@@ -15,6 +15,27 @@ enum class Exercise(val label: String, val spoken: String, val target: Int) {
 /** What the last analysed frame produced. */
 enum class RepEvent { NONE, REP, EXERCISE_DONE, ROUND_DONE }
 
+/** How the pre-workout check is getting on. */
+enum class SetupStage {
+    /** Joints this movement needs are not all in shot. */
+    FRAMING,
+    /** Framing is good; waiting for calibration reps. */
+    MOVING,
+    /** Calibrated — the workout can start. */
+    READY,
+    /** Framing is good but the movement barely registers, so the phone is badly placed. */
+    POOR
+}
+
+/** A frame's worth of pre-workout check. */
+data class Setup(
+    val stage: SetupStage,
+    val missing: List<String>,
+    val reps: Int,
+    val range: Float,
+    val needed: Float
+)
+
 /**
  * Turns a stream of keypoints into a Cindy scorecard.
  *
@@ -27,6 +48,10 @@ class WorkoutEngine {
     private companion object {
         /** MoveNet confidence below which a keypoint is treated as unseen. */
         const val MIN_SCORE = 0.30f
+        /** Reps to watch before trusting the learned band. */
+        const val CALIBRATION_REPS = 2
+        /** How long to wait for a believable range before calling the setup bad. */
+        const val POOR_AFTER_MS = 20_000L
     }
 
     private val counters = mapOf(
@@ -49,6 +74,8 @@ class WorkoutEngine {
     var bodyVisible = false
         private set
 
+    private var movingSince = 0L
+
     val reps: Int get() = counters.getValue(exercise).count
     val phase: RepCounter.Phase get() = counters.getValue(exercise).phase
     val signal: Float get() = counters.getValue(exercise).smoothed
@@ -67,6 +94,7 @@ class WorkoutEngine {
         rounds = 0
         hint = "Step into frame"
         bodyVisible = false
+        movingSince = 0L
     }
 
     /** Advances past the current exercise without finishing it (manual override). */
@@ -87,12 +115,7 @@ class WorkoutEngine {
         }
         bodyVisible = true
 
-        val s = when (exercise) {
-            Exercise.PULLUP -> pullupSignal(k)
-            Exercise.PUSHUP -> pushupSignal(k)
-            Exercise.SQUAT -> squatSignal(k)
-        }
-
+        val s = signalFor(k)
         if (s.isNaN()) return RepEvent.NONE
 
         val counted = counters.getValue(exercise).update(s, now)
@@ -118,6 +141,72 @@ class WorkoutEngine {
         } else {
             RepEvent.EXERCISE_DONE
         }
+    }
+
+    // ── pre-workout check ─────────────────────────────────────────────────────
+
+    /** Starts the check for the current movement, discarding any band learned earlier. */
+    fun beginSetup() {
+        counters.getValue(exercise).reset()
+        movingSince = 0L
+    }
+
+    /**
+     * Watches a calibration rep and reports whether this camera placement can be worked with.
+     *
+     * The check is just the counter running before the clock does. Calibrating this way seeds
+     * the band from the athlete's own range, so the first rep of the workout is judged against
+     * a real measurement rather than the fallback floor — and a placement that cannot produce a
+     * believable range is caught here, instead of quietly undercounting for twenty minutes.
+     */
+    fun onSetupFrame(k: Array<Keypoint>, now: Long): Setup {
+        val counter = counters.getValue(exercise)
+        val missing = missingJoints(k)
+        if (missing.isNotEmpty()) {
+            movingSince = 0L
+            return Setup(SetupStage.FRAMING, missing, counter.count, counter.learnedRange, counter.requiredRange)
+        }
+        if (movingSince == 0L) movingSince = now
+
+        val s = signalFor(k)
+        if (!s.isNaN()) counter.update(s, now)
+
+        val enough = counter.count >= CALIBRATION_REPS && counter.learnedRange >= counter.requiredRange
+        val stage = when {
+            enough -> SetupStage.READY
+            now - movingSince > POOR_AFTER_MS -> SetupStage.POOR
+            else -> SetupStage.MOVING
+        }
+        return Setup(stage, emptyList(), counter.count, counter.learnedRange, counter.requiredRange)
+    }
+
+    /** Zeroes the calibration reps but keeps the band they taught. */
+    fun finishSetup() = counters.getValue(exercise).resetCount()
+
+    /** Joints the current movement cannot be judged without, named for a human. */
+    private fun missingJoints(k: Array<Keypoint>): List<String> {
+        val needed = when (exercise) {
+            Exercise.PULLUP, Exercise.PUSHUP -> listOf(
+                "shoulders" to (KP.LEFT_SHOULDER to KP.RIGHT_SHOULDER),
+                "elbows" to (KP.LEFT_ELBOW to KP.RIGHT_ELBOW),
+                "hands" to (KP.LEFT_WRIST to KP.RIGHT_WRIST),
+                "hips" to (KP.LEFT_HIP to KP.RIGHT_HIP)
+            )
+            Exercise.SQUAT -> listOf(
+                "shoulders" to (KP.LEFT_SHOULDER to KP.RIGHT_SHOULDER),
+                "hips" to (KP.LEFT_HIP to KP.RIGHT_HIP),
+                "knees" to (KP.LEFT_KNEE to KP.RIGHT_KNEE),
+                "ankles" to (KP.LEFT_ANKLE to KP.RIGHT_ANKLE)
+            )
+        }
+        // midpoint() accepts either side, so a joint counts as seen if one of the pair is.
+        return needed.filter { midpoint(k, it.second.first, it.second.second) == null }.map { it.first }
+    }
+
+    private fun signalFor(k: Array<Keypoint>): Float = when (exercise) {
+        Exercise.PULLUP -> pullupSignal(k)
+        Exercise.PUSHUP -> pushupSignal(k)
+        Exercise.SQUAT -> squatSignal(k)
     }
 
     // ── signals ───────────────────────────────────────────────────────────────

@@ -56,8 +56,10 @@ last seen, follows it, and falls back to the whole frame when tracking is lost. 
 a body that fills its input.
 
 The app ships **MoveNet Thunder** (256×256) rather than Lightning for the same reason — the
-awkward angles are where the extra accuracy earns its keep. Lightning is still in `assets/`;
-switching is the `modelAsset` default in `PoseDetector`.
+awkward angles are where the extra accuracy earns its keep, and the crop means it is not being
+asked to find a body in a tall frame. Whether that trade is right depends on the phone, so
+long-pressing `FLIP` swaps between them at runtime and the debug readout shows the inference
+time for each.
 
 ### Two bugs this replaced
 
@@ -75,6 +77,23 @@ A third followed from the fix: arming on a fixed low threshold meant a squashed 
 at all, so the counter now tracks the lowest value since the last rep instead. It does not matter
 that the range was still unknown when the athlete was at the bottom of the movement.
 
+### Setting up before the clock starts
+
+`START` does not start the clock — it starts a check, because a badly placed phone undercounts
+silently for twenty minutes and there is no way to tell from the score that it happened.
+
+1. **Framing.** The joints this movement cannot be judged without have to be in shot. If they
+   are not, the app names them: *"Can't see your knees"*.
+2. **Calibration.** Two slow reps. The counter runs against them exactly as it will during the
+   workout, so the band is seeded from the athlete's own range and rep one is judged against a
+   real measurement rather than the fallback floor.
+3. **Verdict.** Calibrated, and the workout starts itself. Or, after twenty seconds of movement
+   that barely registers, *"Movement barely registers — raise the phone or step back"* — which
+   is the failure this app was losing reps to, said out loud instead of hidden in the score.
+
+`SKIP` bypasses the whole thing. While running, the status line turns red whenever the body is
+not being tracked, so a stalled counter looks stalled.
+
 ### Interface
 
 Full-screen preview with the skeleton drawn over it, and four numbers: the clock, the round,
@@ -89,7 +108,8 @@ the current movement, and reps against the target.
 | `VOICE` | toggle spoken counting |
 | `MUSIC` | tap to pick a track (or mute); long press to change it |
 | `RECORDS` | open the record board |
-| status line (long press) | debug readout: inference ms, crop state, signal, learned range, phase |
+| status line (long press) | debug readout: model, inference ms, crop state, signal, learned range, phase |
+| `FLIP` (long press) | swap Thunder ↔ Lightning, to compare accuracy against latency on your phone |
 
 Reps buzz short, finishing a movement buzzes longer, finishing a round buzzes longest.
 At `00:00` the app freezes the score as `N rounds + M reps` and logs it.

@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_VOICE = "voice_on"
     }
 
-    private enum class State { IDLE, RUNNING, PAUSED, FINISHED }
+    private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
 
     /**
      * An immutable read of the engine taken on the analysis thread.
@@ -65,7 +65,8 @@ class MainActivity : AppCompatActivity() {
         val signal: Float,
         val phase: RepCounter.Phase,
         val range: Float,
-        val calibrated: Boolean
+        val calibrated: Boolean,
+        val bodyVisible: Boolean
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -74,7 +75,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var music: MusicPlayer
     private lateinit var records: RecordStore
 
-    private var detector: PoseDetector? = null
+    @Volatile private var detector: PoseDetector? = null
     private val engine = WorkoutEngine()
     private val engineLock = Any()
 
@@ -84,6 +85,8 @@ class MainActivity : AppCompatActivity() {
     private var lastAnnouncedSec = -1
     private var musicEnabled = true
     private var debug = false
+    /** Set from the UI, acted on by the analysis thread, which owns the detector. */
+    @Volatile private var pendingModel: String? = null
 
     @Volatile private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var cameraProvider: ProcessCameraProvider? = null
@@ -142,6 +145,18 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnFlip.setOnClickListener { flipCamera() }
+        binding.btnFlip.setOnLongClickListener {
+            // Whether Thunder's accuracy is worth its latency is a question about this phone,
+            // so make it answerable on this phone.
+            val next = if (detector?.modelAsset == PoseDetector.THUNDER) {
+                PoseDetector.LIGHTNING
+            } else {
+                PoseDetector.THUNDER
+            }
+            pendingModel = next
+            toast("Switching to ${if (next == PoseDetector.THUNDER) "Thunder" else "Lightning"}")
+            true
+        }
         binding.btnSkip.setOnClickListener { onManualRep() }
         binding.btnSkip.setOnLongClickListener {
             if (state == State.RUNNING) apply(runEngine { engine.skipExercise() })
@@ -171,7 +186,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        binding.status.text = "Press START, then get in frame"
+        binding.status.text = "Press START to set up"
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -231,6 +246,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Runs on [analysisExecutor]; must never touch views directly. */
     private fun analyse(proxy: ImageProxy) {
+        pendingModel?.let { asset ->
+            pendingModel = null
+            try {
+                detector?.close()
+                detector = PoseDetector(this, asset)
+            } catch (t: Throwable) {
+                Log.e(TAG, "could not swap model to $asset", t)
+            }
+        }
         val det = detector
         if (det == null || !analysing.compareAndSet(false, true)) {
             proxy.close()
@@ -239,15 +263,21 @@ class MainActivity : AppCompatActivity() {
         try {
             val frame = proxy.toUprightBitmap(mirror = lensFacing == CameraSelector.LENS_FACING_FRONT)
             val keypoints = det.detect(frame)
-            val running = state == State.RUNNING
-            val snap = if (running) {
-                runEngine { engine.onFrame(keypoints, SystemClock.elapsedRealtime()) }
+            val now = SystemClock.elapsedRealtime()
+            val snap = if (state == State.RUNNING) {
+                runEngine { engine.onFrame(keypoints, now) }
+            } else {
+                null
+            }
+            val setup = if (state == State.SETUP) {
+                synchronized(engineLock) { engine.onSetupFrame(keypoints, now) }
             } else {
                 null
             }
             ui.post {
                 binding.overlay.setPose(keypoints, frame.width, frame.height)
                 if (snap != null && state == State.RUNNING) apply(snap)
+                if (setup != null && state == State.SETUP) applySetup(setup)
             }
         } catch (t: Throwable) {
             Log.e(TAG, "analysis failed", t)
@@ -288,7 +318,8 @@ class MainActivity : AppCompatActivity() {
             signal = engine.signal,
             phase = engine.phase,
             range = engine.learnedRange,
-            calibrated = engine.calibrated
+            calibrated = engine.calibrated,
+            bodyVisible = engine.bodyVisible
         )
     }
 
@@ -297,9 +328,10 @@ class MainActivity : AppCompatActivity() {
         val det = detector
         val ms = det?.lastInferenceMs ?: 0L
         val view = if (det?.tracking == true) "roi" else "full"
+        val model = det?.modelLabel ?: "none"
         val cal = if (snap.calibrated) "cal" else "warm"
-        return "%dms · %s · sig %.0f · rng %.0f · %s · %s".format(
-            Locale.US, ms, view, snap.signal, snap.range, cal, snap.phase
+        return "%s %dms · %s · sig %.0f · rng %.0f · %s · %s".format(
+            Locale.US, model, ms, view, snap.signal, snap.range, cal, snap.phase
         )
     }
 
@@ -307,7 +339,13 @@ class MainActivity : AppCompatActivity() {
         binding.exercise.text = snap.exercise.label
         binding.reps.text = "${snap.reps} / ${snap.exercise.target}"
         binding.rounds.text = "ROUND ${snap.rounds + 1}"
-        if (state == State.RUNNING) binding.status.text = if (debug) debugLine(snap) else snap.hint
+        if (state == State.RUNNING) {
+            binding.status.text = if (debug) debugLine(snap) else snap.hint
+            // Say plainly that nothing is being counted, rather than sitting there at zero.
+            binding.status.setTextColor(
+                getColor(if (snap.bodyVisible) R.color.on_surface_dim else R.color.warn)
+            )
+        }
 
         when (snap.event) {
             RepEvent.NONE -> Unit
@@ -329,18 +367,72 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── setup ─────────────────────────────────────────────────────────────────
+
+    private fun enterSetup() {
+        state = State.SETUP
+        synchronized(engineLock) { engine.beginSetup() }
+        detector?.resetRoi()
+        binding.btnStart.text = "SKIP"
+        binding.exercise.text = "SET UP"
+        binding.reps.text = "—"
+        binding.status.setTextColor(getColor(R.color.on_surface_dim))
+        binding.status.text = "Get in frame"
+        speaker.say("Get in frame, then do two slow pull ups")
+    }
+
+    private fun applySetup(setup: Setup) {
+        when (setup.stage) {
+            SetupStage.FRAMING -> {
+                binding.reps.text = "—"
+                binding.status.setTextColor(getColor(R.color.warn))
+                binding.status.text = "Can't see your ${setup.missing.joinToString(", ")}"
+            }
+            SetupStage.MOVING -> {
+                binding.reps.text = "${setup.reps} / 2"
+                binding.status.setTextColor(getColor(R.color.on_surface_dim))
+                binding.status.text = if (debug) {
+                    "calibrating · rng %.0f / %.0f".format(Locale.US, setup.range, setup.needed)
+                } else {
+                    "Do 2 slow pull-ups to calibrate"
+                }
+            }
+            SetupStage.POOR -> {
+                binding.reps.text = "${setup.reps} / 2"
+                binding.status.setTextColor(getColor(R.color.warn))
+                binding.status.text = "Movement barely registers — raise the phone or step back"
+            }
+            SetupStage.READY -> beginWorkout(calibrated = true)
+        }
+    }
+
     // ── workout control ───────────────────────────────────────────────────────
+
+    /** Starts the clock. [calibrated] only changes what is announced. */
+    private fun beginWorkout(calibrated: Boolean) {
+        synchronized(engineLock) { engine.finishSetup() }
+        state = State.RUNNING
+        lastTickAt = SystemClock.elapsedRealtime()
+        binding.btnStart.text = "PAUSE"
+        binding.status.setTextColor(getColor(R.color.on_surface_dim))
+        binding.status.text = "Counting…"
+        if (musicEnabled) music.play()
+        speaker.say(if (calibrated) "Calibrated. Go." else "Go. Pull ups")
+        apply(runEngine { RepEvent.NONE })
+        ui.post(ticker)
+    }
 
     private fun toggleRun() {
         when (state) {
-            State.IDLE, State.PAUSED -> {
-                val resuming = state == State.PAUSED
+            State.IDLE -> enterSetup()
+            State.SETUP -> beginWorkout(calibrated = false)
+            State.PAUSED -> {
                 state = State.RUNNING
                 lastTickAt = SystemClock.elapsedRealtime()
                 binding.btnStart.text = "PAUSE"
                 binding.status.text = "Counting…"
                 if (musicEnabled) music.play()
-                speaker.say(if (resuming) "Resume" else "Go. Pull ups")
+                speaker.say("Resume")
                 ui.post(ticker)
             }
             State.RUNNING -> {
@@ -362,7 +454,8 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.reset() }
         detector?.resetRoi()
         binding.btnStart.text = "START"
-        binding.status.text = "Press START, then get in frame"
+        binding.status.setTextColor(getColor(R.color.on_surface_dim))
+        binding.status.text = "Press START to set up"
         binding.reps.setTextColor(getColor(R.color.on_surface))
         music.stop()
         renderClock()

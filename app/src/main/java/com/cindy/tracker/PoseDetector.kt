@@ -73,10 +73,21 @@ object KP {
  */
 class PoseDetector(
     context: Context,
-    modelAsset: String = "movenet_thunder.tflite"
+    val modelAsset: String = THUNDER
 ) {
 
-    private companion object {
+    companion object {
+        /** 256x256. Slower, and worth it at the awkward angles a floor-level phone produces. */
+        const val THUNDER = "movenet_thunder.tflite"
+        /** 192x192. Roughly a third of the work; the fallback if Thunder cannot keep up. */
+        const val LIGHTNING = "movenet_lightning.tflite"
+    }
+
+    /** Short name for the debug readout. */
+    val modelLabel: String get() = if (modelAsset == THUNDER) "thndr" else "lite"
+
+
+    private object Tune {
         const val MIN_SCORE = 0.30f
         /** Confident keypoints needed to trust the crop for the next frame. */
         const val MIN_TRACKED = 5
@@ -217,9 +228,9 @@ class PoseDetector(
 
     /** Re-aims the crop at wherever the body just was, or drops it if the body was lost. */
     private fun updateRoi(k: Array<Keypoint>, frameW: Int, frameH: Int) {
-        val seen = k.filter { it.score >= MIN_SCORE }
-        if (seen.size < MIN_TRACKED) {
-            if (++misses >= MAX_MISSES) resetRoi()
+        val seen = k.filter { it.score >= Tune.MIN_SCORE }
+        if (seen.size < Tune.MIN_TRACKED) {
+            if (++misses >= Tune.MAX_MISSES) resetRoi()
             return
         }
         misses = 0
@@ -234,18 +245,18 @@ class PoseDetector(
         }
 
         val longest = max(max(frameW, frameH).toFloat(), 1f)
-        val side = (max(right - left, bottom - top) * MARGIN)
-            .coerceIn(longest * MIN_CROP_FRACTION, longest)
+        val side = (max(right - left, bottom - top) * Tune.MARGIN)
+            .coerceIn(longest * Tune.MIN_CROP_FRACTION, longest)
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
 
         val target = RectF(cx - side / 2f, cy - side / 2f, cx + side / 2f, cy + side / 2f)
         val current = roi
         roi = if (current == null) target else RectF(
-            current.left + (target.left - current.left) * FOLLOW,
-            current.top + (target.top - current.top) * FOLLOW,
-            current.right + (target.right - current.right) * FOLLOW,
-            current.bottom + (target.bottom - current.bottom) * FOLLOW
+            current.left + (target.left - current.left) * Tune.FOLLOW,
+            current.top + (target.top - current.top) * Tune.FOLLOW,
+            current.right + (target.right - current.right) * Tune.FOLLOW,
+            current.bottom + (target.bottom - current.bottom) * Tune.FOLLOW
         )
     }
 

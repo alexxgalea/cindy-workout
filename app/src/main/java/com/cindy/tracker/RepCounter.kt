@@ -74,6 +74,16 @@ class RepCounter(
     val learnedRange: Float
         get() = if (seenLow.isNaN() || seenHigh.isNaN()) 0f else seenHigh - seenLow
 
+    /** Travel the calibration step should see before it trusts the camera placement. */
+    val requiredRange: Float get() = minRange
+
+    /** Seeds the band from a calibration rep, so rep one is judged against a real range. */
+    fun seedBand(low: Float, high: Float) {
+        if (low.isNaN() || high.isNaN() || high <= low) return
+        seenLow = low
+        seenHigh = high
+    }
+
     /** True once the band is wide enough to set the thresholds itself. */
     val calibrated: Boolean
         get() = minRange > 0f && learnedRange >= minRange
