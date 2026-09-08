@@ -11,8 +11,12 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
+import androidx.camera.core.CameraEffect
+import androidx.camera.effects.OverlayEffect
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
+import android.os.Handler
+import android.os.HandlerThread
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +38,12 @@ class VideoRecorder(private val context: Context) {
     var useCase: VideoCapture<Recorder>? = null
         private set
 
+    /** Draws the skeleton, score and watermark into the recorded stream. */
+    val overlay = RecordingOverlay()
+
     private var recording: Recording? = null
+    private var effect: OverlayEffect? = null
+    private var effectThread: HandlerThread? = null
 
     val isRecording: Boolean get() = recording != null
 
@@ -54,6 +63,43 @@ class VideoRecorder(private val context: Context) {
     fun forgetUseCase() {
         stop()
         useCase = null
+        releaseEffect()
+    }
+
+    /**
+     * Builds the effect that paints over the recorded frames.
+     *
+     * Targets VIDEO_CAPTURE only: the preview already has its own overlay view, and pointing the
+     * effect at both would draw the skeleton twice on screen.
+     */
+    fun buildEffect(): CameraEffect? = try {
+        releaseEffect()
+        val thread = HandlerThread("cindy-overlay").also { it.start() }
+        effectThread = thread
+        OverlayEffect(
+            CameraEffect.VIDEO_CAPTURE,
+            /* queueDepth = */ 0,
+            Handler(thread.looper)
+        ) { t -> Log.e(TAG, "overlay effect failed", t) }
+            .also { built ->
+                built.setOnDrawListener { frame -> overlay.draw(frame) }
+                effect = built
+            }
+    } catch (t: Throwable) {
+        Log.w(TAG, "could not build the overlay effect", t)
+        releaseEffect()
+        null
+    }
+
+    private fun releaseEffect() {
+        try {
+            effect?.close()
+        } catch (t: Throwable) {
+            Log.w(TAG, "closing the effect failed", t)
+        }
+        effect = null
+        effectThread?.quitSafely()
+        effectThread = null
     }
 
     /**

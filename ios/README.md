@@ -79,5 +79,12 @@ For one phone, Xcode wireless is enough. For sending builds to anyone else, it i
 The record board (history list and progress chart) and the music picker. `RecordStore` and
 `Records.ranked` are already there and tested, so the screen is the only missing piece.
 
-Filming currently writes to the app's temporary directory. Moving it into the photo library needs
-`PHPhotoLibrary` and the usage description above.
+Filming currently writes the raw camera stream to the app's temporary directory. Two gaps against
+Android:
+
+- **Overlays are not burned in.** Android uses CameraX's `OverlayEffect` to draw the skeleton,
+  score and watermark into the recorded buffer. `AVCaptureMovieFileOutput` has no equivalent, so
+  iOS needs `AVAssetWriter` with the frames composited by hand — the pixel buffer is already in
+  reach in `CameraModel.captureOutput`, which is where that work belongs.
+- **It does not reach the photo library.** That needs `PHPhotoLibrary` and the usage description
+  above.

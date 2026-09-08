@@ -125,7 +125,7 @@ the current movement, and reps against the target.
 | `+1` (long press) | skip to the next movement |
 | `−1` | take back a rep that should not have counted; steps across movement and round boundaries |
 | `STOP` | end early and save the score (replaces `FLIP` during a workout) |
-| `REC` | film the workout to `Movies/Cindy` |
+| `REC` | film the workout, overlays burned in, to `Movies/Cindy` |
 | `FLIP` | switch between the rear and selfie camera |
 | `VOICE` | toggle spoken counting |
 | `MUSIC` | tap to pick a track (or mute); long press to change it |
@@ -151,6 +151,31 @@ The app ships no audio. `MUSIC` opens the storage access framework so you pick a
 already own; it loops for the workout, pauses when you pause, and ducks to 18% whenever the
 voice speaks. The chosen track is remembered across launches through a persistable URI
 permission, and quietly forgotten if that permission lapses.
+
+### Filming
+
+`REC` records the workout with the skeleton, clock, round, movement, rep count and a **CINDY**
+watermark burned into the file — not just drawn on screen.
+
+The preview's overlay is a view on top of the screen and never reaches the encoder, so the video
+gets its own renderer through CameraX's `OverlayEffect`, which hands back a canvas over the
+recorded buffer. The effect targets `VIDEO_CAPTURE` only; pointing it at the preview as well would
+draw the skeleton twice on screen.
+
+Everything is drawn in the analysis frame's upright space — the space the keypoints are already
+in — and mapped to the video buffer by one matrix composed from each frame's own metadata, routed
+through the sensor. Going via the sensor is what lets the two streams differ in resolution, crop,
+rotation and mirroring while the skeleton still lands on the body; putting the text through the
+same matrix is what keeps it the right way up. The analyzer declares
+`COORDINATE_SYSTEM_SENSOR` so CameraX supplies that transform, because the matrix on `ImageInfo`
+is a default method that returns identity unless asked.
+
+Video only, no audio: it keeps the app clear of the microphone permission and stops it recording
+its own voice counting back at you.
+
+Preview, analysis, recording and the overlay effect together are more surfaces than some cameras
+will bind at once. Rep counting is the point of the app, so binding degrades in order — overlay
+first, then recording — rather than failing outright.
 
 ### Records, levels and statistics
 
