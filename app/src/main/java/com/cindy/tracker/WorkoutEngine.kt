@@ -1,5 +1,6 @@
 package com.cindy.tracker
 
+import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.hypot
 
@@ -10,10 +11,12 @@ enum class Exercise(val label: String, val spoken: String, val target: Int) {
     SQUAT("SQUATS", "squats", 15);
 
     fun next(): Exercise = entries[(ordinal + 1) % entries.size]
+
+    fun previous(): Exercise = entries[(ordinal + entries.size - 1) % entries.size]
 }
 
 /** What the last analysed frame produced. */
-enum class RepEvent { NONE, REP, EXERCISE_DONE, ROUND_DONE }
+enum class RepEvent { NONE, REP, UNDO, EXERCISE_DONE, ROUND_DONE }
 
 /** How the pre-workout check is getting on. */
 enum class SetupStage {
@@ -52,6 +55,8 @@ class WorkoutEngine {
         const val CALIBRATION_REPS = 2
         /** How long to wait for a believable range before calling the setup bad. */
         const val POOR_AFTER_MS = 20_000L
+        /** Elbow angle at or above which the arms count as straight, i.e. a dead hang. */
+        const val DEAD_HANG_DEGREES = 150f
     }
 
     private val counters = mapOf(
@@ -75,6 +80,10 @@ class WorkoutEngine {
         private set
 
     private var movingSince = 0L
+    private val bar = BarZone()
+
+    /** True once a dead hang has taught the engine where the bar is. */
+    val barKnown: Boolean get() = bar.established
 
     val reps: Int get() = counters.getValue(exercise).count
     val phase: RepCounter.Phase get() = counters.getValue(exercise).phase
@@ -95,6 +104,7 @@ class WorkoutEngine {
         hint = "Step into frame"
         bodyVisible = false
         movingSince = 0L
+        bar.reset()
     }
 
     /** Advances past the current exercise without finishing it (manual override). */
@@ -104,6 +114,43 @@ class WorkoutEngine {
     fun manualRep(): RepEvent {
         counters.getValue(exercise).forceIncrement()
         return settle()
+    }
+
+    /**
+     * Takes back a rep the counter should not have scored.
+     *
+     * Steps backwards across movement and round boundaries, so undoing the first push-up of a
+     * round returns you to the fifth pull-up rather than stranding the score at zero.
+     */
+    fun undoRep(): RepEvent {
+        val counter = counters.getValue(exercise)
+        if (counter.count > 0) {
+            counter.forceDecrement()
+            return RepEvent.UNDO
+        }
+        if (exercise != Exercise.PULLUP) {
+            exercise = exercise.previous()
+            counters.getValue(exercise).setCount(exercise.target - 1)
+            return RepEvent.UNDO
+        }
+        if (rounds == 0) return RepEvent.NONE
+        rounds--
+        exercise = Exercise.SQUAT
+        counters.getValue(exercise).setCount(Exercise.SQUAT.target - 1)
+        return RepEvent.UNDO
+    }
+
+    /**
+     * Forgets every learned band, keeping the score.
+     *
+     * The bands describe this athlete as seen from where the phone was standing. A flip, or a
+     * pause long enough for either to have moved, invalidates that without invalidating the reps
+     * already counted.
+     */
+    fun recalibrate() {
+        counters.values.forEach { it.resetBand() }
+        // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
+        bar.reset()
     }
 
     fun onFrame(k: Array<Keypoint>, now: Long): RepEvent {
@@ -149,6 +196,7 @@ class WorkoutEngine {
     fun beginSetup() {
         counters.getValue(exercise).reset()
         movingSince = 0L
+        bar.reset()
     }
 
     /**
@@ -231,13 +279,39 @@ class WorkoutEngine {
             hint = "Hang from the bar"
             return Float.NaN
         }
+        val hands = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return Float.NaN
+        val torso = torsoLength(k) ?: return Float.NaN
+
+        // Elbow flexion on its own counts anyone waving their arms overhead as a pull-up.
+        if (!bar.holds(hands.x, hands.y, torso)) {
+            hint = "Get on the bar"
+            return Float.NaN
+        }
+
         val elbow = bilateralAngle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
             KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST
         )
-        if (elbow.isNaN()) hint = "Arms out of frame"
+        if (elbow.isNaN()) {
+            hint = "Arms out of frame"
+            return Float.NaN
+        }
+
+        // A straight-armed hang is the one posture that reliably marks where the bar is.
+        if (elbow >= DEAD_HANG_DEGREES) {
+            val half = gripHalfWidth(k) ?: 0f
+            bar.observeHang(hands.x, hands.y, half)
+        }
         return -elbow
+    }
+
+    /** Half the distance between the hands, for the bar's horizontal span. */
+    private fun gripHalfWidth(k: Array<Keypoint>): Float? {
+        val l = k[KP.LEFT_WRIST]
+        val r = k[KP.RIGHT_WRIST]
+        if (!ok(l) || !ok(r)) return null
+        return abs(l.x - r.x) / 2f
     }
 
     /**

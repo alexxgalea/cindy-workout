@@ -46,6 +46,7 @@ class RecordsActivity : AppCompatActivity() {
         val rows = binding.rows
         rows.removeAllViews()
 
+        history()
         val mine = Records.ranked(store.all())
         val beaten = mine.firstOrNull()?.let { Records.beatsBenchmark(it) } == true
 
@@ -72,11 +73,47 @@ class RecordsActivity : AppCompatActivity() {
                     rank = if (outranks) "${i + 1}" else "${i + 2}",
                     name = if (i == 0) "You · best" else "You",
                     score = a.scoreLabel(),
-                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.totalReps} reps",
+                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.level.title}" +
+                        (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
                     benchmark = false
                 )
             )
         }
+    }
+
+    /** Score over time, oldest to newest, so progress is visible at a glance. */
+    private fun history() {
+        val past = store.chronological()
+        if (past.size < 2) return
+
+        binding.rows.addView(TextView(this).apply {
+            text = "PROGRESS"
+            letterSpacing = 0.12f
+            setTextColor(getColor(R.color.on_surface_dim))
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, dp(8))
+        })
+        binding.rows.addView(SplitsChartView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(120)
+            ).apply { bottomMargin = dp(6) }
+            val best = past.indexOf(past.maxByOrNull { it.totalReps })
+            setValues(past.map { it.totalReps.toLong() }, highlightIndex = best)
+        })
+        binding.rows.addView(TextView(this).apply {
+            val first = past.first().totalReps
+            val last = past.last().totalReps
+            val delta = last - first
+            text = "${past.size} attempts · " + when {
+                delta > 0 -> "up $delta reps since your first"
+                delta < 0 -> "${-delta} reps below your first"
+                else -> "level with your first"
+            }
+            setTextColor(getColor(R.color.on_surface_dim))
+            textSize = 12f
+            setPadding(0, 0, 0, dp(18))
+        })
     }
 
     private fun empty(): TextView = TextView(this).apply {

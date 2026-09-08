@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -73,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var analysisExecutor: ExecutorService
     private lateinit var speaker: Speaker
     private lateinit var music: MusicPlayer
+    private lateinit var video: VideoRecorder
     private lateinit var records: RecordStore
 
     @Volatile private var detector: PoseDetector? = null
@@ -83,6 +85,13 @@ class MainActivity : AppCompatActivity() {
     private var remainingMs = WORKOUT_MS
     private var lastTickAt = 0L
     private var lastAnnouncedSec = -1
+    /** Wall time of each completed round, and when the current one started. */
+    private val roundSplits = mutableListOf<Long>()
+    /** Clock time at which the current round began, so a pause cannot inflate its split. */
+    private var roundStartedAtElapsed = 0L
+    private var elapsedMs = 0L
+    private var pausedMs = 0L
+    private var pauseStartedAt = 0L
     private var musicEnabled = true
     private var debug = false
     /** Set from the UI, acted on by the analysis thread, which owns the detector. */
@@ -97,7 +106,9 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             if (state != State.RUNNING) return
             val now = SystemClock.elapsedRealtime()
-            remainingMs -= (now - lastTickAt)
+            val step = now - lastTickAt
+            remainingMs -= step
+            elapsedMs += step
             lastTickAt = now
             if (remainingMs <= 0L) {
                 remainingMs = 0L
@@ -129,6 +140,7 @@ class MainActivity : AppCompatActivity() {
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
         music = MusicPlayer(this)
+        video = VideoRecorder(this)
         speaker = Speaker(this).apply {
             enabled = prefs().getBoolean(KEY_VOICE, true)
             onSpeakingChanged = { speaking -> ui.post { music.duck(speaking) } }
@@ -144,7 +156,7 @@ class MainActivity : AppCompatActivity() {
         restoreTrack()
 
         binding.btnStart.setOnClickListener { toggleRun() }
-        binding.btnFlip.setOnClickListener { flipCamera() }
+        binding.btnFlip.setOnClickListener { onLeftButton() }
         binding.btnFlip.setOnLongClickListener {
             // Whether Thunder's accuracy is worth its latency is a question about this phone,
             // so make it answerable on this phone.
@@ -158,6 +170,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.btnSkip.setOnClickListener { onManualRep() }
+        binding.btnUndo.setOnClickListener { onUndoRep() }
         binding.btnSkip.setOnLongClickListener {
             if (state == State.RUNNING) apply(runEngine { engine.skipExercise() })
             true
@@ -166,6 +179,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMusic.setOnClickListener { onMusicTapped() }
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
         binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
+        binding.btnRec.setOnClickListener { toggleRecording() }
         binding.status.setOnLongClickListener {
             debug = !debug
             toast(if (debug) "Debug readout on" else "Debug readout off")
@@ -175,6 +189,7 @@ class MainActivity : AppCompatActivity() {
         renderClock()
         apply(runEngine { RepEvent.NONE })
         renderChips()
+        renderControls()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -225,12 +240,21 @@ class MainActivity : AppCompatActivity() {
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
 
         provider.unbindAll()
+        // Preview + analysis + recording is more than some cameras will bind at once. Rep
+        // counting is the point of the app, so recording is what gets dropped.
         try {
-            provider.bindToLifecycle(this, selector, preview, analysis)
+            provider.bindToLifecycle(this, selector, preview, analysis, video.buildUseCase())
         } catch (t: Throwable) {
-            Log.e(TAG, "bindToLifecycle failed", t)
-            binding.status.text = "Could not open camera: ${t.message}"
+            Log.w(TAG, "could not bind the recorder, continuing without it", t)
+            video.forgetUseCase()
+            try {
+                provider.bindToLifecycle(this, selector, preview, analysis)
+            } catch (t2: Throwable) {
+                Log.e(TAG, "bindToLifecycle failed", t2)
+                binding.status.text = "Could not open camera: ${t2.message}"
+            }
         }
+        renderChips()
     }
 
     private fun flipCamera() {
@@ -241,6 +265,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.overlay.clear()
         detector?.resetRoi()
+        synchronized(engineLock) { engine.recalibrate() }
         bindUseCases()
     }
 
@@ -340,7 +365,11 @@ class MainActivity : AppCompatActivity() {
         binding.reps.text = "${snap.reps} / ${snap.exercise.target}"
         binding.rounds.text = "ROUND ${snap.rounds + 1}"
         if (state == State.RUNNING) {
-            binding.status.text = if (debug) debugLine(snap) else snap.hint
+            binding.status.text = when {
+                debug -> debugLine(snap)
+                !snap.calibrated -> "Recalibrating…"
+                else -> snap.hint
+            }
             // Say plainly that nothing is being counted, rather than sitting there at zero.
             binding.status.setTextColor(
                 getColor(if (snap.bodyVisible) R.color.on_surface_dim else R.color.warn)
@@ -353,6 +382,10 @@ class MainActivity : AppCompatActivity() {
                 buzz(35)
                 speaker.say("${snap.reps}")
             }
+            RepEvent.UNDO -> {
+                buzz(20)
+                speaker.say("${snap.reps}")
+            }
             RepEvent.EXERCISE_DONE -> {
                 buzz(90)
                 snap.completed?.let { speaker.say("${it.target}") }
@@ -360,9 +393,12 @@ class MainActivity : AppCompatActivity() {
             }
             RepEvent.ROUND_DONE -> {
                 buzz(220)
+                val split = elapsedMs - roundStartedAtElapsed
+                roundSplits += split
+                roundStartedAtElapsed = elapsedMs
                 snap.completed?.let { speaker.say("${it.target}") }
-                speaker.queue("Round ${snap.rounds + 1}")
-                toast("Round ${snap.rounds} done")
+                speaker.queue("Round ${snap.rounds} in ${spokenDuration(split)}")
+                toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
         }
     }
@@ -371,6 +407,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun enterSetup() {
         state = State.SETUP
+        renderControls()
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
         binding.btnStart.text = "SKIP"
@@ -413,6 +450,10 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.finishSetup() }
         state = State.RUNNING
         lastTickAt = SystemClock.elapsedRealtime()
+        roundStartedAtElapsed = 0L
+        roundSplits.clear()
+        elapsedMs = 0L
+        pausedMs = 0L
         binding.btnStart.text = "PAUSE"
         binding.status.setTextColor(getColor(R.color.on_surface_dim))
         binding.status.text = "Counting…"
@@ -428,15 +469,25 @@ class MainActivity : AppCompatActivity() {
             State.SETUP -> beginWorkout(calibrated = false)
             State.PAUSED -> {
                 state = State.RUNNING
-                lastTickAt = SystemClock.elapsedRealtime()
+                val now = SystemClock.elapsedRealtime()
+                if (pauseStartedAt != 0L) {
+                    pausedMs += now - pauseStartedAt
+                    pauseStartedAt = 0L
+                }
+                lastTickAt = now
                 binding.btnStart.text = "PAUSE"
-                binding.status.text = "Counting…"
+                // The phone or the athlete may have moved while the clock was stopped, so the
+                // band learned before the pause no longer describes what the camera is seeing.
+                synchronized(engineLock) { engine.recalibrate() }
+                detector?.resetRoi()
+                binding.status.text = "Recalibrating…"
                 if (musicEnabled) music.play()
                 speaker.say("Resume")
                 ui.post(ticker)
             }
             State.RUNNING -> {
                 state = State.PAUSED
+                pauseStartedAt = SystemClock.elapsedRealtime()
                 binding.btnStart.text = "RESUME"
                 binding.status.text = "Paused"
                 music.pause()
@@ -445,12 +496,42 @@ class MainActivity : AppCompatActivity() {
             }
             State.FINISHED -> resetWorkout()
         }
+        renderControls()
+    }
+
+    /**
+     * The left button is FLIP outside a workout and STOP inside one. Flipping the camera
+     * mid-Cindy is not a thing anyone does; ending early is.
+     */
+    private fun renderControls() {
+        val inWorkout = state == State.RUNNING || state == State.PAUSED
+        binding.btnFlip.text = if (inWorkout) "STOP" else "FLIP"
+        binding.btnFlip.setTextColor(getColor(if (inWorkout) R.color.warn else R.color.on_surface))
+    }
+
+    private fun onLeftButton() {
+        if (state == State.RUNNING || state == State.PAUSED) confirmStop() else flipCamera()
+    }
+
+    private fun confirmStop() {
+        val wasRunning = state == State.RUNNING
+        if (wasRunning) toggleRun() // park the clock while the dialog is up
+        AlertDialog.Builder(this)
+            .setTitle("End the workout?")
+            .setMessage("Your score so far will be saved.")
+            .setNegativeButton("Keep going") { _, _ -> if (wasRunning) toggleRun() }
+            .setPositiveButton("End") { _, _ -> finishWorkout(stoppedEarly = true) }
+            .show()
     }
 
     private fun resetWorkout() {
         state = State.IDLE
         remainingMs = WORKOUT_MS
         lastAnnouncedSec = -1
+        roundSplits.clear()
+        elapsedMs = 0L
+        pausedMs = 0L
+        pauseStartedAt = 0L
         synchronized(engineLock) { engine.reset() }
         detector?.resetRoi()
         binding.btnStart.text = "START"
@@ -467,27 +548,68 @@ class MainActivity : AppCompatActivity() {
         apply(runEngine { engine.manualRep() })
     }
 
-    private fun finishWorkout() {
+    /** Takes back a rep the counter should not have scored. */
+    private fun onUndoRep() {
+        if (state != State.RUNNING) return
+        val before = synchronized(engineLock) { engine.rounds }
+        val snap = runEngine { engine.undoRep() }
+        // Stepping back over a round boundary un-books that round's split too.
+        if (snap.rounds < before && roundSplits.isNotEmpty()) {
+            roundStartedAtElapsed = elapsedMs - roundSplits.removeAt(roundSplits.size - 1)
+        }
+        apply(snap)
+    }
+
+    private fun finishWorkout(stoppedEarly: Boolean = false) {
         state = State.FINISHED
         ui.removeCallbacks(ticker)
         buzz(600)
         music.stop()
         renderClock()
+        renderControls()
+
+        // A stop pressed from the pause dialog still owes its hidden time to the tally.
+        if (pauseStartedAt != 0L) {
+            pausedMs += SystemClock.elapsedRealtime() - pauseStartedAt
+            pauseStartedAt = 0L
+        }
+        video.stop()
 
         val snap = runEngine { RepEvent.NONE }
-        val attempt = Attempt(snap.rounds, snap.repsThisRound, System.currentTimeMillis())
+        val attempt = Attempt(
+            rounds = snap.rounds,
+            reps = snap.repsThisRound,
+            atMillis = System.currentTimeMillis(),
+            durationMs = elapsedMs,
+            pausedMs = pausedMs,
+            roundSplitsMs = roundSplits.toList()
+        )
         records.add(attempt)
 
         binding.btnStart.text = "RESET"
         binding.reps.setTextColor(getColor(R.color.warn))
         val beat = Records.beatsBenchmark(attempt)
-        binding.status.text = buildString {
-            append("TIME — ${attempt.scoreLabel()}  (${attempt.totalReps} reps)")
-            if (beat) append("  ·  you beat ${Records.BENCHMARK_NAME}")
-        }
-        speaker.say("Time.")
+        binding.status.setTextColor(getColor(R.color.on_surface_dim))
+        binding.status.text = "${attempt.scoreLabel()} · ${attempt.level.title}"
+
+        speaker.say(if (stoppedEarly) "Stopped." else "Time.")
         speaker.queue("${snap.rounds} rounds and ${snap.repsThisRound} reps")
+        attempt.avgRoundMs?.let { speaker.queue("Averaging ${spokenDuration(it)} a round") }
         if (beat) speaker.queue("You beat ${Records.BENCHMARK_NAME}")
+
+        startActivity(ResultsActivity.intent(this, attempt, stoppedEarly))
+    }
+
+    /** "one minute twenty" — TTS makes a mess of "1:20". */
+    private fun spokenDuration(ms: Long): String {
+        val total = ms / 1000L
+        val m = total / 60
+        val sec = total % 60
+        return when {
+            m == 0L -> "$sec seconds"
+            sec == 0L -> "$m minute${if (m == 1L) "" else "s"}"
+            else -> "$m minute${if (m == 1L) "" else "s"} $sec"
+        }
     }
 
     private fun announceTime() {
@@ -557,6 +679,28 @@ class MainActivity : AppCompatActivity() {
         tint(binding.btnVoice, speaker.enabled)
         tint(binding.btnMusic, music.hasTrack && musicEnabled)
         binding.btnMusic.text = if (music.hasTrack) "MUSIC" else "MUSIC +"
+        binding.btnRec.text = if (video.isRecording) "● REC" else "REC"
+        binding.btnRec.setTextColor(
+            getColor(if (video.isRecording) R.color.warn else R.color.on_surface_dim)
+        )
+    }
+
+    private fun toggleRecording() {
+        if (video.isRecording) {
+            video.stop()
+            renderChips()
+            return
+        }
+        if (video.useCase == null) {
+            toast("Recording is not available on this camera")
+            return
+        }
+        val started = video.start { name ->
+            renderChips()
+            toast(if (name != null) "Saved $name to Movies/Cindy" else "Recording failed")
+        }
+        if (!started) toast("Could not start recording")
+        renderChips()
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
@@ -575,7 +719,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         // Do not keep playing over whatever the athlete opens next.
-        if (state == State.RUNNING) toggleRun() else music.pause()
+        if (state == State.RUNNING && !isChangingConfigurations) toggleRun() else music.pause()
     }
 
     override fun onDestroy() {
@@ -585,5 +729,6 @@ class MainActivity : AppCompatActivity() {
         detector?.close()
         speaker.shutdown()
         music.release()
+        video.stop()
     }
 }

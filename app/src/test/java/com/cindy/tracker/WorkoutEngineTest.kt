@@ -237,6 +237,87 @@ class WorkoutEngineTest {
     }
 
     @Test
+    fun `minus takes a rep back`() {
+        val e = WorkoutEngine()
+        repeat(3) { e.doPullup() }
+        assertEquals(RepEvent.UNDO, e.undoRep())
+        assertEquals(2, e.reps)
+    }
+
+    @Test
+    fun `minus steps back over a movement boundary`() {
+        val e = WorkoutEngine()
+        repeat(5) { e.doPullup() }
+        assertEquals(Exercise.PUSHUP, e.exercise)
+        assertEquals(RepEvent.UNDO, e.undoRep())
+        assertEquals(Exercise.PULLUP, e.exercise)
+        assertEquals(4, e.reps)
+    }
+
+    @Test
+    fun `minus steps back over a round boundary`() {
+        val e = WorkoutEngine()
+        repeat(5) { e.doPullup() }
+        repeat(10) { e.doPushup() }
+        repeat(15) { e.doSquat() }
+        assertEquals(1, e.rounds)
+        assertEquals(RepEvent.UNDO, e.undoRep())
+        assertEquals(0, e.rounds)
+        assertEquals(Exercise.SQUAT, e.exercise)
+        assertEquals(14, e.reps)
+        assertEquals(29, e.totalReps)
+    }
+
+    @Test
+    fun `minus at the very start does nothing`() {
+        val e = WorkoutEngine()
+        assertEquals(RepEvent.NONE, e.undoRep())
+        assertEquals(0, e.totalReps)
+        assertEquals(Exercise.PULLUP, e.exercise)
+    }
+
+    @Test
+    fun `plus then minus leaves the score where it started`() {
+        val e = WorkoutEngine()
+        repeat(2) { e.doPullup() }
+        e.manualRep()
+        assertEquals(3, e.reps)
+        e.undoRep()
+        assertEquals(2, e.reps)
+    }
+
+    @Test
+    fun `recalibrating keeps the reps but forgets the band`() {
+        val e = WorkoutEngine()
+        repeat(3) { e.doPullup() }
+        assertTrue(e.calibrated)
+        e.recalibrate()
+        assertEquals(3, e.reps)
+        assertFalse(e.calibrated)
+        assertEquals(0f, e.learnedRange, 0.001f)
+    }
+
+    @Test
+    fun `a recalibrated counter re-learns from the next reps`() {
+        val e = WorkoutEngine()
+        repeat(3) { e.doPullup() }
+        e.recalibrate()
+        repeat(2) { e.doPullup() }
+        assertEquals(Exercise.PUSHUP, e.exercise)
+    }
+
+    @Test
+    fun `recalibrating mid-round does not disturb the round count`() {
+        val e = WorkoutEngine()
+        repeat(5) { e.doPullup() }
+        repeat(4) { e.doPushup() }
+        e.recalibrate()
+        assertEquals(0, e.rounds)
+        assertEquals(Exercise.PUSHUP, e.exercise)
+        assertEquals(9, e.repsThisRound)
+    }
+
+    @Test
     fun `reset returns the engine to the start of Cindy`() {
         val e = WorkoutEngine()
         repeat(5) { e.doPullup() }

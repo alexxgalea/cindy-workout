@@ -145,6 +145,39 @@ class RepCounter(
         trough = smoothed
     }
 
+    /** Takes a rep back off the score — the "−1" override for a miscount. */
+    fun forceDecrement() {
+        if (count == 0) return
+        count--
+        phase = Phase.UNKNOWN
+        armed = true
+        trough = Float.NaN
+    }
+
+    /** Overwrites the score, for stepping back across a movement boundary. */
+    fun setCount(n: Int) {
+        count = n.coerceAtLeast(0)
+        phase = Phase.UNKNOWN
+        armed = true
+        trough = Float.NaN
+    }
+
+    /**
+     * Forgets the learned band without touching the score.
+     *
+     * Used when the camera's view of the athlete changes — a flip, or a pause long enough that
+     * the phone or the athlete has moved — because a band learned from the old geometry will
+     * quietly mis-score the new one.
+     */
+    fun resetBand() {
+        seenLow = Float.NaN
+        seenHigh = Float.NaN
+        trough = Float.NaN
+        smoothed = Float.NaN
+        phase = Phase.UNKNOWN
+        armed = true
+    }
+
     fun reset() {
         phase = Phase.UNKNOWN
         count = 0

@@ -44,6 +44,82 @@ class RecordsTest {
     }
 
     @Test
+    fun `splits and duration survive the round-trip`() {
+        val list = listOf(
+            Attempt(3, 12, 1000L, 1_200_000L, 45_000L, listOf(60_000L, 71_000L, 68_000L)),
+            Attempt(1, 0, 2000L, 90_000L, 0L, listOf(90_000L))
+        )
+        assertEquals(list, Records.decode(Records.encode(list)))
+    }
+
+    @Test
+    fun `an attempt with no complete rounds round-trips`() {
+        val a = Attempt(0, 9, 5L, 300_000L, 0L, emptyList())
+        assertEquals(listOf(a), Records.decode(Records.encode(listOf(a))))
+    }
+
+    @Test
+    fun `attempts saved before splits existed still load`() {
+        val decoded = Records.decode("12,7,1000\n14,0,2000")
+        assertEquals(2, decoded.size)
+        assertEquals(12, decoded[0].rounds)
+        assertEquals(emptyList<Long>(), decoded[0].roundSplitsMs)
+        assertEquals(0L, decoded[0].durationMs)
+    }
+
+    @Test
+    fun `old and new records coexist in one file`() {
+        val mixed = "12,7,1000\n" + Records.encode(listOf(Attempt(9, 0, 3000L, 600_000L, 0L, listOf(300_000L))))
+        val decoded = Records.decode(mixed)
+        assertEquals(2, decoded.size)
+        assertEquals(12, decoded[0].rounds)
+        assertEquals(listOf(300_000L), decoded[1].roundSplitsMs)
+    }
+
+    @Test
+    fun `average round prefers the splits over dividing the clock`() {
+        val a = Attempt(2, 5, 0L, 1_200_000L, 0L, listOf(100_000L, 140_000L))
+        assertEquals(120_000L, a.avgRoundMs)
+        assertEquals(100_000L, a.fastestRoundMs)
+        assertEquals(140_000L, a.slowestRoundMs)
+    }
+
+    @Test
+    fun `average round falls back to the clock when splits are missing`() {
+        assertEquals(300_000L, Attempt(4, 0, 0L, 1_200_000L).avgRoundMs)
+        assertNull(Attempt(0, 5, 0L, 600_000L).avgRoundMs)
+        assertNull(Attempt(3, 0, 0L, 0L).avgRoundMs)
+    }
+
+    @Test
+    fun `real time counts the pauses that the workout clock does not`() {
+        val a = Attempt(5, 0, 0L, durationMs = 1_200_000L, pausedMs = 180_000L)
+        assertEquals(1_200_000L, a.durationMs)
+        assertEquals(1_380_000L, a.realTimeMs)
+        // Splits are clock time, so a pause must not inflate the average.
+        assertEquals(240_000L, a.avgRoundMs)
+    }
+
+    @Test
+    fun `an unpaused attempt has real time equal to clock time`() {
+        val a = Attempt(3, 0, 0L, durationMs = 900_000L)
+        assertEquals(a.durationMs, a.realTimeMs)
+    }
+
+    @Test
+    fun `durations read as minutes and seconds`() {
+        assertEquals("0:00", formatDuration(0L))
+        assertEquals("1:05", formatDuration(65_000L))
+        assertEquals("20:00", formatDuration(20 * 60 * 1000L))
+    }
+
+    @Test
+    fun `an attempt carries its level`() {
+        assertEquals(Level.INTERMEDIATE, attempt(12).level)
+        assertEquals(Level.LEGEND, attempt(27).level)
+    }
+
+    @Test
     fun `decoding junk yields nothing rather than crashing`() {
         assertEquals(emptyList<Attempt>(), Records.decode(null))
         assertEquals(emptyList<Attempt>(), Records.decode(""))

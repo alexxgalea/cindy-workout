@@ -1,6 +1,8 @@
 # Cindy Tracker
 
-An Android app that counts a **Cindy** workout from the phone camera:
+An app that counts a **Cindy** workout from the phone camera. Android is the working build; an
+iOS port lives in [ios/](ios/), where the counting logic is ported and tested but the app layer
+around it has never been compiled — see [ios/README.md](ios/README.md).
 
 > AMRAP 20 minutes — 5 pull-ups, 10 push-ups, 15 air squats.
 
@@ -36,6 +38,19 @@ their distance from the camera can move them.
 **Only the current movement is scored.** The three exercises share joints, and evaluating all of
 them at once lets a push-up lockout leak into the squat counter. A posture test separates them:
 hands above the hips means hanging, which is a pull-up and not a push-up.
+
+### The bar gate
+
+Elbow flexion cannot tell a pull-up from someone standing on the floor waving their arms about,
+which is how reps got counted with nobody on the bar. `BarZone` fixes that by learning roughly
+where the hands sit when they *are* on the bar, from the one posture that reliably marks it: a
+straight-armed dead hang.
+
+Nothing is tapped in. The setup reps already have you hanging, and every dead hang during the
+workout refines the estimate, so it survives a pause without another calibration step. Tolerances
+are multiples of torso length rather than pixels, so stepping toward or away from the camera does
+not move the gate — and `recalibrate()` forgets the bar outright, because its position was
+recorded in frame pixels and a moved camera makes those meaningless.
 
 ### Designing for a phone on the floor
 
@@ -94,6 +109,10 @@ silently for twenty minutes and there is no way to tell from the score that it h
 `SKIP` bypasses the whole thing. While running, the status line turns red whenever the body is
 not being tracked, so a stalled counter looks stalled.
 
+Pausing and flipping the camera both trigger a recalibration: the bands describe this athlete as
+seen from where the phone was standing, and either action can invalidate that without invalidating
+the reps already counted. The status line says `Recalibrating…` until the band is re-learned.
+
 ### Interface
 
 Full-screen preview with the skeleton drawn over it, and four numbers: the clock, the round,
@@ -104,6 +123,9 @@ the current movement, and reps against the target.
 | `START` | start / pause / resume; `RESET` once time expires |
 | `+1` | book a rep by hand when the angle defeats the detector |
 | `+1` (long press) | skip to the next movement |
+| `−1` | take back a rep that should not have counted; steps across movement and round boundaries |
+| `STOP` | end early and save the score (replaces `FLIP` during a workout) |
+| `REC` | film the workout to `Movies/Cindy` |
 | `FLIP` | switch between the rear and selfie camera |
 | `VOICE` | toggle spoken counting |
 | `MUSIC` | tap to pick a track (or mute); long press to change it |
@@ -130,14 +152,36 @@ already own; it loops for the workout, pauses when you pause, and ducks to 18% w
 voice speaks. The chosen track is remembered across launches through a persistable URI
 permission, and quietly forgotten if that permission lapses.
 
-### Records
+### Records, levels and statistics
 
-`RECORDS` shows the benchmark to chase and every attempt logged on this phone, best first.
-The benchmark is **Tom Holland — 27 rounds** (810 reps), the score that prompted this app.
-Beat it and the finish line says so.
+Every attempt ends on a results screen: score, level, rounds completed, workout time, average and
+fastest round, and a bar chart of the round splits.
 
-Attempts are stored in `SharedPreferences` as one `rounds,reps,timestamp` line each. A zero-rep
-attempt — the app left running with nobody in front of it — is not logged.
+**Clock time and real time are reported separately.** The workout clock stops when you pause; the
+day does not. Round splits are clock time, so a pause cannot inflate the round it happened in, and
+the paused total is shown alongside the real elapsed time whenever it is non-zero.
+
+`RECORDS` shows the benchmark to chase, a progress chart across every attempt, and each attempt
+with its level and pace. The benchmark is **Tom Holland — 27 rounds** (810 reps), the score that
+prompted this app.
+
+Levels are ranked by rounds, since in a fixed 20-minute AMRAP that is the same measurement as
+average round time:
+
+| Level | Rounds |
+|---|---|
+| First Steps | 0 |
+| Novice | 5 |
+| **Intermediate** | **10** — a complete Cindy |
+| Advanced | 16 |
+| Elite | 21 |
+| Legend | 27 — level with the benchmark |
+
+The ladder is provisional and lives in one table in [Levels.kt](app/src/main/java/com/cindy/tracker/Levels.kt),
+so retuning it is a matter of editing numbers.
+
+Attempts persist in `SharedPreferences`, one line each, versioned so older records keep loading. A
+zero-rep attempt — the app left running with nobody in front of it — is not logged.
 
 ## Build
 
