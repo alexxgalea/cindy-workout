@@ -13,6 +13,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Phones are ARM. The x86 TFLite libraries are ~9 MB of emulator-only payload.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
