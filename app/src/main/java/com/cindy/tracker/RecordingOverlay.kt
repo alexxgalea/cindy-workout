@@ -29,12 +29,13 @@ class RecordingOverlay {
         val keypoints: Array<Keypoint>,
         val width: Int,
         val height: Int,
-        /** Maps the upright analysis frame back to sensor coordinates. */
-        val uprightToSensor: Matrix,
+        /** Whether the analysis frame was mirrored, as it is for the selfie camera. */
+        val mirrored: Boolean,
         val clock: String,
         val round: String,
         val exercise: String,
-        val reps: String
+        val reps: String,
+        val debug: Boolean
     )
 
     @Volatile
@@ -76,13 +77,14 @@ class RecordingOverlay {
         keypoints: Array<Keypoint>,
         width: Int,
         height: Int,
-        uprightToSensor: Matrix,
+        mirrored: Boolean,
         clock: String,
         round: String,
         exercise: String,
-        reps: String
+        reps: String,
+        debug: Boolean = false
     ) {
-        state = State(keypoints, width, height, uprightToSensor, clock, round, exercise, reps)
+        state = State(keypoints, width, height, mirrored, clock, round, exercise, reps, debug)
     }
 
     fun clear() {
@@ -96,17 +98,53 @@ class RecordingOverlay {
         val s = state ?: return true
         if (s.width <= 0 || s.height <= 0) return true
 
-        val toBuffer = Matrix(s.uprightToSensor).apply {
-            postConcat(frame.sensorToBufferTransform)
-        }
+        val size = frame.size
+        if (size.width <= 0 || size.height <= 0) return true
 
         canvas.save()
-        canvas.concat(toBuffer)
+        canvas.concat(transform(frame, s))
+        if (s.debug) drawFrameBorder(canvas, s)
         drawSkeleton(canvas, s)
         drawHud(canvas, s)
         drawWatermark(canvas, s)
         canvas.restore()
         return true
+    }
+
+    /**
+     * Maps the upright analysis frame onto the recorded buffer.
+     *
+     * An earlier version composed this out of `sensorToBufferTransform` on both streams. That
+     * put the overlay in a corner at a fraction of its size: the analysis matrix is a default
+     * that stays identity unless asked for, so the composition was effectively mapping
+     * analysis-sized coordinates through a full sensor-to-buffer scale.
+     *
+     * This version needs only the two things every frame reports for itself — its size and how
+     * far it has to be rotated to be displayed — plus the analysis frame's own dimensions. The
+     * fit is the same FILL_CENTER the preview uses, so the recording is framed like the screen
+     * and nothing is stretched.
+     */
+    private fun transform(frame: Frame, s: State): Matrix {
+        val affine = OverlayTransform.build(
+            srcWidth = s.width,
+            srcHeight = s.height,
+            bufferWidth = frame.size.width,
+            bufferHeight = frame.size.height,
+            rotationDegrees = frame.rotationDegrees,
+            // The keypoints are mirrored for the selfie camera; the buffer may not be.
+            mirror = s.mirrored != frame.isMirroring
+        )
+        return Matrix().apply { setValues(affine.values()) }
+    }
+
+    /** Outlines the mapped frame, so a misaligned overlay is obvious in the recording. */
+    private fun drawFrameBorder(canvas: Canvas, s: State) {
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ACCENT
+            style = Paint.Style.STROKE
+            strokeWidth = s.height * 0.006f
+        }
+        canvas.drawRect(0f, 0f, s.width.toFloat(), s.height.toFloat(), edge)
     }
 
     private fun drawSkeleton(canvas: Canvas, s: State) {

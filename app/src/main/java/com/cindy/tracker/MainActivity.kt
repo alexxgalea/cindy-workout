@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -100,27 +99,6 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var pendingModel: String? = null
 
     @Volatile private var lensFacing = CameraSelector.LENS_FACING_BACK
-    /**
-     * Sensor coordinates to analysis-buffer coordinates, supplied by CameraX.
-     *
-     * `ImageInfo.getSensorToBufferTransformMatrix()` is a default method that returns identity
-     * unless the analyzer asks for a coordinate system, so it is taken from `updateTransform`
-     * instead. Without it the recording overlay would map the skeleton as though the analysis
-     * buffer and the sensor were the same thing, and it would land beside the body.
-     */
-    private val sensorToAnalysis = Matrix()
-
-    private val analyzer = object : ImageAnalysis.Analyzer {
-        override fun analyze(image: ImageProxy) = analyse(image)
-
-        override fun getTargetCoordinateSystem(): Int = ImageAnalysis.COORDINATE_SYSTEM_SENSOR
-
-        override fun updateTransform(matrix: Matrix?) {
-            synchronized(sensorToAnalysis) {
-                if (matrix == null) sensorToAnalysis.reset() else sensorToAnalysis.set(matrix)
-            }
-        }
-    }
     private var cameraProvider: ProcessCameraProvider? = null
     private val analysing = AtomicBoolean(false)
 
@@ -258,7 +236,7 @@ class MainActivity : AppCompatActivity() {
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
-            .also { it.setAnalyzer(analysisExecutor, analyzer) }
+            .also { it.setAnalyzer(analysisExecutor, ::analyse) }
 
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
 
@@ -351,8 +329,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         try {
-            val upright = proxy.toUprightFrame(mirror = lensFacing == CameraSelector.LENS_FACING_FRONT)
-            val frame = upright.bitmap
+            val mirrored = lensFacing == CameraSelector.LENS_FACING_FRONT
+            val frame = proxy.toUprightBitmap(mirror = mirrored)
             val keypoints = det.detect(frame)
             val now = SystemClock.elapsedRealtime()
             val snap = if (state == State.RUNNING) {
@@ -374,11 +352,12 @@ class MainActivity : AppCompatActivity() {
                     keypoints = keypoints,
                     width = frame.width,
                     height = frame.height,
-                    uprightToSensor = upright.toSensor,
+                    mirrored = mirrored,
                     clock = binding.timer.text.toString(),
                     round = binding.rounds.text.toString(),
                     exercise = binding.exercise.text.toString(),
-                    reps = binding.reps.text.toString()
+                    reps = binding.reps.text.toString(),
+                    debug = debug
                 )
             }
         } catch (t: Throwable) {
@@ -389,41 +368,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** An analysis frame, with the transform that maps it back into sensor coordinates. */
-    private class UprightFrame(val bitmap: Bitmap, val toSensor: Matrix)
-
-    /**
-     * Rotates the analysis frame to display orientation, mirroring it for the selfie camera.
-     *
-     * Also returns the inverse route back to the sensor. The recording overlay needs it: the
-     * video buffer is a different size, crop and rotation from the analysis buffer, and the
-     * sensor is the one frame of reference both of them can be expressed in.
-     */
-    private fun ImageProxy.toUprightFrame(mirror: Boolean): UprightFrame {
+    /** Rotates the analysis frame to display orientation, mirroring it for the selfie camera. */
+    private fun ImageProxy.toUprightBitmap(mirror: Boolean): Bitmap {
         val raw = toBitmap()
         val rotation = imageInfo.rotationDegrees
-        val toBuffer = synchronized(sensorToAnalysis) { Matrix(sensorToAnalysis) }
-
-        if (rotation == 0 && !mirror) {
-            val toSensor = Matrix()
-            return UprightFrame(raw, if (toBuffer.invert(toSensor)) toSensor else Matrix())
-        }
-
-        val rotate = Matrix().apply {
+        if (rotation == 0 && !mirror) return raw
+        val m = Matrix().apply {
             postRotate(rotation.toFloat())
             // Mirror after rotation so it matches how PreviewView flips the front camera.
             if (mirror) postScale(-1f, 1f)
         }
-        // createBitmap shifts the result back to the origin; the matrix has to say so too.
-        val bounds = RectF(0f, 0f, raw.width.toFloat(), raw.height.toFloat())
-        rotate.mapRect(bounds)
-        val analysisToUpright = Matrix(rotate).apply { postTranslate(-bounds.left, -bounds.top) }
-
-        val bitmap = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, rotate, true)
-        val sensorToUpright = Matrix(toBuffer).apply { postConcat(analysisToUpright) }
-        val uprightToSensor = Matrix()
-        if (!sensorToUpright.invert(uprightToSensor)) uprightToSensor.reset()
-        return UprightFrame(bitmap, uprightToSensor)
+        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
     }
 
     // ── engine access ─────────────────────────────────────────────────────────

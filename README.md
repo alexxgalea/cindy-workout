@@ -163,12 +163,23 @@ recorded buffer. The effect targets `VIDEO_CAPTURE` only; pointing it at the pre
 draw the skeleton twice on screen.
 
 Everything is drawn in the analysis frame's upright space — the space the keypoints are already
-in — and mapped to the video buffer by one matrix composed from each frame's own metadata, routed
-through the sensor. Going via the sensor is what lets the two streams differ in resolution, crop,
-rotation and mirroring while the skeleton still lands on the body; putting the text through the
-same matrix is what keeps it the right way up. The analyzer declares
-`COORDINATE_SYSTEM_SENSOR` so CameraX supplies that transform, because the matrix on `ImageInfo`
-is a default method that returns identity unless asked.
+in — and mapped onto the recorded buffer by [OverlayTransform](app/src/main/java/com/cindy/tracker/OverlayTransform.kt).
+
+The first attempt composed that map out of the sensor-to-buffer matrices of both streams, and put
+the entire overlay in the lower-left corner at a fraction of its size: `ImageInfo`'s matrix is a
+default method that stays identity unless the analyzer asks for a coordinate system, so the
+composition was pushing analysis-sized coordinates through a full sensor-to-buffer scale.
+
+It now needs only what every frame reports about itself — its size, how far it must be turned to
+be displayed, and whether it is mirrored — plus the analysis frame's dimensions. The fit is the
+same FILL_CENTER the preview uses, so the recording is framed like the screen and nothing is
+stretched, and the text goes through the same map so it comes out the right way up.
+
+That calculation is deliberately plain Kotlin rather than `android.graphics.Matrix`, because
+framework classes cannot run in JVM unit tests and this is the part that was wrong. It is now
+covered by 13 tests asserting the properties that would have caught it: corners land on corners,
+the centre on the centre, squares stay square at every rotation, and a mismatched aspect ratio
+crops instead of squashing.
 
 Video only, no audio: it keeps the app clear of the microphone permission and stops it recording
 its own voice counting back at you.
