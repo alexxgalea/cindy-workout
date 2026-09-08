@@ -49,9 +49,37 @@ the current movement, and reps against the target.
 | `+1` | book a rep by hand when the angle defeats the detector |
 | `+1` (long press) | skip to the next movement |
 | `FLIP` | switch between the rear and selfie camera |
+| `VOICE` | toggle spoken counting |
+| `MUSIC` | tap to pick a track (or mute); long press to change it |
+| `RECORDS` | open the record board |
 
 Reps buzz short, finishing a movement buzzes longer, finishing a round buzzes longest.
-At `00:00` the app freezes the score as `N rounds + M reps`.
+At `00:00` the app freezes the score as `N rounds + M reps` and logs it.
+
+### Voice
+
+Every rep is called out. Finishing a movement speaks the final count and then the next
+movement; finishing a round announces the round number. The clock calls ten minutes, five
+minutes, one minute and ten seconds.
+
+Rep numbers are spoken with `QUEUE_FLUSH` so the voice tracks the athlete instead of falling a
+queue behind during a fast set — cues that must not be dropped are queued after.
+
+### Music
+
+The app ships no audio. `MUSIC` opens the storage access framework so you pick a track you
+already own; it loops for the workout, pauses when you pause, and ducks to 18% whenever the
+voice speaks. The chosen track is remembered across launches through a persistable URI
+permission, and quietly forgotten if that permission lapses.
+
+### Records
+
+`RECORDS` shows the benchmark to chase and every attempt logged on this phone, best first.
+The benchmark is **Tom Holland — 27 rounds** (810 reps), the score that prompted this app.
+Beat it and the finish line says so.
+
+Attempts are stored in `SharedPreferences` as one `rounds,reps,timestamp` line each. A zero-rep
+attempt — the app left running with nobody in front of it — is not logged.
 
 ## Build
 
@@ -67,10 +95,13 @@ Requires JDK 17 and the Android SDK (platform 35, build-tools 35.0.0).
 
 ## Tests
 
-The rep logic is pure Kotlin and is tested on the JVM with synthetic skeletons
+32 JVM tests. The rep logic runs against synthetic skeletons
 ([PoseFixtures](app/src/test/java/com/cindy/tracker/PoseFixtures.kt)) — full rounds, partial
-reps that must not count, and cross-talk between movements. It does **not** cover the camera
-path or the model itself; those need a real device.
+reps that must not count, and cross-talk between movements — and the record board is covered
+for ranking, round-tripping and corrupt-data tolerance.
+
+They do **not** cover the camera path, the model, the voice or the music; those need a real
+device.
 
 ## Camera placement
 

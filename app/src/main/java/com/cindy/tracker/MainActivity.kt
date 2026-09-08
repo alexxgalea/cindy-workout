@@ -1,9 +1,11 @@
 package com.cindy.tracker
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -14,7 +16,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.util.Size
-import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -37,21 +39,48 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
+        const val PREFS = "cindy"
+        const val KEY_MUSIC = "music_uri"
+        const val KEY_VOICE = "voice_on"
     }
 
     private enum class State { IDLE, RUNNING, PAUSED, FINISHED }
 
+    /**
+     * An immutable read of the engine taken on the analysis thread.
+     *
+     * The engine is mutated from the camera thread and read from the main thread, so the UI is
+     * driven from a snapshot rather than from live fields. It also carries the movement that was
+     * just completed, which the engine has already advanced past by the time the UI sees it.
+     */
+    private data class Snapshot(
+        val exercise: Exercise,
+        val reps: Int,
+        val rounds: Int,
+        val repsThisRound: Int,
+        val totalReps: Int,
+        val hint: String,
+        val event: RepEvent,
+        val completed: Exercise?
+    )
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var analysisExecutor: ExecutorService
+    private lateinit var speaker: Speaker
+    private lateinit var music: MusicPlayer
+    private lateinit var records: RecordStore
 
     private var detector: PoseDetector? = null
     private val engine = WorkoutEngine()
+    private val engineLock = Any()
 
-    private var state = State.IDLE
+    @Volatile private var state = State.IDLE
     private var remainingMs = WORKOUT_MS
     private var lastTickAt = 0L
+    private var lastAnnouncedSec = -1
+    private var musicEnabled = true
 
-    private var lensFacing = CameraSelector.LENS_FACING_BACK
+    @Volatile private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var cameraProvider: ProcessCameraProvider? = null
     private val analysing = AtomicBoolean(false)
 
@@ -67,6 +96,7 @@ class MainActivity : AppCompatActivity() {
                 finishWorkout()
             } else {
                 renderClock()
+                announceTime()
                 ui.postDelayed(this, 200L)
             }
         }
@@ -79,12 +109,22 @@ class MainActivity : AppCompatActivity() {
         else binding.status.text = "Camera permission is required to count reps"
     }
 
+    private val pickMusic = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { adoptTrack(it) } }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         analysisExecutor = Executors.newSingleThreadExecutor()
+        records = RecordStore(this)
+        music = MusicPlayer(this)
+        speaker = Speaker(this).apply {
+            enabled = prefs().getBoolean(KEY_VOICE, true)
+            onSpeakingChanged = { speaking -> ui.post { music.duck(speaking) } }
+        }
 
         try {
             detector = PoseDetector(this)
@@ -93,25 +133,30 @@ class MainActivity : AppCompatActivity() {
             binding.status.text = "Pose model failed to load — manual counting only"
         }
 
+        restoreTrack()
+
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnFlip.setOnClickListener { flipCamera() }
         binding.btnSkip.setOnClickListener { onManualRep() }
         binding.btnSkip.setOnLongClickListener {
-            if (state == State.RUNNING) {
-                handleEvent(engine.skipExercise())
-                renderScore()
-                toast("Skipped to ${engine.exercise.label}")
-            }
+            if (state == State.RUNNING) apply(runEngine { engine.skipExercise() })
             true
         }
+        binding.btnVoice.setOnClickListener { toggleVoice() }
+        binding.btnMusic.setOnClickListener { onMusicTapped() }
+        binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
+        binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
 
         renderClock()
-        renderScore()
+        apply(runEngine { RepEvent.NONE })
+        renderChips()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) startCamera() else requestCamera.launch(Manifest.permission.CAMERA)
     }
+
+    private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
 
     // ── camera ────────────────────────────────────────────────────────────────
 
@@ -183,16 +228,15 @@ class MainActivity : AppCompatActivity() {
         try {
             val frame = proxy.toUprightBitmap(mirror = lensFacing == CameraSelector.LENS_FACING_FRONT)
             val keypoints = det.detect(frame)
-            val now = SystemClock.elapsedRealtime()
-            val event = if (state == State.RUNNING) engine.onFrame(keypoints, now) else RepEvent.NONE
-
+            val running = state == State.RUNNING
+            val snap = if (running) {
+                runEngine { engine.onFrame(keypoints, SystemClock.elapsedRealtime()) }
+            } else {
+                null
+            }
             ui.post {
                 binding.overlay.setPose(keypoints, frame.width, frame.height)
-                if (state == State.RUNNING) {
-                    handleEvent(event)
-                    renderScore()
-                    binding.status.text = engine.hint
-                }
+                if (snap != null && state == State.RUNNING) apply(snap)
             }
         } catch (t: Throwable) {
             Log.e(TAG, "analysis failed", t)
@@ -215,21 +259,70 @@ class MainActivity : AppCompatActivity() {
         return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
     }
 
+    // ── engine access ─────────────────────────────────────────────────────────
+
+    /** Mutates the engine under lock and returns what the UI needs to render the result. */
+    private fun runEngine(block: () -> RepEvent): Snapshot = synchronized(engineLock) {
+        val before = engine.exercise
+        val event = block()
+        Snapshot(
+            exercise = engine.exercise,
+            reps = engine.reps,
+            rounds = engine.rounds,
+            repsThisRound = engine.repsThisRound,
+            totalReps = engine.totalReps,
+            hint = engine.hint,
+            event = event,
+            completed = if (event == RepEvent.EXERCISE_DONE || event == RepEvent.ROUND_DONE) before else null
+        )
+    }
+
+    private fun apply(snap: Snapshot) {
+        binding.exercise.text = snap.exercise.label
+        binding.reps.text = "${snap.reps} / ${snap.exercise.target}"
+        binding.rounds.text = "ROUND ${snap.rounds + 1}"
+        if (state == State.RUNNING) binding.status.text = snap.hint
+
+        when (snap.event) {
+            RepEvent.NONE -> Unit
+            RepEvent.REP -> {
+                buzz(35)
+                speaker.say("${snap.reps}")
+            }
+            RepEvent.EXERCISE_DONE -> {
+                buzz(90)
+                snap.completed?.let { speaker.say("${it.target}") }
+                speaker.queue(snap.exercise.spoken)
+            }
+            RepEvent.ROUND_DONE -> {
+                buzz(220)
+                snap.completed?.let { speaker.say("${it.target}") }
+                speaker.queue("Round ${snap.rounds + 1}")
+                toast("Round ${snap.rounds} done")
+            }
+        }
+    }
+
     // ── workout control ───────────────────────────────────────────────────────
 
     private fun toggleRun() {
         when (state) {
             State.IDLE, State.PAUSED -> {
+                val resuming = state == State.PAUSED
                 state = State.RUNNING
                 lastTickAt = SystemClock.elapsedRealtime()
                 binding.btnStart.text = "PAUSE"
                 binding.status.text = "Counting…"
+                if (musicEnabled) music.play()
+                speaker.say(if (resuming) "Resume" else "Go. Pull ups")
                 ui.post(ticker)
             }
             State.RUNNING -> {
                 state = State.PAUSED
                 binding.btnStart.text = "RESUME"
                 binding.status.text = "Paused"
+                music.pause()
+                speaker.stop()
                 ui.removeCallbacks(ticker)
             }
             State.FINISHED -> resetWorkout()
@@ -239,41 +332,96 @@ class MainActivity : AppCompatActivity() {
     private fun resetWorkout() {
         state = State.IDLE
         remainingMs = WORKOUT_MS
-        engine.reset()
+        lastAnnouncedSec = -1
+        synchronized(engineLock) { engine.reset() }
         binding.btnStart.text = "START"
         binding.status.text = "Press START, then get in frame"
         binding.reps.setTextColor(getColor(R.color.on_surface))
+        music.stop()
         renderClock()
-        renderScore()
+        apply(runEngine { RepEvent.NONE })
     }
 
     private fun onManualRep() {
         if (state != State.RUNNING) return
-        handleEvent(engine.manualRep())
-        renderScore()
-    }
-
-    private fun handleEvent(event: RepEvent) {
-        when (event) {
-            RepEvent.NONE -> Unit
-            RepEvent.REP -> buzz(35)
-            RepEvent.EXERCISE_DONE -> buzz(90)
-            RepEvent.ROUND_DONE -> {
-                buzz(220)
-                toast("Round ${engine.rounds} done")
-            }
-        }
+        apply(runEngine { engine.manualRep() })
     }
 
     private fun finishWorkout() {
         state = State.FINISHED
         ui.removeCallbacks(ticker)
         buzz(600)
+        music.stop()
         renderClock()
+
+        val snap = runEngine { RepEvent.NONE }
+        val attempt = Attempt(snap.rounds, snap.repsThisRound, System.currentTimeMillis())
+        records.add(attempt)
+
         binding.btnStart.text = "RESET"
-        binding.status.text =
-            "TIME — ${engine.rounds} rounds + ${engine.repsThisRound} reps  (${engine.totalReps} total)"
         binding.reps.setTextColor(getColor(R.color.warn))
+        val beat = Records.beatsBenchmark(attempt)
+        binding.status.text = buildString {
+            append("TIME — ${attempt.scoreLabel()}  (${attempt.totalReps} reps)")
+            if (beat) append("  ·  you beat ${Records.BENCHMARK_NAME}")
+        }
+        speaker.say("Time.")
+        speaker.queue("${snap.rounds} rounds and ${snap.repsThisRound} reps")
+        if (beat) speaker.queue("You beat ${Records.BENCHMARK_NAME}")
+    }
+
+    private fun announceTime() {
+        val sec = (remainingMs / 1000L).toInt()
+        if (sec == lastAnnouncedSec) return
+        lastAnnouncedSec = sec
+        when (sec) {
+            600 -> speaker.queue("Ten minutes remaining")
+            300 -> speaker.queue("Five minutes remaining")
+            60 -> speaker.queue("One minute")
+            10 -> speaker.queue("Ten seconds")
+        }
+    }
+
+    // ── voice & music ─────────────────────────────────────────────────────────
+
+    private fun toggleVoice() {
+        speaker.enabled = !speaker.enabled
+        prefs().edit().putBoolean(KEY_VOICE, speaker.enabled).apply()
+        if (!speaker.enabled) speaker.stop() else speaker.say("Voice on")
+        renderChips()
+    }
+
+    private fun onMusicTapped() {
+        if (!music.hasTrack) {
+            pickMusic.launch(arrayOf("audio/*"))
+            return
+        }
+        musicEnabled = !musicEnabled
+        if (musicEnabled && state == State.RUNNING) music.play() else music.pause()
+        renderChips()
+    }
+
+    private fun adoptTrack(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (t: Throwable) {
+            Log.w(TAG, "no persistable permission for $uri", t)
+        }
+        if (!music.load(uri)) {
+            toast("Could not play that file")
+            return
+        }
+        prefs().edit().putString(KEY_MUSIC, uri.toString()).apply()
+        musicEnabled = true
+        if (state == State.RUNNING) music.play()
+        renderChips()
+        toast("Music: ${music.trackName ?: "track loaded"}")
+    }
+
+    /** Reloads last session's track, quietly forgetting it if the permission has lapsed. */
+    private fun restoreTrack() {
+        val saved = prefs().getString(KEY_MUSIC, null) ?: return
+        if (!music.load(Uri.parse(saved))) prefs().edit().remove(KEY_MUSIC).apply()
     }
 
     // ── rendering ─────────────────────────────────────────────────────────────
@@ -283,14 +431,15 @@ class MainActivity : AppCompatActivity() {
         binding.timer.text = String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
     }
 
-    private fun renderScore() {
-        binding.exercise.text = engine.exercise.label
-        binding.reps.text = "${engine.reps} / ${engine.exercise.target}"
-        binding.rounds.text = "ROUND ${engine.rounds + 1}"
+    private fun renderChips() {
+        fun tint(view: TextView, on: Boolean) =
+            view.setTextColor(getColor(if (on) R.color.accent else R.color.on_surface_dim))
+        tint(binding.btnVoice, speaker.enabled)
+        tint(binding.btnMusic, music.hasTrack && musicEnabled)
+        binding.btnMusic.text = if (music.hasTrack) "MUSIC" else "MUSIC +"
     }
 
-    private fun toast(msg: String) =
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
     private fun buzz(ms: Long) {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -303,10 +452,18 @@ class MainActivity : AppCompatActivity() {
         vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Do not keep playing over whatever the athlete opens next.
+        if (state == State.RUNNING) toggleRun() else music.pause()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ui.removeCallbacks(ticker)
         analysisExecutor.shutdown()
         detector?.close()
+        speaker.shutdown()
+        music.release()
     }
 }

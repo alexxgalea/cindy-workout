@@ -4,10 +4,10 @@ import kotlin.math.acos
 import kotlin.math.hypot
 
 /** One round of Cindy: 5 pull-ups, 10 push-ups, 15 air squats. */
-enum class Exercise(val label: String, val target: Int) {
-    PULLUP("PULL-UPS", 5),
-    PUSHUP("PUSH-UPS", 10),
-    SQUAT("SQUATS", 15);
+enum class Exercise(val label: String, val spoken: String, val target: Int) {
+    PULLUP("PULL-UPS", "pull ups", 5),
+    PUSHUP("PUSH-UPS", "push ups", 10),
+    SQUAT("SQUATS", "squats", 15);
 
     fun next(): Exercise = entries[(ordinal + 1) % entries.size]
 }
