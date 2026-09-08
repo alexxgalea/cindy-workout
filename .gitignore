@@ -1,0 +1,22 @@
+# Android / Gradle
+*.iml
+.gradle/
+build/
+local.properties
+.cxx/
+captures/
+.externalNativeBuild/
+
+# IDE
+.idea/
+*.hprof
+
+# Keys & secrets — never commit
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+*.env
+
+# macOS
+.DS_Store
