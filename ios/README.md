@@ -47,13 +47,32 @@ Everything downstream of that file is the same logic as Android, arrived at the 
 
 ## Building it
 
-1. Xcode → new iOS App, SwiftUI, named `CindyTracker`.
-2. File → Add Package Dependencies → Add Local → select `ios/CindyCore`.
-3. Add the files in `ios/CindyTracker/` to the target, replacing the generated `ContentView.swift`.
-4. In Info.plist:
-   - `NSCameraUsageDescription` — "Counts your reps from the camera."
-   - `NSPhotoLibraryAddUsageDescription` — only if you wire filming into the photo library.
-5. Run on a device. The simulator has no camera.
+The project is generated, not committed — `project.yml` is the source of truth, and it already
+wires up the local `CindyCore` package, the camera usage string and the portrait/dark settings.
+
+```sh
+brew install xcodegen          # once
+cd ios && xcodegen generate    # writes CindyTracker.xcodeproj
+open CindyTracker.xcodeproj
+```
+
+Then set a signing team in Signing & Capabilities and run **on a device** — the simulator has no
+camera, so there is nothing for the pose detector to look at.
+
+Re-run `xcodegen generate` after adding or moving files.
+
+## Getting it onto a phone
+
+There is no equivalent of the Android APK link. iOS will not install an app that is not signed for
+the target device, so a build cannot simply be downloaded from a URL. The routes that exist:
+
+| Route | Cost | Over the air? |
+|---|---|---|
+| Xcode → Run, wireless | free Apple ID | after one USB pairing; app expires every 7 days |
+| TestFlight | $99/yr Developer Program | yes — an install link, the closest thing to the APK flow |
+| Ad Hoc + Firebase App Distribution / Diawi | $99/yr | yes, but every device UDID must be registered first |
+
+For one phone, Xcode wireless is enough. For sending builds to anyone else, it is TestFlight.
 
 ## Still to port
 

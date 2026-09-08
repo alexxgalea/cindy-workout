@@ -1,0 +1,37 @@
+# Generates CindyTracker.xcodeproj so the app target does not have to be assembled by hand.
+# Regenerate with `xcodegen generate` from this directory after adding or moving files.
+name: CindyTracker
+options:
+  bundleIdPrefix: com.cindy
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  CindyCore:
+    path: CindyCore
+
+targets:
+  CindyTracker:
+    type: application
+    platform: iOS
+    sources:
+      - path: CindyTracker
+    dependencies:
+      - package: CindyCore
+        product: CindyCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        # The camera is the whole app; without this string iOS kills it on first frame.
+        INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Saves your workout recording.
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UIStatusBarHidden: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
