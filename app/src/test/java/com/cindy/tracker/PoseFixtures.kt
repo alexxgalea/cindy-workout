@@ -61,17 +61,19 @@ object PoseFixtures {
     }
 
     /**
-     * A body on the bar with the hands [riseFromHands] pixels above the shoulders.
-     * Large values are a dead hang; small values are chin over the bar.
+     * A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
+     * Elbow at the origin, wrist straight above it on the bar, shoulder swung by [elbowDeg] —
+     * so the shoulders rise past the hands at the top, exactly as they do on a real pull-up.
      */
-    fun pullup(riseFromHands: Float): Array<Keypoint> {
+    fun pullup(elbowDeg: Float): Array<Keypoint> {
         val k = blank()
-        val shoulderY = 0f
-        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, shoulderY)
-        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, 0f, shoulderY + TORSO)
-        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, shoulderY - riseFromHands)
-        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, shoulderY - riseFromHands / 2f)
-        k.put(KP.NOSE, 0f, shoulderY - 30f)
+        val shX = (LIMB * sin(rad(elbowDeg))).toFloat()
+        val shY = (-LIMB * cos(rad(elbowDeg))).toFloat()
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, 0f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, -LIMB)
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shX, shY)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, shX, shY + TORSO)
+        k.put(KP.NOSE, shX, shY - 20f)
         return k
     }
 

@@ -30,10 +30,13 @@ class WorkoutEngine {
     }
 
     private val counters = mapOf(
-        // Elbow/knee angles are degrees; the pull-up signal is shoulder rise in torso-lengths.
-        Exercise.PULLUP to RepCounter(downBelow = -0.85f, upAbove = -0.45f, minRepMs = 400L),
-        Exercise.PUSHUP to RepCounter(downBelow = 100f, upAbove = 150f, minRepMs = 350L),
-        Exercise.SQUAT to RepCounter(downBelow = 100f, upAbove = 158f, minRepMs = 350L)
+        // All three signals are joint angles in degrees. The pull-up one is negated because a
+        // dead hang is the *extended* end of its range, the opposite way round to the others.
+        // minRange is the projected travel below which a swing is not believed to be a rep at
+        // all; above it the counter calibrates to the athlete and the fixed numbers stop mattering.
+        Exercise.PULLUP to RepCounter(-140f, -100f, minRepMs = 400L, minRange = 40f),
+        Exercise.PUSHUP to RepCounter(100f, 150f, minRepMs = 350L, minRange = 45f),
+        Exercise.SQUAT to RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
     )
 
     var exercise = Exercise.PULLUP
@@ -49,6 +52,8 @@ class WorkoutEngine {
     val reps: Int get() = counters.getValue(exercise).count
     val phase: RepCounter.Phase get() = counters.getValue(exercise).phase
     val signal: Float get() = counters.getValue(exercise).smoothed
+    val learnedRange: Float get() = counters.getValue(exercise).learnedRange
+    val calibrated: Boolean get() = counters.getValue(exercise).calibrated
 
     /** Reps completed since the start of the current round, across all three movements. */
     val repsThisRound: Int
@@ -83,7 +88,7 @@ class WorkoutEngine {
         bodyVisible = true
 
         val s = when (exercise) {
-            Exercise.PULLUP -> pullupSignal(k, torso)
+            Exercise.PULLUP -> pullupSignal(k)
             Exercise.PUSHUP -> pushupSignal(k)
             Exercise.SQUAT -> squatSignal(k)
         }
@@ -118,32 +123,51 @@ class WorkoutEngine {
     // ── signals ───────────────────────────────────────────────────────────────
 
     /**
-     * Shoulder height relative to the hands, in torso-lengths, negated so that a dead hang is
-     * the low value and chin-over-bar is the high one.
+     * Mean elbow angle, negated: about -170 at a dead hang, about -60 with the chin over the bar.
      *
-     * Measuring the body rising toward the hands — rather than elbow flexion — is what makes
-     * this a pull-up counter and not an arm-bend counter.
+     * An earlier version measured how far the shoulders rose toward the hands, divided by torso
+     * length. That undercounted badly for two compounding reasons. Dividing by torso length put
+     * the hip keypoints in the denominator, and hips are the *least* reliable joints on someone
+     * hanging with their knees bent behind them — a hip estimate drifting low inflates the
+     * divisor and shrinks the signal until it no longer reaches the arming threshold. Worse, the
+     * posture guard rejected any frame where the shoulders rose above the hands, which is
+     * exactly what happens at the top of a strong pull-up: the better the rep, the more reliably
+     * it was thrown away.
+     *
+     * An angle needs no normalisation, so nothing about the athlete's build, their distance from
+     * the camera, or where MoveNet thinks their hips are can move the thresholds.
      */
-    private fun pullupSignal(k: Array<Keypoint>, torso: Float): Float {
-        val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return Float.NaN
-        val wr = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: run {
-            hint = "Hands out of frame"
-            return Float.NaN
-        }
-        // Image y grows downward, so hands overhead means wr.y < sh.y.
-        if (wr.y > sh.y) {
+    private fun pullupSignal(k: Array<Keypoint>): Float {
+        if (!hangingFromBar(k)) {
             hint = "Hang from the bar"
             return Float.NaN
         }
-        return (wr.y - sh.y) / torso
+        val elbow = bilateralAngle(
+            k,
+            KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
+            KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST
+        )
+        if (elbow.isNaN()) hint = "Arms out of frame"
+        return -elbow
+    }
+
+    /**
+     * Hands overhead, tested against the hips rather than the shoulders.
+     *
+     * The shoulders climb past the hands at the top of a good rep, so gating on them rejects the
+     * peak of the movement. The hips stay well below the hands throughout, which separates
+     * hanging from a push-up without discarding the reps worth counting.
+     */
+    private fun hangingFromBar(k: Array<Keypoint>): Boolean {
+        val hip = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
+        val wr = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
+        return wr.y < hip.y
     }
 
     /** Mean elbow angle in degrees; small at the bottom of a push-up, ~180 at lockout. */
     private fun pushupSignal(k: Array<Keypoint>): Float {
-        val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return Float.NaN
-        val wr = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST)
-        // Guard against a pull-up being scored as a push-up.
-        if (wr != null && wr.y < sh.y) {
+        // Guard against a pull-up being scored as a push-up, using the same overhead test.
+        if (hangingFromBar(k)) {
             hint = "Get on the floor"
             return Float.NaN
         }

@@ -61,7 +61,11 @@ class MainActivity : AppCompatActivity() {
         val totalReps: Int,
         val hint: String,
         val event: RepEvent,
-        val completed: Exercise?
+        val completed: Exercise?,
+        val signal: Float,
+        val phase: RepCounter.Phase,
+        val range: Float,
+        val calibrated: Boolean
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var lastTickAt = 0L
     private var lastAnnouncedSec = -1
     private var musicEnabled = true
+    private var debug = false
 
     @Volatile private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var cameraProvider: ProcessCameraProvider? = null
@@ -146,6 +151,11 @@ class MainActivity : AppCompatActivity() {
         binding.btnMusic.setOnClickListener { onMusicTapped() }
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
         binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
+        binding.status.setOnLongClickListener {
+            debug = !debug
+            toast(if (debug) "Debug readout on" else "Debug readout off")
+            true
+        }
 
         renderClock()
         apply(runEngine { RepEvent.NONE })
@@ -215,6 +225,7 @@ class MainActivity : AppCompatActivity() {
             CameraSelector.LENS_FACING_BACK
         }
         binding.overlay.clear()
+        detector?.resetRoi()
         bindUseCases()
     }
 
@@ -273,7 +284,22 @@ class MainActivity : AppCompatActivity() {
             totalReps = engine.totalReps,
             hint = engine.hint,
             event = event,
-            completed = if (event == RepEvent.EXERCISE_DONE || event == RepEvent.ROUND_DONE) before else null
+            completed = if (event == RepEvent.EXERCISE_DONE || event == RepEvent.ROUND_DONE) before else null,
+            signal = engine.signal,
+            phase = engine.phase,
+            range = engine.learnedRange,
+            calibrated = engine.calibrated
+        )
+    }
+
+    /** Everything needed to judge a miscount from across the room. */
+    private fun debugLine(snap: Snapshot): String {
+        val det = detector
+        val ms = det?.lastInferenceMs ?: 0L
+        val view = if (det?.tracking == true) "roi" else "full"
+        val cal = if (snap.calibrated) "cal" else "warm"
+        return "%dms · %s · sig %.0f · rng %.0f · %s · %s".format(
+            Locale.US, ms, view, snap.signal, snap.range, cal, snap.phase
         )
     }
 
@@ -281,7 +307,7 @@ class MainActivity : AppCompatActivity() {
         binding.exercise.text = snap.exercise.label
         binding.reps.text = "${snap.reps} / ${snap.exercise.target}"
         binding.rounds.text = "ROUND ${snap.rounds + 1}"
-        if (state == State.RUNNING) binding.status.text = snap.hint
+        if (state == State.RUNNING) binding.status.text = if (debug) debugLine(snap) else snap.hint
 
         when (snap.event) {
             RepEvent.NONE -> Unit
@@ -334,6 +360,7 @@ class MainActivity : AppCompatActivity() {
         remainingMs = WORKOUT_MS
         lastAnnouncedSec = -1
         synchronized(engineLock) { engine.reset() }
+        detector?.resetRoi()
         binding.btnStart.text = "START"
         binding.status.text = "Press START, then get in frame"
         binding.reps.setTextColor(getColor(R.color.on_surface))

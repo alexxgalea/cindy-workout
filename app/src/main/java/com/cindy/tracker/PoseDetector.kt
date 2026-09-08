@@ -4,8 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.RectF
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
@@ -14,6 +14,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import kotlin.math.max
+import kotlin.math.min
 
 /** A single COCO keypoint, in the coordinate space of the *source* bitmap (pixels). */
 data class Keypoint(val x: Float, val y: Float, val score: Float)
@@ -57,13 +58,37 @@ object KP {
 }
 
 /**
- * MoveNet SinglePose Lightning running on TFLite.
+ * MoveNet SinglePose running on TFLite, with region-of-interest tracking.
  *
- * The model wants a square image, so the frame is letterboxed rather than centre-cropped:
- * cropping reliably clips wrists overhead during pull-ups, which is exactly the signal the
- * pull-up counter depends on.
+ * ### Why the crop matters
+ *
+ * MoveNet resizes whatever it is given down to a small square. A phone standing on the floor
+ * puts the athlete in a slice of a tall frame, so feeding it whole spends most of those pixels
+ * on ceiling and carpet and leaves the body a few dozen pixels tall — which is where the
+ * keypoints get mushy and the rep counter starts guessing.
+ *
+ * So each frame is cropped to a square around where the body was last seen, and the model sees
+ * a body that fills the input. The crop follows the athlete, grows a margin around them, and
+ * falls back to the whole frame whenever tracking is lost.
  */
-class PoseDetector(context: Context, modelAsset: String = "movenet_lightning.tflite") {
+class PoseDetector(
+    context: Context,
+    modelAsset: String = "movenet_thunder.tflite"
+) {
+
+    private companion object {
+        const val MIN_SCORE = 0.30f
+        /** Confident keypoints needed to trust the crop for the next frame. */
+        const val MIN_TRACKED = 5
+        /** Consecutive poor frames before giving up and re-scanning the whole image. */
+        const val MAX_MISSES = 5
+        /** How much room to leave around the body, as a multiple of its bounding box. */
+        const val MARGIN = 1.45f
+        /** Crop is never allowed below this share of the frame, to avoid chasing noise. */
+        const val MIN_CROP_FRACTION = 0.25f
+        /** Per-frame follow rate of the crop, damping jitter. */
+        const val FOLLOW = 0.35f
+    }
 
     private val interpreter: Interpreter
     private val inputSize: Int
@@ -75,12 +100,19 @@ class PoseDetector(context: Context, modelAsset: String = "movenet_lightning.tfl
     private val squarePixels: IntArray
     private val canvas: Canvas
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val srcRect = Rect()
-    private val dstRect = RectF()
+    private val matrix = Matrix()
 
-    /** Milliseconds spent inside the last `Interpreter.run` — surfaced in the HUD. */
+    /** Square crop in source-bitmap pixels; null means "look at the whole frame". */
+    private var roi: RectF? = null
+    private var misses = 0
+
     @Volatile
     var lastInferenceMs: Long = 0L
+        private set
+
+    /** True while the model is being fed a tracked crop rather than the whole frame. */
+    @Volatile
+    var tracking: Boolean = false
         private set
 
     init {
@@ -88,8 +120,7 @@ class PoseDetector(context: Context, modelAsset: String = "movenet_lightning.tfl
         interpreter = Interpreter(loadModel(context, modelAsset), opts)
 
         val inTensor = interpreter.getInputTensor(0)
-        // MoveNet ships as [1, S, S, 3]; read S from the model rather than hard-coding 192 so
-        // dropping in the Thunder (256) or a float build needs no code change.
+        // Read the square size from the model so Lightning (192) and Thunder (256) both drop in.
         inputSize = inTensor.shape()[1]
         inputIsFloat = inTensor.dataType() == DataType.FLOAT32
 
@@ -115,24 +146,29 @@ class PoseDetector(context: Context, modelAsset: String = "movenet_lightning.tfl
         }
     }
 
+    /** Forgets the tracked crop — call when the camera changes or a workout restarts. */
+    fun resetRoi() {
+        roi = null
+        misses = 0
+        tracking = false
+    }
+
     /**
      * Runs the model on [frame] and returns 17 keypoints in **[frame] pixel coordinates**.
      * Not thread-safe: call from a single analysis thread.
      */
     fun detect(frame: Bitmap): Array<Keypoint> {
-        // ── letterbox into the square input ──
-        val scale = inputSize.toFloat() / max(frame.width, frame.height)
-        val drawW = frame.width * scale
-        val drawH = frame.height * scale
-        val padX = (inputSize - drawW) / 2f
-        val padY = (inputSize - drawH) / 2f
+        val region = roi ?: fullFrameSquare(frame)
+        tracking = roi != null
 
+        // Map the region onto the model's square. A region reaching outside the frame simply
+        // leaves black there, which is the letterbox the model expects.
+        val scale = inputSize / region.width()
         canvas.drawColor(Color.BLACK)
-        srcRect.set(0, 0, frame.width, frame.height)
-        dstRect.set(padX, padY, padX + drawW, padY + drawH)
-        canvas.drawBitmap(frame, srcRect, dstRect, paint)
+        matrix.setScale(scale, scale)
+        matrix.postTranslate(-region.left * scale, -region.top * scale)
+        canvas.drawBitmap(frame, matrix, paint)
 
-        // ── pack pixels ──
         square.getPixels(squarePixels, 0, inputSize, 0, 0, inputSize, inputSize)
         inputBuffer.rewind()
         if (inputIsFloat) {
@@ -154,17 +190,63 @@ class PoseDetector(context: Context, modelAsset: String = "movenet_lightning.tfl
         interpreter.run(inputBuffer, output)
         lastInferenceMs = System.currentTimeMillis() - t0
 
-        // ── undo the letterbox so callers work in frame pixels ──
         val raw = output[0][0]
-        return Array(KP.COUNT) { i ->
-            val yn = raw[i][0] * inputSize
-            val xn = raw[i][1] * inputSize
+        val side = region.width()
+        val keypoints = Array(KP.COUNT) { i ->
             Keypoint(
-                x = (xn - padX) / scale,
-                y = (yn - padY) / scale,
+                x = region.left + raw[i][1] * side,
+                y = region.top + raw[i][0] * side,
                 score = raw[i][2]
             )
         }
+
+        updateRoi(keypoints, frame.width, frame.height)
+        return keypoints
+    }
+
+    /** The whole frame expressed as a square, so a portrait image is letterboxed not cropped. */
+    private fun fullFrameSquare(frame: Bitmap): RectF {
+        val side = max(frame.width, frame.height).toFloat()
+        return RectF(
+            (frame.width - side) / 2f,
+            (frame.height - side) / 2f,
+            (frame.width + side) / 2f,
+            (frame.height + side) / 2f
+        )
+    }
+
+    /** Re-aims the crop at wherever the body just was, or drops it if the body was lost. */
+    private fun updateRoi(k: Array<Keypoint>, frameW: Int, frameH: Int) {
+        val seen = k.filter { it.score >= MIN_SCORE }
+        if (seen.size < MIN_TRACKED) {
+            if (++misses >= MAX_MISSES) resetRoi()
+            return
+        }
+        misses = 0
+
+        var left = Float.MAX_VALUE
+        var top = Float.MAX_VALUE
+        var right = -Float.MAX_VALUE
+        var bottom = -Float.MAX_VALUE
+        for (p in seen) {
+            left = min(left, p.x); right = max(right, p.x)
+            top = min(top, p.y); bottom = max(bottom, p.y)
+        }
+
+        val longest = max(max(frameW, frameH).toFloat(), 1f)
+        val side = (max(right - left, bottom - top) * MARGIN)
+            .coerceIn(longest * MIN_CROP_FRACTION, longest)
+        val cx = (left + right) / 2f
+        val cy = (top + bottom) / 2f
+
+        val target = RectF(cx - side / 2f, cy - side / 2f, cx + side / 2f, cy + side / 2f)
+        val current = roi
+        roi = if (current == null) target else RectF(
+            current.left + (target.left - current.left) * FOLLOW,
+            current.top + (target.top - current.top) * FOLLOW,
+            current.right + (target.right - current.right) * FOLLOW,
+            current.bottom + (target.bottom - current.bottom) * FOLLOW
+        )
     }
 
     fun close() = interpreter.close()

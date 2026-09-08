@@ -34,9 +34,9 @@ class WorkoutEngineTest {
         hold(PoseFixtures.pushup(175f))
     }
 
-    private fun WorkoutEngine.doPullup() {
-        hold(PoseFixtures.pullup(riseFromHands = 115f))
-        hold(PoseFixtures.pullup(riseFromHands = 25f))
+    private fun WorkoutEngine.doPullup(hang: Float = 170f, top: Float = 60f) {
+        hold(PoseFixtures.pullup(hang))
+        hold(PoseFixtures.pullup(top))
     }
 
     @Test
@@ -138,13 +138,60 @@ class WorkoutEngineTest {
     }
 
     @Test
-    fun `partial pull-ups that never reach the top score nothing`() {
+    fun `a squat seen from a low phone still counts`() {
+        val e = WorkoutEngine()
+        e.skipExercise(); e.skipExercise()
+        assertEquals(Exercise.SQUAT, e.exercise)
+        repeat(6) {
+            e.hold(PoseFixtures.squat(85f))
+            e.hold(PoseFixtures.squat(145f))
+        }
+        assertEquals(6, e.reps)
+    }
+
+    @Test
+    fun `pull-ups that barely bend the arms score nothing`() {
         val e = WorkoutEngine()
         repeat(5) {
-            e.hold(PoseFixtures.pullup(riseFromHands = 115f))
-            e.hold(PoseFixtures.pullup(riseFromHands = 95f)) // barely bends the arms
+            e.hold(PoseFixtures.pullup(170f))
+            e.hold(PoseFixtures.pullup(145f)) // 25 degrees of travel: a twitch, not a rep
         }
         assertEquals(0, e.reps)
+    }
+
+    @Test
+    fun `a pull-up seen from a low phone still counts despite the squashed range`() {
+        // A phone on the floor foreshortens everything above it, so the same rep projects a
+        // much smaller elbow swing. The counter should calibrate to it rather than miss it.
+        val e = WorkoutEngine()
+        repeat(5) { e.doPullup(hang = 150f, top = 90f) }
+        assertEquals(Exercise.PUSHUP, e.exercise)
+        assertEquals(5, e.repsThisRound)
+    }
+
+    @Test
+    fun `an even harsher camera angle still counts`() {
+        val e = WorkoutEngine()
+        repeat(4) { e.doPullup(hang = 140f, top = 95f) }
+        assertEquals(4, e.reps)
+    }
+
+    @Test
+    fun `once full reps set the standard, partial ones stop counting`() {
+        val e = WorkoutEngine()
+        repeat(2) { e.doPullup(hang = 170f, top = 55f) }
+        assertEquals(2, e.reps)
+        // Half-height reps against a band learned from full ones.
+        repeat(4) { e.doPullup(hang = 170f, top = 120f) }
+        assertEquals(2, e.reps)
+    }
+
+    @Test
+    fun `the shoulders rising above the hands does not void the rep`() {
+        // The old signal rejected exactly this frame, so the best reps were the ones it lost.
+        val e = WorkoutEngine()
+        repeat(5) { e.doPullup(hang = 175f, top = 45f) }
+        assertEquals(Exercise.PUSHUP, e.exercise)
     }
 
     @Test
