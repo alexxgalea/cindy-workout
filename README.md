@@ -233,10 +233,17 @@ Requires JDK 17 and the Android SDK (platform 35, build-tools 35.0.0).
 
 ## Tests
 
-32 JVM tests. The rep logic runs against synthetic skeletons
+100 JVM tests. **JDK 17 is required** for Android Gradle test runs. The rep logic runs against synthetic skeletons
 ([PoseFixtures](app/src/test/java/com/cindy/tracker/PoseFixtures.kt)) — full rounds, partial
 reps that must not count, and cross-talk between movements — and the record board is covered
 for ranking, round-tripping and corrupt-data tolerance.
+
+Real-video regression is a separate, opt-in Android instrumentation job. It decodes every native
+video frame, runs the production MoveNet preprocessing/model and production counter, then emits
+JSON/CSV evidence for every rejection and counted rep. Fixture data is deliberately not bundled
+with the app or repository; see [tests/README.md](tests/README.md) for provisioning datasets,
+scenario labels, golden keypoints, and the `videoRegressionTest` command. A missing fixture is
+reported as an explicit skipped test, never as a video-test pass.
 
 They do **not** cover the camera path, the model, the voice or the music; those need a real
 device.

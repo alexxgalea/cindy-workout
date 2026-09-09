@@ -334,12 +334,12 @@ class MainActivity : AppCompatActivity() {
             val keypoints = det.detect(frame)
             val now = SystemClock.elapsedRealtime()
             val snap = if (state == State.RUNNING) {
-                runEngine { engine.onFrame(keypoints, now) }
+                runEngine { engine.onFrame(keypoints, now, det.tracking) }
             } else {
                 null
             }
             val setup = if (state == State.SETUP) {
-                synchronized(engineLock) { engine.onSetupFrame(keypoints, now) }
+                synchronized(engineLock) { engine.onSetupFrame(keypoints, now, det.tracking) }
             } else {
                 null
             }

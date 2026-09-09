@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val videoRegressionEnabled = providers.gradleProperty("cindyVideoRegression").orNull == "true"
+val recordVideoGoldens = providers.gradleProperty("cindyVideoGolden").orNull == "true"
+
 android {
     namespace = "com.cindy.tracker"
     compileSdk = 35
@@ -13,6 +16,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["videoRegression"] = videoRegressionEnabled.toString()
+        testInstrumentationRunnerArguments["recordGoldens"] = recordVideoGoldens.toString()
 
         // Phones are ARM. The x86 TFLite libraries are ~9 MB of emulator-only payload.
         ndk {
@@ -30,6 +36,9 @@ android {
     // The .tflite asset must not be compressed or the Interpreter cannot mmap it.
     androidResources {
         noCompress += "tflite"
+        // Video fixtures are copied to the device from the test APK before decoding.
+        noCompress += "mp4"
+        noCompress += "mov"
     }
 
     compileOptions {
@@ -41,6 +50,12 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+
+    sourceSets {
+        // Keep licenced/large fixtures at the repository root, outside the application APK and
+        // outside git. The instrumentation APK sees them as assets/fixtures and assets/scenarios.
+        getByName("androidTest").assets.srcDir("../tests")
     }
 }
 
@@ -64,4 +79,13 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     testImplementation("junit:junit:4.13.2")
+
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+}
+
+tasks.register("videoRegressionTest") {
+    group = "verification"
+    description = "Runs offline MoveNet video regression scenarios on a connected emulator/device."
+    dependsOn("connectedDebugAndroidTest")
 }

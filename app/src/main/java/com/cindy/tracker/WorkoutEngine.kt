@@ -40,13 +40,38 @@ data class Setup(
 )
 
 /**
+ * The gate decisions behind the most recently analysed frame.
+ *
+ * This is deliberately public and framework-free: the offline video harness writes it to its
+ * reports, making a rejected frame explainable without duplicating any counter decisions.
+ */
+data class FrameDiagnostics(
+    val minimumConfidence: Float = 0f,
+    /** True only when the keypoints used to construct the current exercise signal are usable. */
+    val scoringConfidenceAdequate: Boolean = false,
+    val identityStable: Boolean = false,
+    val barGateOpen: Boolean = false,
+    val headAboveBar: Boolean = false,
+    val deadHangSinceLastRep: Boolean = false,
+    val resetBelowBarSeen: Boolean = false,
+    val rejectionReason: String? = null
+)
+
+/**
  * Turns a stream of keypoints into a Cindy scorecard.
  *
  * Only the signal for the *current* exercise is evaluated. That is deliberate: the three
  * movements share joints, and scoring all of them at once lets a push-up lockout leak into
  * the squat counter.
  */
-class WorkoutEngine {
+class WorkoutEngine(
+    /**
+     * Keeps the engine on one movement for a labelled exercise clip. The application uses the
+     * default Cindy progression; the regression harness uses this mode so a ten-rep push-up
+     * video is not truncated at Cindy's five-pull-up transition.
+     */
+    private val fixedExercise: Exercise? = null
+) {
 
     private companion object {
         /** MoveNet confidence below which a keypoint is treated as unseen. */
@@ -57,6 +82,46 @@ class WorkoutEngine {
         const val POOR_AFTER_MS = 20_000L
         /** Elbow angle at or above which the arms count as straight, i.e. a dead hang. */
         const val DEAD_HANG_DEGREES = 150f
+        /**
+         * How far below the straightest arms yet seen still reads as a dead hang.
+         *
+         * 150 degrees assumes the camera sees the elbow square on. A phone on the floor looks up
+         * at the athlete and foreshortens the upper arm, so a genuinely locked-out hang can
+         * project as 140 — and a fixed threshold then refuses to arm a single rep for the whole
+         * workout. This is the same argument that made RepCounter learn its band instead of
+         * trusting fixed thresholds, applied to the gate in front of it.
+         */
+        const val DEAD_HANG_SLACK_DEGREES = 15f
+        /**
+         * Floor under the derived dead-hang angle.
+         *
+         * Without it the derivation eats itself: an athlete who has only ever been seen with
+         * bent arms teaches a small "extension", which drops the threshold far enough that the
+         * bent arms then qualify as a hang. No camera angle turns a 60-degree elbow into a
+         * locked-out one, so the relaxation stops here.
+         */
+        const val DEAD_HANG_FLOOR_DEGREES = 130f
+        /**
+         * Body-scale change past which a learned bar is describing a geometry that has gone.
+         *
+         * The bar's tolerances are multiples of torso length, so an estimate learned while the
+         * athlete stood close to the camera does not fit them hanging further away.
+         */
+        const val BAR_SCALE_CHANGE = 1.6f
+        /** Straight-armed hangs rejected at that different scale before the bar is abandoned. */
+        const val MAX_BAR_CONTRADICTIONS = 30
+        /** How far below the bar the head must return before another pull-up can arm. */
+        const val HEAD_RESET_TORSOS = 0.25f
+        /**
+         * Unusable frames tolerated mid-rep before the cycle is abandoned.
+         *
+         * A pull-up occludes its own keypoints exactly where it matters: at the top the head
+         * tilts back and the wrists disappear behind it. Treating the first sub-threshold frame
+         * as "left the bar" threw the rep away at the moment it was earned. Eight frames is a
+         * third of a second at 24fps — long enough to ride out an occlusion or a motion-blurred
+         * frame, far too short to cover someone actually dropping off the bar.
+         */
+        const val MAX_DROPOUT_FRAMES = 8
     }
 
     private val counters = mapOf(
@@ -69,7 +134,7 @@ class WorkoutEngine {
         Exercise.SQUAT to RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
     )
 
-    var exercise = Exercise.PULLUP
+    var exercise = fixedExercise ?: Exercise.PULLUP
         private set
     var rounds = 0
         private set
@@ -79,11 +144,57 @@ class WorkoutEngine {
     var bodyVisible = false
         private set
 
+    /** Details used by the video-regression reports for the most recent frame. */
+    var diagnostics = FrameDiagnostics()
+        private set
+
+    /** Stable spelling for scenario files; it does not expose RepCounter's implementation enum. */
+    val countingState: String
+        get() = when (phase) {
+            RepCounter.Phase.UNKNOWN -> "idle"
+            RepCounter.Phase.DOWN -> "down"
+            RepCounter.Phase.UP -> "up"
+        }
+
     private var movingSince = 0L
     private val bar = BarZone()
+    private var setupInProgress = false
+    /** A fresh, on-bar dead hang is required before every pull-up count. */
+    private var pullupDownSeen = false
+    /** Consecutive unusable frames since the last good one, while a cycle is in flight. */
+    private var pullupDropoutFrames = 0
+    /** Straightest elbow angle seen while hanging, which scales the dead-hang test. */
+    private var pullupExtendedElbow = Float.NaN
+    /** Torso length when the current bar estimate was first established. */
+    private var barTorso = Float.NaN
+    /** Consecutive dead hangs a bar learned at a very different scale has refused. */
+    private var barContradictions = 0
 
     /** True once a dead hang has taught the engine where the bar is. */
     val barKnown: Boolean get() = bar.established
+
+    /**
+     * Configures a recorded clip's bar from normalised video coordinates.
+     *
+     * This intentionally lives on the production engine, rather than in test-only code, so the
+     * harness still uses the same bar gate as the app. The live camera leaves the bar automatic.
+     */
+    fun configureManualBar(
+        yNormalized: Float,
+        xMinNormalized: Float,
+        xMaxNormalized: Float,
+        frameWidth: Int,
+        frameHeight: Int
+    ) {
+        require(frameWidth > 0 && frameHeight > 0) { "Frame dimensions must be positive" }
+        bar.configureManual(
+            y = yNormalized * frameHeight,
+            xMin = xMinNormalized * frameWidth,
+            xMax = xMaxNormalized * frameWidth
+        )
+        pullupDownSeen = false
+        counters.getValue(Exercise.PULLUP).requireFreshDown()
+    }
 
     val reps: Int get() = counters.getValue(exercise).count
     val phase: RepCounter.Phase get() = counters.getValue(exercise).phase
@@ -99,11 +210,17 @@ class WorkoutEngine {
 
     fun reset() {
         counters.values.forEach { it.reset() }
-        exercise = Exercise.PULLUP
+        exercise = fixedExercise ?: Exercise.PULLUP
         rounds = 0
         hint = "Step into frame"
         bodyVisible = false
         movingSince = 0L
+        setupInProgress = false
+        pullupDownSeen = false
+        pullupExtendedElbow = Float.NaN
+        barTorso = Float.NaN
+        barContradictions = 0
+        diagnostics = FrameDiagnostics()
         bar.reset()
     }
 
@@ -151,23 +268,51 @@ class WorkoutEngine {
         counters.values.forEach { it.resetBand() }
         // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
         bar.reset()
+        pullupDownSeen = false
+        pullupExtendedElbow = Float.NaN
+        barTorso = Float.NaN
+        barContradictions = 0
+        diagnostics = FrameDiagnostics()
     }
 
-    fun onFrame(k: Array<Keypoint>, now: Long): RepEvent {
+    /**
+     * Scores a running-workout frame.
+     *
+     * [identityStable] comes from PoseDetector's tracked ROI. A single-pose model cannot name
+     * people, but a lost ROI is the one reliable signal that this is no longer the same body;
+     * treating it as a pause prevents a new person from completing a half-started pull-up.
+     */
+    fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): RepEvent {
+        if (setupInProgress) {
+            hint = "Finish setup first"
+            diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
+            return RepEvent.NONE
+        }
         val torso = torsoLength(k)
         if (torso == null || torso < 1f) {
             bodyVisible = false
             hint = "Step into frame"
+            if (exercise == Exercise.PULLUP) toleratePullupDropout()
+            diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
             return RepEvent.NONE
         }
         bodyVisible = true
 
+        if (exercise == Exercise.PULLUP) return onPullupFrame(k, now, identityStable)
+
         val s = signalFor(k)
-        if (s.isNaN()) return RepEvent.NONE
+        if (s.isNaN()) {
+            diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
+            return RepEvent.NONE
+        }
 
         val counted = counters.getValue(exercise).update(s, now)
+        diagnostics = frameDiagnostics(
+            k, identityStable, scoringConfidenceAdequate = true, rejection = if (counted) null else hint
+        )
         if (!counted) {
             hint = if (phase == RepCounter.Phase.DOWN) "Drive up" else "Go down"
+            diagnostics = frameDiagnostics(k, identityStable, scoringConfidenceAdequate = true, rejection = hint)
             return RepEvent.NONE
         }
         return settle()
@@ -175,7 +320,7 @@ class WorkoutEngine {
 
     /** Advances to the next movement if the current one just hit its target. */
     private fun settle(): RepEvent =
-        if (reps >= exercise.target) advance() else RepEvent.REP
+        if (fixedExercise == null && reps >= exercise.target) advance() else RepEvent.REP
 
     private fun advance(): RepEvent {
         counters.getValue(exercise).resetCount()
@@ -197,6 +342,12 @@ class WorkoutEngine {
         counters.getValue(exercise).reset()
         movingSince = 0L
         bar.reset()
+        setupInProgress = true
+        pullupDownSeen = false
+        pullupExtendedElbow = Float.NaN
+        barTorso = Float.NaN
+        barContradictions = 0
+        diagnostics = FrameDiagnostics()
     }
 
     /**
@@ -207,17 +358,27 @@ class WorkoutEngine {
      * a real measurement rather than the fallback floor — and a placement that cannot produce a
      * believable range is caught here, instead of quietly undercounting for twenty minutes.
      */
-    fun onSetupFrame(k: Array<Keypoint>, now: Long): Setup {
+    fun onSetupFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): Setup {
         val counter = counters.getValue(exercise)
         val missing = missingJoints(k)
         if (missing.isNotEmpty()) {
             movingSince = 0L
+            if (exercise == Exercise.PULLUP) toleratePullupDropout()
+            diagnostics = frameDiagnostics(k, identityStable, rejection = "Missing ${missing.joinToString()}")
             return Setup(SetupStage.FRAMING, missing, counter.count, counter.learnedRange, counter.requiredRange)
         }
         if (movingSince == 0L) movingSince = now
 
-        val s = signalFor(k)
-        if (!s.isNaN()) counter.update(s, now)
+        if (exercise == Exercise.PULLUP) {
+            onPullupFrame(k, now, identityStable, settleWorkout = false)
+        } else {
+            val s = signalFor(k)
+            if (!s.isNaN()) counter.update(s, now)
+            diagnostics = frameDiagnostics(
+                k, identityStable, scoringConfidenceAdequate = !s.isNaN(),
+                rejection = if (s.isNaN()) hint else null
+            )
+        }
 
         val enough = counter.count >= CALIBRATION_REPS && counter.learnedRange >= counter.requiredRange
         val stage = when {
@@ -229,7 +390,14 @@ class WorkoutEngine {
     }
 
     /** Zeroes the calibration reps but keeps the band they taught. */
-    fun finishSetup() = counters.getValue(exercise).resetCount()
+    fun finishSetup() {
+        counters.getValue(exercise).resetCount()
+        setupInProgress = false
+        // Setup may have ended at the top of its second calibration rep. A new counted rep still
+        // has to begin with a fresh dead hang below the reset line.
+        pullupDownSeen = false
+        if (exercise == Exercise.PULLUP) counters.getValue(exercise).requireFreshDown()
+    }
 
     /** Joints the current movement cannot be judged without, named for a human. */
     private fun missingJoints(k: Array<Keypoint>): List<String> {
@@ -252,7 +420,8 @@ class WorkoutEngine {
     }
 
     private fun signalFor(k: Array<Keypoint>): Float = when (exercise) {
-        Exercise.PULLUP -> pullupSignal(k)
+        // Pull-ups are handled by onPullupFrame(), which owns the bar/head/reset gates.
+        Exercise.PULLUP -> Float.NaN
         Exercise.PUSHUP -> pushupSignal(k)
         Exercise.SQUAT -> squatSignal(k)
     }
@@ -274,20 +443,104 @@ class WorkoutEngine {
      * An angle needs no normalisation, so nothing about the athlete's build, their distance from
      * the camera, or where MoveNet thinks their hips are can move the thresholds.
      */
-    private fun pullupSignal(k: Array<Keypoint>): Float {
+    private data class PullupSample(
+        val signal: Float,
+        val deadHangBelowReset: Boolean,
+        val headAboveBar: Boolean,
+        val barGateOpen: Boolean
+    )
+
+    /**
+     * Scores a pull-up only after the physical gates are true. RepCounter remains the only
+     * component which can increment the score; this method only decides whether its input is
+     * meaningful for the current tracked body.
+     */
+    private fun onPullupFrame(
+        k: Array<Keypoint>,
+        now: Long,
+        identityStable: Boolean,
+        settleWorkout: Boolean = true
+    ): RepEvent {
+        if (!identityStable) {
+            hint = "Tracking…"
+            toleratePullupDropout()
+            diagnostics = frameDiagnostics(k, false, rejection = hint)
+            return RepEvent.NONE
+        }
+
+        val sample = pullupSample(k)
+        if (sample == null) {
+            toleratePullupDropout()
+            diagnostics = frameDiagnostics(k, true, rejection = hint)
+            return RepEvent.NONE
+        }
+
+        pullupDropoutFrames = 0
+
+        val counter = counters.getValue(Exercise.PULLUP)
+
+        // Every readable on-bar frame is observed, so the band learns the athlete's real swing
+        // even while the gates are shut. Only a frame that clears all of them may book a rep,
+        // which is what stops an elbow-only partial from scoring. Withholding the samples
+        // instead — the previous approach — left the counter judging reps against a band built
+        // from a fraction of the movement.
+        val mayCount = !sample.deadHangBelowReset && sample.headAboveBar && pullupDownSeen
+        val counted = counter.update(sample.signal, now, mayCount = mayCount)
+
+        if (sample.deadHangBelowReset) {
+            // Observing here makes RepCounter's DOWN phase agree with the physical reset.
+            if (counter.phase == RepCounter.Phase.DOWN) pullupDownSeen = true
+            diagnostics = frameDiagnostics(
+                k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
+                headAboveBar = sample.headAboveBar
+            )
+            return RepEvent.NONE
+        }
+
+        if (!mayCount) {
+            hint = if (!pullupDownSeen) "Return to a dead hang" else "Get your head over the bar"
+            diagnostics = frameDiagnostics(
+                k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
+                headAboveBar = sample.headAboveBar, rejection = hint
+            )
+            return RepEvent.NONE
+        }
+
+        diagnostics = frameDiagnostics(
+            k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
+            headAboveBar = sample.headAboveBar, rejection = if (counted) null else "Drive up"
+        )
+        if (!counted) {
+            hint = "Drive up"
+            return RepEvent.NONE
+        }
+
+        // A second count cannot inherit this rep: a fresh reset below the bar is required.
+        pullupDownSeen = false
+        return if (settleWorkout) settle() else RepEvent.NONE
+    }
+
+    /** Validates a pull-up pose without mutating the counter. */
+    private fun pullupSample(k: Array<Keypoint>): PullupSample? {
+        val leftWrist = k[KP.LEFT_WRIST]
+        val rightWrist = k[KP.RIGHT_WRIST]
+        if (!ok(leftWrist) || !ok(rightWrist)) {
+            hint = "Show both hands"
+            return null
+        }
         if (!hangingFromBar(k)) {
             hint = "Hang from the bar"
-            return Float.NaN
+            return null
         }
-        val hands = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return Float.NaN
-        val torso = torsoLength(k) ?: return Float.NaN
-
-        // Elbow flexion on its own counts anyone waving their arms overhead as a pull-up.
-        if (!bar.holds(hands.x, hands.y, torso)) {
-            hint = "Get on the bar"
-            return Float.NaN
+        val hands = Keypoint(
+            (leftWrist.x + rightWrist.x) / 2f,
+            (leftWrist.y + rightWrist.y) / 2f,
+            minOf(leftWrist.score, rightWrist.score)
+        )
+        val torso = torsoLength(k) ?: run {
+            hint = "Step into frame"
+            return null
         }
-
         val elbow = bilateralAngle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
@@ -295,16 +548,99 @@ class WorkoutEngine {
         )
         if (elbow.isNaN()) {
             hint = "Arms out of frame"
-            return Float.NaN
+            return null
+        }
+        pullupExtendedElbow =
+            if (pullupExtendedElbow.isNaN()) elbow else maxOf(pullupExtendedElbow, elbow)
+        val deadHang = deadHangDegrees()
+
+        // Refinement requires already passing the gate, so a bar learned in the wrong place can
+        // otherwise lock the athlete out for the rest of the workout — which is exactly what a
+        // clip mis-established during a walk-up did, rejecting 2377 of 2888 frames. A sustained
+        // dead hang refused at a very different body scale is evidence that the estimate, not
+        // the athlete, is in the wrong place.
+        if (bar.established && elbow >= deadHang && !bar.holds(leftWrist, rightWrist, torso)) {
+            val ratio =
+                if (barTorso.isNaN() || barTorso <= 0f || torso <= 0f) 1f
+                else maxOf(torso / barTorso, barTorso / torso)
+            if (ratio > BAR_SCALE_CHANGE && ++barContradictions > MAX_BAR_CONTRADICTIONS) {
+                bar.reset()
+                barTorso = Float.NaN
+                barContradictions = 0
+            }
+        } else {
+            barContradictions = 0
         }
 
-        // A straight-armed hang is the one posture that reliably marks where the bar is.
-        if (elbow >= DEAD_HANG_DEGREES) {
+        // A straight-armed hang establishes an unknown bar. Once known, only observations that
+        // are already on that bar may refine it; otherwise someone stepping off the bar could
+        // slowly drag the learned line down to the floor.
+        if (elbow >= deadHang &&
+            (!bar.established || bar.holds(leftWrist, rightWrist, torso))
+        ) {
+            val wasEstablished = bar.established
             val half = gripHalfWidth(k) ?: 0f
             bar.observeHang(hands.x, hands.y, half)
+            if (!wasEstablished) barTorso = torso
         }
-        return -elbow
+        if (!bar.holds(leftWrist, rightWrist, torso)) {
+            hint = "Get on the bar"
+            return null
+        }
+
+        val nose = k[KP.NOSE]
+        val barY = bar.lineY
+        if (!ok(nose) || barY == null) {
+            hint = if (!ok(nose)) "Show your head" else "Hang from the bar"
+            return null
+        }
+        return PullupSample(
+            signal = -elbow,
+            deadHangBelowReset = elbow >= deadHang &&
+                nose.y >= barY + HEAD_RESET_TORSOS * torso,
+            headAboveBar = nose.y < barY,
+            barGateOpen = true
+        )
     }
+
+    /**
+     * Forget a partial pull-up until a fresh on-bar dead hang is observed.
+     *
+     * This is the hard reset, for when the athlete has genuinely left the bar. A frame that is
+     * merely unreadable goes through [toleratePullupDropout] instead.
+     */
+    private fun invalidatePullupCycle() {
+        pullupDownSeen = false
+        pullupDropoutFrames = 0
+        counters.getValue(Exercise.PULLUP).requireFreshDown()
+    }
+
+    /**
+     * Absorbs a frame the pull-up gates could not read.
+     *
+     * A cycle already in flight survives a short run of them; a sustained run is indistinguishable
+     * from having left the bar, so it ends the cycle.
+     */
+    private fun toleratePullupDropout() {
+        if (!pullupDownSeen) {
+            invalidatePullupCycle()
+            return
+        }
+        if (++pullupDropoutFrames > MAX_DROPOUT_FRAMES) invalidatePullupCycle()
+    }
+
+    /**
+     * The angle at which the arms read as straight for *this* camera placement.
+     *
+     * Never stricter than [DEAD_HANG_DEGREES]; a foreshortened view relaxes it to whatever full
+     * extension actually projects as.
+     */
+    private fun deadHangDegrees(): Float =
+        if (pullupExtendedElbow.isNaN()) DEAD_HANG_DEGREES
+        else minOf(
+            DEAD_HANG_DEGREES,
+            maxOf(DEAD_HANG_FLOOR_DEGREES, pullupExtendedElbow - DEAD_HANG_SLACK_DEGREES)
+        )
 
     /** Half the distance between the hands, for the bar's horizontal span. */
     private fun gripHalfWidth(k: Array<Keypoint>): Float? {
@@ -347,6 +683,24 @@ class WorkoutEngine {
         KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE,
         KP.RIGHT_HIP, KP.RIGHT_KNEE, KP.RIGHT_ANKLE
     ).also { if (it.isNaN()) hint = "Show your legs to the camera" }
+
+    private fun frameDiagnostics(
+        k: Array<Keypoint>,
+        identityStable: Boolean,
+        scoringConfidenceAdequate: Boolean = false,
+        barGateOpen: Boolean = false,
+        headAboveBar: Boolean = false,
+        rejection: String? = null
+    ) = FrameDiagnostics(
+        minimumConfidence = k.minOfOrNull { it.score } ?: 0f,
+        scoringConfidenceAdequate = scoringConfidenceAdequate,
+        identityStable = identityStable,
+        barGateOpen = barGateOpen,
+        headAboveBar = headAboveBar,
+        deadHangSinceLastRep = pullupDownSeen,
+        resetBelowBarSeen = pullupDownSeen,
+        rejectionReason = rejection
+    )
 
     // ── geometry helpers ──────────────────────────────────────────────────────
 

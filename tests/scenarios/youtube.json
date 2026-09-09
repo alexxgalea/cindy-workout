@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "source": "youtube",
+  "comment": "Expectations are ground truth \u2014 what a human scores the clip at \u2014 not what the engine currently produces. Provision the clips with tools/video_regression/fetch_youtube.py.",
+  "scenarios": [
+    {
+      "id": "youtube_pullups_ten_rep_set",
+      "video": "tests/fixtures/youtube/pullups/AB5LE7WDvcQ.mp4",
+      "exercise": "pullup",
+      "expectedReps": 10,
+      "tags": [
+        "youtube",
+        "pullups",
+        "occlusion",
+        "known-gap"
+      ],
+      "notes": "Ten weighted pull-ups, rear view, static camera. Was scored 1 before the occlusion fix (a single sub-threshold nose or wrist frame cancelled the cycle mid-ascent); now scores 9. The remaining rep is a genuine gap, not a regression \u2014 the expectation stays at ground truth so it shows."
+    },
+    {
+      "id": "youtube_pushups_four_rep_demo",
+      "video": "tests/fixtures/youtube/pushups/WDIpL0pjun0.mp4",
+      "exercise": "pushup",
+      "expectedReps": 4,
+      "tags": [
+        "youtube",
+        "pushups"
+      ],
+      "notes": "Side-view push-up form demo. Currently scored correctly."
+    },
+    {
+      "id": "youtube_squats_two_rep_demo",
+      "video": "tests/fixtures/youtube/squats/l83R5PblSMA.mp4",
+      "exercise": "squat",
+      "expectedReps": 2,
+      "tags": [
+        "youtube",
+        "squats"
+      ],
+      "notes": "Side-view bodyweight squat demo. Currently scored correctly."
+    },
+    {
+      "id": "youtube_squats_camera_cut",
+      "video": "tests/fixtures/youtube/squats/eJBtfEgw__A.mp4",
+      "exercise": "squat",
+      "expectedReps": 2,
+      "tags": [
+        "youtube",
+        "squats",
+        "camera-cut"
+      ],
+      "notes": "Barbell back squat in two shots with a hard camera cut at about 5.5s, one rep per shot. Guards the learned band against a mid-clip geometry change."
+    }
+  ]
+}

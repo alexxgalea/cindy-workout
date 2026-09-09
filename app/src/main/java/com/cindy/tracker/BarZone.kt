@@ -31,12 +31,34 @@ class BarZone {
     private var y = Float.NaN
     private var xMin = Float.NaN
     private var xMax = Float.NaN
+    private var manual = false
 
     /** True once a dead hang has been seen and the zone means something. */
     val established: Boolean get() = !y.isNaN()
 
+    /** The centre line of the bar, in the same pixel coordinate system as the keypoints. */
+    val lineY: Float? get() = y.takeUnless { it.isNaN() }
+
+    /**
+     * Uses a fixed bar for a recorded regression clip.
+     *
+     * The app normally learns its bar from dead hangs. A labelled offline clip cannot be asked
+     * to perform that calibration on demand, so tests may supply the line and horizontal extent
+     * measured from that clip instead. Production never needs to call this.
+     */
+    fun configureManual(y: Float, xMin: Float, xMax: Float) {
+        require(y.isFinite() && xMin.isFinite() && xMax.isFinite() && xMin <= xMax) {
+            "Manual bar bounds must be finite and ordered"
+        }
+        this.y = y
+        this.xMin = xMin
+        this.xMax = xMax
+        manual = true
+    }
+
     /** Records where the hands were during a confirmed dead hang. */
     fun observeHang(handsX: Float, handsY: Float, halfGrip: Float) {
+        if (manual) return
         val low = handsX - halfGrip
         val high = handsX + halfGrip
         if (!established) {
@@ -50,12 +72,22 @@ class BarZone {
         xMax += FOLLOW * (max(xMax, high) - xMax)
     }
 
-    /** Whether hands at this position, on a body of this scale, are plausibly on the bar. */
-    fun holds(handsX: Float, handsY: Float, torso: Float): Boolean {
+    /**
+     * Whether *both* wrists, on a body of this scale, are plausibly on the bar.
+     *
+     * Testing the midpoint lets one hand leave the bar while the other hand keeps a rep alive.
+     * A pull-up needs both grips, so each wrist is tested independently.
+     */
+    fun holds(left: Keypoint, right: Keypoint, torso: Float): Boolean {
         if (!established || torso <= 0f) return true // nothing learned yet: do not block counting
-        if (abs(handsY - y) > Y_TOLERANCE * torso) return false
-        val pad = X_PADDING * torso
-        return handsX >= xMin - pad && handsX <= xMax + pad
+        if (abs(left.y - y) > Y_TOLERANCE * torso || abs(right.y - y) > Y_TOLERANCE * torso) {
+            return false
+        }
+        // Scenario bars are explicit regions, so do not silently widen them. Learned bars still
+        // need a torso-scaled allowance for a natural regrip along the bar.
+        val pad = if (manual) 0f else X_PADDING * torso
+        return left.x >= xMin - pad && left.x <= xMax + pad &&
+            right.x >= xMin - pad && right.x <= xMax + pad
     }
 
     /** Forgets the bar — the camera has moved, so its position in the frame is meaningless. */
@@ -63,5 +95,6 @@ class BarZone {
         y = Float.NaN
         xMin = Float.NaN
         xMax = Float.NaN
+        manual = false
     }
 }

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "comment": "Third-party clips used as local regression input. The videos themselves are never committed (see .gitignore); this manifest is, so the fixture tree can be rebuilt with tools/video_regression/fetch_youtube.py. 'labelled' entries have an expected rep count in tests/scenarios/youtube.json; 'candidate' entries still need a human rep count before they can assert anything.",
+  "clips": [
+    {
+      "id": "AB5LE7WDvcQ",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "labelled",
+      "reps": 10,
+      "confidence": "high",
+      "label_basis": "The uploader's title states 10 reps, and an independent elbow-angle hysteresis count over the clip also gives 10.",
+      "notes": "Weighted pull-ups, rear view, static camera, full set visible."
+    },
+    {
+      "id": "WDIpL0pjun0",
+      "group": "pushups",
+      "exercise": "pushup",
+      "status": "labelled",
+      "reps": 4,
+      "confidence": "high",
+      "label_basis": "Independent elbow-angle count and the production engine both give 4.",
+      "notes": "NASM push-up form demo, side view, static camera."
+    },
+    {
+      "id": "l83R5PblSMA",
+      "group": "squats",
+      "exercise": "squat",
+      "status": "labelled",
+      "reps": 2,
+      "confidence": "medium",
+      "label_basis": "Independent knee-angle count and the production engine both give 2.",
+      "notes": "Bodyweight squat demo, side view."
+    },
+    {
+      "id": "eJBtfEgw__A",
+      "group": "squats",
+      "exercise": "squat",
+      "status": "labelled",
+      "reps": 2,
+      "confidence": "medium",
+      "label_basis": "Counted by eye from a contact sheet: two shots, one rep each.",
+      "notes": "Barbell back squat, not an air squat, and there is a hard camera cut at about 5.5s. Kept deliberately: a mid-clip camera change is a case the learned band has to survive."
+    },
+    {
+      "id": "BNg4jnxLHxM",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "label_basis": "Elbow-angle oracle suggests 11, unverified by eye.",
+      "notes": "Max pull-up set with heavy wrist dropout (522 of 1916 frames below the confidence floor). Scored 0 before the occlusion fix, 9 now."
+    },
+    {
+      "id": "fgO6AgXSNA0",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "label_basis": "Oracle gives 28 but with clustered double-counts, so the number is not trustworthy.",
+      "notes": "Was rejected on 2377 of 2888 frames with 'Get on the bar' \u2014 the bar had been mis-established during the walk-up and could never correct itself. Scores 9 since the bar re-establishment fix. Still needs a human rep count before it can assert anything."
+    },
+    {
+      "id": "rsL1Pse0XzY",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "label_basis": "Oracle suggests 11, unverified by eye.",
+      "notes": "Pull-ups with a 5-count hang pause; 1525 nose dropouts. Scored 0 before the occlusion fix, 10 now."
+    },
+    {
+      "id": "IODxDxX7oi4",
+      "group": "pushups",
+      "exercise": "pushup",
+      "status": "candidate",
+      "label_basis": "Oracle gives 68 with clustered double-counts; not trustworthy.",
+      "notes": "Long-form push-up tutorial with cuts and talking segments."
+    },
+    {
+      "id": "xqvCmoLULNY",
+      "group": "squats",
+      "exercise": "squat",
+      "status": "candidate",
+      "label_basis": "Oracle gives 6, production gives 5; needs a human count to break the tie.",
+      "notes": "Squat tutorial with a talking intro before the set."
+    },
+    {
+      "id": "UxhKoj3jyQ4",
+      "group": "cindy",
+      "exercise": "mixed",
+      "status": "candidate",
+      "notes": "Full Cindy AMRAP: pull-ups, push-ups and air squats in one clip. Needs per-movement segment labels before it can be scored."
+    },
+    {
+      "id": "IGeeTmrkGDM",
+      "group": "cindy",
+      "exercise": "mixed",
+      "status": "candidate",
+      "notes": "Full Cindy AMRAP, 20 minutes. Same labelling caveat."
+    }
+  ]
+}

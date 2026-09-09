@@ -73,7 +73,10 @@ object PoseFixtures {
         k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, -LIMB)
         k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shX, shY)
         k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, shX, shY + TORSO)
-        k.put(KP.NOSE, shX, shY - 20f)
+        // Nose is the head proxy emitted by COCO-17. At the top it must pass the wrist/bar line;
+        // at a dead hang it is below the reset line. Keeping that distinction in the shared
+        // fixture lets the production head gate be exercised without a camera.
+        k.put(KP.NOSE, shX, shY - 120f)
         return k
     }
 

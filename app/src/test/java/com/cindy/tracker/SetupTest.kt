@@ -46,6 +46,9 @@ class SetupTest {
     @Test
     fun `two calibration reps get the workout going`() {
         val e = engine()
+        // Nothing may score while the setup check is still running.
+        assertEquals(RepEvent.NONE, e.onFrame(PoseFixtures.pullup(60f), clock))
+        assertEquals(0, e.reps)
         var last = e.setupHold(PoseFixtures.pullup(170f))
         assertEquals(SetupStage.MOVING, last.stage)
         repeat(2) {

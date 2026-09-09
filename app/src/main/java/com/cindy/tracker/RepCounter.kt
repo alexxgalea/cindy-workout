@@ -88,8 +88,18 @@ class RepCounter(
     val calibrated: Boolean
         get() = minRange > 0f && learnedRange >= minRange
 
-    /** @return true if this sample completed a rep. */
-    fun update(raw: Float, now: Long): Boolean {
+    /**
+     * Feeds one sample.
+     *
+     * [mayCount] separates *observing* the signal from *booking* a rep. The band can only
+     * describe the athlete's real swing if the counter sees the whole oscillation, but a caller
+     * with its own gates — the pull-up bar and head checks — still needs to withhold the score
+     * on frames those gates reject. Passing false keeps the smoothing, band and phase current
+     * while guaranteeing no rep is booked.
+     *
+     * @return true if this sample completed a rep.
+     */
+    fun update(raw: Float, now: Long, mayCount: Boolean = true): Boolean {
         if (raw.isNaN()) return false
         smoothed = if (smoothed.isNaN()) raw else smoothed + smoothing * (raw - smoothed)
         val s = smoothed
@@ -114,7 +124,7 @@ class RepCounter(
 
         val climbed = s - trough
         val atTop = if (useBand) s >= topOfBand else s > upAbove
-        if (armed && climbed >= needed && atTop &&
+        if (mayCount && armed && climbed >= needed && atTop &&
             (lastRepAt == NO_REP || now - lastRepAt >= minRepMs)
         ) {
             lastRepAt = now
@@ -176,6 +186,18 @@ class RepCounter(
         smoothed = Float.NaN
         phase = Phase.UNKNOWN
         armed = true
+    }
+
+    /**
+     * Discards an in-flight repetition while retaining the learned calibration band.
+     *
+     * Used when a pull-up loses bar contact or pose identity. The next valid low sample restores
+     * the DOWN phase and arms the counter; a recovered top frame cannot finish the old cycle.
+     */
+    fun requireFreshDown() {
+        phase = Phase.UNKNOWN
+        trough = Float.NaN
+        armed = false
     }
 
     fun reset() {

@@ -33,6 +33,12 @@ class BarGateTest {
     fun `the bar is unknown until someone hangs from it`() {
         val e = WorkoutEngine()
         assertFalse(e.barKnown)
+        // A body the tracker has lost is not evidence about where the bar is.
+        repeat(5) {
+            e.onFrame(PoseFixtures.pullup(170f), clock, identityStable = false)
+            clock += 100
+        }
+        assertFalse(e.barKnown)
         e.hold(PoseFixtures.pullup(170f))
         assertTrue("a dead hang should mark the bar", e.barKnown)
     }
@@ -42,6 +48,31 @@ class BarGateTest {
         val e = WorkoutEngine()
         e.hold(PoseFixtures.pullup(60f))
         assertFalse(e.barKnown)
+        e.hold(PoseFixtures.pullup(170f))
+
+        // Bent elbows are not a rep on their own: the head has to clear the bar.
+        val chinBelowBar = PoseFixtures.pullup(60f).copyOf()
+        chinBelowBar[KP.NOSE] = Keypoint(0f, 0f, 0.9f)
+        e.hold(chinBelowBar)
+        assertEquals(0, e.reps)
+        assertEquals("Get your head over the bar", e.hint)
+
+        // A pull-up needs both grips, so one hand leaving the bar ends the rep.
+        val oneHandOffBar = PoseFixtures.pullup(60f).copyOf()
+        oneHandOffBar[KP.LEFT_WRIST] = oneHandOffBar[KP.LEFT_WRIST].let {
+            Keypoint(it.x + 1000f, it.y, it.score)
+        }
+        e.hold(oneHandOffBar)
+        assertEquals(0, e.reps)
+        assertEquals("Get on the bar", e.hint)
+
+        // The invalidated cycle cannot be finished by a recovered top frame; it needs a fresh
+        // dead hang first.
+        e.hold(PoseFixtures.pullup(60f))
+        assertEquals(0, e.reps)
+        e.hold(PoseFixtures.pullup(170f))
+        e.hold(PoseFixtures.pullup(60f))
+        assertEquals(1, e.reps)
     }
 
     @Test
