@@ -53,6 +53,15 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "cindy"
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
+        /**
+         * How long a fault must stand before it is worth saying out loud.
+         *
+         * Long enough that a frame of lost tracking, or the moment between finishing one
+         * movement and taking up the next, passes in silence.
+         */
+        const val NUDGE_AFTER_MS = 4_000L
+        /** And how often it may be repeated while nothing improves. A coach, not a nag. */
+        const val NUDGE_EVERY_MS = 12_000L
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
@@ -112,7 +121,8 @@ class MainActivity : AppCompatActivity() {
         val phase: RepCounter.Phase,
         val range: Float,
         val calibrated: Boolean,
-        val bodyVisible: Boolean
+        val bodyVisible: Boolean,
+        val blocked: Boolean
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -147,6 +157,10 @@ class MainActivity : AppCompatActivity() {
     private var pauseStartedAt = 0L
     private var musicEnabled = true
     private var debug = false
+    /** The fault currently being waited out, and when it started, for the spoken nudge. */
+    private var blockedHint = ""
+    private var blockedSince = 0L
+    private var lastNudgeAt = 0L
     /** Set from the UI, acted on by the analysis thread, which owns the detector. */
     @Volatile private var pendingModel: String? = null
 
@@ -561,7 +575,8 @@ class MainActivity : AppCompatActivity() {
             phase = engine.phase,
             range = engine.learnedRange,
             calibrated = engine.calibrated,
-            bodyVisible = engine.bodyVisible
+            bodyVisible = engine.bodyVisible,
+            blocked = engine.blocked
         )
     }
 
@@ -591,6 +606,7 @@ class MainActivity : AppCompatActivity() {
             }
             // Say plainly that nothing is being counted, rather than sitting there at zero.
             status.colour(if (snap.bodyVisible) dim else warn)
+            coach(snap)
         }
 
         when (snap.event) {
@@ -618,6 +634,37 @@ class MainActivity : AppCompatActivity() {
                 toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
         }
+    }
+
+    /**
+     * Says the hint out loud when the screen is the wrong place to put it.
+     *
+     * Mid-set nobody is looking at the phone, so a rep that will not count is lost in silence
+     * and the athlete finds out twenty minutes later. Only faults they can act on are spoken —
+     * "Go down" is not a fault — and only once one has stood long enough to be real.
+     */
+    private fun coach(snap: Snapshot) {
+        if (!snap.blocked) {
+            stopCoaching()
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (snap.hint != blockedHint) {
+            blockedHint = snap.hint
+            blockedSince = now
+            return
+        }
+        if (now - blockedSince < NUDGE_AFTER_MS) return
+        if (lastNudgeAt != 0L && now - lastNudgeAt < NUDGE_EVERY_MS) return
+        lastNudgeAt = now
+        // Queued, so it never cuts off a rep count mid-number.
+        speaker.queue(snap.hint)
+    }
+
+    private fun stopCoaching() {
+        blockedHint = ""
+        blockedSince = 0L
+        lastNudgeAt = 0L
     }
 
     // ── setup ─────────────────────────────────────────────────────────────────
@@ -708,6 +755,7 @@ class MainActivity : AppCompatActivity() {
             }
             State.RUNNING -> {
                 state = State.PAUSED
+                stopCoaching()
                 pauseStartedAt = SystemClock.elapsedRealtime()
                 binding.btnStart.text = "RESUME"
                 status.text = "Paused"

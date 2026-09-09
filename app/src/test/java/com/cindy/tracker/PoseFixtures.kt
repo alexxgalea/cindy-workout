@@ -44,6 +44,26 @@ object PoseFixtures {
     }
 
     /**
+     * A body face down on the floor at the end of a set of push-ups, legs straight.
+     *
+     * The knee angle here is a full 180 degrees — the same reading a standing body gives — so
+     * this is the pose that proves a squat cannot be gated on leg extension alone. What separates
+     * it from standing is the torso, which lies along the floor instead of pointing up.
+     */
+    fun onTheFloor(): Array<Keypoint> {
+        val k = blank()
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, 0f)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, -TORSO, 0f)
+        // Hip, knee and ankle collinear along the floor: the legs are locked out.
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, -TORSO - 80f, 0f)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, -TORSO - 160f, 0f)
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, LIMB)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, 2f * LIMB)
+        k.put(KP.NOSE, 60f, 0f)
+        return k
+    }
+
+    /**
      * A body mid push-up with the given elbow angle. 180 is lockout, 90 is chest down.
      * Elbow at the origin, wrist below it, shoulder swung out by [elbowDeg].
      */

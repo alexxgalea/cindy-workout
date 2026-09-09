@@ -24,12 +24,22 @@ class WorkoutEngineTest {
         return events
     }
 
+    /**
+     * One rep, starting and finishing in the position the movement is held in.
+     *
+     * The leading frames matter: a squat begins standing and a push-up begins at lockout, and
+     * the engine will not score either until it has seen the athlete get there. Starting these
+     * helpers at the bottom instead described an athlete who materialises mid-rep, and let the
+     * climb up out of the previous movement count as the first rep of this one.
+     */
     private fun WorkoutEngine.doSquat() {
+        hold(PoseFixtures.squat(175f))
         hold(PoseFixtures.squat(80f))
         hold(PoseFixtures.squat(175f))
     }
 
     private fun WorkoutEngine.doPushup() {
+        hold(PoseFixtures.pushup(175f))
         hold(PoseFixtures.pushup(80f))
         hold(PoseFixtures.pushup(175f))
     }
@@ -142,6 +152,8 @@ class WorkoutEngineTest {
         val e = WorkoutEngine()
         e.skipExercise(); e.skipExercise()
         assertEquals(Exercise.SQUAT, e.exercise)
+        // Stand up into the movement first; from a low phone that is only 145 degrees.
+        e.hold(PoseFixtures.squat(145f))
         repeat(6) {
             e.hold(PoseFixtures.squat(85f))
             e.hold(PoseFixtures.squat(145f))

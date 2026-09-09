@@ -43,6 +43,24 @@ def squat(knee_deg: float) -> list[Keypoint]:
     return k
 
 
+def on_the_floor() -> list[Keypoint]:
+    """A body face down at the end of a set of push-ups, legs straight.
+
+    The knee angle here is a full 180 degrees -- the same reading a standing body gives -- so
+    this is the pose that proves a squat cannot be gated on leg extension alone.
+    """
+    k = _blank()
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, -TORSO, 0.0)
+    # Hip, knee and ankle collinear along the floor: the legs are locked out.
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, -TORSO - 80.0, 0.0)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, -TORSO - 160.0, 0.0)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, LIMB)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, 2.0 * LIMB)
+    _put(k, KP.NOSE, 60.0, 0.0)
+    return k
+
+
 def pushup(elbow_deg: float) -> list[Keypoint]:
     """A body mid push-up with the given elbow angle. 180 is lockout, 90 is chest down."""
     k = _blank()

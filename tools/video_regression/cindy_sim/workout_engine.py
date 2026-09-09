@@ -21,16 +21,25 @@ from .rep_counter import NAN, Phase, RepCounter, f32
 
 
 class Exercise(Enum):
-    """One round of Cindy: 5 pull-ups, 10 push-ups, 15 air squats."""
+    """One round of Cindy: 5 pull-ups, 10 push-ups, 15 air squats.
 
-    PULLUP = ("PULL-UPS", "pull ups", 5)
-    PUSHUP = ("PUSH-UPS", "push ups", 10)
-    SQUAT = ("SQUATS", "squats", 15)
+    `starts_from_position` marks the movements entered from a posture the athlete has to assume
+    first. Getting up off the floor after push-ups traces the second half of a squat exactly, and
+    the knee angle alone cannot tell them apart. Pull-ups are excluded: their bar and dead-hang
+    gates already do this.
+    """
 
-    def __init__(self, label: str, spoken: str, target: int) -> None:
+    PULLUP = ("PULL-UPS", "pull ups", 5, False, "Hang from the bar")
+    PUSHUP = ("PUSH-UPS", "push ups", 10, True, "Get set on the floor")
+    SQUAT = ("SQUATS", "squats", 15, True, "Stand up to start")
+
+    def __init__(self, label: str, spoken: str, target: int,
+                 starts_from_position: bool, start_cue: str) -> None:
         self.label = label
         self.spoken = spoken
         self.target = target
+        self.starts_from_position = starts_from_position
+        self.start_cue = start_cue
 
     @property
     def ordinal(self) -> int:
@@ -132,6 +141,15 @@ class WorkoutEngine:
     #: wrists disappear behind it -- so treating the first sub-threshold frame as "left the bar"
     #: threw the rep away at the moment it was earned.
     MAX_DROPOUT_FRAMES = 8
+    #: How far the shoulders must sit above the hips, in torso lengths, to call the athlete
+    #: upright. A plank and a standing body both have straight legs, so the knee angle cannot
+    #: tell them apart -- only the direction the torso is pointing can.
+    UPRIGHT_TORSOS = 0.7
+    #: How long that posture must hold before the movement is considered taken up. Deliberately
+    #: a posture and a clock rather than a joint angle: a phone on the floor foreshortens a
+    #: standing body until "legs straight" reads 145 degrees, and a fixed gate then locks the
+    #: athlete out.
+    START_POSITION_MS = 500
 
     def __init__(self, fixed_exercise: Exercise | None = None) -> None:
         self._fixed_exercise = fixed_exercise
@@ -145,6 +163,12 @@ class WorkoutEngine:
         self.hint = "Step into frame"
         self.body_visible = False
         self.diagnostics = FrameDiagnostics()
+        #: True while waiting for the athlete to take up the movement's starting position.
+        self.awaiting_start = False
+        #: True when this frame was refused for a reason the athlete could fix by moving.
+        self.blocked = False
+        #: When the current run of correct posture began, or 0 while it is broken.
+        self._start_position_since = 0
 
         self._moving_since = 0
         self._bar = BarZone()
@@ -233,6 +257,9 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self.awaiting_start = False
+        self._start_position_since = 0
+        self.blocked = False
         self.diagnostics = FrameDiagnostics()
         self._bar.reset()
 
@@ -244,6 +271,7 @@ class WorkoutEngine:
         return self._settle()
 
     def undo_rep(self) -> RepEvent:
+        self.awaiting_start = False
         counter = self._counters[self.exercise]
         if counter.count > 0:
             counter.force_decrement()
@@ -279,6 +307,7 @@ class WorkoutEngine:
         """
         if self._setup_in_progress:
             self.hint = "Finish setup first"
+            self.blocked = False
             self.diagnostics = self._frame_diagnostics(k, identity_stable, rejection=self.hint)
             return RepEvent.NONE
 
@@ -286,6 +315,7 @@ class WorkoutEngine:
         if torso is None or torso < 1.0:
             self.body_visible = False
             self.hint = "Step into frame"
+            self.blocked = True
             if self.exercise is Exercise.PULLUP:
                 self._tolerate_pullup_dropout()
             self.diagnostics = self._frame_diagnostics(k, identity_stable, rejection=self.hint)
@@ -297,21 +327,74 @@ class WorkoutEngine:
 
         s = self._signal_for(k)
         if math.isnan(s):
+            self.blocked = True
             self.diagnostics = self._frame_diagnostics(k, identity_stable, rejection=self.hint)
             return RepEvent.NONE
 
-        counted = self._counters[self.exercise].update(s, now)
+        counter = self._counters[self.exercise]
+
+        if self.awaiting_start:
+            # Observed but never scored: the band keeps learning this athlete's range while the
+            # movement is being taken up, so the first real rep is still judged against it.
+            counter.update(s, now, may_count=False)
+            self.blocked = True
+            self.hint = self.exercise.start_cue
+            if not self._in_start_position(k):
+                self._start_position_since = 0
+            else:
+                if self._start_position_since == 0:
+                    self._start_position_since = now
+                if now - self._start_position_since >= self.START_POSITION_MS:
+                    self.awaiting_start = False
+                    self.blocked = False
+                    # Arriving is not the top of a rep. Throwing away the climb that got here is
+                    # the whole point: otherwise standing up off the floor books one.
+                    counter.require_fresh_down()
+            self.diagnostics = self._frame_diagnostics(
+                k, identity_stable, scoring_confidence_adequate=True, rejection=self.hint
+            )
+            return RepEvent.NONE
+
+        counted = counter.update(s, now)
         self.diagnostics = self._frame_diagnostics(
             k, identity_stable, scoring_confidence_adequate=True,
             rejection=None if counted else self.hint,
         )
         if not counted:
             self.hint = "Drive up" if self.phase is Phase.DOWN else "Go down"
+            self.blocked = False
             self.diagnostics = self._frame_diagnostics(
                 k, identity_stable, scoring_confidence_adequate=True, rejection=self.hint
             )
             return RepEvent.NONE
+        self.blocked = False
         return self._settle()
+
+    def _in_start_position(self, k: Sequence[Keypoint]) -> bool:
+        """Standing, or down on the floor, as the current movement requires.
+
+        Only the torso's direction is tested. Both a plank and a standing body have straight
+        legs, so the knee angle that scores a squat cannot also decide whether it has begun.
+        """
+        if self.exercise is Exercise.PULLUP:
+            # The bar, head and dead-hang gates already refuse anything that is not a pull-up.
+            return True
+        if self.exercise is Exercise.PUSHUP:
+            return not self._upright(k)
+        return self._upright(k)
+
+    def _upright(self, k: Sequence[Keypoint]) -> bool:
+        """True when the shoulders sit well above the hips: on the feet, not lying down."""
+        sh = self._midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
+        if sh is None:
+            return False
+        hp = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
+        if hp is None:
+            return False
+        torso = f32(math.hypot(f32(sh.x - hp.x), f32(sh.y - hp.y)))
+        if torso < 1.0:
+            return False
+        return f32(hp.y - sh.y) >= f32(self.UPRIGHT_TORSOS * torso)
 
     def _settle(self) -> RepEvent:
         if self._fixed_exercise is None and self.reps >= self.exercise.target:
@@ -323,6 +406,9 @@ class WorkoutEngine:
         was_last = self.exercise is Exercise.SQUAT
         self.exercise = self.exercise.next()
         self._counters[self.exercise].reset_count()
+        # Whatever the athlete does to get from the last movement into this one must not score.
+        self.awaiting_start = self.exercise.starts_from_position
+        self._start_position_since = 0
         if was_last:
             self.rounds += 1
             return RepEvent.ROUND_DONE
@@ -419,12 +505,14 @@ class WorkoutEngine:
         """Scores a pull-up only after the physical gates are true."""
         if not identity_stable:
             self.hint = "Tracking…"
+            self.blocked = True
             self._tolerate_pullup_dropout()
             self.diagnostics = self._frame_diagnostics(k, False, rejection=self.hint)
             return RepEvent.NONE
 
         sample = self._pullup_sample(k)
         if sample is None:
+            self.blocked = True
             self._tolerate_pullup_dropout()
             self.diagnostics = self._frame_diagnostics(k, True, rejection=self.hint)
             return RepEvent.NONE
@@ -443,6 +531,8 @@ class WorkoutEngine:
         counted = counter.update(sample.signal, now, may_count=may_count)
 
         if sample.dead_hang_below_reset:
+            # Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
+            self.blocked = False
             # Observing here makes RepCounter's DOWN phase agree with the physical reset.
             if counter.phase is Phase.DOWN:
                 self._pullup_down_seen = True
@@ -453,6 +543,7 @@ class WorkoutEngine:
             return RepEvent.NONE
 
         if not may_count:
+            self.blocked = True
             self.hint = ("Return to a dead hang" if not self._pullup_down_seen
                          else "Get your head over the bar")
             self.diagnostics = self._frame_diagnostics(
@@ -467,6 +558,7 @@ class WorkoutEngine:
             bar_gate_open=sample.bar_gate_open, head_above_bar=sample.head_above_bar,
             rejection=None if counted else "Drive up",
         )
+        self.blocked = False
         if not counted:
             self.hint = "Drive up"
             return RepEvent.NONE
