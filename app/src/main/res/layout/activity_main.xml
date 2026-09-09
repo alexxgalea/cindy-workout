@@ -72,14 +72,26 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
 
+    <!--
+      Below the taller of the timer and round chips, not just round: the timer's 34sp text makes
+      it deeper than ROUND 1's 16sp, so anchoring to round alone let the chip row ride up under it.
+    -->
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/topRowBottom"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="bottom"
+        app:constraint_referenced_ids="timer,rounds" />
+
     <!-- ── voice / music / records toggles ── -->
     <LinearLayout
         android:id="@+id/chips"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
         android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@id/rounds"
+        app:layout_constraintTop_toBottomOf="@id/topRowBottom"
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
