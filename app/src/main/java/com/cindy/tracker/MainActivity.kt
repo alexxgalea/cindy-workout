@@ -17,6 +17,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.util.Size
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +33,12 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.core.view.updateLayoutParams
 import com.cindy.tracker.databinding.ActivityMainBinding
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -44,9 +53,53 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "cindy"
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
+        /**
+         * How long a fault must stand before it is worth saying out loud.
+         *
+         * Long enough that a frame of lost tracking, or the moment between finishing one
+         * movement and taking up the next, passes in silence.
+         */
+        const val NUDGE_AFTER_MS = 4_000L
+        /** And how often it may be repeated while nothing improves. A coach, not a nag. */
+        const val NUDGE_EVERY_MS = 12_000L
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
+
+    /**
+     * A HUD field that is only written when it actually changes.
+     *
+     * The analysis thread posts a frame of UI work at camera rate, and almost none of those
+     * frames change any of this text; setting it anyway costs a measure and a layout each time.
+     * Holding the current value here also lets the burned-in recording overlay be fed from
+     * plain strings instead of reading four TextViews back on the hot path.
+     */
+    private class HudText(private val view: TextView) {
+        private var shown: String? = null
+        private var spoken: String? = null
+        private var colour: Int? = null
+
+        var text: String
+            get() = shown.orEmpty()
+            set(value) {
+                if (shown == value) return
+                shown = value
+                view.text = value
+            }
+
+        /** What a screen reader should say, for fields whose glyphs do not read aloud well. */
+        fun spoken(value: String) {
+            if (spoken == value) return
+            spoken = value
+            view.contentDescription = value
+        }
+
+        fun colour(argb: Int) {
+            if (colour == argb) return
+            colour = argb
+            view.setTextColor(argb)
+        }
+    }
 
     /**
      * An immutable read of the engine taken on the analysis thread.
@@ -68,10 +121,19 @@ class MainActivity : AppCompatActivity() {
         val phase: RepCounter.Phase,
         val range: Float,
         val calibrated: Boolean,
-        val bodyVisible: Boolean
+        val bodyVisible: Boolean,
+        val blocked: Boolean
     )
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var clock: HudText
+    private lateinit var round: HudText
+    private lateinit var exercise: HudText
+    private lateinit var reps: HudText
+    private lateinit var status: HudText
+    private var dim = 0
+    private var warn = 0
+    private var onSurface = 0
     private lateinit var analysisExecutor: ExecutorService
     private lateinit var speaker: Speaker
     private lateinit var music: MusicPlayer
@@ -95,6 +157,10 @@ class MainActivity : AppCompatActivity() {
     private var pauseStartedAt = 0L
     private var musicEnabled = true
     private var debug = false
+    /** The fault currently being waited out, and when it started, for the spoken nudge. */
+    private var blockedHint = ""
+    private var blockedSince = 0L
+    private var lastNudgeAt = 0L
     /** Set from the UI, acted on by the analysis thread, which owns the detector. */
     @Volatile private var pendingModel: String? = null
 
@@ -126,7 +192,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) startCamera()
-        else binding.status.text = "Camera permission is required to count reps"
+        else status.text = "Camera permission is required to count reps"
     }
 
     private val pickMusic = registerForActivityResult(
@@ -135,8 +201,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The camera fills the window; the HUD is moved off the system bars in code, because
+        // padding the root would letterbox the preview along with the overlay.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        clock = HudText(binding.timer)
+        round = HudText(binding.rounds)
+        exercise = HudText(binding.exercise)
+        reps = HudText(binding.reps)
+        status = HudText(binding.status)
+        dim = getColor(R.color.on_surface_dim)
+        warn = getColor(R.color.warn)
+        onSurface = getColor(R.color.on_surface)
 
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
@@ -151,7 +229,7 @@ class MainActivity : AppCompatActivity() {
             detector = PoseDetector(this)
         } catch (t: Throwable) {
             Log.e(TAG, "MoveNet failed to load", t)
-            binding.status.text = "Pose model failed to load — manual counting only"
+            status.text = "Pose model failed to load — manual counting only"
         }
 
         restoreTrack()
@@ -187,6 +265,8 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        keepHudClearOfSystemBars()
+        describeControls()
         renderClock()
         apply(runEngine { RepEvent.NONE })
         renderChips()
@@ -199,10 +279,101 @@ class MainActivity : AppCompatActivity() {
 
     private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
 
+    // ── window and accessibility ──────────────────────────────────────────────
+
+    /**
+     * Re-margins the overlaid HUD by whatever the system bars and the cutout are covering.
+     *
+     * Only the edge each view is actually anchored to is adjusted: adding the top inset to the
+     * status line, which hangs off the chips above it, would just push it down the screen.
+     */
+    private fun keepHudClearOfSystemBars() {
+        val hud = listOf(
+            binding.timer, binding.rounds, binding.chips,
+            binding.status, binding.repBlock, binding.controls
+        )
+        val base = hud.associateWith { view ->
+            val lp = view.layoutParams as ViewGroup.MarginLayoutParams
+            intArrayOf(lp.marginStart, lp.topMargin, lp.marginEnd, lp.bottomMargin)
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val rtl = root.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val start = if (rtl) bars.right else bars.left
+            val end = if (rtl) bars.left else bars.right
+
+            fun View.push(startBy: Int = 0, topBy: Int = 0, endBy: Int = 0, bottomBy: Int = 0) {
+                val b = base.getValue(this)
+                updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                    marginStart = b[0] + startBy
+                    topMargin = b[1] + topBy
+                    marginEnd = b[2] + endBy
+                    bottomMargin = b[3] + bottomBy
+                }
+            }
+
+            binding.timer.push(startBy = start, topBy = bars.top)
+            binding.rounds.push(topBy = bars.top, endBy = end)
+            binding.chips.push(endBy = end)
+            binding.status.push(startBy = start, endBy = end)
+            binding.repBlock.push(startBy = start, endBy = end)
+            binding.controls.push(startBy = start, endBy = end, bottomBy = bars.bottom)
+            insets
+        }
+    }
+
+    /**
+     * Names the controls for TalkBack, and says out loud what a long press does.
+     *
+     * Every control on this screen is a styled TextView, which draws correctly and is silent to
+     * a screen reader: no role, no name, and no clue that four of them do a second thing when
+     * held. The labels that depend on state are refreshed by [renderChips] and [renderControls].
+     */
+    private fun describeControls() {
+        binding.btnUndo.describe("Take back a rep")
+        binding.btnSkip.describe("Add a rep", longPress = "Skip to the next movement")
+        binding.btnRecords.describe("Your records")
+        binding.status.describe(longPress = "Show the debug readout")
+        // The rest change job with the workout: renderControls and renderChips name those, and
+        // only the long presses, which never change, are declared here.
+        binding.btnStart.describe()
+        binding.btnFlip.describe(longPress = "Switch pose model")
+        binding.btnMusic.describe(longPress = "Choose a track")
+        binding.btnVoice.describe()
+        binding.btnRec.describe()
+    }
+
+    /**
+     * Gives a TextView a button's semantics. A null [label] keeps the view's own text as its
+     * name, which is what a live status line wants.
+     */
+    private fun TextView.describe(label: String? = null, longPress: String? = null) {
+        label?.let { contentDescription = it }
+        ViewCompat.setAccessibilityDelegate(this, object : AccessibilityDelegateCompat() {
+            override fun onInitializeAccessibilityNodeInfo(
+                host: View,
+                info: AccessibilityNodeInfoCompat
+            ) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                if (host.isClickable) info.className = Button::class.java.name
+                longPress?.let {
+                    info.addAction(
+                        AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                            AccessibilityNodeInfoCompat.ACTION_LONG_CLICK, it
+                        )
+                    )
+                }
+            }
+        })
+    }
+
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        binding.status.text = "Press START to set up"
+        status.text = "Press START to set up"
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -210,7 +381,7 @@ class MainActivity : AppCompatActivity() {
                 bindUseCases()
             } catch (t: Throwable) {
                 Log.e(TAG, "Camera init failed", t)
-                binding.status.text = "Camera unavailable: ${t.message}"
+                status.text = "Camera unavailable: ${t.message}"
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -247,7 +418,7 @@ class MainActivity : AppCompatActivity() {
         val bound = bindWithOverlay(provider, selector, preview, analysis) ||
             bindPlainRecording(provider, selector, preview, analysis) ||
             bindCountingOnly(provider, selector, preview, analysis)
-        if (!bound) binding.status.text = "Could not open the camera"
+        if (!bound) status.text = "Could not open the camera"
         renderChips()
     }
 
@@ -343,8 +514,12 @@ class MainActivity : AppCompatActivity() {
             } else {
                 null
             }
+            // The gate is pull-up geometry; the other two movements have no bar to draw.
+            val guide = synchronized(engineLock) {
+                engine.barGuide.takeIf { engine.exercise == Exercise.PULLUP }
+            }
             ui.post {
-                binding.overlay.setPose(keypoints, frame.width, frame.height)
+                binding.overlay.setPose(keypoints, frame.width, frame.height, guide)
                 if (snap != null && state == State.RUNNING) apply(snap)
                 if (setup != null && state == State.SETUP) applySetup(setup)
                 // Feed the burned-in overlay the same numbers the screen is showing.
@@ -353,10 +528,10 @@ class MainActivity : AppCompatActivity() {
                     width = frame.width,
                     height = frame.height,
                     mirrored = mirrored,
-                    clock = binding.timer.text.toString(),
-                    round = binding.rounds.text.toString(),
-                    exercise = binding.exercise.text.toString(),
-                    reps = binding.reps.text.toString(),
+                    clock = clock.text,
+                    round = round.text,
+                    exercise = exercise.text,
+                    reps = reps.text,
                     debug = debug
                 )
             }
@@ -400,7 +575,8 @@ class MainActivity : AppCompatActivity() {
             phase = engine.phase,
             range = engine.learnedRange,
             calibrated = engine.calibrated,
-            bodyVisible = engine.bodyVisible
+            bodyVisible = engine.bodyVisible,
+            blocked = engine.blocked
         )
     }
 
@@ -417,19 +593,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun apply(snap: Snapshot) {
-        binding.exercise.text = snap.exercise.label
-        binding.reps.text = "${snap.reps} / ${snap.exercise.target}"
-        binding.rounds.text = "ROUND ${snap.rounds + 1}"
+        exercise.text = snap.exercise.label
+        reps.text = "${snap.reps} / ${snap.exercise.target}"
+        reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
+        round.text = "ROUND ${snap.rounds + 1}"
+        round.spoken("Round ${snap.rounds + 1}")
         if (state == State.RUNNING) {
-            binding.status.text = when {
+            status.text = when {
                 debug -> debugLine(snap)
                 !snap.calibrated -> "Recalibrating…"
                 else -> snap.hint
             }
             // Say plainly that nothing is being counted, rather than sitting there at zero.
-            binding.status.setTextColor(
-                getColor(if (snap.bodyVisible) R.color.on_surface_dim else R.color.warn)
-            )
+            status.colour(if (snap.bodyVisible) dim else warn)
+            coach(snap)
         }
 
         when (snap.event) {
@@ -459,6 +636,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Says the hint out loud when the screen is the wrong place to put it.
+     *
+     * Mid-set nobody is looking at the phone, so a rep that will not count is lost in silence
+     * and the athlete finds out twenty minutes later. Only faults they can act on are spoken —
+     * "Go down" is not a fault — and only once one has stood long enough to be real.
+     */
+    private fun coach(snap: Snapshot) {
+        if (!snap.blocked) {
+            stopCoaching()
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (snap.hint != blockedHint) {
+            blockedHint = snap.hint
+            blockedSince = now
+            return
+        }
+        if (now - blockedSince < NUDGE_AFTER_MS) return
+        if (lastNudgeAt != 0L && now - lastNudgeAt < NUDGE_EVERY_MS) return
+        lastNudgeAt = now
+        // Queued, so it never cuts off a rep count mid-number.
+        speaker.queue(snap.hint)
+    }
+
+    private fun stopCoaching() {
+        blockedHint = ""
+        blockedSince = 0L
+        lastNudgeAt = 0L
+    }
+
     // ── setup ─────────────────────────────────────────────────────────────────
 
     private fun enterSetup() {
@@ -467,33 +675,37 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
         binding.btnStart.text = "SKIP"
-        binding.exercise.text = "SET UP"
-        binding.reps.text = "—"
-        binding.status.setTextColor(getColor(R.color.on_surface_dim))
-        binding.status.text = "Get in frame"
+        exercise.text = "SET UP"
+        reps.text = "—"
+        reps.spoken("Setting up")
+        status.colour(dim)
+        status.text = "Get in frame"
         speaker.say("Get in frame, then do two slow pull ups")
     }
 
     private fun applySetup(setup: Setup) {
         when (setup.stage) {
             SetupStage.FRAMING -> {
-                binding.reps.text = "—"
-                binding.status.setTextColor(getColor(R.color.warn))
-                binding.status.text = "Can't see your ${setup.missing.joinToString(", ")}"
+                reps.text = "—"
+                reps.spoken("Setting up")
+                status.colour(warn)
+                status.text = "Can't see your ${setup.missing.joinToString(", ")}"
             }
             SetupStage.MOVING -> {
-                binding.reps.text = "${setup.reps} / 2"
-                binding.status.setTextColor(getColor(R.color.on_surface_dim))
-                binding.status.text = if (debug) {
+                reps.text = "${setup.reps} / 2"
+                reps.spoken("${setup.reps} of 2 calibration reps")
+                status.colour(dim)
+                status.text = if (debug) {
                     "calibrating · rng %.0f / %.0f".format(Locale.US, setup.range, setup.needed)
                 } else {
                     "Do 2 slow pull-ups to calibrate"
                 }
             }
             SetupStage.POOR -> {
-                binding.reps.text = "${setup.reps} / 2"
-                binding.status.setTextColor(getColor(R.color.warn))
-                binding.status.text = "Movement barely registers — raise the phone or step back"
+                reps.text = "${setup.reps} / 2"
+                reps.spoken("${setup.reps} of 2 calibration reps")
+                status.colour(warn)
+                status.text = "Movement barely registers — raise the phone or step back"
             }
             SetupStage.READY -> beginWorkout(calibrated = true)
         }
@@ -511,8 +723,8 @@ class MainActivity : AppCompatActivity() {
         elapsedMs = 0L
         pausedMs = 0L
         binding.btnStart.text = "PAUSE"
-        binding.status.setTextColor(getColor(R.color.on_surface_dim))
-        binding.status.text = "Counting…"
+        status.colour(dim)
+        status.text = "Counting…"
         if (musicEnabled) music.play()
         speaker.say(if (calibrated) "Calibrated. Go." else "Go. Pull ups")
         apply(runEngine { RepEvent.NONE })
@@ -536,16 +748,17 @@ class MainActivity : AppCompatActivity() {
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
                 detector?.resetRoi()
-                binding.status.text = "Recalibrating…"
+                status.text = "Recalibrating…"
                 if (musicEnabled) music.play()
                 speaker.say("Resume")
                 ui.post(ticker)
             }
             State.RUNNING -> {
                 state = State.PAUSED
+                stopCoaching()
                 pauseStartedAt = SystemClock.elapsedRealtime()
                 binding.btnStart.text = "RESUME"
-                binding.status.text = "Paused"
+                status.text = "Paused"
                 music.pause()
                 speaker.stop()
                 ui.removeCallbacks(ticker)
@@ -563,6 +776,15 @@ class MainActivity : AppCompatActivity() {
         val inWorkout = state == State.RUNNING || state == State.PAUSED
         binding.btnFlip.text = if (inWorkout) "STOP" else "FLIP"
         binding.btnFlip.setTextColor(getColor(if (inWorkout) R.color.warn else R.color.on_surface))
+        binding.btnFlip.contentDescription =
+            if (inWorkout) "End the workout" else "Switch camera"
+        binding.btnStart.contentDescription = when (state) {
+            State.IDLE -> "Start the workout"
+            State.SETUP -> "Skip the setup check"
+            State.RUNNING -> "Pause"
+            State.PAUSED -> "Resume"
+            State.FINISHED -> "Start again"
+        }
     }
 
     private fun onLeftButton() {
@@ -591,9 +813,9 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.reset() }
         detector?.resetRoi()
         binding.btnStart.text = "START"
-        binding.status.setTextColor(getColor(R.color.on_surface_dim))
-        binding.status.text = "Press START to set up"
-        binding.reps.setTextColor(getColor(R.color.on_surface))
+        status.colour(dim)
+        status.text = "Press START to set up"
+        reps.colour(onSurface)
         music.stop()
         renderClock()
         apply(runEngine { RepEvent.NONE })
@@ -643,10 +865,11 @@ class MainActivity : AppCompatActivity() {
         records.add(attempt)
 
         binding.btnStart.text = "RESET"
-        binding.reps.setTextColor(getColor(R.color.warn))
+        renderControls()
+        reps.colour(warn)
         val beat = Records.beatsBenchmark(attempt)
-        binding.status.setTextColor(getColor(R.color.on_surface_dim))
-        binding.status.text = "${attempt.scoreLabel()} · ${attempt.level.title}"
+        status.colour(dim)
+        status.text = "${attempt.scoreLabel()} · ${attempt.level.title}"
 
         speaker.say(if (stoppedEarly) "Stopped." else "Time.")
         speaker.queue("${snap.rounds} rounds and ${snap.repsThisRound} reps")
@@ -726,7 +949,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderClock() {
         val total = (remainingMs + 999L) / 1000L
-        binding.timer.text = String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
+        clock.text = String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
+        clock.spoken("${spokenDuration(remainingMs)} remaining")
     }
 
     private fun renderChips() {
@@ -739,6 +963,16 @@ class MainActivity : AppCompatActivity() {
         binding.btnRec.setTextColor(
             getColor(if (video.isRecording) R.color.warn else R.color.on_surface_dim)
         )
+        // These states live in the text colour alone, which a screen reader cannot see.
+        binding.btnVoice.contentDescription =
+            if (speaker.enabled) "Voice counting, on" else "Voice counting, off"
+        binding.btnMusic.contentDescription = when {
+            !music.hasTrack -> "Music, no track chosen"
+            musicEnabled -> "Music, on"
+            else -> "Music, off"
+        }
+        binding.btnRec.contentDescription =
+            if (video.isRecording) "Stop recording" else "Record this workout"
     }
 
     private fun toggleRecording() {

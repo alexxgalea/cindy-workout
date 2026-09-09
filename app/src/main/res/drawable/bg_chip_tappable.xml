@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The pill a finger can actually hit.
+
+  A 28dp chip is well under the 48dp minimum touch target, and simply growing it would put four
+  fat pills over the camera. Insetting the drawable instead keeps the pill its designed size
+  while the view around it stays big enough to tap mid-set.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/bg_chip"
+    android:insetTop="10dp"
+    android:insetBottom="10dp" />

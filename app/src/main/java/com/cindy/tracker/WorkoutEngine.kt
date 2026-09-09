@@ -5,10 +5,27 @@ import kotlin.math.acos
 import kotlin.math.hypot
 
 /** One round of Cindy: 5 pull-ups, 10 push-ups, 15 air squats. */
-enum class Exercise(val label: String, val spoken: String, val target: Int) {
-    PULLUP("PULL-UPS", "pull ups", 5),
-    PUSHUP("PUSH-UPS", "push ups", 10),
-    SQUAT("SQUATS", "squats", 15);
+enum class Exercise(
+    val label: String,
+    val spoken: String,
+    val target: Int,
+    /**
+     * True when the movement is entered from a posture the athlete has to assume first.
+     *
+     * Getting up off the floor after a set of push-ups traces the second half of a squat
+     * exactly: a deep knee bend followed by a climb to full extension. Nothing in the knee
+     * angle alone separates that from a rep, so these movements refuse to score until the
+     * athlete has been seen in the position the movement actually starts from.
+     *
+     * Pull-ups are excluded because their own bar and dead-hang gates already do this.
+     */
+    val startsFromPosition: Boolean,
+    /** Said and shown while that starting position has not been reached. */
+    val startCue: String
+) {
+    PULLUP("PULL-UPS", "pull ups", 5, startsFromPosition = false, startCue = "Hang from the bar"),
+    PUSHUP("PUSH-UPS", "push ups", 10, startsFromPosition = true, startCue = "Get set on the floor"),
+    SQUAT("SQUATS", "squats", 15, startsFromPosition = true, startCue = "Stand up to start");
 
     fun next(): Exercise = entries[(ordinal + 1) % entries.size]
 
@@ -122,6 +139,26 @@ class WorkoutEngine(
          * frame, far too short to cover someone actually dropping off the bar.
          */
         const val MAX_DROPOUT_FRAMES = 8
+        /**
+         * How far the shoulders must sit above the hips, in torso lengths, to call the athlete
+         * upright.
+         *
+         * A plank and a standing body both have straight legs, so the knee angle cannot tell
+         * them apart — only the direction the torso is pointing can. A vertical torso scores
+         * 1.0 and a horizontal one 0.0; the threshold leaves room for the forward lean of a
+         * real squat and for a phone standing on the floor looking up.
+         */
+        const val UPRIGHT_TORSOS = 0.7f
+        /**
+         * How long that posture must hold before the movement is considered taken up.
+         *
+         * Deliberately a posture and a clock rather than a joint angle. An angle threshold is
+         * the trap this engine keeps falling into: a phone on the floor foreshortens a standing
+         * body until "legs straight" reads 145 degrees, and a fixed gate then locks the athlete
+         * out. Which way the torso points barely changes with camera height, and half a second
+         * is longer than anyone spends passing through vertical on their way up off the floor.
+         */
+        const val START_POSITION_MS = 500L
     }
 
     private val counters = mapOf(
@@ -173,6 +210,33 @@ class WorkoutEngine(
     /** True once a dead hang has taught the engine where the bar is. */
     val barKnown: Boolean get() = bar.established
 
+    /** True while waiting for the athlete to take up the current movement's starting position. */
+    var awaitingStart = false
+        private set
+
+    /** When the current run of correct posture began, or 0 while it is broken. */
+    private var startPositionSince = 0L
+
+    /**
+     * True when this frame was refused for a reason the athlete could fix by moving.
+     *
+     * Distinct from simply being mid-rep: "Go down" is not a problem, whereas "Stand up to
+     * start" or "Get on the bar" means nothing is being counted until something changes. The
+     * UI uses it to decide when a hint is worth saying out loud.
+     */
+    var blocked = false
+        private set
+
+    /**
+     * Where to draw the pull-up gate, or null while no bar is known.
+     *
+     * The overlay exists because the gates that refuse a rep are invisible: "Get on the bar" and
+     * "Return to a dead hang" describe a box and a line the athlete cannot see. This is the
+     * engine's own geometry, not a second estimate of it, so what is drawn is what is tested.
+     */
+    var barGuide: BarGuide? = null
+        private set
+
     /**
      * Configures a recorded clip's bar from normalised video coordinates.
      *
@@ -220,8 +284,12 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        awaitingStart = false
+        startPositionSince = 0L
+        blocked = false
         diagnostics = FrameDiagnostics()
         bar.reset()
+        barGuide = null
     }
 
     /** Advances past the current exercise without finishing it (manual override). */
@@ -240,6 +308,7 @@ class WorkoutEngine(
      * round returns you to the fifth pull-up rather than stranding the score at zero.
      */
     fun undoRep(): RepEvent {
+        awaitingStart = false
         val counter = counters.getValue(exercise)
         if (counter.count > 0) {
             counter.forceDecrement()
@@ -268,6 +337,7 @@ class WorkoutEngine(
         counters.values.forEach { it.resetBand() }
         // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
         bar.reset()
+        barGuide = null
         pullupDownSeen = false
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
@@ -285,6 +355,7 @@ class WorkoutEngine(
     fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): RepEvent {
         if (setupInProgress) {
             hint = "Finish setup first"
+            blocked = false
             diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
             return RepEvent.NONE
         }
@@ -292,6 +363,7 @@ class WorkoutEngine(
         if (torso == null || torso < 1f) {
             bodyVisible = false
             hint = "Step into frame"
+            blocked = true
             if (exercise == Exercise.PULLUP) toleratePullupDropout()
             diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
             return RepEvent.NONE
@@ -302,20 +374,71 @@ class WorkoutEngine(
 
         val s = signalFor(k)
         if (s.isNaN()) {
+            blocked = true
             diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
             return RepEvent.NONE
         }
 
-        val counted = counters.getValue(exercise).update(s, now)
+        val counter = counters.getValue(exercise)
+
+        if (awaitingStart) {
+            // Observed but never scored: the band keeps learning this athlete's range while the
+            // movement is being taken up, so the first real rep is still judged against it.
+            counter.update(s, now, mayCount = false)
+            blocked = true
+            hint = exercise.startCue
+            if (!inStartPosition(k)) {
+                startPositionSince = 0L
+            } else {
+                if (startPositionSince == 0L) startPositionSince = now
+                if (now - startPositionSince >= START_POSITION_MS) {
+                    awaitingStart = false
+                    blocked = false
+                    // Arriving is not the top of a rep. Throwing away the climb that got here is
+                    // the whole point: otherwise standing up off the floor books one.
+                    counter.requireFreshDown()
+                }
+            }
+            diagnostics = frameDiagnostics(
+                k, identityStable, scoringConfidenceAdequate = true, rejection = hint
+            )
+            return RepEvent.NONE
+        }
+
+        val counted = counter.update(s, now)
         diagnostics = frameDiagnostics(
             k, identityStable, scoringConfidenceAdequate = true, rejection = if (counted) null else hint
         )
         if (!counted) {
             hint = if (phase == RepCounter.Phase.DOWN) "Drive up" else "Go down"
+            blocked = false
             diagnostics = frameDiagnostics(k, identityStable, scoringConfidenceAdequate = true, rejection = hint)
             return RepEvent.NONE
         }
+        blocked = false
         return settle()
+    }
+
+    /**
+     * Whether the athlete is standing, or down on the floor, as the current movement requires.
+     *
+     * Only the torso's direction is tested. Both a plank and a standing body have straight legs,
+     * so the knee angle that scores a squat cannot also decide whether the squat has begun.
+     */
+    private fun inStartPosition(k: Array<Keypoint>): Boolean = when (exercise) {
+        // The bar, head and dead-hang gates already refuse anything that is not a pull-up.
+        Exercise.PULLUP -> true
+        Exercise.PUSHUP -> !upright(k)
+        Exercise.SQUAT -> upright(k)
+    }
+
+    /** True when the shoulders sit well above the hips: on the feet, not lying down. */
+    private fun upright(k: Array<Keypoint>): Boolean {
+        val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
+        val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
+        val torso = hypot(sh.x - hp.x, sh.y - hp.y)
+        if (torso < 1f) return false
+        return (hp.y - sh.y) >= UPRIGHT_TORSOS * torso
     }
 
     /** Advances to the next movement if the current one just hit its target. */
@@ -327,6 +450,9 @@ class WorkoutEngine(
         val wasLast = exercise == Exercise.SQUAT
         exercise = exercise.next()
         counters.getValue(exercise).resetCount()
+        // Whatever the athlete does to get from the last movement into this one must not score.
+        awaitingStart = exercise.startsFromPosition
+        startPositionSince = 0L
         return if (wasLast) {
             rounds++
             RepEvent.ROUND_DONE
@@ -342,6 +468,7 @@ class WorkoutEngine(
         counters.getValue(exercise).reset()
         movingSince = 0L
         bar.reset()
+        barGuide = null
         setupInProgress = true
         pullupDownSeen = false
         pullupExtendedElbow = Float.NaN
@@ -426,6 +553,16 @@ class WorkoutEngine(
         Exercise.SQUAT -> squatSignal(k)
     }
 
+    /**
+     * The pull-up gate as the overlay draws it: the box both wrists must sit in, and the line
+     * the head must drop back below before the next rep can arm.
+     */
+    data class BarGuide(
+        val zone: BarZone.Bounds,
+        val resetY: Float,
+        val gateOpen: Boolean
+    )
+
     // ── signals ───────────────────────────────────────────────────────────────
 
     /**
@@ -463,6 +600,7 @@ class WorkoutEngine(
     ): RepEvent {
         if (!identityStable) {
             hint = "Tracking…"
+            blocked = true
             toleratePullupDropout()
             diagnostics = frameDiagnostics(k, false, rejection = hint)
             return RepEvent.NONE
@@ -470,6 +608,7 @@ class WorkoutEngine(
 
         val sample = pullupSample(k)
         if (sample == null) {
+            blocked = true
             toleratePullupDropout()
             diagnostics = frameDiagnostics(k, true, rejection = hint)
             return RepEvent.NONE
@@ -488,6 +627,8 @@ class WorkoutEngine(
         val counted = counter.update(sample.signal, now, mayCount = mayCount)
 
         if (sample.deadHangBelowReset) {
+            // Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
+            blocked = false
             // Observing here makes RepCounter's DOWN phase agree with the physical reset.
             if (counter.phase == RepCounter.Phase.DOWN) pullupDownSeen = true
             diagnostics = frameDiagnostics(
@@ -498,6 +639,7 @@ class WorkoutEngine(
         }
 
         if (!mayCount) {
+            blocked = true
             hint = if (!pullupDownSeen) "Return to a dead hang" else "Get your head over the bar"
             diagnostics = frameDiagnostics(
                 k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
@@ -510,6 +652,7 @@ class WorkoutEngine(
             k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
             headAboveBar = sample.headAboveBar, rejection = if (counted) null else "Drive up"
         )
+        blocked = false
         if (!counted) {
             hint = "Drive up"
             return RepEvent.NONE
@@ -565,6 +708,7 @@ class WorkoutEngine(
                 else maxOf(torso / barTorso, barTorso / torso)
             if (ratio > BAR_SCALE_CHANGE && ++barContradictions > MAX_BAR_CONTRADICTIONS) {
                 bar.reset()
+                barGuide = null
                 barTorso = Float.NaN
                 barContradictions = 0
             }
@@ -583,7 +727,15 @@ class WorkoutEngine(
             bar.observeHang(hands.x, hands.y, half)
             if (!wasEstablished) barTorso = torso
         }
-        if (!bar.holds(leftWrist, rightWrist, torso)) {
+        val onBar = bar.holds(leftWrist, rightWrist, torso)
+        barGuide = bar.bounds(torso)?.let {
+            BarGuide(
+                zone = it,
+                resetY = it.lineY + HEAD_RESET_TORSOS * torso,
+                gateOpen = onBar
+            )
+        }
+        if (!onBar) {
             hint = "Get on the bar"
             return null
         }
