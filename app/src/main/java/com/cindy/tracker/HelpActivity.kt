@@ -153,6 +153,7 @@ class HelpActivity : AppCompatActivity() {
                 "here is a fixed angle. The app learns your range from your own movement and " +
                 "judges reps against that."
         )
+        diagram()
         bullets(
             "Stand the phone so your whole body stays in frame, and leave it there — moving it " +
                 "mid-workout invalidates what it has learned, so a pause re-calibrates.",
@@ -204,6 +205,21 @@ class HelpActivity : AppCompatActivity() {
     }
 
     // ── building blocks ───────────────────────────────────────────────────────
+
+    /**
+     * The placement diagram, in its permanent home.
+     *
+     * It is offered once before the first setup check and can be dismissed for good there, so it
+     * needs somewhere to live afterwards — this is the section that already gives the same advice
+     * in words.
+     */
+    private fun diagram() = binding.sections.addView(
+        PlacementGuideView(this),
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(12)
+        }
+    )
 
     private fun heading(text: String) = binding.sections.addView(
         TextView(this).apply {
