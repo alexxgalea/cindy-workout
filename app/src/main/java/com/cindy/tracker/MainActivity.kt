@@ -122,7 +122,8 @@ class MainActivity : AppCompatActivity() {
         val range: Float,
         val calibrated: Boolean,
         val bodyVisible: Boolean,
-        val blocked: Boolean
+        val blocked: Boolean,
+        val awaitingStart: Boolean
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -576,7 +577,8 @@ class MainActivity : AppCompatActivity() {
             range = engine.learnedRange,
             calibrated = engine.calibrated,
             bodyVisible = engine.bodyVisible,
-            blocked = engine.blocked
+            blocked = engine.blocked,
+            awaitingStart = engine.awaitingStart
         )
     }
 
@@ -587,8 +589,10 @@ class MainActivity : AppCompatActivity() {
         val view = if (det?.tracking == true) "roi" else "full"
         val model = det?.modelLabel ?: "none"
         val cal = if (snap.calibrated) "cal" else "warm"
+        // "start" means the movement has not been taken up yet, so nothing can score.
+        val phase = if (snap.awaitingStart) "start" else snap.phase.toString()
         return "%s %dms · %s · sig %.0f · rng %.0f · %s · %s".format(
-            Locale.US, model, ms, view, snap.signal, snap.range, cal, snap.phase
+            Locale.US, model, ms, view, snap.signal, snap.range, cal, phase
         )
     }
 

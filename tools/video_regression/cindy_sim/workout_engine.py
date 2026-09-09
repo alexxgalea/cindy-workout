@@ -145,11 +145,19 @@ class WorkoutEngine:
     #: upright. A plank and a standing body both have straight legs, so the knee angle cannot
     #: tell them apart -- only the direction the torso is pointing can.
     UPRIGHT_TORSOS = 0.7
-    #: How long that posture must hold before the movement is considered taken up. Deliberately
-    #: a posture and a clock rather than a joint angle: a phone on the floor foreshortens a
-    #: standing body until "legs straight" reads 145 degrees, and a fixed gate then locks the
-    #: athlete out.
+    #: How far the knees must sit below the hips, in torso lengths, to call the athlete stood up
+    #: rather than gathered in a crouch. A vertical torso is not standing: people get up off the
+    #: floor by bringing the torso upright first and collecting themselves on their haunches,
+    #: which reads as upright for most of a second. An offset rather than a knee angle, on
+    #: purpose -- an angle threshold is what locked out the athlete whose foreshortened full
+    #: extension only read 145 degrees.
+    STANDING_TORSOS = 0.5
+    #: How long the starting posture must hold, without extending further, to be taken up.
     START_POSITION_MS = 500
+    #: Further extension than this, within the dwell, means they are still getting up.
+    START_SETTLE_DEGREES = 3.0
+    #: Smoothing on the settling signal, so raw jitter does not read as still rising.
+    START_SETTLE_SMOOTHING = 0.4
 
     def __init__(self, fixed_exercise: Exercise | None = None) -> None:
         self._fixed_exercise = fixed_exercise
@@ -167,8 +175,11 @@ class WorkoutEngine:
         self.awaiting_start = False
         #: True when this frame was refused for a reason the athlete could fix by moving.
         self.blocked = False
-        #: When the current run of correct posture began, or 0 while it is broken.
+        #: When the current run of correct, no-longer-extending posture began, or 0 if broken.
         self._start_position_since = 0
+        #: Smoothed signal while taking up a position, and the value the dwell was measured from.
+        self._start_smoothed = NAN
+        self._start_reference = NAN
 
         self._moving_since = 0
         self._bar = BarZone()
@@ -259,6 +270,8 @@ class WorkoutEngine:
         self._bar_contradictions = 0
         self.awaiting_start = False
         self._start_position_since = 0
+        self._start_smoothed = NAN
+        self._start_reference = NAN
         self.blocked = False
         self.diagnostics = FrameDiagnostics()
         self._bar.reset()
@@ -334,22 +347,13 @@ class WorkoutEngine:
         counter = self._counters[self.exercise]
 
         if self.awaiting_start:
-            # Observed but never scored: the band keeps learning this athlete's range while the
-            # movement is being taken up, so the first real rep is still judged against it.
-            counter.update(s, now, may_count=False)
+            # Deliberately not fed to the counter at all. Lying face down reads as a full 180
+            # degrees of knee extension, and letting that into the learned band lifts the top of
+            # it above anything the athlete can reach standing -- which stops every squat
+            # counting rather than just the phantom one.
             self.blocked = True
             self.hint = self.exercise.start_cue
-            if not self._in_start_position(k):
-                self._start_position_since = 0
-            else:
-                if self._start_position_since == 0:
-                    self._start_position_since = now
-                if now - self._start_position_since >= self.START_POSITION_MS:
-                    self.awaiting_start = False
-                    self.blocked = False
-                    # Arriving is not the top of a rep. Throwing away the climb that got here is
-                    # the whole point: otherwise standing up off the floor books one.
-                    counter.require_fresh_down()
+            self._take_up_position(k, s, now, counter)
             self.diagnostics = self._frame_diagnostics(
                 k, identity_stable, scoring_confidence_adequate=True, rejection=self.hint
             )
@@ -370,21 +374,53 @@ class WorkoutEngine:
         self.blocked = False
         return self._settle()
 
-    def _in_start_position(self, k: Sequence[Keypoint]) -> bool:
-        """Standing, or down on the floor, as the current movement requires.
+    def _take_up_position(
+        self, k: Sequence[Keypoint], s: float, now: int, counter: RepCounter
+    ) -> None:
+        """Watches the athlete take up the movement, and opens the gate once they have.
 
-        Only the torso's direction is tested. Both a plank and a standing body have straight
-        legs, so the knee angle that scores a squat cannot also decide whether it has begun.
+        Two things have to be true together, and neither is sufficient alone. The posture has to
+        be right -- standing for squats, down for push-ups -- which rules out arriving while
+        still on the floor. And the joint that scores the movement has to have stopped opening,
+        which rules out arriving halfway up.
         """
+        if not self._in_start_position(k):
+            self._start_position_since = 0
+            self._start_smoothed = NAN
+            self._start_reference = NAN
+            return
+        if math.isnan(self._start_smoothed):
+            self._start_smoothed = s
+        else:
+            self._start_smoothed = f32(
+                self._start_smoothed
+                + f32(self.START_SETTLE_SMOOTHING * f32(s - self._start_smoothed))
+            )
+        # Any further opening restarts the clock, however slowly it is happening.
+        if (self._start_position_since == 0
+                or self._start_smoothed > f32(self._start_reference + self.START_SETTLE_DEGREES)):
+            self._start_position_since = now
+            self._start_reference = self._start_smoothed
+            return
+        if now - self._start_position_since < self.START_POSITION_MS:
+            return
+        self.awaiting_start = False
+        self.blocked = False
+        # Arriving is not the top of a rep. Throwing away the climb that got here is the whole
+        # point: otherwise standing up off the floor books one.
+        counter.require_fresh_down()
+
+    def _in_start_position(self, k: Sequence[Keypoint]) -> bool:
+        """Standing, or down on the floor, as the current movement requires."""
         if self.exercise is Exercise.PULLUP:
             # The bar, head and dead-hang gates already refuse anything that is not a pull-up.
             return True
         if self.exercise is Exercise.PUSHUP:
             return not self._upright(k)
-        return self._upright(k)
+        return self._standing(k)
 
     def _upright(self, k: Sequence[Keypoint]) -> bool:
-        """True when the shoulders sit well above the hips: on the feet, not lying down."""
+        """True when the shoulders sit well above the hips: torso vertical, not lying down."""
         sh = self._midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
         if sh is None:
             return False
@@ -395,6 +431,21 @@ class WorkoutEngine:
         if torso < 1.0:
             return False
         return f32(hp.y - sh.y) >= f32(self.UPRIGHT_TORSOS * torso)
+
+    def _standing(self, k: Sequence[Keypoint]) -> bool:
+        """Upright *and* stood up on the legs, rather than folded over them in a crouch."""
+        if not self._upright(k):
+            return False
+        hp = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
+        if hp is None:
+            return False
+        kn = self._midpoint(k, KP.LEFT_KNEE, KP.RIGHT_KNEE)
+        if kn is None:
+            return False
+        torso = self._torso_length(k)
+        if torso is None:
+            return False
+        return f32(kn.y - hp.y) >= f32(self.STANDING_TORSOS * torso)
 
     def _settle(self) -> RepEvent:
         if self._fixed_exercise is None and self.reps >= self.exercise.target:
@@ -409,6 +460,8 @@ class WorkoutEngine:
         # Whatever the athlete does to get from the last movement into this one must not score.
         self.awaiting_start = self.exercise.starts_from_position
         self._start_position_since = 0
+        self._start_smoothed = NAN
+        self._start_reference = NAN
         if was_last:
             self.rounds += 1
             return RepEvent.ROUND_DONE

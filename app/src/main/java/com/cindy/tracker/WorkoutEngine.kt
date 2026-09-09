@@ -150,15 +150,40 @@ class WorkoutEngine(
          */
         const val UPRIGHT_TORSOS = 0.7f
         /**
-         * How long that posture must hold before the movement is considered taken up.
+         * How far the knees must sit below the hips, in torso lengths, to call the athlete stood
+         * up rather than gathered in a crouch.
          *
-         * Deliberately a posture and a clock rather than a joint angle. An angle threshold is
-         * the trap this engine keeps falling into: a phone on the floor foreshortens a standing
-         * body until "legs straight" reads 145 degrees, and a fixed gate then locks the athlete
-         * out. Which way the torso points barely changes with camera height, and half a second
-         * is longer than anyone spends passing through vertical on their way up off the floor.
+         * A vertical torso is not standing. People get up off the floor by bringing the torso
+         * upright first and collecting themselves on their haunches, which reads as upright for
+         * most of a second — long enough to open a gate waiting only for that, after which the
+         * drive out of the crouch scored as a rep. Standing carries the hips a whole thigh above
+         * the knees; a crouch puts them level with, or below, them.
+         *
+         * An offset rather than a knee angle, on purpose: an angle threshold is what locked out
+         * the athlete whose foreshortened full extension only read 145 degrees.
+         */
+        const val STANDING_TORSOS = 0.5f
+        /**
+         * How long the starting posture must hold, without extending further, to be taken up.
+         *
+         * Half a second of *stillness*, not half a second of merely being upright. Upright alone
+         * was not enough: people get up off the floor by bringing the torso vertical first and
+         * gathering themselves in a crouch, which is upright for far longer than this — and the
+         * drive out of that crouch was then booked as a rep, which is the bug this exists for.
          */
         const val START_POSITION_MS = 500L
+        /**
+         * Further extension than this, within the dwell, means they are still getting up.
+         *
+         * Deliberately a *change* and not a threshold. An absolute "legs straight" angle is the
+         * trap this engine keeps falling into — a phone on the floor foreshortens a standing
+         * body until full extension reads 145 degrees, under the 158 needed to score, and the
+         * athlete is locked out. How far a joint still has left to travel does not care where
+         * the camera is standing.
+         */
+        const val START_SETTLE_DEGREES = 3f
+        /** Smoothing on the settling signal, so raw jitter does not read as still rising. */
+        const val START_SETTLE_SMOOTHING = 0.4f
     }
 
     private val counters = mapOf(
@@ -214,8 +239,11 @@ class WorkoutEngine(
     var awaitingStart = false
         private set
 
-    /** When the current run of correct posture began, or 0 while it is broken. */
+    /** When the current run of correct, no-longer-extending posture began, or 0 while broken. */
     private var startPositionSince = 0L
+    /** Smoothed signal while taking up a position, and the value the dwell was measured from. */
+    private var startSmoothed = Float.NaN
+    private var startReference = Float.NaN
 
     /**
      * True when this frame was refused for a reason the athlete could fix by moving.
@@ -286,6 +314,8 @@ class WorkoutEngine(
         barContradictions = 0
         awaitingStart = false
         startPositionSince = 0L
+        startSmoothed = Float.NaN
+        startReference = Float.NaN
         blocked = false
         diagnostics = FrameDiagnostics()
         bar.reset()
@@ -382,23 +412,13 @@ class WorkoutEngine(
         val counter = counters.getValue(exercise)
 
         if (awaitingStart) {
-            // Observed but never scored: the band keeps learning this athlete's range while the
-            // movement is being taken up, so the first real rep is still judged against it.
-            counter.update(s, now, mayCount = false)
+            // Deliberately not fed to the counter at all. Lying face down reads as a full 180
+            // degrees of knee extension, and letting that into the learned band lifts the top of
+            // it above anything the athlete can reach standing — which stops every squat
+            // counting rather than just the phantom one.
             blocked = true
             hint = exercise.startCue
-            if (!inStartPosition(k)) {
-                startPositionSince = 0L
-            } else {
-                if (startPositionSince == 0L) startPositionSince = now
-                if (now - startPositionSince >= START_POSITION_MS) {
-                    awaitingStart = false
-                    blocked = false
-                    // Arriving is not the top of a rep. Throwing away the climb that got here is
-                    // the whole point: otherwise standing up off the floor books one.
-                    counter.requireFreshDown()
-                }
-            }
+            takeUpPosition(k, s, now, counter)
             diagnostics = frameDiagnostics(
                 k, identityStable, scoringConfidenceAdequate = true, rejection = hint
             )
@@ -420,6 +440,39 @@ class WorkoutEngine(
     }
 
     /**
+     * Watches the athlete take up the movement, and opens the gate once they have.
+     *
+     * Two things have to be true together, and neither is sufficient alone. The posture has to be
+     * right — upright for squats, down for push-ups — which is what rules out arriving while
+     * still on the floor. And the joint that scores the movement has to have stopped opening,
+     * which is what rules out arriving halfway up. Getting off the floor satisfies the first for
+     * most of a second before it satisfies the second.
+     */
+    private fun takeUpPosition(k: Array<Keypoint>, s: Float, now: Long, counter: RepCounter) {
+        if (!inStartPosition(k)) {
+            startPositionSince = 0L
+            startSmoothed = Float.NaN
+            startReference = Float.NaN
+            return
+        }
+        startSmoothed =
+            if (startSmoothed.isNaN()) s
+            else startSmoothed + START_SETTLE_SMOOTHING * (s - startSmoothed)
+        // Any further opening restarts the clock, however slowly it is happening.
+        if (startPositionSince == 0L || startSmoothed > startReference + START_SETTLE_DEGREES) {
+            startPositionSince = now
+            startReference = startSmoothed
+            return
+        }
+        if (now - startPositionSince < START_POSITION_MS) return
+        awaitingStart = false
+        blocked = false
+        // Arriving is not the top of a rep. Throwing away the climb that got here is the whole
+        // point: otherwise standing up off the floor books one.
+        counter.requireFreshDown()
+    }
+
+    /**
      * Whether the athlete is standing, or down on the floor, as the current movement requires.
      *
      * Only the torso's direction is tested. Both a plank and a standing body have straight legs,
@@ -429,16 +482,25 @@ class WorkoutEngine(
         // The bar, head and dead-hang gates already refuse anything that is not a pull-up.
         Exercise.PULLUP -> true
         Exercise.PUSHUP -> !upright(k)
-        Exercise.SQUAT -> upright(k)
+        Exercise.SQUAT -> standing(k)
     }
 
-    /** True when the shoulders sit well above the hips: on the feet, not lying down. */
+    /** True when the shoulders sit well above the hips: torso vertical, not lying down. */
     private fun upright(k: Array<Keypoint>): Boolean {
         val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
         val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
         val torso = hypot(sh.x - hp.x, sh.y - hp.y)
         if (torso < 1f) return false
         return (hp.y - sh.y) >= UPRIGHT_TORSOS * torso
+    }
+
+    /** Upright *and* stood up on the legs, rather than folded over them in a crouch. */
+    private fun standing(k: Array<Keypoint>): Boolean {
+        if (!upright(k)) return false
+        val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
+        val kn = midpoint(k, KP.LEFT_KNEE, KP.RIGHT_KNEE) ?: return false
+        val torso = torsoLength(k) ?: return false
+        return (kn.y - hp.y) >= STANDING_TORSOS * torso
     }
 
     /** Advances to the next movement if the current one just hit its target. */
@@ -453,6 +515,8 @@ class WorkoutEngine(
         // Whatever the athlete does to get from the last movement into this one must not score.
         awaitingStart = exercise.startsFromPosition
         startPositionSince = 0L
+        startSmoothed = Float.NaN
+        startReference = Float.NaN
         return if (wasLast) {
             rounds++
             RepEvent.ROUND_DONE

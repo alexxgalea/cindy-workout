@@ -71,6 +71,29 @@ class StartPositionTest {
         assertFalse("but the movement has now started", e.awaitingStart)
     }
 
+    /**
+     * The way people actually get up off the floor.
+     *
+     * Not a jump from prone to standing: the torso comes vertical first, while the knees are
+     * still folded, and the athlete gathers themselves in that crouch before driving up. Both
+     * halves matter — the crouch is upright, and the drive out of it is a knee extension.
+     */
+    private fun WorkoutEngine.getUpOffTheFloor() {
+        hold(PoseFixtures.onTheFloor(), frames = 8)
+        // Upright, but still folded up: on the knees or in a deep crouch, gathering.
+        hold(PoseFixtures.squat(70f), frames = 8)
+        // Then the legs drive out over about two thirds of a second.
+        for (knee in listOf(90f, 110f, 130f, 150f, 165f)) hold(PoseFixtures.squat(knee), frames = 2)
+        hold(PoseFixtures.squat(175f), frames = 8)
+    }
+
+    @Test
+    fun `gathering in a crouch before standing is still not a squat`() {
+        val e = engineOnSquats()
+        e.getUpOffTheFloor()
+        assertEquals("pausing on the way up must not buy a rep", 0, e.reps)
+    }
+
     @Test
     fun `real squats count once the athlete is standing`() {
         val e = engineOnSquats()
@@ -121,6 +144,70 @@ class StartPositionTest {
 
         e.doPushup()
         assertEquals(1, e.reps)
+    }
+
+    @Test
+    fun `a crouch is not standing, however long it is held`() {
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.onTheFloor())
+        // Sat on the haunches for three seconds: torso vertical the whole time, and perfectly
+        // still, so neither posture-alone nor stillness-alone would hold the gate shut.
+        e.hold(PoseFixtures.squat(75f), frames = 30)
+        assertTrue("the hips are still down by the knees", e.awaitingStart)
+
+        e.hold(PoseFixtures.squat(175f))
+        assertFalse(e.awaitingStart)
+        assertEquals(0, e.reps)
+    }
+
+    @Test
+    fun `the floor does not poison the learned squat range`() {
+        // Lying face down reads as 180 degrees of knee extension. Letting that into the band
+        // would lift its top above anything this athlete reaches standing, and then *no* squat
+        // would ever count -- the opposite failure, and a quieter one.
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.onTheFloor(), frames = 20)
+        e.hold(PoseFixtures.squat(70f), frames = 5)
+        // A phone on the floor foreshortens this athlete: standing only projects as 145 degrees.
+        e.hold(PoseFixtures.squat(145f))
+        assertFalse(e.awaitingStart)
+
+        // Twelve, not a token few: the band's decay heals the pollution eventually, so a short
+        // set cannot tell the two behaviours apart. Feeding the floor in scores 3 of these 12.
+        repeat(12) {
+            e.hold(PoseFixtures.squat(85f))
+            e.hold(PoseFixtures.squat(145f))
+        }
+        assertEquals("every real squat counts", 12, e.reps)
+    }
+
+    @Test
+    fun `the second round asks for the position again`() {
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.onTheFloor())
+        e.hold(PoseFixtures.squat(175f))
+        repeat(15) {
+            e.hold(PoseFixtures.squat(80f))
+            e.hold(PoseFixtures.squat(175f))
+        }
+        assertEquals(1, e.rounds)
+        assertEquals(Exercise.PULLUP, e.exercise)
+
+        // Round two: back through the bar and the floor, and the squat gate must be armed again.
+        repeat(5) { e.doPullup() }
+        repeat(10) { e.doPushup() }
+        assertEquals(Exercise.SQUAT, e.exercise)
+        assertTrue("a new round cannot inherit a started movement", e.awaitingStart)
+        e.getUpOffTheFloor()
+        assertEquals("and getting up still does not score", 0, e.reps)
+    }
+
+    @Test
+    fun `a body the tracker cannot read does not open the gate`() {
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.empty(), frames = 20)
+        assertTrue(e.awaitingStart)
+        assertEquals(0, e.reps)
     }
 
     @Test
