@@ -21,7 +21,18 @@ final class WorkoutViewModel: ObservableObject {
     @Published private(set) var finished: Attempt?
     @Published var voiceEnabled = true
 
-    private let engine = WorkoutEngine()
+    private static let profileKey = "cindy.movementProfile"
+    private let defaults = UserDefaults.standard
+
+    /// Rebuilt rather than mutated when the movements change.
+    ///
+    /// `WorkoutEngine.profile` is immutable for the life of an engine on purpose: a rep's meaning
+    /// must not change halfway through the score it contributes to. There is no UI yet to choose
+    /// anything but the standard movements — this only makes sure the choice, once there is a way
+    /// to make it, is saved, scored and reported honestly rather than silently defaulting.
+    private var engine = WorkoutEngine(
+        profile: Variations.decode(UserDefaults.standard.string(forKey: WorkoutViewModel.profileKey))
+    )
     private let records = RecordStore()
     private let speech = AVSpeechSynthesizer()
 
@@ -100,6 +111,20 @@ final class WorkoutViewModel: ObservableObject {
     /// The camera's view of the athlete changed, so the learned bands no longer describe it.
     func recalibrate() {
         engine.recalibrate()
+    }
+
+    /// The movements this session is counting, for a future "make Cindy yours" screen to read.
+    var profile: CindyProfile { engine.profile }
+
+    /// Changes the movements for the next workout. Refused mid-session: a rep's meaning cannot
+    /// change halfway through the score it contributes to.
+    @discardableResult
+    func setMovementProfile(_ chosen: CindyProfile) -> Bool {
+        guard phase == .idle || phase == .finished else { return false }
+        defaults.set(Variations.encode(chosen), forKey: Self.profileKey)
+        engine = WorkoutEngine(profile: chosen)
+        render()
+        return true
     }
 
     private func enterSetup() {
@@ -211,7 +236,9 @@ final class WorkoutViewModel: ObservableObject {
             atMillis: Int64(Date().timeIntervalSince1970 * 1000),
             durationMs: elapsedMs,
             pausedMs: pausedMs,
-            roundSplitsMs: splits
+            roundSplitsMs: splits,
+            profile: engine.profile,
+            manualReps: engine.manualReps
         )
         records.add(attempt)
         finished = attempt

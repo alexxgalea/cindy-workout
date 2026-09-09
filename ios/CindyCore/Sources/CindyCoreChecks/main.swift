@@ -310,4 +310,262 @@ Check.suite("Bar gate") {
     Check.equal(r.engine.barKnown, true, "and it survives into the workout")
 }
 
+// ── knee push-up ──────────────────────────────────────────────────────────────
+//
+// Characterisation, not a spec of what ought to happen: the push-up signal is the elbow angle
+// alone and the gate in front of it asks only which way the torso points, so a kneeling athlete
+// already passes both. No ankle, knee or shoulder-hip-ankle line is consulted anywhere in the
+// movement, so there is no strictness rule here to relax for an adaptive mode.
+
+Check.suite("Knee push-up") {
+    var r = Rig(fixedExercise: .pushup)
+    r.hold(PoseFixtures.kneePushup(175))
+    for _ in 0..<3 {
+        r.hold(PoseFixtures.kneePushup(80))
+        r.hold(PoseFixtures.kneePushup(175))
+    }
+    Check.equal(r.engine.reps, 3, "a knee push-up scores as a push-up: the engine has no rule it breaks")
+
+    // Both fixtures put the same shoulder-elbow-wrist chain in front of the camera; they differ
+    // only below the hips, where nothing looks.
+    let strict = Rig(fixedExercise: .pushup)
+    let knees = Rig(fixedExercise: .pushup)
+    strict.hold(PoseFixtures.pushup(175))
+    knees.hold(PoseFixtures.kneePushup(175))
+    for _ in 0..<4 {
+        strict.hold(PoseFixtures.pushup(80)); strict.hold(PoseFixtures.pushup(175))
+        knees.hold(PoseFixtures.kneePushup(80)); knees.hold(PoseFixtures.kneePushup(175))
+    }
+    Check.equal(strict.engine.reps, knees.engine.reps, "the engine cannot tell a knee push-up from a standard one")
+    Check.close(strict.engine.signal, knees.engine.signal, 0.01, "same elbow angle, same signal")
+
+    // The same finding through the normal Cindy flow, where push-ups are entered from the start
+    // gate that stops the walk to the floor from scoring a rep. `inStartPosition` asks only
+    // `!upright`, and a kneeling plank's torso is horizontal, so the gate opens for a kneeling
+    // athlete exactly as it does for a prone one.
+    r = Rig()
+    for _ in 0..<5 { r.pullup() }
+    Check.equal(r.engine.exercise, .pushup, "hands over to push-ups at five")
+    Check.equal(r.engine.awaitingStart, true, "push-ups are entered awaiting the start position")
+    r.hold(PoseFixtures.kneePushup(175))
+    Check.equal(r.engine.awaitingStart, false, "kneeling satisfies the start gate")
+    for _ in 0..<9 {
+        r.hold(PoseFixtures.kneePushup(80))
+        r.hold(PoseFixtures.kneePushup(175))
+    }
+    Check.equal(r.engine.reps, 9, "nine knee push-ups scored")
+    r.hold(PoseFixtures.kneePushup(80))
+    r.hold(PoseFixtures.kneePushup(175))
+    Check.equal(r.engine.exercise, .squat, "the tenth finishes the block")
+}
+
+// ── limited extension: the bar-settle fallback ─────────────────────────────────
+//
+// An athlete whose arms never straighten into a dead hang — limited extension, or a band taking
+// enough weight — used to never establish the bar at all, since establishing it required a dead
+// hang. Every frame was then refused under "Hang from the bar" and the workout scored zero
+// without ever explaining why. `settleBar` locates the bar from hands simply held still overhead.
+
+Check.suite("Limited extension (bar settle)") {
+    let bottom: Float = 120  // as straight as this athlete's arms get, well under a dead hang
+    let top: Float = 60
+
+    var r = Rig(fixedExercise: .pullup)
+    r.hold(PoseFixtures.pullup(bottom), frames: 20)
+    Check.equal(r.engine.barKnown, false, "two seconds is not yet sustained stillness")
+    r.hold(PoseFixtures.pullup(bottom), frames: 15)
+    Check.equal(r.engine.barKnown, true, "a still overhead hang eventually locates the bar")
+
+    // The fallback is a fallback: a real dead hang still establishes the bar immediately.
+    r = Rig(fixedExercise: .pullup)
+    r.hold(PoseFixtures.pullup(170), frames: 1)
+    Check.equal(r.engine.barKnown, true, "a dead hang still locates the bar at once")
+
+    // The case the dead-hang requirement was really guarding: a walk-up with arms overhead must
+    // not teach a bar in the wrong place. Drift restarts the dwell, so it never settles.
+    r = Rig(fixedExercise: .pullup)
+    for step in 0..<12 {
+        let shift = Float(step) * 30
+        var walking = PoseFixtures.pullup(bottom)
+        for i in [KP.nose, KP.leftShoulder, KP.rightShoulder, KP.leftElbow, KP.rightElbow,
+                  KP.leftWrist, KP.rightWrist, KP.leftHip, KP.rightHip] {
+            walking[i] = Keypoint(x: walking[i].x + shift, y: walking[i].y, score: walking[i].score)
+        }
+        r.hold(walking, frames: 5)
+    }
+    Check.equal(r.engine.barKnown, false, "a walk-up never settles, so it teaches nothing")
+
+    // The standard, unchanged: full range of motion but never a straight arm is not a strict
+    // pull-up, and the bar being findable does not relax that.
+    r = Rig(fixedExercise: .pullup)
+    r.hold(PoseFixtures.pullup(bottom), frames: 35)
+    Check.equal(r.engine.barKnown, true, "the bar is known, so the refusal below is the gate, not the geometry")
+    for _ in 0..<5 {
+        r.hold(PoseFixtures.pullup(top), frames: 8)
+        r.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    Check.equal(r.engine.reps, 0, "strict mode still refuses to score an athlete who never dead hangs")
+}
+
+// ── the band-assisted pull-up ───────────────────────────────────────────────────
+//
+// A relaxed bottom, and nothing else relaxed: the head still has to clear the bar, the hands
+// still have to be on it, and RepCounter still wants the athlete's whole learned travel.
+
+Check.suite("Assisted pull-up") {
+    let bottom: Float = 120
+    let top: Float = 60
+
+    func engineFor(_ pull: PullVariant) -> Rig {
+        Rig(fixedExercise: .pullup, profile: CindyProfile(pull: pull))
+    }
+
+    var r = engineFor(.bandAssistedPullUp)
+    r.hold(PoseFixtures.pullup(bottom), frames: 35)
+    for _ in 0..<6 {
+        r.hold(PoseFixtures.pullup(top), frames: 8)
+        r.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    // The first cycle teaches the counter the athlete's range; the rest score.
+    Check.equal(r.engine.reps, 5, "a band-assisted pull-up counts without a dead hang")
+
+    // The same movement, in the mode that says it is a strict pull-up. Unchanged.
+    r = engineFor(.strictPullUp)
+    r.hold(PoseFixtures.pullup(bottom), frames: 35)
+    for _ in 0..<6 {
+        r.hold(PoseFixtures.pullup(top), frames: 8)
+        r.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    Check.equal(r.engine.reps, 0, "the same reps score nothing in strict mode")
+
+    // The gate that is not relaxed: pulling only partway is not a rep in either mode.
+    r = engineFor(.bandAssistedPullUp)
+    r.hold(PoseFixtures.pullup(bottom), frames: 35)
+    for _ in 0..<6 {
+        r.hold(PoseFixtures.pullup(95), frames: 8)
+        r.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    Check.equal(r.engine.reps, 0, "a band-assisted pull-up still requires the head over the bar")
+
+    // And the bar itself is still a gate: arms overhead a long way from where the bar was
+    // learned do not score, assisted or not.
+    r = engineFor(.bandAssistedPullUp)
+    r.hold(PoseFixtures.pullup(bottom), frames: 35)
+    let before = r.engine.reps
+    for _ in 0..<6 {
+        for angle in [top, bottom] {
+            var offBar = PoseFixtures.pullup(angle)
+            for i in offBar.indices where offBar[i].score > 0 {
+                offBar[i] = Keypoint(x: offBar[i].x + 900, y: offBar[i].y, score: offBar[i].score)
+            }
+            r.hold(offBar, frames: 8)
+        }
+    }
+    Check.equal(r.engine.reps, before, "overhead movement away from the bar does not count")
+
+    // Rep provenance: a tapped rep counts, and is remembered as tapped.
+    let manual = engineFor(.footAssistedPullUp)
+    manual.engine.manualRep()
+    Check.equal(manual.engine.reps, 1, "a manual rep is recorded: reps")
+    Check.equal(manual.engine.manualReps, 1, "a manual rep is recorded: manualReps")
+    Check.equal(manual.engine.lastRepSource == .manual, true, "a manual rep is recorded: source")
+
+    let undoRig = engineFor(.footAssistedPullUp)
+    undoRig.engine.manualRep()
+    undoRig.engine.manualRep()
+    _ = undoRig.engine.undoRep()
+    Check.equal(undoRig.engine.reps, 1, "undoing a tapped rep takes the rep back")
+    Check.equal(undoRig.engine.manualReps, 1, "and takes the tap back too")
+
+    let camera = engineFor(.bandAssistedPullUp)
+    camera.hold(PoseFixtures.pullup(bottom), frames: 35)
+    for _ in 0..<3 {
+        camera.hold(PoseFixtures.pullup(top), frames: 8)
+        camera.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    Check.expect(camera.engine.reps > 0, "the camera scored at least one")
+    Check.equal(camera.engine.manualReps, 0, "a rep the camera scored is not counted as manual")
+    Check.equal(camera.engine.lastRepSource == .auto, true, "and the source says so")
+}
+
+// ── movement profiles: honest history ────────────────────────────────────────
+//
+// An adapted session is recorded as what it was, and ranked against its own kind: never quietly
+// filed as strict, never taking the strict record, never earning a rung on a ladder calibrated
+// against a workout it did not attempt — while still counting as a session the athlete did.
+
+Check.suite("Variations") {
+    let adaptive = CindyProfile(pull: .bandAssistedPullUp, push: .kneePushUp, squat: .boxSquat)
+    func attempt(_ rounds: Int, reps: Int = 0, at: Int64 = 1000, profile: CindyProfile? = .standard,
+                manualReps: Int = 0) -> Attempt {
+        Attempt(rounds: rounds, reps: reps, atMillis: at, durationMs: 20 * 60 * 1000,
+               profile: profile, manualReps: manualReps)
+    }
+
+    // The profile survives a round trip, and reps tapped in survive with it.
+    let saved = Records.decode(Records.encode([attempt(7, reps: 12, profile: adaptive, manualReps: 4)]))
+    Check.equal(saved.count, 1, "one attempt round-trips")
+    Check.equal(saved.first?.profile, adaptive, "an adaptive session stores the movements it was run with")
+    Check.equal(saved.first?.manualReps, 4, "reps tapped in survive a round trip")
+
+    // History written before the choice existed was standard Cindy, because that was the only
+    // thing the app did.
+    let v3 = Records.decode("v3|8|12|1700000000000|1200000|0|150000,160000").first
+    Check.equal(v3?.profile, CindyProfile.standard, "attempts written before variations existed read as standard")
+    Check.equal(v3?.rounds, 8, "and the rounds are unaffected")
+
+    // The one case where guessing would be a lie: a movement this build does not know cannot be
+    // filed under one it does, or an assisted session would silently promote into the strict
+    // record.
+    let unknown = Records.decode("v4|8|0|1700000000000|1200000|0||ONE_ARM_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0").first
+    Check.equal(unknown?.profile == nil, true, "an unrecognised movement leaves the profile unknown")
+    Check.equal(unknown?.rounds, 8, "but the session itself is still theirs")
+
+    // Separate records, and not merely "standard versus the rest": two different adaptations are
+    // no more comparable to each other than either is to the strict movement.
+    let history = [
+        attempt(8, at: 1, profile: .standard),
+        attempt(20, at: 2, profile: adaptive)
+    ]
+    Check.equal(Records.bestIn(history, profile: .standard)?.rounds, 8, "the strict record is untouched")
+    Check.equal(Records.bestIn(history, profile: adaptive)?.rounds, 20, "an adaptive result never becomes it")
+
+    let knees = CindyProfile(push: .kneePushUp)
+    let box = CindyProfile(squat: .boxSquat)
+    let twoAdaptations = [attempt(9, at: 1, profile: knees), attempt(14, at: 2, profile: box)]
+    Check.equal(Records.bestIn(twoAdaptations, profile: knees)?.rounds, 9, "each adaptation keeps its own record")
+    Check.equal(Records.bestIn(twoAdaptations, profile: box)?.rounds, 14, "the other adaptation does not share it")
+    Check.equal(Records.bestIn(twoAdaptations, profile: .standard) == nil, true, "and neither is the strict record")
+
+    // The strict ladder and the benchmark do not rank a session they do not describe.
+    Check.equal(attempt(12).level, .intermediate, "a standard session gets a rung")
+    Check.equal(attempt(12, profile: adaptive).level == nil, true, "an adaptive session gets no rung")
+    Check.equal(attempt(12).caption, "Intermediate", "a standard caption is the rung")
+    Check.equal(
+        attempt(28, profile: adaptive).caption,
+        "Adaptive Cindy · band-assisted pull-ups · knee push-ups · box squats",
+        "an adaptive caption names what changed instead"
+    )
+    Check.equal(Records.beatsBenchmark(attempt(28)), true, "a strict score can pass the benchmark")
+    Check.equal(Records.beatsBenchmark(attempt(28, profile: adaptive)), false,
+               "an adaptive session never does, however many rounds")
+
+    // The picker's own memory: a preference, not a record, so an unknown choice can safely fall
+    // back to standard rather than staying unknown.
+    Check.equal(Variations.decode(Variations.encode(adaptive)), adaptive, "the chosen profile round-trips")
+    Check.equal(Variations.decode(nil), CindyProfile.standard, "no saved choice is the standard movement")
+    let partlyUnknown = Variations.decode("ONE_ARM_PULL_UP|KNEE_PUSH_UP|AIR_SQUAT")
+    Check.equal(partlyUnknown.pull, .strictPullUp, "an unknown saved choice falls back to standard")
+    Check.equal(partlyUnknown.push, .kneePushUp, "but the choices it does understand are kept")
+
+    // Labels name only what changed.
+    Check.equal(CindyProfile.standard.label(), "Cindy", "a standard profile is just Cindy")
+    Check.equal(CindyProfile(push: .kneePushUp).label(), "Adaptive Cindy · knee push-ups",
+               "an adaptive one names only the change")
+    Check.equal(CindyProfile.standard.fullyAutomatic, true, "the standard profile is fully automatic")
+    Check.equal(adaptive.fullyAutomatic, true, "so is this adaptive one -- all three variants are AUTO-tracked")
+    Check.equal(CindyProfile(pull: .negativePullUp).manualMovements, [.pullup],
+               "a profile knows which movements it will ask to be tapped in")
+}
+
 Check.finish()

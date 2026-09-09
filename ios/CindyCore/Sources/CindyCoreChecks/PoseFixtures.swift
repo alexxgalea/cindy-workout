@@ -46,6 +46,11 @@ enum PoseFixtures {
 
     /// A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
     /// The shoulders rise past the hands at the top, exactly as they do on a real pull-up.
+    ///
+    /// Nose is the head proxy emitted by COCO-17. At the top it must pass the wrist/bar line; at
+    /// a dead hang it is below the reset line. Keeping that distinction in the shared fixture
+    /// lets the production head gate be exercised without a camera — matches the Kotlin/Python
+    /// fixture geometry exactly, since the head-over-bar gate is sensitive to it.
     static func pullup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
         let shX = limb * sinf(rad(elbowDeg))
@@ -54,7 +59,31 @@ enum PoseFixtures {
         putPair(&k, KP.leftWrist, KP.rightWrist, 0, -limb)
         putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
         putPair(&k, KP.leftHip, KP.rightHip, shX, shY + torso)
-        k[KP.nose] = Keypoint(x: shX, y: shY - 20, score: 0.9)
+        k[KP.nose] = Keypoint(x: shX, y: shY - 120, score: 0.9)
+        return k
+    }
+
+    /// A body mid *knee* push-up with the given elbow angle: hands and knees on the floor, shins
+    /// folded up behind, and no plank line from shoulder to ankle.
+    ///
+    /// Deliberately identical to `pushup` everywhere the push-up path actually looks — the
+    /// shoulder-elbow-wrist chain and the torso — because that is the finding this fixture exists
+    /// to pin down. The knees and shins are placed honestly so the fixture describes the real
+    /// movement, not so the engine can read them: nothing in the push-up path consults them.
+    /// Mirrors Kotlin's `PoseFixtures.kneePushup`.
+    static func kneePushup(_ elbowDeg: Float) -> [Keypoint] {
+        var k = blank()
+        let shX = limb * sinf(rad(elbowDeg))
+        let shY = limb * cosf(rad(elbowDeg))
+        // The floor is the line the planted hands sit on.
+        let floorY = limb
+        putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
+        putPair(&k, KP.leftWrist, KP.rightWrist, 0, floorY)
+        putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
+        putPair(&k, KP.leftHip, KP.rightHip, shX - torso, shY)
+        // Knees down on the floor rather than trailing the hips, and the shins raised behind.
+        putPair(&k, KP.leftKnee, KP.rightKnee, shX - torso - 40, floorY)
+        putPair(&k, KP.leftAnkle, KP.rightAnkle, shX - torso - 40, floorY - 60)
         return k
     }
 
@@ -64,8 +93,12 @@ enum PoseFixtures {
 
 /// Drives an engine the way a camera would.
 final class Rig {
-    let engine = WorkoutEngine()
+    let engine: WorkoutEngine
     var clock: Int64 = 0
+
+    init(fixedExercise: Exercise? = nil, profile: CindyProfile = .standard) {
+        engine = WorkoutEngine(fixedExercise: fixedExercise, profile: profile)
+    }
 
     func hold(_ pose: [Keypoint], frames: Int = 10) {
         for _ in 0..<frames {
@@ -89,12 +122,21 @@ final class Rig {
         hold(PoseFixtures.pullup(top))
     }
 
+    /// One rep, starting and finishing in the position the movement is held in.
+    ///
+    /// The leading frame matters: a push-up begins at lockout and the engine will not score it
+    /// until it has seen the athlete get there. Starting at the bottom instead described an
+    /// athlete who materialises mid-rep, and let the climb up out of the previous movement count
+    /// as the first rep of this one. Mirrors Kotlin's `doPushup()`.
     func pushup() {
+        hold(PoseFixtures.pushup(175))
         hold(PoseFixtures.pushup(80))
         hold(PoseFixtures.pushup(175))
     }
 
+    /// Mirrors Kotlin's `doSquat()` — see `pushup()`.
     func squat() {
+        hold(PoseFixtures.squat(175))
         hold(PoseFixtures.squat(80))
         hold(PoseFixtures.squat(175))
     }
