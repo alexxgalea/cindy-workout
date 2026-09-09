@@ -584,11 +584,13 @@ class WorkoutEngine:
         counted = counter.update(sample.signal, now, may_count=may_count)
 
         if sample.dead_hang_below_reset:
-            # Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
-            self.blocked = False
             # Observing here makes RepCounter's DOWN phase agree with the physical reset.
             if counter.phase is Phase.DOWN:
                 self._pullup_down_seen = True
+            # Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
+            # But the athlete is told "Ready" off the back of this, and that has to mean the
+            # next rep will actually score -- which a hang that has not yet armed will not.
+            self.blocked = not self._pullup_down_seen
             self.diagnostics = self._frame_diagnostics(
                 k, True, scoring_confidence_adequate=True,
                 bar_gate_open=sample.bar_gate_open, head_above_bar=sample.head_above_bar,
