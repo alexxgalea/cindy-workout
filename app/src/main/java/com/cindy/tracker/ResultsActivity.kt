@@ -1,14 +1,18 @@
 package com.cindy.tracker
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityResultsBinding
+import java.util.Locale
 
 /** What just happened: score, rank, pace, and how the rounds actually went. */
 class ResultsActivity : AppCompatActivity() {
@@ -35,13 +39,17 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityResultsBinding
+    private lateinit var profile: Profile
+    private lateinit var attempt: Attempt
+    private var stoppedEarly = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityResultsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val attempt = Attempt(
+        profile = Profile(this)
+        attempt = Attempt(
             rounds = intent.getIntExtra(EXTRA_ROUNDS, 0),
             reps = intent.getIntExtra(EXTRA_REPS, 0),
             atMillis = intent.getLongExtra(EXTRA_AT, System.currentTimeMillis()),
@@ -49,13 +57,13 @@ class ResultsActivity : AppCompatActivity() {
             pausedMs = intent.getLongExtra(EXTRA_PAUSED, 0L),
             roundSplitsMs = intent.getLongArrayExtra(EXTRA_SPLITS)?.toList() ?: emptyList()
         )
-        val stopped = intent.getBooleanExtra(EXTRA_STOPPED, false)
+        stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
 
         binding.btnDone.setOnClickListener { finish() }
         binding.btnRecords.setOnClickListener {
             startActivity(Intent(this, RecordsActivity::class.java))
         }
-        render(attempt, stopped)
+        render(attempt, stoppedEarly)
     }
 
     private fun render(a: Attempt, stopped: Boolean) {
@@ -89,6 +97,7 @@ class ResultsActivity : AppCompatActivity() {
         a.fastestRoundMs?.let { stat("Fastest round", formatDuration(it)) }
         a.slowestRoundMs?.let { stat("Slowest round", formatDuration(it)) }
         stat("Total reps", "${a.totalReps}")
+        energy(a)
         previousBest?.let {
             val delta = a.totalReps - it.totalReps
             val sign = if (delta >= 0) "+" else ""
@@ -115,7 +124,66 @@ class ResultsActivity : AppCompatActivity() {
         }
     }
 
-    private fun stat(label: String, value: String) {
+    /**
+     * The energy estimate, or an invitation to make one possible.
+     *
+     * Shown as an estimate, because that is what it is: without a heart rate the arithmetic is a
+     * MET table and the athlete's weight, and the answer carries real uncertainty. Saying so is
+     * cheaper than being quietly wrong.
+     */
+    private fun energy(a: Attempt) {
+        val kcal = Calories.burned(a.totalReps, a.durationMs, profile.bodyWeightKg)
+        if (kcal == null) {
+            stat("Calories", "set weight →") { askBodyWeight() }
+            return
+        }
+        val kg = profile.bodyWeightKg
+        stat("Calories (est.)", "$kcal kcal") { askBodyWeight() }
+        binding.stats.addView(TextView(this).apply {
+            text = "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
+                .format(Locale.US, kg, Calories.met(a.totalReps, a.durationMs))
+            setTextColor(getColor(R.color.on_surface_dim))
+            textSize = 11f
+            setPadding(0, 0, 0, dp(6))
+        })
+    }
+
+    /** Asks for body weight in kilograms, and redraws whatever depended on it. */
+    private fun askBodyWeight() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            hint = "kg"
+            if (profile.hasBodyWeight) {
+                setText("%.0f".format(Locale.US, profile.bodyWeightKg))
+            }
+            setPadding(dp(24), dp(16), dp(24), dp(16))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Your body weight")
+            .setMessage(
+                "Calories are estimated from body weight and how hard you worked. It stays on " +
+                    "this phone."
+            )
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val kg = input.text.toString().trim().toDoubleOrNull()
+                if (kg == null || kg < Profile.MIN_KG || kg > Profile.MAX_KG) {
+                    android.widget.Toast.makeText(
+                        this,
+                        "Enter a weight between ${Profile.MIN_KG.toInt()} and " +
+                            "${Profile.MAX_KG.toInt()} kg",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+                profile.bodyWeightKg = kg
+                render(attempt, stoppedEarly)
+            }
+            .show()
+    }
+
+    private fun stat(label: String, value: String, onTap: (() -> Unit)? = null) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -132,10 +200,15 @@ class ResultsActivity : AppCompatActivity() {
             })
             addView(TextView(context).apply {
                 text = value
-                setTextColor(getColor(R.color.on_surface))
+                setTextColor(getColor(if (onTap == null) R.color.on_surface else R.color.accent))
                 textSize = 16f
                 typeface = android.graphics.Typeface.MONOSPACE
             })
+            onTap?.let { tap ->
+                isClickable = true
+                setOnClickListener { tap() }
+                contentDescription = "$label, $value, tap to change"
+            }
         }
         binding.stats.addView(row)
     }
