@@ -151,6 +151,14 @@
       "status": "candidate",
       "confidence": "low",
       "notes": "Band-assisted pull-ups, band behind the athlete with the foot in it, REAR view, single static portrait shot -- framing is fine. Scores 1 under band_assisted, unaffected by the false-bar fix. Limited by the detector rather than the gates: 'Show both hands' rejects 275 of 407 frames, so the wrists are simply not resolved often enough from behind with the arms overhead, and head-above-bar is true on only 7 frames. A rear view with raised arms is the hard case for wrist keypoints; recorded so the next attempt does not re-derive it."
+    },
+    {
+      "id": "ZTsuNUzq3e4",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "confidence": "high",
+      "notes": "A ten-step pull-up progression in one clip: wall pull-up, high/low/elevated inverted row, scapular pull, chair assisted, negative, jumping, banded, full pull-up. Camera moves between a doorway bar, a hallway and a squat rack, so it is cut footage and cannot be a straight counting fixture -- but it is the best MUST-NOT-COUNT material found so far, because most of the ten movements are not pull-ups. Scores 10 under both strict and band_assisted, at identical timestamps. Verified frame by frame, those ten are: three wall pull-ups (0.50, 3.33, 5.47s, feet bearing weight on the floor), THREE INVERTED ROWS (6.87, 8.53, 9.93s), chair-assisted (13.53s), jumping (16.13s), banded (17.87s) and one full pull-up (18.83s). So only one of the ten counted movements is an unassisted pull-up, and three are horizontal rows. Correctly ignored: the scapular pulls (no elbow flexion, head never crosses the bar) and the negatives (no concentric, and RepCounter books at the top of a climb). THE FINDING: the pull-up path has no body-orientation test. An inverted row passes every gate -- lying or inclined under a bar the wrists are still above the hips, so hangingFromBar holds, the bar is found, the head crosses the bar line and the elbow oscillates a full range. This is the mirror of the push-up path, which does test orientation via upright()/inStartPosition. Discriminating a row from a pull-up needs that same torso-direction test; whether a row is then rejected or counted as its own labelled variant is an open product decision. Expected counts are deliberately not asserted until that is decided."
     }
   ]
 }
