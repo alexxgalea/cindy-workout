@@ -19,6 +19,7 @@ import android.util.Log
 import android.util.Size
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
         const val KEY_PROFILE = "movement_profile"
+        const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
@@ -206,6 +208,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // The camera fills the window; the HUD is moved off the system bars in code, because
         // padding the root would letterbox the preview along with the overlay.
+        // The screen must not sleep mid-workout. This has to be the window flag set in code:
+        // android:keepScreenOn is a *View* attribute, and the copy of it that used to sit on
+        // <activity> in the manifest was silently ignored, so a device with a short display
+        // timeout blanked the screen with the athlete across the room mid-set.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -738,7 +745,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleRun() {
         when (state) {
-            State.IDLE -> enterSetup()
+            State.IDLE -> showPlacementGuide { enterSetup() }
             State.SETUP -> beginWorkout(calibrated = false)
             State.PAUSED -> {
                 state = State.RUNNING
@@ -999,6 +1006,49 @@ class MainActivity : AppCompatActivity() {
         }
         if (!started) toast("Could not start recording")
         renderChips()
+    }
+
+    /**
+     * Shows where to stand, then starts the setup check.
+     *
+     * Placement is the one thing the athlete has to get right before the camera can help them,
+     * and the setup check can only report it *after* they are already in shot getting it wrong —
+     * "Can't see your ankles" arrives too late to be advice. So it is offered first, once, and
+     * then stays out of the way: [KEY_PLACEMENT_SEEN] suppresses it for someone who has read it,
+     * and the same diagram lives permanently in the help screen for when they want it back.
+     */
+    private fun showPlacementGuide(onContinue: () -> Unit) {
+        if (prefs().getBoolean(KEY_PLACEMENT_SEEN, false)) {
+            onContinue()
+            return
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(4), dp(20), dp(4))
+        }
+        container.addView(
+            PlacementGuideView(this),
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190))
+        )
+        container.addView(note(
+            "Stand the phone up rather than laying it flat, keep your head and feet both in " +
+                "shot, and leave it where it is — moving it mid-workout resets what it has learned."
+        ))
+        val again = android.widget.CheckBox(this).apply {
+            text = "Don't show this again"
+            minHeight = dp(48)
+        }
+        container.addView(again)
+
+        AlertDialog.Builder(this)
+            .setTitle("Where to stand")
+            .setView(ScrollView(this).apply { addView(container) })
+            .setPositiveButton("Start setup") { _, _ ->
+                if (again.isChecked) prefs().edit().putBoolean(KEY_PLACEMENT_SEEN, true).apply()
+                onContinue()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun savedProfile(): CindyProfile = Variations.decode(prefs().getString(KEY_PROFILE, null))

@@ -95,6 +95,32 @@
       "exercise": "mixed",
       "status": "candidate",
       "notes": "Full Cindy AMRAP, 20 minutes. Same labelling caveat."
+    },
+    {
+      "id": "EgIMk-PZwo0",
+      "group": "pushups",
+      "exercise": "pushup",
+      "status": "labelled",
+      "reps": 12,
+      "confidence": "high",
+      "label_basis": "Counted by eye from a 2fps contact sheet, then each of the engine's 12 count timestamps was checked against the frame it fired on and every one shows a completed lockout. The boundaries were checked too: the footage fades in at 24.5s with the first full cycle counted at 26.7s, and the athlete holds the top after the last count at 52.1s before the fade-out, so no rep falls outside the counted span.",
+      "notes": "KNEE push-ups, three-quarter view, static camera, continuous unbroken set. Scored under the standard push-up path and counted 12/12 exactly, with no gate rejection at all during the active portion -- which is the real-footage confirmation of what KneePushupTest asserts synthetically: the push-up path reads the elbow chain and the torso direction, and never looks at the legs, so a knee push-up is the same measurement as a standard one."
+    },
+    {
+      "id": "5rR_bzBc1NA",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "confidence": "low",
+      "notes": "Band-assisted pull-ups, front view, single static shot, whole body in frame -- the framing is fine. Scores 0 under pull=band_assisted: 'Get on the bar' rejects 530 of 965 frames and 174 more are lost to 'Show both hands'. The cause is upstream of the counting rules. The bilateral elbow angle swings between -170.9 (a correct dead hang) and -2.7 degrees (anatomically impossible) across the clip, so the wrist and elbow estimates are not stable enough for the bar gate to hold. Front-on framing with a resistance band running down the athlete's centreline is the likely reason. Re-cropping to a 9:16 portrait around the athlete did not help (still 0, 541 'Get on the bar'), so it is not simply subject size. Needs a side-view clip before the assisted rule can be said to have been tested at all."
+    },
+    {
+      "id": "4yE-XGDWJPg",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "confidence": "low",
+      "notes": "Band-assisted pull-ups, side view, but an EDITED tutorial: it cuts from a wide shot to a close-up insert around 17-25s and back. Scores 2 under pull=band_assisted, one rep in each continuous segment, with 221 frames of 'Get on the bar' and 386 more with keypoints missing. Unusable as a counting fixture by construction, since a cut moves the bar in frame and crops the body -- the same class of problem already recorded against IODxDxX7oi4. Kept as a candidate only as a record of that."
     }
   ]
 }

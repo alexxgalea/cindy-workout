@@ -24,7 +24,9 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim.pose_detector import PoseDetector
-from cindy_sim.workout_engine import Exercise, RepEvent, SetupStage, WorkoutEngine
+from cindy_sim.workout_engine import (
+    CindyProfile, Exercise, PullVariant, RepEvent, SetupStage, WorkoutEngine,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 EXERCISES = {
@@ -33,6 +35,16 @@ EXERCISES = {
     "pushup": Exercise.PUSHUP, "push-up": Exercise.PUSHUP,
     "pushups": Exercise.PUSHUP, "push-ups": Exercise.PUSHUP,
     "squat": Exercise.SQUAT, "squats": Exercise.SQUAT,
+}
+# Selects the movement variant a pull-up clip is scored under. Only the pull-up gate actually
+# branches on the profile today (the relaxed dead-hang rule for an assisted athlete); push-up and
+# squat variants count identically to their strict counterparts, so no equivalent map exists for
+# them yet -- see KneePushupTest for why.
+PULL_VARIANTS = {
+    "strict": PullVariant.STRICT_PULL_UP,
+    "strict_pull_up": PullVariant.STRICT_PULL_UP,
+    "band_assisted": PullVariant.BAND_ASSISTED_PULL_UP,
+    "band_assisted_pull_up": PullVariant.BAND_ASSISTED_PULL_UP,
 }
 MODELS = {
     None: "movenet_thunder.tflite",
@@ -195,6 +207,12 @@ def run_scenario(scenario: dict) -> ScenarioReport:
                               None, [], [], [f"unsupported exercise '{name}'"])
     exercise = EXERCISES[name]
 
+    pull_key = (scenario.get("pull") or "").lower() or None
+    if pull_key is not None and pull_key not in PULL_VARIANTS:
+        return ScenarioReport(scenario["id"], name, int(scenario.get("expectedReps", 0)), 0,
+                              None, [], [], [f"unsupported pull variant '{scenario.get('pull')}'"])
+    profile = CindyProfile(pull=PULL_VARIANTS[pull_key]) if pull_key else CindyProfile()
+
     model = MODELS.get((scenario.get("model") or "").lower() or None)
     if model is None:
         return ScenarioReport(scenario["id"], name, int(scenario.get("expectedReps", 0)), 0,
@@ -215,7 +233,7 @@ def run_scenario(scenario: dict) -> ScenarioReport:
     # Setup is validated separately from the score. Dataset labels normally include every
     # movement in a clip, while the phone deliberately does not score its two setup reps, so a
     # scoring engine sees the complete clip and a second engine verifies framing/calibration.
-    setup_engine = WorkoutEngine(fixed_exercise=exercise)
+    setup_engine = WorkoutEngine(fixed_exercise=exercise, profile=profile)
     setup_engine.begin_setup()
     configure_manual_bar(setup_engine, scenario, inferred[0])
     setup = None
@@ -227,7 +245,7 @@ def run_scenario(scenario: dict) -> ScenarioReport:
         setup = setup_engine.on_setup_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
     check_setup(scenario.get("expectedSetup"), setup.stage if setup else None, errors)
 
-    engine = WorkoutEngine(fixed_exercise=exercise)
+    engine = WorkoutEngine(fixed_exercise=exercise, profile=profile)
     configure_manual_bar(engine, scenario, inferred[0])
     frames: list[dict] = []
     count_times: list[int] = []
@@ -298,6 +316,7 @@ def main() -> int:
     parser.add_argument("--video", type=Path, help="score a single clip without a catalogue")
     parser.add_argument("--exercise", choices=sorted(set(EXERCISES)), help="with --video")
     parser.add_argument("--expect", type=int, default=0, help="expected reps for --video")
+    parser.add_argument("--pull", choices=sorted(PULL_VARIANTS), help="pull-up variant for --video")
     parser.add_argument("--report", type=Path, default=ROOT / "tests/reports/python-regression.json")
     parser.add_argument("--frames", action="store_true", help="print every scoring frame")
     args = parser.parse_args()
@@ -307,7 +326,7 @@ def main() -> int:
             parser.error("--video requires --exercise")
         scenarios = [{
             "id": args.video.stem, "video": str(args.video), "exercise": args.exercise,
-            "expectedReps": args.expect, "tags": ["ad-hoc"],
+            "expectedReps": args.expect, "tags": ["ad-hoc"], "pull": args.pull,
         }]
     else:
         paths = args.scenarios or sorted((ROOT / "tests/scenarios").glob("*.json"))

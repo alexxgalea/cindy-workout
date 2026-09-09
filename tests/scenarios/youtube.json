@@ -88,6 +88,19 @@
         "false-positive-guard"
       ],
       "notes": "Squat tutorial scored as pull-ups; the hands never go overhead."
+    },
+    {
+      "id": "youtube_pushups_twelve_rep_knee_set",
+      "video": "tests/fixtures/youtube/pushups/EgIMk-PZwo0.mp4",
+      "exercise": "pushup",
+      "expectedReps": 12,
+      "tags": [
+        "youtube",
+        "pushups",
+        "knee-pushup",
+        "variation"
+      ],
+      "notes": "Twelve KNEE push-ups, three-quarter view, static camera. The variation fixture for the claim that a knee push-up is the same measurement as a standard one: the push-up path reads the elbow chain and the torso direction and never looks at the legs. Counted 12/12 with no gate rejection during the set."
     }
   ]
 }

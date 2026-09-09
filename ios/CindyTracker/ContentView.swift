@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 import CindyCore
 
 /// The live camera feed behind the HUD.
@@ -75,8 +76,17 @@ struct ContentView: View {
             hud
         }
         .background(Color.appBackground)
-        .onAppear { camera.start() }
-        .onDisappear { camera.stop() }
+        .onAppear {
+            camera.start()
+            // The athlete is across the room mid-set, not touching the phone, so the display
+            // must not sleep. Scoped to this view rather than set globally, so it lifts again
+            // when the app is backgrounded.
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            camera.stop()
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
         .onReceive(camera.$keypoints) { workout.onFrame($0) }
         .sheet(item: $workout.finished) { ResultsView(attempt: $0) }
         .confirmationDialog("End the workout?", isPresented: $showStopConfirm) {
