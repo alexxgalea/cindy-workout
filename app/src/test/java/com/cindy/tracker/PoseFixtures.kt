@@ -125,6 +125,29 @@ object PoseFixtures {
         return k
     }
 
+    /**
+     * Standing on the floor holding a resistance band at chest height, arms straight.
+     *
+     * The posture that taught a bar in the wrong place on real band footage: the hands are above
+     * the hips and the elbows are extended, so every test the bar used to be learned from passes
+     * — but the hands are below the head, because the band is being held in front of the chest
+     * rather than gripped overhead.
+     */
+    fun bandSetup(): Array<Keypoint> {
+        val k = blank()
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, 0f)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, 0f, TORSO)
+        // Arm hanging forward and down onto the band: shoulder, elbow and wrist near-collinear,
+        // so the elbow reads as extended.
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, 0.2f * TORSO)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, 0.4f * TORSO)
+        // The head is above the hands, which is the whole difference from a hang.
+        k.put(KP.NOSE, 0f, -0.4f * TORSO)
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, 0f, 2f * TORSO)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0f, 3f * TORSO)
+        return k
+    }
+
     /** Nothing confidently detected — the "step into frame" case. */
     fun empty(): Array<Keypoint> = blank()
 }

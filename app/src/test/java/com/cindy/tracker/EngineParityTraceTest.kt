@@ -48,6 +48,7 @@ class EngineParityTraceTest {
                     "pullup" -> PoseFixtures.pullup(angle)
                     "pushup" -> PoseFixtures.pushup(angle)
                     "squat" -> PoseFixtures.squat(angle)
+                    "bandsetup" -> PoseFixtures.bandSetup()
                     else -> error("Unknown builder in $traceId")
                 }
                 val event = engine.onFrame(keypoints, now)

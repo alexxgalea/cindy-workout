@@ -101,6 +101,35 @@
         "variation"
       ],
       "notes": "Twelve KNEE push-ups, three-quarter view, static camera. The variation fixture for the claim that a knee push-up is the same measurement as a standard one: the push-up path reads the elbow chain and the torso direction and never looks at the legs. Counted 12/12 with no gate rejection during the set."
+    },
+    {
+      "id": "youtube_pullups_band_assisted_five",
+      "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+      "exercise": "pullup",
+      "pull": "band_assisted",
+      "expectedReps": 5,
+      "tags": [
+        "youtube",
+        "pullups",
+        "band-assisted",
+        "variation",
+        "regression"
+      ],
+      "notes": "Five band-assisted pull-ups, front view, static portrait shot. The regression fixture for the false-bar bug: the band setup must not teach a bar at chest height. Scored 0 before the fix, 5/5 after."
+    },
+    {
+      "id": "youtube_pullups_machine_assisted_four",
+      "video": "tests/fixtures/youtube/pullups/75tpN6zeR8U.mp4",
+      "exercise": "pullup",
+      "pull": "band_assisted",
+      "expectedReps": 4,
+      "tags": [
+        "youtube",
+        "pullups",
+        "machine-assisted",
+        "variation"
+      ],
+      "notes": "Four machine-assisted pull-ups, rear three-quarter view. Scored under band_assisted since there is no MACHINE_ASSISTED variant. Clip opens mid-set, so the first count's descent precedes the footage."
     }
   ]
 }

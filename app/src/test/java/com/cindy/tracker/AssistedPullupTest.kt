@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -104,6 +105,36 @@ class AssistedPullupTest {
         }
 
         assertEquals(before, d.engine.reps)
+    }
+
+    /**
+     * Setting the band up must not teach a bar.
+     *
+     * Found on real footage: standing on a box holding the band at chest height satisfies every
+     * other condition the bar used to be learned from — hands above the hips, elbows extended —
+     * so the bar was fixed at the athlete's chest, and every real rep afterwards was refused with
+     * "Get on the bar" with no way back, because refinement requires already passing the gate.
+     */
+    @Test
+    fun `holding a band at chest height does not teach a bar`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.hold(PoseFixtures.bandSetup(), frames = 60)
+
+        assertFalse("the hands are below the head, so this is not a hang", d.engine.barKnown)
+    }
+
+    /** And the bar the athlete then actually hangs from is still found normally. */
+    @Test
+    fun `a hang after the band setup still finds the bar`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.hold(PoseFixtures.bandSetup(), frames = 60)
+        d.findBar(bottom)
+
+        assertTrue("the real hang teaches it", d.engine.barKnown)
+        d.cycles(6, bottom, top)
+        assertEquals("and the reps score", 5, d.engine.reps)
     }
 
     // ── rep provenance ────────────────────────────────────────────────────────

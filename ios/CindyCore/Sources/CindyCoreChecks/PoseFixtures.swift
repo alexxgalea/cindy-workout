@@ -87,6 +87,24 @@ enum PoseFixtures {
         return k
     }
 
+    /// Standing on the floor holding a resistance band at chest height, arms straight.
+    ///
+    /// The posture that taught a bar in the wrong place on real band footage: hands above the
+    /// hips with the elbows extended, so every test the bar used to be learned from passes — but
+    /// the hands are below the head, because the band is held in front of the chest rather than
+    /// gripped overhead. Mirrors Kotlin's `PoseFixtures.bandSetup`.
+    static func bandSetup() -> [Keypoint] {
+        var k = blank()
+        putPair(&k, KP.leftShoulder, KP.rightShoulder, 0, 0)
+        putPair(&k, KP.leftHip, KP.rightHip, 0, torso)
+        putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0.2 * torso)
+        putPair(&k, KP.leftWrist, KP.rightWrist, 0, 0.4 * torso)
+        k[KP.nose] = Keypoint(x: 0, y: -0.4 * torso, score: 0.9)
+        putPair(&k, KP.leftKnee, KP.rightKnee, 0, 2 * torso)
+        putPair(&k, KP.leftAnkle, KP.rightAnkle, 0, 3 * torso)
+        return k
+    }
+
     /// Nothing confidently detected — the "step into frame" case.
     static func empty() -> [Keypoint] { blank() }
 }

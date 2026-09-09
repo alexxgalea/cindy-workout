@@ -820,8 +820,19 @@ public final class WorkoutEngine {
         // A straight-armed hang establishes an unknown bar. Once known, only observations that
         // are already on that bar may refine it; otherwise someone stepping off the bar could
         // slowly drag the learned line down to the floor.
-        if elbow >= deadHang,
-           !bar.established || bar.holds(left: leftWrist, right: rightWrist, torso: torso) {
+        //
+        // Establishing one from scratch additionally needs the hands *overhead*. Setting up a
+        // resistance band means standing there holding it at chest height with straight arms,
+        // which satisfies every other test here — hands above the hips, elbows extended — and
+        // taught the bar at the athlete's chest, hundreds of pixels below the real one. Every
+        // later rep was then refused with "Get on the bar" with no way back, because refinement
+        // requires already passing the gate. Strict pull-ups have no such phase, which is why
+        // only band footage found it.
+        let overhead = handsOverhead(k, hands: hands)
+        let mayLearn = bar.established
+            ? bar.holds(left: leftWrist, right: rightWrist, torso: torso)
+            : overhead
+        if elbow >= deadHang, mayLearn {
             let wasEstablished = bar.established
             let half = gripHalfWidth(k) ?? 0
             bar.observeHang(handsX: hands.x, handsY: hands.y, halfGrip: half)
@@ -830,8 +841,12 @@ public final class WorkoutEngine {
         if bar.established {
             barSettleSince = 0
             barSettleHands = nil
-        } else {
+        } else if overhead {
             settleBar(hands, halfGrip: gripHalfWidth(k) ?? 0, torso: torso, now: now)
+        } else {
+            // Not a hang, so the stillness of holding a band must not accumulate toward one.
+            barSettleSince = 0
+            barSettleHands = nil
         }
         let onBar = bar.holds(left: leftWrist, right: rightWrist, torso: torso)
         barGuide = bar.bounds(torso: torso).map {
@@ -933,6 +948,22 @@ public final class WorkoutEngine {
         barTorso = torso
         barSettleSince = 0
         barSettleHands = nil
+    }
+
+    /// Whether the hands are above the head, which is what separates hanging from a grip that
+    /// merely happens to sit above the hips.
+    ///
+    /// At a dead hang the arms are overhead by definition, so the hands are clearly above the
+    /// nose; holding a band in front of the chest puts them clearly below it. Only used to decide
+    /// whether an *unknown* bar may be learned — once a bar exists, `BarZone.holds` already
+    /// constrains what may refine it.
+    ///
+    /// A head that cannot be seen does not block anything, so the rear-view and occluded footage
+    /// that already counts keeps working: this rejects one specific wrong posture, not an
+    /// unclear view of the face.
+    private func handsOverhead(_ k: [Keypoint], hands: Keypoint) -> Bool {
+        let nose = k[KP.nose]
+        return !ok(nose) || hands.y < nose.y
     }
 
     /// Half the distance between the hands, for the bar's horizontal span.

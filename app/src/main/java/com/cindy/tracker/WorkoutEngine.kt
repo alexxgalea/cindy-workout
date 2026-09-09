@@ -847,8 +847,17 @@ class WorkoutEngine(
         // A straight-armed hang establishes an unknown bar. Once known, only observations that
         // are already on that bar may refine it; otherwise someone stepping off the bar could
         // slowly drag the learned line down to the floor.
+        //
+        // Establishing one from scratch additionally needs the hands *overhead*. Setting up a
+        // resistance band means standing there holding it at chest height with straight arms for
+        // several seconds, which satisfies every other test here — hands above the hips, elbows
+        // extended — and taught the bar at the athlete's chest, a couple of hundred pixels below
+        // the real one. Every subsequent rep was then refused with "Get on the bar", and because
+        // refinement requires already passing the gate, it could never recover. Strict pull-ups
+        // have no such phase, which is why only band footage found it.
+        val overhead = handsOverhead(k, hands)
         if (elbow >= deadHang &&
-            (!bar.established || bar.holds(leftWrist, rightWrist, torso))
+            (if (bar.established) bar.holds(leftWrist, rightWrist, torso) else overhead)
         ) {
             val wasEstablished = bar.established
             val half = gripHalfWidth(k) ?: 0f
@@ -858,8 +867,12 @@ class WorkoutEngine(
         if (bar.established) {
             barSettleSince = 0L
             barSettleHands = null
-        } else {
+        } else if (overhead) {
             settleBar(hands, gripHalfWidth(k) ?: 0f, torso, now)
+        } else {
+            // Not a hang, so the stillness of holding a band must not accumulate toward one.
+            barSettleSince = 0L
+            barSettleHands = null
         }
         val onBar = bar.holds(leftWrist, rightWrist, torso)
         barGuide = bar.bounds(torso)?.let {
@@ -978,6 +991,24 @@ class WorkoutEngine(
         barTorso = torso
         barSettleSince = 0L
         barSettleHands = null
+    }
+
+    /**
+     * Whether the hands are above the head, which is what separates hanging from a grip that
+     * merely happens to sit above the hips.
+     *
+     * At a dead hang the arms are overhead by definition, so the hands are clearly above the
+     * nose; holding a band, a rope or a towel in front of the chest puts them clearly below it.
+     * Only used to decide whether an *unknown* bar may be learned from this frame — once a bar
+     * exists, [BarZone.holds] already constrains what may refine it.
+     *
+     * A head that cannot be seen does not block anything. Refusing to learn a bar whenever the
+     * nose is missing would lock out the rear-view and occluded footage that already counts, and
+     * this test exists to reject a specific wrong posture, not to demand a clear view of the face.
+     */
+    private fun handsOverhead(k: Array<Keypoint>, hands: Keypoint): Boolean {
+        val nose = k[KP.NOSE]
+        return !ok(nose) || hands.y < nose.y
     }
 
     /** Half the distance between the hands, for the bar's horizontal span. */
