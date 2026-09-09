@@ -76,9 +76,24 @@ public final class RepCounter {
     /// Travel the calibration step should see before it trusts the camera placement.
     public var requiredRange: Float { minRange }
 
+    /// Seeds the band from a calibration rep, so rep one is judged against a real range.
+    public func seedBand(low: Float, high: Float) {
+        guard !low.isNaN, !high.isNaN, high > low else { return }
+        seenLow = low
+        seenHigh = high
+    }
+
+    /// Feeds one sample.
+    ///
+    /// `mayCount` separates *observing* the signal from *booking* a rep. The band can only
+    /// describe the athlete's real swing if the counter sees the whole oscillation, but a caller
+    /// with its own gates — the pull-up bar and head checks — still needs to withhold the score
+    /// on frames those gates reject. Passing false keeps the smoothing, band and phase current
+    /// while guaranteeing no rep is booked.
+    ///
     /// - Returns: true if this sample completed a rep.
     @discardableResult
-    public func update(_ raw: Float, now: Int64) -> Bool {
+    public func update(_ raw: Float, now: Int64, mayCount: Bool = true) -> Bool {
         guard !raw.isNaN else { return false }
         smoothed = smoothed.isNaN ? raw : smoothed + smoothing * (raw - smoothed)
         let s = smoothed
@@ -102,7 +117,7 @@ public final class RepCounter {
         let climbed = s - trough
         let atTop = useBand ? s >= topOfBand : s > upAbove
         let debounced = lastRepAt.map { now - $0 >= minRepMs } ?? true
-        if armed && climbed >= needed && atTop && debounced {
+        if mayCount && armed && climbed >= needed && atTop && debounced {
             lastRepAt = now
             count += 1
             armed = false
@@ -181,5 +196,15 @@ public final class RepCounter {
         smoothed = .nan
         trough = .nan
         armed = true
+    }
+
+    /// Discards an in-flight repetition while retaining the learned calibration band.
+    ///
+    /// Used when a pull-up loses bar contact or pose identity. The next valid low sample restores
+    /// the `.down` phase and arms the counter; a recovered top frame cannot finish the old cycle.
+    public func requireFreshDown() {
+        phase = .unknown
+        trough = .nan
+        armed = false
     }
 }

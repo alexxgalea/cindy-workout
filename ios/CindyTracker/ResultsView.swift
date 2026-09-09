@@ -16,24 +16,9 @@ struct ResultsView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Color.dim)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(attempt.level.title)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(Color.accent)
-                    Text(attempt.level.blurb)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.dim)
-                    ProgressView(value: Double(Level.progress(attempt.rounds)))
-                        .tint(Color.accent)
-                    if let need = Level.roundsToNext(attempt.rounds),
-                       let next = Level.next(after: attempt.level) {
-                        Text("\(need) more round\(need == 1 ? "" : "s") to \(next.title)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.dim)
-                    }
-                }
-                .padding(16)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                levelCard
+                    .padding(16)
+                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
 
                 stat("Rounds completed", "\(attempt.rounds)")
                 stat("Workout time", formatDuration(attempt.durationMs))
@@ -44,6 +29,11 @@ struct ResultsView: View {
                 }
                 if let avg = attempt.avgRoundMs { stat("Average round", formatDuration(avg)) }
                 if let fastest = attempt.fastestRoundMs { stat("Fastest round", formatDuration(fastest)) }
+                // Said out loud rather than folded into the total: the app saw most of these and
+                // was told about the rest, and those are different kinds of claim.
+                if attempt.manualReps > 0 {
+                    stat("Added by hand", "\(attempt.manualReps) of \(attempt.totalReps)")
+                }
 
                 if !attempt.roundSplitsMs.isEmpty {
                     Text("ROUND SPLITS")
@@ -63,6 +53,47 @@ struct ResultsView: View {
             .padding(20)
         }
         .background(Color.appBackground)
+    }
+
+    /// The ladder, or — for a session that did not run the standard movements — what it did run.
+    ///
+    /// The rungs are calibrated against strict Cindy and top out level with the benchmark, so
+    /// showing them here for an adaptive session would be ranking it on a workout it did not
+    /// attempt. That is not a demotion: this panel says what was actually performed and, when a
+    /// personal record exists, compares it with the same thing done before — the only comparison
+    /// that means anything for a movement the ladder does not describe.
+    @ViewBuilder private var levelCard: some View {
+        if let level = attempt.level {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(level.title)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.accent)
+                Text(level.blurb)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.dim)
+                ProgressView(value: Double(Level.progress(attempt.rounds)))
+                    .tint(Color.accent)
+                if let need = Level.roundsToNext(attempt.rounds),
+                   let next = Level.next(after: level) {
+                    Text("\(need) more round\(need == 1 ? "" : "s") to \(next.title)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.dim)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(attempt.profile?.mode.label ?? "Adaptive Cindy")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.accent)
+                let changed = attempt.profile?.changedMovements() ?? ""
+                Text(changed.isEmpty ? "Movements this version does not recognise." : changed)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.dim)
+                Text("Ranked against your own sessions at these movements, not the strict ladder.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.dim)
+            }
+        }
     }
 
     private var splits: some View {
