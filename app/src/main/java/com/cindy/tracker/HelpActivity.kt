@@ -156,6 +156,32 @@ class HelpActivity : AppCompatActivity() {
             "−1 and +1 fix a miscount. Hold +1 to skip to the next movement."
         )
 
+        heading("CALORIES AND STREAKS")
+        paragraph(
+            "The calorie figure on the results screen is an estimate, and it is labelled as one. " +
+                "Without a heart-rate strap there is no honest way to measure this, so it uses " +
+                "the standard MET equation that every strapless tracker uses underneath: " +
+                "kcal = MET × 3.5 × your weight in kg ÷ 200, per minute."
+        )
+        bullets(
+            "The Compendium of Physical Activities puts vigorous calisthenics and general " +
+                "circuit training at 8 METs. That is taken to describe ten rounds in the " +
+                "twenty minutes.",
+            "Cindy is an AMRAP, so eight rounds and twenty-five rounds are not the same effort. " +
+                "The MET is scaled by the rate you actually worked at, and capped at both ends — " +
+                "no one sustains more than 14 METs for twenty minutes.",
+            "Paused time is excluded. Resting with the clock stopped is not work.",
+            "Nothing is shown until you enter your body weight, because a guessed weight would " +
+                "produce a confident number that is wrong by however far the guess missed. It " +
+                "is stored on this phone only."
+        )
+        paragraph(
+            "The streak on the RECORDS screen counts consecutive days on which you trained, in " +
+                "your own time zone. It does not break the moment midnight passes — a day you " +
+                "have not finished living yet still counts as alive, so training this evening " +
+                "keeps it going."
+        )
+
         heading("SOURCE")
         paragraph(
             "The workout, the scaled version, the score tiers and the pacing quotes on this " +
