@@ -691,10 +691,12 @@ class WorkoutEngine(
         val counted = counter.update(sample.signal, now, mayCount = mayCount)
 
         if (sample.deadHangBelowReset) {
-            // Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
-            blocked = false
             // Observing here makes RepCounter's DOWN phase agree with the physical reset.
             if (counter.phase == RepCounter.Phase.DOWN) pullupDownSeen = true
+            // Hanging at the bottom is where a pull-up starts, not a fault worth announcing.
+            // But the athlete is told "Ready" off the back of this, and that has to mean the
+            // next rep will actually score — which a hang that has not yet armed will not.
+            blocked = !pullupDownSeen
             diagnostics = frameDiagnostics(
                 k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
                 headAboveBar = sample.headAboveBar
