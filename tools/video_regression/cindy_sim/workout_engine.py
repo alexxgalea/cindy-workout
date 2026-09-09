@@ -741,9 +741,20 @@ class WorkoutEngine:
 
         # A straight-armed hang establishes an unknown bar. Once known, only observations already
         # on that bar may refine it; otherwise stepping off could drag the line to the floor.
-        if elbow >= dead_hang and (
-            not self._bar.established or self._bar.holds(left_wrist, right_wrist, torso)
-        ):
+        #
+        # Establishing one from scratch additionally needs the hands *overhead*. Setting up a
+        # resistance band means standing holding it at chest height with straight arms, which
+        # satisfies every other test here -- hands above the hips, elbows extended -- and taught
+        # the bar at the athlete's chest, hundreds of pixels below the real one; every later rep
+        # was then refused with "Get on the bar" with no way back, since refinement requires
+        # already passing the gate. Strict pull-ups have no such phase, so only band footage
+        # found it.
+        overhead = self._hands_overhead(k, hands)
+        gate_ok = (
+            self._bar.holds(left_wrist, right_wrist, torso)
+            if self._bar.established else overhead
+        )
+        if elbow >= dead_hang and gate_ok:
             was_established = self._bar.established
             half = self._grip_half_width(k)
             self._bar.observe_hang(hands.x, hands.y, 0.0 if half is None else half)
@@ -752,9 +763,13 @@ class WorkoutEngine:
         if self._bar.established:
             self._bar_settle_since = 0
             self._bar_settle_hands = None
-        else:
+        elif overhead:
             half = self._grip_half_width(k)
             self._settle_bar(hands, 0.0 if half is None else half, torso, now)
+        else:
+            # Not a hang, so the stillness of holding a band must not accumulate toward one.
+            self._bar_settle_since = 0
+            self._bar_settle_hands = None
         if not self._bar.holds(left_wrist, right_wrist, torso):
             self.hint = "Get on the bar"
             return None
@@ -852,6 +867,19 @@ class WorkoutEngine:
         self._bar_torso = torso
         self._bar_settle_since = 0
         self._bar_settle_hands = None
+
+    def _hands_overhead(self, k: Sequence[Keypoint], hands: Keypoint) -> bool:
+        """Whether the hands are above the head, separating a hang from a chest-height grip.
+
+        At a dead hang the arms are overhead by definition, so the hands sit clearly above the
+        nose; holding a band in front of the chest puts them clearly below it. Only gates whether
+        an *unknown* bar may be learned -- once one exists, ``BarZone.holds`` constrains refining.
+
+        A head that cannot be seen blocks nothing, so rear-view and occluded footage that already
+        counts keeps working; this rejects one specific wrong posture, not an unclear view.
+        """
+        nose = k[KP.NOSE]
+        return not self._ok(nose) or hands.y < nose.y
 
     def _grip_half_width(self, k: Sequence[Keypoint]) -> float | None:
         l = k[KP.LEFT_WRIST]

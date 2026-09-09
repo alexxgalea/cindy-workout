@@ -98,4 +98,23 @@ def empty() -> list[Keypoint]:
     return _blank()
 
 
-BUILDERS = {"squat": squat, "pushup": pushup, "pullup": pullup}
+def band_setup(_unused: float = 0.0) -> list[Keypoint]:
+    """Standing holding a resistance band at chest height, arms straight.
+
+    The posture that taught a bar in the wrong place on real band footage: hands above the hips
+    with the elbows extended, but below the head, because the band is held in front of the chest
+    rather than gripped overhead. Takes an ignored angle so it can be driven from the parity plan
+    like the other builders.
+    """
+    k = _blank()
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, 0.0, TORSO)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, 0.2 * TORSO)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, 0.4 * TORSO)
+    _put(k, KP.NOSE, 0.0, -0.4 * TORSO)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, 0.0, 2.0 * TORSO)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0.0, 3.0 * TORSO)
+    return k
+
+
+BUILDERS = {"squat": squat, "pushup": pushup, "pullup": pullup, "bandsetup": band_setup}

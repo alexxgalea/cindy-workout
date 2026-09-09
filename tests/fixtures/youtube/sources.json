@@ -121,6 +121,36 @@
       "status": "candidate",
       "confidence": "low",
       "notes": "Band-assisted pull-ups, side view, but an EDITED tutorial: it cuts from a wide shot to a close-up insert around 17-25s and back. Scores 2 under pull=band_assisted, one rep in each continuous segment, with 221 frames of 'Get on the bar' and 386 more with keypoints missing. Unusable as a counting fixture by construction, since a cut moves the bar in frame and crops the body -- the same class of problem already recorded against IODxDxX7oi4. Kept as a candidate only as a record of that."
+    },
+    {
+      "id": "3aRP4o23HXo",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "labelled",
+      "reps": 5,
+      "confidence": "high",
+      "pull": "band_assisted",
+      "label_basis": "Each of the 5 count timestamps checked against the frame it fired on -- every one is chin-at-bar. Boundaries checked both ways: 4.4-7.0s is a sustained dead hang with no pull, so nothing precedes the first count, and after the fifth at 14.5s he steps out of the band. Independently corroborated by re-running with a hand-measured manual bar, which gives the same five within ~100ms.",
+      "notes": "Band-assisted pull-ups, front view, band under one knee, single static portrait shot. THE CLIP THAT FOUND THE FALSE-BAR BUG: scored 0 before the fix because the band setup (standing on the box holding the band at chest height, arms straight) satisfied every condition the bar was learned from and fixed it at chest height, after which every rep was refused 'Get on the bar' with no way back. Scores 5/5 once the bar may only be learned with the hands overhead."
+    },
+    {
+      "id": "75tpN6zeR8U",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "labelled",
+      "reps": 4,
+      "confidence": "medium",
+      "pull": "band_assisted",
+      "label_basis": "All 4 count timestamps checked against their frames; every one is a completed top with the chin at the handles. Confidence is medium only because the clip opens mid-set, so the first count's descent happens before the footage starts.",
+      "notes": "MACHINE-assisted pull-up (kneeling-pad assist machine), rear three-quarter view, static shot. Scored under band_assisted because the app has no MACHINE_ASSISTED variant -- the plan had deferred machine assistance to manual/beta on the grounds that the machine's pads and handles occlude landmarks. This clip is evidence against that caution: the bar gate held on 274 of 301 frames and it counted 4/4. Worth revisiting whether machine-assisted deserves its own AUTO variant."
+    },
+    {
+      "id": "ZBFUOkukwrw",
+      "group": "pullups",
+      "exercise": "pullup",
+      "status": "candidate",
+      "confidence": "low",
+      "notes": "Band-assisted pull-ups, band behind the athlete with the foot in it, REAR view, single static portrait shot -- framing is fine. Scores 1 under band_assisted, unaffected by the false-bar fix. Limited by the detector rather than the gates: 'Show both hands' rejects 275 of 407 frames, so the wrists are simply not resolved often enough from behind with the arms overhead, and head-above-bar is true on only 7 frames. A rear view with raised arms is the hard case for wrist keypoints; recorded so the next attempt does not re-derive it."
     }
   ]
 }

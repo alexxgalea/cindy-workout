@@ -463,6 +463,21 @@ Check.suite("Assisted pull-up") {
     }
     Check.equal(r.engine.reps, before, "overhead movement away from the bar does not count")
 
+    // Setting the band up must not teach a bar. Found on real footage: standing holding the
+    // band at chest height satisfies every other condition the bar was learned from, so the bar
+    // was fixed at the athlete's chest and every real rep afterwards was refused with "Get on
+    // the bar" with no way back, since refinement requires already passing the gate.
+    let bandSetup = engineFor(.bandAssistedPullUp)
+    bandSetup.hold(PoseFixtures.bandSetup(), frames: 60)
+    Check.equal(bandSetup.engine.barKnown, false, "holding a band at chest height teaches no bar")
+    bandSetup.hold(PoseFixtures.pullup(bottom), frames: 35)
+    Check.equal(bandSetup.engine.barKnown, true, "the real hang afterwards still finds it")
+    for _ in 0..<6 {
+        bandSetup.hold(PoseFixtures.pullup(top), frames: 8)
+        bandSetup.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    Check.equal(bandSetup.engine.reps, 5, "and the reps score normally after it")
+
     // Rep provenance: a tapped rep counts, and is remembered as tapped.
     let manual = engineFor(.footAssistedPullUp)
     manual.engine.manualRep()
