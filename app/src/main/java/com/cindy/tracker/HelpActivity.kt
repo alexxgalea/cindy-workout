@@ -93,7 +93,12 @@ class HelpActivity : AppCompatActivity() {
 
         heading("WHAT A GOOD SCORE IS")
         paragraph("CrossFit's tiers, in rounds:")
-        val best = RecordStore(this).all().maxByOrNull { it.totalReps }
+        val history = RecordStore(this).all()
+        // These tiers describe the prescribed movements, so only a standard Cindy is measured
+        // against them. Ticking "Rx'd" off the back of a session run with knee push-ups would be
+        // exactly the claim the note below has always refused to make -- the difference now is
+        // that the app records which movements were used and can tell.
+        val best = Records.bestIn(history, CindyProfile.STANDARD)
         // The scaled tier is deliberately never ticked: this app counts the prescribed rep
         // scheme, so it has no idea whether the work was scaled, and a tick there would be a
         // claim it cannot make.
@@ -101,10 +106,18 @@ class HelpActivity : AppCompatActivity() {
         tier("Intermediate", "8–10+ rounds as prescribed", 8, best)
         tier("Rx'd", "20+ rounds", 20, best)
         tier("Elite", "25+ rounds", 25, best)
-        if (best != null) {
-            quiet("Your best so far: ${best.scoreLabel()} — ${best.rounds} rounds.")
-        } else {
-            quiet("Finish a Cindy and your best will show up against these.")
+        val adaptiveBest = history.filter { it.profile?.isStandard != true }.maxByOrNull { it.totalReps }
+        when {
+            best != null ->
+                quiet("Your best so far: ${best.scoreLabel()} — ${best.rounds} rounds.")
+            // Not "no score": they have trained, and saying otherwise to someone whose sessions
+            // were all adaptive would be the app pretending they were not there.
+            adaptiveBest != null -> quiet(
+                "Your best is ${adaptiveBest.scoreLabel()} at ${adaptiveBest.caption}. These " +
+                    "tiers describe the prescribed movements, so it is ranked against your own " +
+                    "sessions at the same movements instead."
+            )
+            else -> quiet("Finish a Cindy and your best will show up against these.")
         }
         quiet("This app's own ladder in RECORDS is a separate, finer-grained scale. These four " +
             "are CrossFit's.")

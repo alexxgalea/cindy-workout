@@ -81,6 +81,31 @@ object PoseFixtures {
     }
 
     /**
+     * A body mid *knee* push-up with the given elbow angle: hands and knees on the floor, shins
+     * folded up behind, and no plank line from shoulder to ankle.
+     *
+     * Deliberately identical to [pushup] everywhere the push-up path actually looks — the
+     * shoulder-elbow-wrist chain and the torso — because that is the finding this fixture
+     * exists to pin down. The knees and shins are placed honestly so the fixture describes the
+     * real movement, not so the engine can read them: nothing in the push-up path consults them.
+     */
+    fun kneePushup(elbowDeg: Float): Array<Keypoint> {
+        val k = blank()
+        val shX = (LIMB * sin(rad(elbowDeg))).toFloat()
+        val shY = (LIMB * cos(rad(elbowDeg))).toFloat()
+        // The floor is the line the planted hands sit on.
+        val floorY = LIMB
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, 0f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, floorY)
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shX, shY)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, shX - TORSO, shY)
+        // Knees down on the floor rather than trailing the hips, and the shins raised behind.
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, shX - TORSO - 40f, floorY)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, shX - TORSO - 40f, floorY - 60f)
+        return k
+    }
+
+    /**
      * A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
      * Elbow at the origin, wrist straight above it on the bar, shoulder swung by [elbowDeg] —
      * so the shoulders rise past the hands at the top, exactly as they do on a real pull-up.

@@ -87,7 +87,15 @@ class WorkoutEngine(
      * default Cindy progression; the regression harness uses this mode so a ten-rep push-up
      * video is not truncated at Cindy's five-pull-up transition.
      */
-    private val fixedExercise: Exercise? = null
+    private val fixedExercise: Exercise? = null,
+    /**
+     * The movements this session is counting, fixed before the clock starts.
+     *
+     * Immutable for the life of the engine on purpose: a rep's meaning cannot be allowed to
+     * change halfway through the score it contributes to. Changing movements means a new
+     * session, which is also the only way the history line can stay true.
+     */
+    val profile: CindyProfile = CindyProfile.STANDARD
 ) {
 
     private companion object {
@@ -127,6 +135,16 @@ class WorkoutEngine(
         const val BAR_SCALE_CHANGE = 1.6f
         /** Straight-armed hangs rejected at that different scale before the bar is abandoned. */
         const val MAX_BAR_CONTRADICTIONS = 30
+        /**
+         * How long hands must hang overhead without moving before their position is taken as
+         * the bar, when no dead hang has managed to establish one.
+         *
+         * Long, on purpose. This is the slow fallback behind the dead-hang route, and stillness
+         * is weaker evidence than a straight-armed hang, so it has to be sustained stillness.
+         */
+        const val BAR_SETTLE_MS = 3_000L
+        /** How far the hands may drift, in torso lengths, and still count as held still. */
+        const val BAR_SETTLE_DRIFT_TORSOS = 0.2f
         /** How far below the bar the head must return before another pull-up can arm. */
         const val HEAD_RESET_TORSOS = 0.25f
         /**
@@ -206,6 +224,18 @@ class WorkoutEngine(
     var bodyVisible = false
         private set
 
+    /**
+     * Reps tapped in rather than seen, across the whole session.
+     *
+     * Reported with the score because "87 reps" and "87 reps, 12 by hand" are different claims.
+     */
+    var manualReps = 0
+        private set
+
+    /** How the most recent rep was booked. */
+    var lastRepSource = Tracking.AUTO
+        private set
+
     /** Details used by the video-regression reports for the most recent frame. */
     var diagnostics = FrameDiagnostics()
         private set
@@ -231,6 +261,10 @@ class WorkoutEngine(
     private var barTorso = Float.NaN
     /** Consecutive dead hangs a bar learned at a very different scale has refused. */
     private var barContradictions = 0
+    /** When the current run of still, overhead hands began, or 0 while broken. */
+    private var barSettleSince = 0L
+    /** Hand position the current still run is measured from, or null while broken. */
+    private var barSettleHands: Keypoint? = null
 
     /** True once a dead hang has taught the engine where the bar is. */
     val barKnown: Boolean get() = bar.established
@@ -285,6 +319,8 @@ class WorkoutEngine(
             xMax = xMaxNormalized * frameWidth
         )
         pullupDownSeen = false
+        barSettleSince = 0L
+        barSettleHands = null
         counters.getValue(Exercise.PULLUP).requireFreshDown()
     }
 
@@ -312,11 +348,15 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        barSettleSince = 0L
+        barSettleHands = null
         awaitingStart = false
         startPositionSince = 0L
         startSmoothed = Float.NaN
         startReference = Float.NaN
         blocked = false
+        manualReps = 0
+        lastRepSource = Tracking.AUTO
         diagnostics = FrameDiagnostics()
         bar.reset()
         barGuide = null
@@ -328,6 +368,8 @@ class WorkoutEngine(
     /** Books one rep by hand, for when the camera angle defeats the detector. */
     fun manualRep(): RepEvent {
         counters.getValue(exercise).forceIncrement()
+        manualReps++
+        lastRepSource = Tracking.MANUAL
         return settle()
     }
 
@@ -339,6 +381,14 @@ class WorkoutEngine(
      */
     fun undoRep(): RepEvent {
         awaitingStart = false
+        // Which rep is being taken back is not recorded, so undo assumes it was the last one
+        // booked. Wrong only if the athlete taps +1, lets the camera score, then undoes twice —
+        // and wrong by one in a figure that exists to be honest about roughly how much was
+        // tapped, not to be audited.
+        if (lastRepSource == Tracking.MANUAL && manualReps > 0) {
+            manualReps--
+            lastRepSource = Tracking.AUTO
+        }
         val counter = counters.getValue(exercise)
         if (counter.count > 0) {
             counter.forceDecrement()
@@ -372,6 +422,8 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        barSettleSince = 0L
+        barSettleHands = null
         diagnostics = FrameDiagnostics()
     }
 
@@ -436,6 +488,7 @@ class WorkoutEngine(
             return RepEvent.NONE
         }
         blocked = false
+        lastRepSource = Tracking.AUTO
         return settle()
     }
 
@@ -538,6 +591,8 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        barSettleSince = 0L
+        barSettleHands = null
         diagnostics = FrameDiagnostics()
     }
 
@@ -670,7 +725,7 @@ class WorkoutEngine(
             return RepEvent.NONE
         }
 
-        val sample = pullupSample(k)
+        val sample = pullupSample(k, now)
         if (sample == null) {
             blocked = true
             toleratePullupDropout()
@@ -706,7 +761,11 @@ class WorkoutEngine(
 
         if (!mayCount) {
             blocked = true
-            hint = if (!pullupDownSeen) "Return to a dead hang" else "Get your head over the bar"
+            hint = when {
+                pullupDownSeen -> "Get your head over the bar"
+                requiresDeadHang -> "Return to a dead hang"
+                else -> "Lower all the way down"
+            }
             diagnostics = frameDiagnostics(
                 k, true, scoringConfidenceAdequate = true, barGateOpen = sample.barGateOpen,
                 headAboveBar = sample.headAboveBar, rejection = hint
@@ -726,11 +785,12 @@ class WorkoutEngine(
 
         // A second count cannot inherit this rep: a fresh reset below the bar is required.
         pullupDownSeen = false
+        lastRepSource = Tracking.AUTO
         return if (settleWorkout) settle() else RepEvent.NONE
     }
 
     /** Validates a pull-up pose without mutating the counter. */
-    private fun pullupSample(k: Array<Keypoint>): PullupSample? {
+    private fun pullupSample(k: Array<Keypoint>, now: Long): PullupSample? {
         val leftWrist = k[KP.LEFT_WRIST]
         val rightWrist = k[KP.RIGHT_WRIST]
         if (!ok(leftWrist) || !ok(rightWrist)) {
@@ -777,6 +837,8 @@ class WorkoutEngine(
                 barGuide = null
                 barTorso = Float.NaN
                 barContradictions = 0
+                barSettleSince = 0L
+                barSettleHands = null
             }
         } else {
             barContradictions = 0
@@ -792,6 +854,12 @@ class WorkoutEngine(
             val half = gripHalfWidth(k) ?: 0f
             bar.observeHang(hands.x, hands.y, half)
             if (!wasEstablished) barTorso = torso
+        }
+        if (bar.established) {
+            barSettleSince = 0L
+            barSettleHands = null
+        } else {
+            settleBar(hands, gripHalfWidth(k) ?: 0f, torso, now)
         }
         val onBar = bar.holds(leftWrist, rightWrist, torso)
         barGuide = bar.bounds(torso)?.let {
@@ -814,12 +882,30 @@ class WorkoutEngine(
         }
         return PullupSample(
             signal = -elbow,
-            deadHangBelowReset = elbow >= deadHang &&
+            deadHangBelowReset = (!requiresDeadHang || elbow >= deadHang) &&
                 nose.y >= barY + HEAD_RESET_TORSOS * torso,
             headAboveBar = nose.y < barY,
             barGateOpen = true
         )
     }
+
+    /**
+     * Whether the bottom of a rep has to be a straight-armed hang.
+     *
+     * It does for a strict pull-up: that is the movement, and [LimitedExtensionPullupTest] holds
+     * the line. It cannot for a band-assisted one — the band takes enough weight that the arms
+     * may never straighten, so requiring it means the reset never arms and the athlete scores
+     * zero all session with the counter working perfectly behind a gate they cannot open.
+     *
+     * What remains for the assisted variant is the head dropping back below the reset line, and
+     * that is the conjunct worth keeping: it is a torso-scaled offset rather than an angle, so
+     * the camera's viewpoint cannot flatten it, and a head a quarter-torso below the bar is at
+     * the bottom of the movement whatever the elbows are doing. The head still has to clear the
+     * bar to score, and [RepCounter] still requires the athlete's full learned travel, so a
+     * relaxed bottom buys a shallower rep nothing.
+     */
+    private val requiresDeadHang: Boolean
+        get() = profile.pull == PullVariant.STRICT_PULL_UP
 
     /**
      * Forget a partial pull-up until a fresh on-bar dead hang is observed.
@@ -859,6 +945,40 @@ class WorkoutEngine(
             DEAD_HANG_DEGREES,
             maxOf(DEAD_HANG_FLOOR_DEGREES, pullupExtendedElbow - DEAD_HANG_SLACK_DEGREES)
         )
+
+    /**
+     * Locates the bar from hands simply held still overhead, when no dead hang has managed to.
+     *
+     * Strictly a fallback. A straight-armed hang still establishes the bar on the frame it
+     * happens, so nothing about a strict pull-up reaches this at all. It exists because the
+     * dead-hang route can never fire for some athletes: an elbow that does not reach
+     * [DEAD_HANG_FLOOR_DEGREES] — limited extension, or a band taking enough weight that the
+     * arms never straighten — leaves the bar unknown, and an unknown bar has no [BarZone.lineY],
+     * so every pull-up frame is refused before the gates are even consulted. The whole workout
+     * then scores zero under "Hang from the bar". Not being able to *find* the bar is not a
+     * movement standard, it is a lockout: the head and bar gates still have to be satisfied
+     * afterwards, and on the strict variant so does the dead hang.
+     *
+     * Stillness is the evidence rather than the elbow, because stillness is what separates
+     * hanging from the walk-up that previously taught a bar in the wrong place. The same
+     * argument as [takeUpPosition]: a dwell on a position that has stopped changing, rather
+     * than a threshold on an angle that the camera's viewpoint can flatten.
+     */
+    private fun settleBar(hands: Keypoint, halfGrip: Float, torso: Float, now: Long) {
+        val reference = barSettleHands
+        if (reference == null ||
+            hypot(hands.x - reference.x, hands.y - reference.y) > BAR_SETTLE_DRIFT_TORSOS * torso
+        ) {
+            barSettleSince = now
+            barSettleHands = hands
+            return
+        }
+        if (now - barSettleSince < BAR_SETTLE_MS) return
+        bar.observeHang(hands.x, hands.y, halfGrip)
+        barTorso = torso
+        barSettleSince = 0L
+        barSettleHands = null
+    }
 
     /** Half the distance between the hands, for the bar's horizontal span. */
     private fun gripHalfWidth(k: Array<Keypoint>): Float? {

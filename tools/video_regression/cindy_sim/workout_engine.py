@@ -107,6 +107,39 @@ class PullupSample:
     bar_gate_open: bool
 
 
+class PullVariant(Enum):
+    """What happened on the bar. Mirrors ``Variations.kt``."""
+
+    STRICT_PULL_UP = "STRICT_PULL_UP"
+    BAND_ASSISTED_PULL_UP = "BAND_ASSISTED_PULL_UP"
+    FOOT_ASSISTED_PULL_UP = "FOOT_ASSISTED_PULL_UP"
+    NEGATIVE_PULL_UP = "NEGATIVE_PULL_UP"
+
+
+class PushVariant(Enum):
+    STANDARD_PUSH_UP = "STANDARD_PUSH_UP"
+    KNEE_PUSH_UP = "KNEE_PUSH_UP"
+    INCLINE_PUSH_UP = "INCLINE_PUSH_UP"
+
+
+class SquatVariant(Enum):
+    AIR_SQUAT = "AIR_SQUAT"
+    BOX_SQUAT = "BOX_SQUAT"
+    SUPPORTED_SQUAT = "SUPPORTED_SQUAT"
+
+
+@dataclass(frozen=True)
+class CindyProfile:
+    """The movements a session is counting, fixed before the clock starts."""
+
+    pull: PullVariant = PullVariant.STRICT_PULL_UP
+    push: PushVariant = PushVariant.STANDARD_PUSH_UP
+    squat: SquatVariant = SquatVariant.AIR_SQUAT
+
+
+STANDARD_PROFILE = CindyProfile()
+
+
 class WorkoutEngine:
     """Turns a stream of keypoints into a Cindy scorecard.
 
@@ -134,6 +167,12 @@ class WorkoutEngine:
     BAR_SCALE_CHANGE = 1.6
     #: Straight-armed hangs rejected at that different scale before the bar is abandoned.
     MAX_BAR_CONTRADICTIONS = 30
+    #: How long hands must hang overhead without moving before their position is taken as the
+    #: bar, when no dead hang has managed to establish one. Long on purpose: this is the slow
+    #: fallback behind the dead-hang route, and stillness is the weaker evidence of the two.
+    BAR_SETTLE_MS = 3_000
+    #: How far the hands may drift, in torso lengths, and still count as held still.
+    BAR_SETTLE_DRIFT_TORSOS = 0.2
     #: How far below the bar the head must return before another pull-up can arm.
     HEAD_RESET_TORSOS = 0.25
     #: Unusable frames tolerated mid-rep before the cycle is abandoned. A pull-up occludes its
@@ -159,8 +198,15 @@ class WorkoutEngine:
     #: Smoothing on the settling signal, so raw jitter does not read as still rising.
     START_SETTLE_SMOOTHING = 0.4
 
-    def __init__(self, fixed_exercise: Exercise | None = None) -> None:
+    def __init__(
+        self,
+        fixed_exercise: Exercise | None = None,
+        profile: CindyProfile = STANDARD_PROFILE,
+    ) -> None:
         self._fixed_exercise = fixed_exercise
+        #: Immutable for the life of the engine: a rep's meaning must not change halfway
+        #: through the score it contributes to.
+        self.profile = profile
         self._counters = {
             Exercise.PULLUP: RepCounter(-140.0, -100.0, min_rep_ms=400, min_range=40.0),
             Exercise.PUSHUP: RepCounter(100.0, 150.0, min_rep_ms=350, min_range=45.0),
@@ -194,6 +240,10 @@ class WorkoutEngine:
         self._bar_torso = NAN
         #: Consecutive dead hangs a bar learned at a very different scale has refused.
         self._bar_contradictions = 0
+        #: When the current run of still, overhead hands began, or 0 while broken.
+        self._bar_settle_since = 0
+        #: Hand position the current still run is measured from, or None while broken.
+        self._bar_settle_hands: Keypoint | None = None
 
     # -- observable state -------------------------------------------------
 
@@ -253,6 +303,8 @@ class WorkoutEngine:
             x_max=x_max_normalized * frame_width,
         )
         self._pullup_down_seen = False
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
         self._counters[Exercise.PULLUP].require_fresh_down()
 
     def reset(self) -> None:
@@ -268,6 +320,8 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
         self.awaiting_start = False
         self._start_position_since = 0
         self._start_smoothed = NAN
@@ -308,6 +362,8 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
         self.diagnostics = FrameDiagnostics()
 
     # -- scoring ----------------------------------------------------------
@@ -478,6 +534,8 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
         self.diagnostics = FrameDiagnostics()
 
     def on_setup_frame(self, k: Sequence[Keypoint], now: int, identity_stable: bool = True) -> Setup:
@@ -563,7 +621,7 @@ class WorkoutEngine:
             self.diagnostics = self._frame_diagnostics(k, False, rejection=self.hint)
             return RepEvent.NONE
 
-        sample = self._pullup_sample(k)
+        sample = self._pullup_sample(k, now)
         if sample is None:
             self.blocked = True
             self._tolerate_pullup_dropout()
@@ -599,8 +657,12 @@ class WorkoutEngine:
 
         if not may_count:
             self.blocked = True
-            self.hint = ("Return to a dead hang" if not self._pullup_down_seen
-                         else "Get your head over the bar")
+            if self._pullup_down_seen:
+                self.hint = "Get your head over the bar"
+            elif self._requires_dead_hang:
+                self.hint = "Return to a dead hang"
+            else:
+                self.hint = "Lower all the way down"
             self.diagnostics = self._frame_diagnostics(
                 k, True, scoring_confidence_adequate=True,
                 bar_gate_open=sample.bar_gate_open, head_above_bar=sample.head_above_bar,
@@ -622,7 +684,7 @@ class WorkoutEngine:
         self._pullup_down_seen = False
         return self._settle() if settle_workout else RepEvent.NONE
 
-    def _pullup_sample(self, k: Sequence[Keypoint]) -> PullupSample | None:
+    def _pullup_sample(self, k: Sequence[Keypoint], now: int) -> PullupSample | None:
         """Validates a pull-up pose without mutating the counter."""
         left_wrist = k[KP.LEFT_WRIST]
         right_wrist = k[KP.RIGHT_WRIST]
@@ -672,6 +734,8 @@ class WorkoutEngine:
                     self._bar.reset()
                     self._bar_torso = NAN
                     self._bar_contradictions = 0
+                    self._bar_settle_since = 0
+                    self._bar_settle_hands = None
         else:
             self._bar_contradictions = 0
 
@@ -685,6 +749,12 @@ class WorkoutEngine:
             self._bar.observe_hang(hands.x, hands.y, 0.0 if half is None else half)
             if not was_established:
                 self._bar_torso = torso
+        if self._bar.established:
+            self._bar_settle_since = 0
+            self._bar_settle_hands = None
+        else:
+            half = self._grip_half_width(k)
+            self._settle_bar(hands, 0.0 if half is None else half, torso, now)
         if not self._bar.holds(left_wrist, right_wrist, torso):
             self.hint = "Get on the bar"
             return None
@@ -696,7 +766,7 @@ class WorkoutEngine:
             return None
         return PullupSample(
             signal=-elbow,
-            dead_hang_below_reset=elbow >= dead_hang
+            dead_hang_below_reset=(not self._requires_dead_hang or elbow >= dead_hang)
             and nose.y >= f32(bar_y + f32(self.HEAD_RESET_TORSOS * torso)),
             head_above_bar=nose.y < bar_y,
             bar_gate_open=True,
@@ -738,6 +808,50 @@ class WorkoutEngine:
         self._pullup_dropout_frames += 1
         if self._pullup_dropout_frames > self.MAX_DROPOUT_FRAMES:
             self._invalidate_pullup_cycle()
+
+    @property
+    def _requires_dead_hang(self) -> bool:
+        """Whether the bottom of a rep has to be a straight-armed hang.
+
+        It does for a strict pull-up: that is the movement. It cannot for a band-assisted one --
+        the band takes enough weight that the arms may never straighten, so requiring it means
+        the reset never arms and the athlete scores zero all session behind a gate they cannot
+        open. What remains is the head dropping back below the reset line, which is a
+        torso-scaled offset rather than an angle and so survives the camera's viewpoint.
+        """
+        return self.profile.pull is PullVariant.STRICT_PULL_UP
+
+    def _settle_bar(self, hands: Keypoint, half_grip: float, torso: float, now: int) -> None:
+        """Locates the bar from hands simply held still overhead, when no dead hang has.
+
+        Strictly a fallback. A straight-armed hang still establishes the bar on the frame it
+        happens, so nothing about a strict pull-up reaches this. It exists because the dead-hang
+        route can never fire for some athletes: an elbow that does not reach
+        ``DEAD_HANG_FLOOR_DEGREES`` -- limited extension, or a band taking enough weight that the
+        arms never straighten -- leaves the bar unknown, and an unknown bar has no ``line_y``, so
+        every pull-up frame is refused before the gates are consulted and the whole workout
+        scores zero under "Hang from the bar". Failing to *find* the bar is not a movement
+        standard, it is a lockout; the head and bar gates still apply afterwards, and on the
+        strict variant so does the dead hang.
+
+        Stillness is the evidence rather than the elbow, because stillness is what separates
+        hanging from the walk-up that previously taught a bar in the wrong place.
+        """
+        reference = self._bar_settle_hands
+        drift = (
+            NAN if reference is None
+            else f32(math.hypot(f32(hands.x - reference.x), f32(hands.y - reference.y)))
+        )
+        if reference is None or drift > f32(self.BAR_SETTLE_DRIFT_TORSOS * torso):
+            self._bar_settle_since = now
+            self._bar_settle_hands = hands
+            return
+        if now - self._bar_settle_since < self.BAR_SETTLE_MS:
+            return
+        self._bar.observe_hang(hands.x, hands.y, half_grip)
+        self._bar_torso = torso
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
 
     def _grip_half_width(self, k: Sequence[Keypoint]) -> float | None:
         l = k[KP.LEFT_WRIST]
