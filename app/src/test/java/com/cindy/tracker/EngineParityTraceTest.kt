@@ -36,7 +36,11 @@ class EngineParityTraceTest {
                 "squat" -> Exercise.SQUAT
                 else -> error("Unknown exercise in $traceId")
             }
-            val engine = WorkoutEngine(fixedExercise = exercise)
+            val pull = PullVariant.entries.first { it.name == steps.first()[PULL] }
+            val engine = WorkoutEngine(
+                fixedExercise = exercise,
+                profile = CindyProfile(pull = pull)
+            )
             steps.forEach { step ->
                 val angle = step[ANGLE].toFloat()
                 val now = step[STEP_MS].toLong() * step[STEP].toLong()
@@ -100,6 +104,7 @@ class EngineParityTraceTest {
         const val STEP_MS = 3
         const val STEP = 4
         const val ANGLE = 5
+        const val PULL = 6
         const val HEADER = "traceId,step,tMs,angle,kpSum,event,count,state,signal,learnedRange," +
             "calibrated,hint,minConfidence,confidenceAdequate,barGateOpen,headAboveBar," +
             "resetSeen,rejection"

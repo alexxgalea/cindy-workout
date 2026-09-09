@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim import pose_fixtures
-from cindy_sim.workout_engine import Exercise, WorkoutEngine
+from cindy_sim.workout_engine import CindyProfile, Exercise, PullVariant, WorkoutEngine
 
 HEADER = [
     "traceId", "step", "tMs", "angle", "kpSum", "event", "count", "state", "signal",
@@ -45,7 +45,10 @@ def run_plan(plan_path: Path) -> list[list[str]]:
     out: list[list[str]] = []
     for trace_id in dict.fromkeys(row["traceId"] for row in rows):
         steps = [row for row in rows if row["traceId"] == trace_id]
-        engine = WorkoutEngine(fixed_exercise=EXERCISES[steps[0]["exercise"]])
+        engine = WorkoutEngine(
+            fixed_exercise=EXERCISES[steps[0]["exercise"]],
+            profile=CindyProfile(pull=PullVariant[steps[0]["pull"]]),
+        )
         for step in steps:
             angle = float(step["angle"])
             now = int(step["stepMs"]) * int(step["step"])

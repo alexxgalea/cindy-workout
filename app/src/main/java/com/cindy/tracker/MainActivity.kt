@@ -20,6 +20,10 @@ import android.util.Size
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "cindy"
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
+        const val KEY_PROFILE = "movement_profile"
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
@@ -114,7 +119,8 @@ class MainActivity : AppCompatActivity() {
         val calibrated: Boolean,
         val bodyVisible: Boolean,
         val blocked: Boolean,
-        val awaitingStart: Boolean
+        val awaitingStart: Boolean,
+        val manualReps: Int
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -134,7 +140,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var records: RecordStore
 
     @Volatile private var detector: PoseDetector? = null
-    private val engine = WorkoutEngine()
+    /**
+     * Rebuilt rather than mutated when the movements change.
+     *
+     * [WorkoutEngine.profile] is immutable for the life of an engine on purpose: a rep's meaning
+     * must not change halfway through the score it contributes to.
+     */
+    @Volatile private var engine = WorkoutEngine()
     private val engineLock = Any()
 
     @Volatile private var state = State.IDLE
@@ -251,6 +263,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
         binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
         binding.btnHelp.setOnClickListener { startActivity(Intent(this, HelpActivity::class.java)) }
+        binding.btnMoves.setOnClickListener { chooseMovements() }
         binding.btnRec.setOnClickListener { toggleRecording() }
         binding.status.setOnLongClickListener {
             debug = !debug
@@ -261,6 +274,7 @@ class MainActivity : AppCompatActivity() {
         keepHudClearOfSystemBars()
         describeControls()
         renderClock()
+        synchronized(engineLock) { engine = WorkoutEngine(profile = savedProfile()) }
         apply(runEngine { RepEvent.NONE })
         renderChips()
         renderControls()
@@ -571,7 +585,8 @@ class MainActivity : AppCompatActivity() {
             calibrated = engine.calibrated,
             bodyVisible = engine.bodyVisible,
             blocked = engine.blocked,
-            awaitingStart = engine.awaitingStart
+            awaitingStart = engine.awaitingStart,
+            manualReps = engine.manualReps
         )
     }
 
@@ -851,7 +866,9 @@ class MainActivity : AppCompatActivity() {
             atMillis = System.currentTimeMillis(),
             durationMs = elapsedMs,
             pausedMs = pausedMs,
-            roundSplitsMs = roundSplits.toList()
+            roundSplitsMs = roundSplits.toList(),
+            profile = engine.profile,
+            manualReps = snap.manualReps
         )
         records.add(attempt)
 
@@ -860,7 +877,7 @@ class MainActivity : AppCompatActivity() {
         reps.colour(warn)
         val beat = Records.beatsBenchmark(attempt)
         status.colour(dim)
-        status.text = "${attempt.scoreLabel()} · ${attempt.level.title}"
+        status.text = "${attempt.scoreLabel()} · ${attempt.caption}"
 
         speaker.say(if (stoppedEarly) "Stopped." else "Time.")
         speaker.queue("${snap.rounds} rounds and ${snap.repsThisRound} reps")
@@ -983,6 +1000,106 @@ class MainActivity : AppCompatActivity() {
         if (!started) toast("Could not start recording")
         renderChips()
     }
+
+    private fun savedProfile(): CindyProfile = Variations.decode(prefs().getString(KEY_PROFILE, null))
+
+    /**
+     * "Make Cindy yours": one choice per movement, taken before the clock starts.
+     *
+     * Neutral names only. No "easy", "beginner", "scaled" or "cheat" — a band-assisted pull-up
+     * is a different prescription, not a lesser athlete, and the app has no business
+     * editorialising about which one someone ought to be doing. What it does say plainly is
+     * which choices it can score with the camera and which it will ask to be tapped in, because
+     * that is a fact about the app rather than a judgement about the person.
+     *
+     * Locked while a workout is live: the movements have to mean one thing for the whole score.
+     */
+    private fun chooseMovements() {
+        if (state != State.IDLE && state != State.FINISHED) {
+            toast("Reset first to change movements")
+            return
+        }
+        val current = savedProfile()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(4), dp(20), dp(4))
+        }
+        container.addView(note("Anything other than the standard three is saved as an Adaptive " +
+            "Cindy and ranked against your own sessions at the same movements."))
+        val pull = variantGroup(container, "PULL", PullVariant.entries, current.pull,
+            { it.label }, { it.tracking })
+        val push = variantGroup(container, "PUSH", PushVariant.entries, current.push,
+            { it.label }, { it.tracking })
+        val squat = variantGroup(container, "SQUAT", SquatVariant.entries, current.squat,
+            { it.label }, { it.tracking })
+
+        AlertDialog.Builder(this)
+            .setTitle("Make Cindy yours")
+            .setView(ScrollView(this).apply { addView(container) })
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                applyProfile(
+                    CindyProfile(
+                        pull = PullVariant.entries[pull.checkedRadioButtonId],
+                        push = PushVariant.entries[push.checkedRadioButtonId],
+                        squat = SquatVariant.entries[squat.checkedRadioButtonId]
+                    )
+                )
+            }
+            .show()
+    }
+
+    private fun note(text: String) = TextView(this).apply {
+        this.text = text
+        setTextColor(getColor(R.color.on_surface_dim))
+        textSize = 12f
+        setPadding(0, dp(8), 0, dp(4))
+    }
+
+    /** One movement's options, as radio buttons whose ids are their ordinal. */
+    private fun <T> variantGroup(
+        parent: LinearLayout,
+        title: String,
+        options: List<T>,
+        selected: T,
+        label: (T) -> String,
+        tracking: (T) -> Tracking
+    ): RadioGroup {
+        parent.addView(TextView(this).apply {
+            text = title
+            setTextColor(getColor(R.color.on_surface_dim))
+            textSize = 11f
+            setPadding(0, dp(14), 0, dp(2))
+        })
+        val group = RadioGroup(this)
+        options.forEachIndexed { i, option ->
+            group.addView(RadioButton(this).apply {
+                id = i
+                // Said on the option itself, so the choice and its consequence arrive together.
+                text = if (tracking(option) == Tracking.MANUAL) {
+                    "${label(option)}  ·  you tap +1"
+                } else {
+                    label(option)
+                }
+                textSize = 15f
+                minHeight = dp(48)
+            })
+        }
+        group.check(options.indexOf(selected))
+        parent.addView(group)
+        return group
+    }
+
+    private fun applyProfile(chosen: CindyProfile) {
+        prefs().edit().putString(KEY_PROFILE, Variations.encode(chosen)).apply()
+        synchronized(engineLock) { engine = WorkoutEngine(profile = chosen) }
+        apply(runEngine { RepEvent.NONE })
+        renderChips()
+        renderControls()
+        toast(chosen.label())
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 

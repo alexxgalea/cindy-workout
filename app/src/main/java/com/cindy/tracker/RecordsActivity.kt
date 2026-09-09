@@ -78,9 +78,11 @@ class RecordsActivity : AppCompatActivity() {
             rows.addView(
                 row(
                     rank = if (outranks) "${i + 1}" else "${i + 2}",
-                    name = if (i == 0) "You · best" else "You",
+                    // "Best" means best at these movements. Across categories it would be
+                    // comparing a band-assisted Cindy with a strict one and calling one better.
+                    name = if (a == Records.bestIn(mine, a.profile)) "You · best" else "You",
                     score = a.scoreLabel(),
-                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.level.title}" +
+                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.caption}" +
                         (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
                     benchmark = false
                 )

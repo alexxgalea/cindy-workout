@@ -173,6 +173,23 @@
             android:textColor="@color/on_surface_dim"
             android:textSize="11sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnMoves"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_chip_tappable"
+            android:contentDescription="Choose your movements"
+            android:gravity="center"
+            android:maxLines="1"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:paddingHorizontal="12dp"
+            android:text="MOVES"
+            android:textColor="@color/on_surface_dim"
+            android:textSize="11sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <!-- ── status / coaching line ── -->

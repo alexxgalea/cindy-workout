@@ -1,0 +1,151 @@
+package com.cindy.tracker
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The band-assisted pull-up: a relaxed bottom, and nothing else relaxed.
+ *
+ * The band takes enough weight that the arms may never straighten, so requiring a dead hang
+ * means the reset never arms and the session scores zero with the counter working perfectly
+ * behind a gate the athlete cannot open. What replaces it is the head dropping back below the
+ * reset line — a torso-scaled offset the camera's viewpoint cannot flatten, and a position you
+ * cannot be in at the top of a rep.
+ *
+ * Everything else still applies, and these tests say so: the head still has to clear the bar,
+ * the hands still have to be on it, and [RepCounter] still wants the athlete's whole learned
+ * travel. A relaxed bottom buys a shallow rep nothing.
+ */
+class AssistedPullupTest {
+
+    /** As straight as this athlete gets, hanging in a band. Well under a dead hang. */
+    private val bottom = 120f
+    private val top = 60f
+
+    private class Driver(val engine: WorkoutEngine) {
+        private var clock = 0L
+
+        fun hold(pose: Array<Keypoint>, frames: Int) = repeat(frames) {
+            engine.onFrame(pose, clock)
+            clock += 100
+        }
+
+        /** Long enough for the settle fallback to find the bar without a dead hang. */
+        fun findBar(angle: Float) = hold(PoseFixtures.pullup(angle), frames = 35)
+
+        fun cycles(n: Int, bottom: Float, top: Float) = repeat(n) {
+            hold(PoseFixtures.pullup(top), frames = 8)
+            hold(PoseFixtures.pullup(bottom), frames = 8)
+        }
+    }
+
+    private fun engineFor(pull: PullVariant) =
+        WorkoutEngine(fixedExercise = Exercise.PULLUP, profile = CindyProfile(pull = pull))
+
+    @Test
+    fun `a band-assisted pull-up counts without a dead hang`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        assertTrue(d.engine.barKnown)
+        d.cycles(6, bottom, top)
+
+        // The first cycle teaches the counter the athlete's range; the rest score.
+        assertEquals(5, d.engine.reps)
+    }
+
+    /** The same movement, in the mode that says it is a strict pull-up. Unchanged. */
+    @Test
+    fun `the same reps score nothing in strict mode`() {
+        val d = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+
+        d.findBar(bottom)
+        d.cycles(6, bottom, top)
+
+        assertEquals(0, d.engine.reps)
+    }
+
+    /**
+     * The gate that is *not* relaxed.
+     *
+     * Pulling only partway, so the head never clears the bar, is not a rep in either mode. This
+     * is the check that the relaxed bottom did not quietly become a relaxed rep.
+     */
+    @Test
+    fun `a band-assisted pull-up still requires the head over the bar`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        // 95 degrees leaves the head below the bar line: a genuine partial.
+        d.cycles(6, bottom, 95f)
+
+        assertEquals(0, d.engine.reps)
+    }
+
+    /**
+     * And the bar itself is still a gate: arms waving overhead away from where the bar was
+     * learned do not score, assisted or not.
+     */
+    @Test
+    fun `overhead movement away from the bar does not count`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        val before = d.engine.reps
+        repeat(6) {
+            for (angle in listOf(top, bottom)) {
+                val offBar = PoseFixtures.pullup(angle).also { k ->
+                    // Same movement, done a long way to the side of the learned bar.
+                    for (i in k.indices) k[i] = Keypoint(k[i].x + 900f, k[i].y, k[i].score)
+                }
+                d.hold(offBar, frames = 8)
+            }
+        }
+
+        assertEquals(before, d.engine.reps)
+    }
+
+    // ── rep provenance ────────────────────────────────────────────────────────
+
+    /**
+     * A tapped rep counts, and is remembered as tapped.
+     *
+     * The score is the athlete's either way; the *claim* about how it was arrived at is the
+     * app's, and it is not entitled to the stronger one.
+     */
+    @Test
+    fun `a manual rep is recorded as manual`() {
+        val engine = engineFor(PullVariant.FOOT_ASSISTED_PULL_UP)
+
+        engine.manualRep()
+
+        assertEquals(1, engine.reps)
+        assertEquals(1, engine.manualReps)
+        assertEquals(Tracking.MANUAL, engine.lastRepSource)
+    }
+
+    @Test
+    fun `undoing a tapped rep takes the tap back too`() {
+        val engine = engineFor(PullVariant.FOOT_ASSISTED_PULL_UP)
+
+        engine.manualRep()
+        engine.manualRep()
+        engine.undoRep()
+
+        assertEquals(1, engine.reps)
+        assertEquals(1, engine.manualReps)
+    }
+
+    @Test
+    fun `a rep the camera scored is not counted as manual`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        d.cycles(3, bottom, top)
+
+        assertTrue("the camera scored at least one", d.engine.reps > 0)
+        assertEquals(0, d.engine.manualReps)
+        assertEquals(Tracking.AUTO, d.engine.lastRepSource)
+    }
+}
