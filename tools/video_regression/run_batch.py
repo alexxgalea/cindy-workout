@@ -63,10 +63,41 @@ class ScenarioReport:
     frames: list[dict]
     failures: list[str]
     tags: list[str] = field(default_factory=list)
+    tolerance: int = 0
 
     @property
     def ok(self) -> bool:
         return not self.failures
+
+    @property
+    def signed_error(self) -> int:
+        return self.observed_reps - self.expected_reps
+
+    @property
+    def within_tolerance(self) -> bool:
+        return abs(self.signed_error) <= self.tolerance
+
+    @property
+    def first_count_ms(self) -> int | None:
+        return self.count_times[0] if self.count_times else None
+
+    @property
+    def rejections_by_gate(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for frame in self.frames:
+            key = frame["rejection"] or "(scored/none)"
+            counts[key] = counts.get(key, 0) + 1
+        return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+
+    @property
+    def category(self) -> str:
+        """Valid and deliberately-invalid clips must never be averaged into one number."""
+        if self.expected_reps == 0:
+            return "must-not-count"
+        for tag in ("occlusion", "camera-cut", "known-gap"):
+            if tag in self.tags:
+                return "difficult-but-valid"
+        return "clean-valid"
 
 
 def infer_video(path: Path, model_asset: str, errors: list[str]) -> list[InferredFrame]:
@@ -232,8 +263,12 @@ def run_scenario(scenario: dict) -> ScenarioReport:
         })
 
     expected_reps = int(scenario.get("expectedReps", 0))
-    if engine.reps != expected_reps:
-        errors.append(f"expected {expected_reps} reps, observed {engine.reps}")
+    tolerance = int(scenario.get("countTolerance", 0))
+    # A tolerance is an evaluation policy, not a lowered expectation: the signed error against
+    # ground truth is reported regardless of whether the scenario passes.
+    if abs(engine.reps - expected_reps) > tolerance:
+        suffix = f" (tolerance {tolerance})" if tolerance else ""
+        errors.append(f"expected {expected_reps} reps, observed {engine.reps}{suffix}")
     wanted_state = scenario.get("expectedCountingState")
     if wanted_state and engine.counting_state != wanted_state.lower():
         errors.append(f"expected final state '{wanted_state}', observed '{engine.counting_state}'")
@@ -242,7 +277,7 @@ def run_scenario(scenario: dict) -> ScenarioReport:
     return ScenarioReport(
         id=scenario["id"], exercise=name, expected_reps=expected_reps, observed_reps=engine.reps,
         setup=setup.stage.name.lower() if setup else None, count_times=count_times,
-        frames=frames, failures=errors, tags=scenario.get("tags", []),
+        frames=frames, failures=errors, tags=scenario.get("tags", []), tolerance=tolerance,
     )
 
 
@@ -289,6 +324,8 @@ def main() -> int:
         print(f"\nScenario: {report.id}  [{report.exercise}]")
         print(f"  Expected reps: {report.expected_reps}")
         print(f"  Counted reps:  {report.observed_reps}")
+        print(f"  Signed error:  {report.signed_error:+d}"
+              + (f" (tolerance ±{report.tolerance})" if report.tolerance else ""))
         print(f"  Setup:         {report.setup}")
         if report.count_times:
             print(f"  Counted at:    {', '.join(f'{t}ms' for t in report.count_times)}")
@@ -302,11 +339,39 @@ def main() -> int:
 
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps({"scenarios": [
-        {"id": r.id, "exercise": r.exercise, "expectedReps": r.expected_reps,
-         "observedReps": r.observed_reps, "setup": r.setup, "countTimestampsMs": r.count_times,
+        {"id": r.id, "exercise": r.exercise, "category": r.category,
+         "expectedReps": r.expected_reps, "observedReps": r.observed_reps,
+         "signedError": r.signed_error, "countTolerance": r.tolerance,
+         "withinTolerance": r.within_tolerance, "setup": r.setup,
+         "countTimestampsMs": r.count_times, "firstCountMs": r.first_count_ms,
+         "rejectionsByGate": r.rejections_by_gate,
          "tags": r.tags, "failures": r.failures, "frames": r.frames}
         for r in reports
     ]}, indent=2))
+
+    print("\n" + "=" * 62)
+    print("Metrics by category — valid and must-not-count clips stay separate,")
+    print("because blending them produces a flattering number that means nothing.")
+    print("=" * 62)
+    for category in ("clean-valid", "difficult-but-valid", "must-not-count"):
+        group = [r for r in reports if r.category == category]
+        if not group:
+            continue
+        exact = sum(1 for r in group if r.signed_error == 0)
+        mae = sum(abs(r.signed_error) for r in group) / len(group)
+        print(f"\n  {category}  ({len(group)} clip(s))")
+        print(f"    exact count:        {exact}/{len(group)}")
+        print(f"    mean absolute error: {mae:.2f} reps")
+        if category == "must-not-count":
+            false_positives = sum(r.observed_reps for r in group)
+            print(f"    false positives:     {false_positives}"
+                  + ("  <-- MUST BE ZERO" if false_positives else "  (clean)"))
+        under = [r.id for r in group if r.signed_error < 0]
+        over = [r.id for r in group if r.signed_error > 0]
+        if under:
+            print(f"    under-counting:      {', '.join(under)}")
+        if over:
+            print(f"    over-counting:       {', '.join(over)}")
 
     passed = sum(1 for r in reports if r.ok)
     print(f"\n{passed}/{len(reports)} scenario(s) passed. Report: {args.report}")

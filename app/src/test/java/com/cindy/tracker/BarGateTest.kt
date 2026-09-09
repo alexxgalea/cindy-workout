@@ -22,6 +22,13 @@ class BarGateTest {
         hold(PoseFixtures.pullup(top))
     }
 
+    /** Shrinks a body about the origin, as if the athlete were much further from the camera. */
+    private fun Array<Keypoint>.scaled(factor: Float): Array<Keypoint> =
+        Array(size) { i ->
+            val p = this[i]
+            if (p.score <= 0f) p else Keypoint(p.x * factor, p.y * factor, p.score)
+        }
+
     /** Shifts a whole body sideways and down, as if the athlete stepped off the bar. */
     private fun Array<Keypoint>.moved(dx: Float, dy: Float): Array<Keypoint> =
         Array(size) { i ->
@@ -162,5 +169,41 @@ class BarGateTest {
         assertTrue("calibration reps should mark the bar", e.barKnown)
         e.finishSetup()
         assertTrue("and it survives into the workout", e.barKnown)
+    }
+
+    @Test
+    fun `off-bar movement at the same scale never re-learns the bar`() {
+        val e = WorkoutEngine()
+        e.doPullup()
+        assertEquals(1, e.reps)
+
+        // A long run of the identical movement on the floor. The body is the same size, so this
+        // is someone who stepped down — not evidence that the bar was learned in the wrong place.
+        repeat(10) {
+            e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+            e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
+        }
+        assertEquals("floor repetitions must never re-teach the bar", 1, e.reps)
+    }
+
+    @Test
+    fun `a brief contradiction at another scale does not abandon the bar`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        // Under MAX_BAR_CONTRADICTIONS (30) consecutive refused hangs.
+        e.hold(PoseFixtures.pullup(170f).scaled(0.4f), frames = 20)
+        e.hold(PoseFixtures.pullup(60f).scaled(0.4f))
+        assertEquals("the bar must not move on a brief contradiction", 0, e.reps)
+    }
+
+    @Test
+    fun `a sustained contradiction at another scale re-learns the bar`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        // Past the limit: the athlete is plainly hanging, at a body scale the learned bar cannot
+        // describe, so the estimate rather than the athlete is treated as wrong.
+        e.hold(PoseFixtures.pullup(170f).scaled(0.4f), frames = 40)
+        e.hold(PoseFixtures.pullup(60f).scaled(0.4f))
+        assertEquals("counting must recover once the bar is re-learned", 1, e.reps)
     }
 }

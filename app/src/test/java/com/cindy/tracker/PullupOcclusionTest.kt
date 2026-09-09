@@ -1,6 +1,8 @@
 package com.cindy.tracker
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -126,5 +128,49 @@ class PullupOcclusionTest {
         e.hold(PoseFixtures.pullup(60f).moved(0f, 400f).hiding(KP.NOSE), frames = 4)
         e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
         assertEquals(1, e.reps)
+    }
+
+    @Test
+    fun `exactly the dropout limit keeps the cycle armed`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        // MAX_DROPOUT_FRAMES is 8; the cycle ends only on the frame *after* the limit.
+        e.hold(PoseFixtures.pullup(60f).hiding(KP.NOSE), frames = 8)
+        e.hold(PoseFixtures.pullup(60f))
+        assertEquals("eight frames is the documented limit, not one past it", 1, e.reps)
+    }
+
+    @Test
+    fun `one frame past the dropout limit clears the cycle`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        e.hold(PoseFixtures.pullup(60f).hiding(KP.NOSE), frames = 9)
+        e.hold(PoseFixtures.pullup(60f))
+        assertEquals("the ninth consecutive blackout ends the cycle", 0, e.reps)
+    }
+
+    @Test
+    fun `the band keeps learning while the head gate is shut`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        val atHang = e.learnedRange
+
+        // Pulls up, but the chin stays below the bar. Nothing may score, yet the movement is
+        // still evidence of this athlete's range — that is the mayCount contract.
+        e.hold(PoseFixtures.pullup(120f))
+        assertEquals(0, e.reps)
+        assertTrue(
+            "observations must widen the band even when no rep can book",
+            e.learnedRange > atHang
+        )
+    }
+
+    @Test
+    fun `a frame refused outside the bar zone names that gate`() {
+        val e = WorkoutEngine()
+        e.hold(PoseFixtures.pullup(170f))
+        e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
+        assertEquals("Get on the bar", e.hint)
+        assertFalse(e.diagnostics.barGateOpen)
     }
 }

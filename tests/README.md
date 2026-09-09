@@ -185,6 +185,51 @@ frames that land exactly on a threshold, so `f32()` rounds at every point the Ko
 
 Reports land in the ignored `tests/reports/`.
 
+## Diagnosing a miss
+
+A count mismatch says a rep is missing, not which gate refused it. `diagnose_pullups.py` answers
+the second question:
+
+```sh
+.venv/bin/python tools/video_regression/diagnose_pullups.py --clip AB5LE7WDvcQ
+.venv/bin/python tools/video_regression/diagnose_pullups.py --all
+```
+
+It finds the repetitions the athlete visibly performed using a deliberately dumb oracle —
+hysteresis on the raw bilateral elbow angle, with no bar, head or dead-hang gate involved, so it
+cannot inherit the failure it is measuring — matches them against the reps the engine booked, and
+names the first gate that stood in the way of each unmatched one:
+
+```text
+=== AB5LE7WDvcQ ===
+  expected 10  actual 9  error -1
+  oracle saw 10 visual reps, 9 matched a booking
+  MISSED @4462ms  DEAD_HANG_NARROWLY_MISSED  — peak elbow 149.0 vs threshold 150.0 (short by 1.0)
+```
+
+Per clip it writes `<id>.events.jsonl` (one row per frame), `<id>.summary.json` (counts, gate
+histogram, classified misses) and `<id>.timeline.csv` (plot-ready) into the ignored
+`reports/diagnostics/`.
+
+**Diagnose before tuning.** A single clip's miss is a data point, not a defect. Only generalise a
+fix when the same classification reproduces across at least two clips or a synthetic semantic
+test — otherwise the likely outcome is trading an under-count for a false positive, which is the
+worse failure.
+
+## Evaluation policy
+
+`run_batch.py` reports metrics grouped by category, because averaging valid clips together with
+deliberately-invalid ones produces a flattering number that means nothing:
+
+- **clean-valid** — ordinary footage; the target is an exact count.
+- **difficult-but-valid** — tagged `occlusion`, `camera-cut` or `known-gap`; judged on error size.
+- **must-not-count** — `expectedReps: 0`; the only acceptable false-positive count is zero.
+
+A scenario may carry `countTolerance`. That is an evaluation policy for footage explicitly
+annotated as visually ambiguous — never permission to hide a regression. `expectedReps` stays at
+ground truth and the signed error is printed whether or not the scenario passes, so a clip that
+counts 9 against a truth of 10 still reports `-1`.
+
 ## Labelling new clips
 
 Expected rep counts must come from somewhere other than the pipeline under test, or the suite

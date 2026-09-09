@@ -112,3 +112,10 @@ These rules are covered by `PullupOcclusionTest`, `BarGateTest`, `SetupTest` and
 `tests/scenarios/youtube.json` through the desktop harness. Both matter: the synthetic tests pin
 the semantics, the clips say whether they survive contact with MoveNet. See
 [tests/README.md](tests/README.md).
+
+Before changing any constant here, run `diagnose_pullups.py` and name the gate that is actually
+refusing the reps. Each of these numbers exists to keep a false pull-up out of someone's score,
+and an under-count is the cheaper of the two errors — so a threshold moves only when the same
+classification reproduces across at least two clips or a synthetic test, never to make one video
+score perfectly. Every change must then be re-checked against the `must-not-count` scenarios and
+the Kotlin/Python parity trace.
