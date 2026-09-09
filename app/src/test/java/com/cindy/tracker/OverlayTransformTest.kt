@@ -32,6 +32,9 @@ class OverlayTransformTest {
         assertEquals("bottom edge", bufH.toFloat(), ys.max(), 1f)
     }
 
+    /** Negative where the transform reflects — which is what flips text. */
+    private fun determinant(a: Affine) = a.a * a.d - a.b * a.c
+
     private fun assertCentred(a: Affine, bufW: Int, bufH: Int) {
         assertEquals(bufW / 2f, a.mapX(srcW / 2f, srcH / 2f), 1f)
         assertEquals(bufH / 2f, a.mapY(srcW / 2f, srcH / 2f), 1f)
@@ -126,6 +129,18 @@ class OverlayTransformTest {
         assertEquals(plain.mapX(srcW.toFloat(), 0f), mirrored.mapX(0f, 0f), 1f)
         assertEquals(plain.mapY(0f, 0f), mirrored.mapY(0f, 0f), 1f)
         assertCoversBuffer(mirrored, 720, 960)
+    }
+
+    @Test
+    fun `only a mirrored transform reverses the picture`() {
+        // The HUD rides the unmirrored one: a reflected canvas writes every letter backwards,
+        // which is what put a reversed clock and rep count in the recording.
+        for (rotation in listOf(0, 90, 180, 270)) {
+            val plain = OverlayTransform.build(srcW, srcH, 720, 960, rotation, false)
+            assertTrue("reflected at $rotation", determinant(plain) > 0f)
+            val mirrored = OverlayTransform.build(srcW, srcH, 720, 960, rotation, true)
+            assertTrue("not reflected at $rotation", determinant(mirrored) < 0f)
+        }
     }
 
     @Test

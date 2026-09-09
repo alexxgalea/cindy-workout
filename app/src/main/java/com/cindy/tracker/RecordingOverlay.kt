@@ -22,6 +22,14 @@ import androidx.camera.effects.Frame
  * from each frame's own metadata. Going through the sensor like this means the two streams may
  * differ in resolution, crop, rotation or mirroring and the skeleton still lands on the body.
  * Drawing the text through the same matrix is what keeps it the right way up.
+ *
+ * ### Mirroring
+ *
+ * The skeleton and the HUD do not want the same matrix. The selfie camera's keypoints are
+ * mirrored while its recorded buffer is not, so the skeleton has to be flipped back to land on
+ * the body — but a flipped canvas also writes every letter backwards, which is how the recording
+ * ended up with a reversed clock, round and rep count. So the body is drawn through the
+ * mirror-corrected matrix and the HUD through the plain one.
  */
 class RecordingOverlay {
 
@@ -101,10 +109,18 @@ class RecordingOverlay {
         val size = frame.size
         if (size.width <= 0 || size.height <= 0) return true
 
+        // The keypoints are mirrored for the selfie camera; the buffer may not be.
+        val bodyMirrored = s.mirrored != frame.isMirroring
+
         canvas.save()
-        canvas.concat(transform(frame, s))
+        canvas.concat(transform(frame, s, mirror = bodyMirrored))
         if (s.debug) drawFrameBorder(canvas, s)
         drawSkeleton(canvas, s)
+        canvas.restore()
+
+        // Text follows the buffer, never the keypoints, so it reads forwards in the file.
+        canvas.save()
+        canvas.concat(transform(frame, s, mirror = false))
         drawHud(canvas, s)
         drawWatermark(canvas, s)
         canvas.restore()
@@ -124,15 +140,14 @@ class RecordingOverlay {
      * fit is the same FILL_CENTER the preview uses, so the recording is framed like the screen
      * and nothing is stretched.
      */
-    private fun transform(frame: Frame, s: State): Matrix {
+    private fun transform(frame: Frame, s: State, mirror: Boolean): Matrix {
         val affine = OverlayTransform.build(
             srcWidth = s.width,
             srcHeight = s.height,
             bufferWidth = frame.size.width,
             bufferHeight = frame.size.height,
             rotationDegrees = frame.rotationDegrees,
-            // The keypoints are mirrored for the selfie camera; the buffer may not be.
-            mirror = s.mirrored != frame.isMirroring
+            mirror = mirror
         )
         return Matrix().apply { setValues(affine.values()) }
     }
