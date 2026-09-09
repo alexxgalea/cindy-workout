@@ -259,6 +259,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMusic.setOnClickListener { onMusicTapped() }
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
         binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
+        binding.btnHelp.setOnClickListener { startActivity(Intent(this, HelpActivity::class.java)) }
         binding.btnRec.setOnClickListener { toggleRecording() }
         binding.status.setOnLongClickListener {
             debug = !debug
@@ -337,6 +338,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnUndo.describe("Take back a rep")
         binding.btnSkip.describe("Add a rep", longPress = "Skip to the next movement")
         binding.btnRecords.describe("Your records")
+        binding.btnHelp.describe("What Cindy is, and how this app scores it")
         binding.status.describe(longPress = "Show the debug readout")
         // The rest change job with the workout: renderControls and renderChips name those, and
         // only the long presses, which never change, are declared here.
