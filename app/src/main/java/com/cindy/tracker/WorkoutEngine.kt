@@ -174,6 +174,16 @@ class WorkoutEngine(
     val barKnown: Boolean get() = bar.established
 
     /**
+     * Where to draw the pull-up gate, or null while no bar is known.
+     *
+     * The overlay exists because the gates that refuse a rep are invisible: "Get on the bar" and
+     * "Return to a dead hang" describe a box and a line the athlete cannot see. This is the
+     * engine's own geometry, not a second estimate of it, so what is drawn is what is tested.
+     */
+    var barGuide: BarGuide? = null
+        private set
+
+    /**
      * Configures a recorded clip's bar from normalised video coordinates.
      *
      * This intentionally lives on the production engine, rather than in test-only code, so the
@@ -222,6 +232,7 @@ class WorkoutEngine(
         barContradictions = 0
         diagnostics = FrameDiagnostics()
         bar.reset()
+        barGuide = null
     }
 
     /** Advances past the current exercise without finishing it (manual override). */
@@ -268,6 +279,7 @@ class WorkoutEngine(
         counters.values.forEach { it.resetBand() }
         // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
         bar.reset()
+        barGuide = null
         pullupDownSeen = false
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
@@ -342,6 +354,7 @@ class WorkoutEngine(
         counters.getValue(exercise).reset()
         movingSince = 0L
         bar.reset()
+        barGuide = null
         setupInProgress = true
         pullupDownSeen = false
         pullupExtendedElbow = Float.NaN
@@ -425,6 +438,16 @@ class WorkoutEngine(
         Exercise.PUSHUP -> pushupSignal(k)
         Exercise.SQUAT -> squatSignal(k)
     }
+
+    /**
+     * The pull-up gate as the overlay draws it: the box both wrists must sit in, and the line
+     * the head must drop back below before the next rep can arm.
+     */
+    data class BarGuide(
+        val zone: BarZone.Bounds,
+        val resetY: Float,
+        val gateOpen: Boolean
+    )
 
     // ── signals ───────────────────────────────────────────────────────────────
 
@@ -565,6 +588,7 @@ class WorkoutEngine(
                 else maxOf(torso / barTorso, barTorso / torso)
             if (ratio > BAR_SCALE_CHANGE && ++barContradictions > MAX_BAR_CONTRADICTIONS) {
                 bar.reset()
+                barGuide = null
                 barTorso = Float.NaN
                 barContradictions = 0
             }
@@ -583,7 +607,15 @@ class WorkoutEngine(
             bar.observeHang(hands.x, hands.y, half)
             if (!wasEstablished) barTorso = torso
         }
-        if (!bar.holds(leftWrist, rightWrist, torso)) {
+        val onBar = bar.holds(leftWrist, rightWrist, torso)
+        barGuide = bar.bounds(torso)?.let {
+            BarGuide(
+                zone = it,
+                resetY = it.lineY + HEAD_RESET_TORSOS * torso,
+                gateOpen = onBar
+            )
+        }
+        if (!onBar) {
             hint = "Get on the bar"
             return null
         }

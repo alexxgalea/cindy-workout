@@ -40,6 +40,24 @@ class BarZone {
     val lineY: Float? get() = y.takeUnless { it.isNaN() }
 
     /**
+     * The region both wrists must fall inside for [holds] to pass, on a body of this scale.
+     *
+     * The tolerances are private to this class and scale with the athlete, so the only honest
+     * way to draw the gate is to ask the gate itself where it currently is.
+     */
+    fun bounds(torso: Float): Bounds? {
+        if (!established || torso <= 0f) return null
+        val pad = if (manual) 0f else X_PADDING * torso
+        return Bounds(
+            lineY = y,
+            left = xMin - pad,
+            right = xMax + pad,
+            top = y - Y_TOLERANCE * torso,
+            bottom = y + Y_TOLERANCE * torso
+        )
+    }
+
+    /**
      * Uses a fixed bar for a recorded regression clip.
      *
      * The app normally learns its bar from dead hangs. A labelled offline clip cannot be asked
@@ -97,4 +115,13 @@ class BarZone {
         xMax = Float.NaN
         manual = false
     }
+
+    /** The bar and the box around it that [holds] tests, in keypoint pixels. */
+    data class Bounds(
+        val lineY: Float,
+        val left: Float,
+        val right: Float,
+        val top: Float,
+        val bottom: Float
+    )
 }
