@@ -170,6 +170,109 @@ class OverlayTransformTest {
         assertEquals(plain, OverlayTransform.build(srcW, srcH, 1280, 960, -270, false))
     }
 
+
+    // --- the safe area -------------------------------------------------------------------
+    //
+    // The transform was right and the HUD was still off the picture, because FILL_CENTER
+    // crops and the HUD was laid out against the frame's own edges. These pin the region
+    // that survives.
+
+    /** Maps a source rect through the transform and asserts it lands inside the buffer. */
+    private fun assertInsideBuffer(a: Affine, r: SourceRect, bufW: Int, bufH: Int) {
+        val pts = listOf(
+            r.left to r.top, r.right to r.top,
+            r.right to r.bottom, r.left to r.bottom
+        ).map { (x, y) -> a.mapX(x, y) to a.mapY(x, y) }
+        for ((x, y) in pts) {
+            assertTrue("x=$x outside 0..$bufW", x >= -1f && x <= bufW + 1f)
+            assertTrue("y=$y outside 0..$bufH", y >= -1f && y <= bufH + 1f)
+        }
+    }
+
+    @Test
+    fun `a 9 by 16 recording keeps only the middle of a 3 by 4 frame`() {
+        // The shipping case: a 480x640 analysis frame into 1280x720 shown portrait. Filling
+        // the height needs a scale of 2, which makes the frame 960 wide against a 720 buffer,
+        // so 120 buffer px go from each side -- 60 of the frame's own 480, or 12.5%.
+        val r = OverlayTransform.visibleSource(srcW, srcH, 1280, 720, 90)
+        assertEquals("left", 60f, r.left, 0.5f)
+        assertEquals("right", 420f, r.right, 0.5f)
+        assertEquals("nothing off the top", 0f, r.top, 0.5f)
+        assertEquals("nothing off the bottom", 640f, r.bottom, 0.5f)
+        assertEquals(360f, r.width, 0.5f)
+        assertEquals(640f, r.height, 0.5f)
+    }
+
+    @Test
+    fun `the safe area is where the HUD used to be laid out, and was not`() {
+        // The regression this exists for. The HUD anchored its panels a pad in from the frame,
+        // pad being 1.8% of the height; against a frame 480 wide that is x=11.5, which is
+        // inside the 60px the crop takes. Against the safe area it is inside the picture.
+        val r = OverlayTransform.visibleSource(srcW, srcH, 1280, 720, 90)
+        val pad = r.height * 0.018f
+        assertTrue("the old anchor should have been cropped", pad < r.left)
+        val a = OverlayTransform.build(srcW, srcH, 1280, 720, 90, false)
+        assertInsideBuffer(a, SourceRect(r.left + pad, r.top + pad, r.right - pad, r.bottom - pad), 1280, 720)
+    }
+
+    @Test
+    fun `every corner of the safe area lands on the buffer at every rotation`() {
+        for (rotation in listOf(0, 90, 180, 270)) {
+            val quarterTurned = rotation % 180 != 0
+            val bufW = if (quarterTurned) 1280 else 720
+            val bufH = if (quarterTurned) 720 else 1280
+            val r = OverlayTransform.visibleSource(srcW, srcH, bufW, bufH, rotation)
+            for (mirror in listOf(false, true)) {
+                val a = OverlayTransform.build(srcW, srcH, bufW, bufH, rotation, mirror)
+                assertInsideBuffer(a, r, bufW, bufH)
+            }
+        }
+    }
+
+    @Test
+    fun `a matching aspect ratio crops nothing`() {
+        // 3:4 into 3:4: the safe area is the whole frame, so the HUD keeps its old placement.
+        val r = OverlayTransform.visibleSource(srcW, srcH, 720, 960, 0)
+        assertEquals(0f, r.left, 0.5f)
+        assertEquals(0f, r.top, 0.5f)
+        assertEquals(srcW.toFloat(), r.right, 0.5f)
+        assertEquals(srcH.toFloat(), r.bottom, 0.5f)
+    }
+
+    @Test
+    fun `a wider buffer crops the top and bottom instead`() {
+        // The other way about -- a landscape recording of the portrait frame loses height,
+        // not width, and the HUD has to follow that too.
+        val r = OverlayTransform.visibleSource(srcW, srcH, 1280, 720, 0)
+        assertEquals("full width", 0f, r.left, 0.5f)
+        assertEquals("full width", srcW.toFloat(), r.right, 0.5f)
+        assertTrue("height should be cropped, got ${r.height}", r.height < srcH - 1f)
+        assertEquals("and centred", r.top, srcH - r.bottom, 0.5f)
+        assertInsideBuffer(OverlayTransform.build(srcW, srcH, 1280, 720, 0, false), r, 1280, 720)
+    }
+
+    @Test
+    fun `the safe area is always centred and never bigger than the frame`() {
+        for (bufW in listOf(320, 720, 1080, 1920)) {
+            for (bufH in listOf(240, 720, 1280, 1920)) {
+                val r = OverlayTransform.visibleSource(srcW, srcH, bufW, bufH, 0)
+                assertTrue("wider than the frame at ${bufW}x$bufH", r.width <= srcW + 0.5f)
+                assertTrue("taller than the frame at ${bufW}x$bufH", r.height <= srcH + 0.5f)
+                assertTrue("empty at ${bufW}x$bufH", r.width > 0f && r.height > 0f)
+                assertEquals("off centre at ${bufW}x$bufH", r.left, srcW - r.right, 0.5f)
+                assertEquals("off centre at ${bufW}x$bufH", r.top, srcH - r.bottom, 0.5f)
+            }
+        }
+    }
+
+    @Test
+    fun `degenerate sizes give back the whole frame rather than an empty rect`() {
+        val r = OverlayTransform.visibleSource(srcW, srcH, 0, 0, 0)
+        assertEquals(0f, r.left, 0.01f)
+        assertEquals(srcW.toFloat(), r.right, 0.01f)
+        assertEquals(srcH.toFloat(), r.bottom, 0.01f)
+    }
+
     @Test
     fun `the matrix value order matches what Matrix setValues expects`() {
         val a = Affine(a = 2f, b = 3f, c = 4f, d = 5f, tx = 6f, ty = 7f)

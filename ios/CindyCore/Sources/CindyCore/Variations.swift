@@ -31,6 +31,7 @@ public enum Tracking: Sendable {
 public enum PullVariant: String, CaseIterable, Sendable {
     case strictPullUp = "STRICT_PULL_UP"
     case bandAssistedPullUp = "BAND_ASSISTED_PULL_UP"
+    case invertedRow = "INVERTED_ROW"
     case footAssistedPullUp = "FOOT_ASSISTED_PULL_UP"
     case negativePullUp = "NEGATIVE_PULL_UP"
 
@@ -38,6 +39,7 @@ public enum PullVariant: String, CaseIterable, Sendable {
         switch self {
         case .strictPullUp: return "Strict pull-up"
         case .bandAssistedPullUp: return "Band-assisted"
+        case .invertedRow: return "Inverted row"
         case .footAssistedPullUp: return "Foot-assisted"
         case .negativePullUp: return "Negatives"
         }
@@ -47,6 +49,7 @@ public enum PullVariant: String, CaseIterable, Sendable {
         switch self {
         case .strictPullUp: return "strict pull-ups"
         case .bandAssistedPullUp: return "band-assisted pull-ups"
+        case .invertedRow: return "inverted rows"
         case .footAssistedPullUp: return "foot-assisted pull-ups"
         case .negativePullUp: return "negative pull-ups"
         }
@@ -55,7 +58,7 @@ public enum PullVariant: String, CaseIterable, Sendable {
     public var tracking: Tracking {
         switch self {
         case .strictPullUp, .bandAssistedPullUp: return .auto
-        case .footAssistedPullUp, .negativePullUp: return .manual
+        case .invertedRow, .footAssistedPullUp, .negativePullUp: return .manual
         }
     }
 
@@ -65,6 +68,11 @@ public enum PullVariant: String, CaseIterable, Sendable {
             return "Hang with straight arms, then pull until your head clears the bar."
         case .bandAssistedPullUp:
             return "Set the band, then pull until your head clears the bar and lower all the way back down."
+        case .invertedRow:
+            // A different family, and manual only because the counting is not built yet: the
+            // strict path's head-over-bar and dead-hang rules describe a vertical hang and do
+            // not transfer to a row.
+            return "Set a low bar, keep your body long and pull your chest to it. Tap +1 for each rep."
         case .footAssistedPullUp:
             // "Hands above hips" is what separates a pull-up from a push-up in the pose. On a
             // low bar with the feet down, the hips ride up level with the hands and that test

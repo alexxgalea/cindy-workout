@@ -463,6 +463,39 @@ Check.suite("Assisted pull-up") {
     }
     Check.equal(r.engine.reps, before, "overhead movement away from the bar does not count")
 
+    // An inverted row satisfies every pull-up gate but one: the wrists are above the hips, the
+    // bar can be learned from the hands, the head reaches the bar line and the elbow swings a
+    // full range. Only the torso's direction separates the families.
+    for variant in [PullVariant.strictPullUp, .bandAssistedPullUp] {
+        let rows = engineFor(variant)
+        rows.hold(PoseFixtures.pullup(bottom), frames: 35)
+        for _ in 0..<6 {
+            rows.hold(PoseFixtures.invertedRow(top), frames: 8)
+            rows.hold(PoseFixtures.invertedRow(bottom), frames: 8)
+        }
+        Check.equal(rows.engine.reps, 0, "inverted rows never count as \(variant.label)")
+    }
+    let rowBar = engineFor(.strictPullUp)
+    for _ in 0..<6 {
+        rowBar.hold(PoseFixtures.invertedRow(top), frames: 8)
+        rowBar.hold(PoseFixtures.invertedRow(bottom), frames: 8)
+    }
+    Check.equal(rowBar.engine.barKnown, false, "and an inverted row teaches no bar")
+
+    // The gate is on orientation, not stillness: a wobble mid-rep is absorbed by the same
+    // dropout window that already rides out an occlusion.
+    let wobble = engineFor(.bandAssistedPullUp)
+    wobble.hold(PoseFixtures.pullup(bottom), frames: 35)
+    for _ in 0..<2 {
+        wobble.hold(PoseFixtures.pullup(top), frames: 8)
+        wobble.hold(PoseFixtures.pullup(bottom), frames: 8)
+    }
+    let beforeWobble = wobble.engine.reps
+    wobble.hold(PoseFixtures.pullup(bottom), frames: 8)
+    wobble.hold(PoseFixtures.invertedRow(bottom), frames: 4)
+    wobble.hold(PoseFixtures.pullup(top), frames: 8)
+    Check.equal(wobble.engine.reps, beforeWobble + 1, "a brief wobble does not throw away a rep")
+
     // Setting the band up must not teach a bar. Found on real footage: standing holding the
     // band at chest height satisfies every other condition the bar was learned from, so the bar
     // was fixed at the athlete's chest and every real rep afterwards was refused with "Get on

@@ -538,7 +538,14 @@ class WorkoutEngine(
         Exercise.SQUAT -> standing(k)
     }
 
-    /** True when the shoulders sit well above the hips: torso vertical, not lying down. */
+    /**
+     * True when the shoulders sit well above the hips: torso vertical, not lying down.
+     *
+     * Shared by both movement families, and the only thing that tells them apart. It decides
+     * whether a push-up has been taken up from the floor, and whether a pull is a hang rather
+     * than an inverted row. Signed on purpose — it asks that the shoulders are above the hips,
+     * not merely that the torso is vertical, so an upside-down body fails it too.
+     */
     private fun upright(k: Array<Keypoint>): Boolean {
         val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
         val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
@@ -799,6 +806,33 @@ class WorkoutEngine(
         }
         if (!hangingFromBar(k)) {
             hint = "Hang from the bar"
+            return null
+        }
+        // Hands overhead is not enough to call this a hang. Lying or leaning back under a bar for
+        // an inverted row also puts the wrists above the hips, and every remaining gate then
+        // passes: the bar is learned from the hands, the head crosses the line, and the elbow
+        // swings a full range. A ten-step progression clip scored ten reps that way, three of
+        // them horizontal rows. Only the direction the torso points separates the two families —
+        // the same test the push-up path has always used to know the athlete is on the floor.
+        //
+        // Measured on that clip, as (hip.y - shoulder.y) / torso:
+        //
+        //     vertical pulls (wall, chair, banded, full)   0.92 .. 1.00, median 1.00
+        //     low and mid inverted rows                    0.33 .. 0.86, median 0.63
+        //     a HIGH inverted row, leaning back steeply     0.86 .. 0.98, median 0.90
+        //
+        // So the row family separates, but not all of it: a steeply inclined high row sits
+        // inside the range real hangs occupy, and no threshold splits 0.90 from 0.92 without
+        // inventing a precision the measurement does not have. The gate is therefore set where
+        // the evidence supports it and no further — it removes the horizontal rows people
+        // actually start a progression with, and a high row is left honestly unseparated rather
+        // than rejected by a number chosen to look decisive.
+        //
+        // Returning null routes the frame through toleratePullupDropout(), so a brief wobble
+        // mid-rep is absorbed by the existing dropout window, while a sustained row never arms a
+        // cycle at all. That is the hysteresis, without a second state machine to keep in step.
+        if (!upright(k)) {
+            hint = "Hang vertically from the bar"
             return null
         }
         val hands = Keypoint(
