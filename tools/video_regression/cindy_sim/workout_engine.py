@@ -112,6 +112,7 @@ class PullVariant(Enum):
 
     STRICT_PULL_UP = "STRICT_PULL_UP"
     BAND_ASSISTED_PULL_UP = "BAND_ASSISTED_PULL_UP"
+    INVERTED_ROW = "INVERTED_ROW"
     FOOT_ASSISTED_PULL_UP = "FOOT_ASSISTED_PULL_UP"
     NEGATIVE_PULL_UP = "NEGATIVE_PULL_UP"
 
@@ -693,6 +694,18 @@ class WorkoutEngine:
             return None
         if not self._hanging_from_bar(k):
             self.hint = "Hang from the bar"
+            return None
+        # Hands overhead is not enough to call this a hang: an inverted row also puts the wrists
+        # above the hips, and every remaining gate then passes. Only the torso's direction
+        # separates the families. Measured as (hip.y - shoulder.y) / torso on a progression clip:
+        # vertical pulls 0.92-1.00, low/mid rows 0.33-0.86, a HIGH row 0.86-0.98 -- so the row
+        # family separates but a steeply inclined high row sits inside the range real hangs
+        # occupy, and is left unseparated rather than rejected by an invented threshold.
+        #
+        # Returning None routes the frame through _tolerate_pullup_dropout(), so a brief wobble
+        # mid-rep is absorbed by the existing dropout window while a sustained row never arms.
+        if not self._upright(k):
+            self.hint = "Hang vertically from the bar"
             return None
         hands = Keypoint(
             f32((left_wrist.x + right_wrist.x) / 2.0),

@@ -53,6 +53,21 @@ enum class PullVariant(
     ),
 
     /**
+     * A pull, but a different family, and now one the engine can actually tell apart.
+     *
+     * Rows are the standard way into a pull-up and belong in an accessible Cindy. They are
+     * manual only because the counting is not built yet: the strict path's head-over-bar and
+     * dead-hang rules describe a vertical hang and do not transfer, so a row needs its own
+     * setup and cycle, and that should not ship before there are row fixtures to validate it.
+     * What is already true is that a row can no longer be *mistaken* for a pull-up — see the
+     * uprightness gate in [WorkoutEngine].
+     */
+    INVERTED_ROW(
+        "Inverted row", "inverted rows", Tracking.MANUAL,
+        "Set a low bar, keep your body long and pull your chest to it. Tap +1 for each rep."
+    ),
+
+    /**
      * Manual, for a concrete reason rather than caution.
      *
      * "Hands above hips" is what separates a pull-up from a push-up in the pose. On a low bar

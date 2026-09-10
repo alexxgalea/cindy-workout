@@ -87,6 +87,28 @@ enum PoseFixtures {
         return k
     }
 
+    /// A body mid *inverted row*: hands on a low bar overhead, body running away horizontally
+    /// instead of hanging below.
+    ///
+    /// The arm chain is exactly `pullup`'s, because that is the point — the elbow swings the
+    /// same range, the wrists sit above the hips and the head reaches the bar line. Every
+    /// pull-up gate except the torso's direction is satisfied by a row. Mirrors Kotlin's
+    /// `PoseFixtures.invertedRow`.
+    static func invertedRow(_ elbowDeg: Float) -> [Keypoint] {
+        var k = blank()
+        let shX = limb * sinf(rad(elbowDeg))
+        let shY = -limb * cosf(rad(elbowDeg))
+        putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
+        putPair(&k, KP.leftWrist, KP.rightWrist, 0, -limb)
+        putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
+        // The body runs out sideways from the shoulders rather than hanging under them.
+        putPair(&k, KP.leftHip, KP.rightHip, shX + torso, shY)
+        putPair(&k, KP.leftKnee, KP.rightKnee, shX + torso + 80, shY)
+        putPair(&k, KP.leftAnkle, KP.rightAnkle, shX + torso + 160, shY)
+        k[KP.nose] = Keypoint(x: shX, y: shY - 120, score: 0.9)
+        return k
+    }
+
     /// Standing on the floor holding a resistance band at chest height, arms straight.
     ///
     /// The posture that taught a bar in the wrong place on real band footage: hands above the

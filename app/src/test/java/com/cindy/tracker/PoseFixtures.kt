@@ -126,6 +126,31 @@ object PoseFixtures {
     }
 
     /**
+     * A body mid *inverted row* with the given elbow angle: hands on a low bar overhead, body
+     * running away horizontally instead of hanging below.
+     *
+     * The arm chain is exactly [pullup]'s, because that is the point — the elbow swings through
+     * the same range, the wrists sit above the hips, and the head reaches the bar line. Every
+     * pull-up gate except the torso's direction is satisfied by a row, which is how three of
+     * them scored as pull-ups on a real progression clip.
+     */
+    fun invertedRow(elbowDeg: Float): Array<Keypoint> {
+        val k = blank()
+        val shX = (LIMB * sin(rad(elbowDeg))).toFloat()
+        val shY = (-LIMB * cos(rad(elbowDeg))).toFloat()
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, 0f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, -LIMB)
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shX, shY)
+        // The whole difference from a pull-up: the body runs out sideways from the shoulders
+        // rather than hanging under them, so the torso is horizontal.
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, shX + TORSO, shY)
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, shX + TORSO + 80f, shY)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, shX + TORSO + 160f, shY)
+        k.put(KP.NOSE, shX, shY - 120f)
+        return k
+    }
+
+    /**
      * Standing on the floor holding a resistance band at chest height, arms straight.
      *
      * The posture that taught a bar in the wrong place on real band footage: the hands are above

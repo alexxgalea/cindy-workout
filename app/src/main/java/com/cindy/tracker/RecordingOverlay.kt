@@ -30,6 +30,15 @@ import androidx.camera.effects.Frame
  * the body — but a flipped canvas also writes every letter backwards, which is how the recording
  * ended up with a reversed clock, round and rep count. So the body is drawn through the
  * mirror-corrected matrix and the HUD through the plain one.
+ *
+ * ### Safe area
+ *
+ * That fit is FILL_CENTER, so the frame overflows the buffer on one axis and the overflow is
+ * cropped -- 12.5% off each side, for a 3:4 analysis frame in a 9:16 video. The skeleton wants
+ * that, because it has to sit on the body. The HUD does not: anchored to the frame's own edges
+ * it landed in the cropped strip, which is how the clock, round, movement and rep count all
+ * ended up outside the picture. So the HUD and the watermark are laid out inside
+ * [OverlayTransform.visibleSource] instead -- the part of the frame the file actually keeps.
  */
 class RecordingOverlay {
 
@@ -111,18 +120,26 @@ class RecordingOverlay {
 
         // The keypoints are mirrored for the selfie camera; the buffer may not be.
         val bodyMirrored = s.mirrored != frame.isMirroring
+        // The part of the frame that survives the crop, and so the only part text may use.
+        val safe = OverlayTransform.visibleSource(
+            srcWidth = s.width,
+            srcHeight = s.height,
+            bufferWidth = size.width,
+            bufferHeight = size.height,
+            rotationDegrees = frame.rotationDegrees
+        )
 
         canvas.save()
         canvas.concat(transform(frame, s, mirror = bodyMirrored))
-        if (s.debug) drawFrameBorder(canvas, s)
+        if (s.debug) drawFrameBorder(canvas, s, safe)
         drawSkeleton(canvas, s)
         canvas.restore()
 
         // Text follows the buffer, never the keypoints, so it reads forwards in the file.
         canvas.save()
         canvas.concat(transform(frame, s, mirror = false))
-        drawHud(canvas, s)
-        drawWatermark(canvas, s)
+        drawHud(canvas, s, safe)
+        drawWatermark(canvas, safe)
         canvas.restore()
         return true
     }
@@ -152,14 +169,21 @@ class RecordingOverlay {
         return Matrix().apply { setValues(affine.values()) }
     }
 
-    /** Outlines the mapped frame, so a misaligned overlay is obvious in the recording. */
-    private fun drawFrameBorder(canvas: Canvas, s: State) {
+    /**
+     * Outlines the mapped frame, so a misaligned overlay is obvious in the recording.
+     *
+     * Also outlines the safe area, because the gap between the two rectangles is exactly what
+     * the crop takes: whatever falls outside the inner one is not in the file.
+     */
+    private fun drawFrameBorder(canvas: Canvas, s: State, safe: SourceRect) {
         val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = ACCENT
             style = Paint.Style.STROKE
             strokeWidth = s.height * 0.006f
         }
         canvas.drawRect(0f, 0f, s.width.toFloat(), s.height.toFloat(), edge)
+        edge.color = Color.RED
+        canvas.drawRect(safe.left, safe.top, safe.right, safe.bottom, edge)
     }
 
     private fun drawSkeleton(canvas: Canvas, s: State) {
@@ -178,28 +202,33 @@ class RecordingOverlay {
         }
     }
 
-    private fun drawHud(canvas: Canvas, s: State) {
-        val pad = s.height * 0.018f
-        val big = s.height * 0.045f
-        val small = s.height * 0.025f
+    /** Every measurement is against [safe], never the frame: the frame's edges are cropped. */
+    private fun drawHud(canvas: Canvas, s: State, safe: SourceRect) {
+        val pad = safe.height * 0.018f
+        val big = safe.height * 0.045f
+        val small = safe.height * 0.025f
 
         text.textSize = big
         accentText.textSize = small
 
         // top-left: the clock
         val clockWidth = text.measureText(s.clock)
-        roundedPanel(canvas, pad, pad, pad * 2 + clockWidth, pad + big * 1.5f)
-        canvas.drawText(s.clock, pad * 1.5f, pad + big * 1.1f, text)
+        roundedPanel(
+            canvas,
+            safe.left + pad, safe.top + pad,
+            safe.left + pad * 2 + clockWidth, safe.top + pad + big * 1.5f
+        )
+        canvas.drawText(s.clock, safe.left + pad * 1.5f, safe.top + pad + big * 1.1f, text)
 
         // top-right: the round
         accentText.textAlign = Paint.Align.RIGHT
         val roundWidth = accentText.measureText(s.round)
         roundedPanel(
             canvas,
-            s.width - pad * 2 - roundWidth, pad,
-            s.width - pad, pad + small * 2f
+            safe.right - pad * 2 - roundWidth, safe.top + pad,
+            safe.right - pad, safe.top + pad + small * 2f
         )
-        canvas.drawText(s.round, s.width - pad * 1.5f, pad + small * 1.4f, accentText)
+        canvas.drawText(s.round, safe.right - pad * 1.5f, safe.top + pad + small * 1.4f, accentText)
         accentText.textAlign = Paint.Align.LEFT
 
         // bottom-left: movement and rep count
@@ -208,18 +237,26 @@ class RecordingOverlay {
         text.textSize = big
         accentText.textSize = small
         val blockWidth = maxOf(text.measureText(count), accentText.measureText(label))
-        val blockTop = s.height - pad - big * 1.6f - small * 1.4f
-        roundedPanel(canvas, pad, blockTop, pad * 2 + blockWidth, s.height - pad)
-        canvas.drawText(label, pad * 1.5f, blockTop + small * 1.2f, accentText)
-        canvas.drawText(count, pad * 1.5f, blockTop + small * 1.4f + big * 1.1f, text)
+        val blockTop = safe.bottom - pad - big * 1.6f - small * 1.4f
+        roundedPanel(
+            canvas,
+            safe.left + pad, blockTop,
+            safe.left + pad * 2 + blockWidth, safe.bottom - pad
+        )
+        canvas.drawText(label, safe.left + pad * 1.5f, blockTop + small * 1.2f, accentText)
+        canvas.drawText(
+            count,
+            safe.left + pad * 1.5f, blockTop + small * 1.4f + big * 1.1f, text
+        )
     }
 
-    private fun drawWatermark(canvas: Canvas, s: State) {
-        val pad = s.height * 0.018f
-        mark.textSize = s.height * 0.030f
-        markSub.textSize = s.height * 0.016f
-        canvas.drawText("CINDY", s.width - pad, s.height - pad - markSub.textSize * 1.4f, mark)
-        canvas.drawText("cindy tracker", s.width - pad, s.height - pad, markSub)
+    private fun drawWatermark(canvas: Canvas, safe: SourceRect) {
+        val pad = safe.height * 0.018f
+        mark.textSize = safe.height * 0.030f
+        markSub.textSize = safe.height * 0.016f
+        val right = safe.right - pad
+        canvas.drawText("CINDY", right, safe.bottom - pad - markSub.textSize * 1.4f, mark)
+        canvas.drawText("cindy tracker", right, safe.bottom - pad, markSub)
     }
 
     private fun roundedPanel(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {

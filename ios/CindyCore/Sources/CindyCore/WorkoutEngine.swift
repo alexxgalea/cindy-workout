@@ -779,6 +779,19 @@ public final class WorkoutEngine {
             hint = "Hang from the bar"
             return nil
         }
+        // Hands overhead is not enough to call this a hang: an inverted row also puts the wrists
+        // above the hips, and every remaining gate then passes. Only the torso's direction
+        // separates the families. Measured as (hip.y - shoulder.y) / torso on a progression clip:
+        // vertical pulls 0.92–1.00, low/mid rows 0.33–0.86, a HIGH row 0.86–0.98 — so the row
+        // family separates, but a steeply inclined high row sits inside the range real hangs
+        // occupy and is left unseparated rather than rejected by an invented threshold.
+        //
+        // Returning nil routes the frame through toleratePullupDropout(), so a brief wobble
+        // mid-rep is absorbed by the existing dropout window while a sustained row never arms.
+        guard upright(k) else {
+            hint = "Hang vertically from the bar"
+            return nil
+        }
         let hands = Keypoint(x: (leftWrist.x + rightWrist.x) / 2, y: (leftWrist.y + rightWrist.y) / 2,
                              score: min(leftWrist.score, rightWrist.score))
         guard let torso = torsoLength(k) else {

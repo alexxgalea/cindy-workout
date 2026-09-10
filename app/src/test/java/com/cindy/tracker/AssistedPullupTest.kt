@@ -137,6 +137,73 @@ class AssistedPullupTest {
         assertEquals("and the reps score", 5, d.engine.reps)
     }
 
+    // ── the row is a different movement ───────────────────────────────────────
+    //
+    // An inverted row satisfies every pull-up gate but one: the wrists are above the hips, the
+    // bar can be learned from the hands, the head reaches the bar line and the elbow swings a
+    // full range. Only the torso's direction separates the families.
+
+    @Test
+    fun `inverted rows never count as strict pull-ups`() {
+        val d = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+
+        d.findBar(bottom)
+        repeat(6) {
+            d.hold(PoseFixtures.invertedRow(top), frames = 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames = 8)
+        }
+
+        assertEquals(0, d.engine.reps)
+        assertEquals("and says which way to hang", "Hang vertically from the bar", d.engine.hint)
+    }
+
+    @Test
+    fun `inverted rows never count as band-assisted pull-ups either`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        repeat(6) {
+            d.hold(PoseFixtures.invertedRow(top), frames = 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames = 8)
+        }
+
+        assertEquals("relaxing the bottom does not relax which movement it is", 0, d.engine.reps)
+    }
+
+    /** A row must not teach a bar either, or it would poison the next real hang. */
+    @Test
+    fun `an inverted row does not establish a bar`() {
+        val d = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+
+        repeat(6) {
+            d.hold(PoseFixtures.invertedRow(top), frames = 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames = 8)
+        }
+
+        assertFalse(d.engine.barKnown)
+    }
+
+    /**
+     * The gate is on orientation, not on stillness: a wobble mid-rep is absorbed by the same
+     * dropout window that already rides out an occlusion, so a real pull-up survives it.
+     */
+    @Test
+    fun `a brief non-vertical wobble does not throw away a valid pull-up`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+
+        d.findBar(bottom)
+        d.cycles(2, bottom, top)
+        val before = d.engine.reps
+
+        // Armed at the bottom, then four unusable frames — well inside MAX_DROPOUT_FRAMES —
+        // before driving to the top. The cycle is in flight across the wobble.
+        d.hold(PoseFixtures.pullup(bottom), frames = 8)
+        d.hold(PoseFixtures.invertedRow(bottom), frames = 4)
+        d.hold(PoseFixtures.pullup(top), frames = 8)
+
+        assertEquals("the cycle across the wobble still scores", before + 1, d.engine.reps)
+    }
+
     // ── rep provenance ────────────────────────────────────────────────────────
 
     /**

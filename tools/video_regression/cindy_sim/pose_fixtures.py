@@ -117,4 +117,28 @@ def band_setup(_unused: float = 0.0) -> list[Keypoint]:
     return k
 
 
-BUILDERS = {"squat": squat, "pushup": pushup, "pullup": pullup, "bandsetup": band_setup}
+def inverted_row(elbow_deg: float) -> list[Keypoint]:
+    """A body mid inverted row: hands on a low bar overhead, body running away horizontally.
+
+    The arm chain is exactly ``pullup``'s, because that is the point -- the elbow swings the same
+    range, the wrists sit above the hips and the head reaches the bar line. Every pull-up gate
+    except the torso's direction is satisfied by a row.
+    """
+    k = _blank()
+    sh_x = LIMB * math.sin(math.radians(elbow_deg))
+    sh_y = -LIMB * math.cos(math.radians(elbow_deg))
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, -LIMB)
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, sh_x, sh_y)
+    # The body runs out sideways from the shoulders rather than hanging under them.
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, sh_x + TORSO, sh_y)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, sh_x + TORSO + 80.0, sh_y)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, sh_x + TORSO + 160.0, sh_y)
+    _put(k, KP.NOSE, sh_x, sh_y - 120.0)
+    return k
+
+
+BUILDERS = {
+    "squat": squat, "pushup": pushup, "pullup": pullup,
+    "bandsetup": band_setup, "invertedrow": inverted_row,
+}
