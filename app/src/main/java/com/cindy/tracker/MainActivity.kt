@@ -22,8 +22,6 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -58,7 +56,6 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "cindy"
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
-        const val KEY_PROFILE = "movement_profile"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
     }
 
@@ -140,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var music: MusicPlayer
     private lateinit var video: VideoRecorder
     private lateinit var records: RecordStore
+    private lateinit var profile: Profile
 
     @Volatile private var detector: PoseDetector? = null
     /**
@@ -229,6 +227,7 @@ class MainActivity : AppCompatActivity() {
 
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
+        profile = Profile(this)
         music = MusicPlayer(this)
         video = VideoRecorder(this)
         speaker = Speaker(this).apply {
@@ -268,10 +267,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnVoice.setOnClickListener { toggleVoice() }
         binding.btnMusic.setOnClickListener { onMusicTapped() }
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
-        binding.btnRecords.setOnClickListener { startActivity(Intent(this, RecordsActivity::class.java)) }
-        binding.btnHelp.setOnClickListener { startActivity(Intent(this, HelpActivity::class.java)) }
-        binding.btnMoves.setOnClickListener { chooseMovements() }
         binding.btnRec.setOnClickListener { toggleRecording() }
+        binding.btnMenu.setOnClickListener {
+            startActivity(MenuActivity.intent(this, workoutLive = inWorkout()))
+        }
         binding.status.setOnLongClickListener {
             debug = !debug
             toast(if (debug) "Debug readout on" else "Debug readout off")
@@ -281,7 +280,7 @@ class MainActivity : AppCompatActivity() {
         keepHudClearOfSystemBars()
         describeControls()
         renderClock()
-        synchronized(engineLock) { engine = WorkoutEngine(profile = savedProfile()) }
+        synchronized(engineLock) { engine = WorkoutEngine(profile = profile.movements) }
         apply(runEngine { RepEvent.NONE })
         renderChips()
         renderControls()
@@ -331,7 +330,7 @@ class MainActivity : AppCompatActivity() {
 
             binding.timer.push(startBy = start, topBy = bars.top)
             binding.rounds.push(topBy = bars.top, endBy = end)
-            binding.chips.push(endBy = end)
+            binding.chips.push(startBy = start, endBy = end)
             binding.status.push(startBy = start, endBy = end)
             binding.repBlock.push(startBy = start, endBy = end)
             binding.controls.push(startBy = start, endBy = end, bottomBy = bars.bottom)
@@ -349,8 +348,7 @@ class MainActivity : AppCompatActivity() {
     private fun describeControls() {
         binding.btnUndo.describe("Take back a rep")
         binding.btnSkip.describe("Add a rep", longPress = "Skip to the next movement")
-        binding.btnRecords.describe("Your records")
-        binding.btnHelp.describe("What Cindy is, and how this app scores it")
+        binding.btnMenu.describe("Menu: records, movements, body weight and help")
         binding.status.describe(longPress = "Show the debug readout")
         // The rest change job with the workout: renderControls and renderChips name those, and
         // only the long presses, which never change, are declared here.
@@ -785,11 +783,12 @@ class MainActivity : AppCompatActivity() {
      * mid-Cindy is not a thing anyone does; ending early is.
      */
     private fun renderControls() {
-        val inWorkout = state == State.RUNNING || state == State.PAUSED
-        binding.btnFlip.text = if (inWorkout) "STOP" else "FLIP"
-        binding.btnFlip.setTextColor(getColor(if (inWorkout) R.color.warn else R.color.on_surface))
+        binding.btnFlip.text = if (inWorkout()) "STOP" else "FLIP"
+        binding.btnFlip.setTextColor(
+            getColor(if (inWorkout()) R.color.warn else R.color.on_surface)
+        )
         binding.btnFlip.contentDescription =
-            if (inWorkout) "End the workout" else "Switch camera"
+            if (inWorkout()) "End the workout" else "Switch camera"
         binding.btnStart.contentDescription = when (state) {
             State.IDLE -> "Start the workout"
             State.SETUP -> "Skip the setup check"
@@ -798,6 +797,9 @@ class MainActivity : AppCompatActivity() {
             State.FINISHED -> "Start again"
         }
     }
+
+    /** A workout is live once the clock has started, whether or not it is ticking right now. */
+    private fun inWorkout(): Boolean = state == State.RUNNING || state == State.PAUSED
 
     private fun onLeftButton() {
         if (state == State.RUNNING || state == State.PAUSED) confirmStop() else flipCamera()
@@ -1030,7 +1032,7 @@ class MainActivity : AppCompatActivity() {
             PlacementGuideView(this),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190))
         )
-        container.addView(note(
+        container.addView(dialogNote(
             "Stand the phone up rather than laying it flat, keep your head and feet both in " +
                 "shot, and leave it where it is — moving it mid-workout resets what it has learned."
         ))
@@ -1051,102 +1053,25 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun savedProfile(): CindyProfile = Variations.decode(prefs().getString(KEY_PROFILE, null))
-
     /**
-     * "Make Cindy yours": one choice per movement, taken before the clock starts.
+     * Picks up a movement change made in [MenuActivity], which is the only place it can be made.
      *
-     * Neutral names only. No "easy", "beginner", "scaled" or "cheat" — a band-assisted pull-up
-     * is a different prescription, not a lesser athlete, and the app has no business
-     * editorialising about which one someone ought to be doing. What it does say plainly is
-     * which choices it can score with the camera and which it will ask to be tapped in, because
-     * that is a fact about the app rather than a judgement about the person.
+     * The picker moved off this screen with the chip that opened it, so the profile can now
+     * change while this activity is stopped. [WorkoutEngine.profile] is immutable for the life of
+     * an engine — deliberately, so a half-scored workout can never be two prescriptions at once —
+     * which makes the response a rebuild rather than a mutation.
      *
-     * Locked while a workout is live: the movements have to mean one thing for the whole score.
+     * Refused outright while a workout is live. The menu already declines to open the picker in
+     * that state; this is the same rule enforced where the score actually lives, because the
+     * clock could have been started from a notification or a second window between the two.
      */
-    private fun chooseMovements() {
-        if (state != State.IDLE && state != State.FINISHED) {
-            toast("Reset first to change movements")
-            return
-        }
-        val current = savedProfile()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(4), dp(20), dp(4))
-        }
-        container.addView(note("Anything other than the standard three is saved as an Adaptive " +
-            "Cindy and ranked against your own sessions at the same movements."))
-        val pull = variantGroup(container, "PULL", PullVariant.entries, current.pull,
-            { it.label }, { it.tracking })
-        val push = variantGroup(container, "PUSH", PushVariant.entries, current.push,
-            { it.label }, { it.tracking })
-        val squat = variantGroup(container, "SQUAT", SquatVariant.entries, current.squat,
-            { it.label }, { it.tracking })
-
-        AlertDialog.Builder(this)
-            .setTitle("Make Cindy yours")
-            .setView(ScrollView(this).apply { addView(container) })
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Save") { _, _ ->
-                applyProfile(
-                    CindyProfile(
-                        pull = PullVariant.entries[pull.checkedRadioButtonId],
-                        push = PushVariant.entries[push.checkedRadioButtonId],
-                        squat = SquatVariant.entries[squat.checkedRadioButtonId]
-                    )
-                )
-            }
-            .show()
-    }
-
-    private fun note(text: String) = TextView(this).apply {
-        this.text = text
-        setTextColor(getColor(R.color.on_surface_dim))
-        textSize = 12f
-        setPadding(0, dp(8), 0, dp(4))
-    }
-
-    /** One movement's options, as radio buttons whose ids are their ordinal. */
-    private fun <T> variantGroup(
-        parent: LinearLayout,
-        title: String,
-        options: List<T>,
-        selected: T,
-        label: (T) -> String,
-        tracking: (T) -> Tracking
-    ): RadioGroup {
-        parent.addView(TextView(this).apply {
-            text = title
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 11f
-            setPadding(0, dp(14), 0, dp(2))
-        })
-        val group = RadioGroup(this)
-        options.forEachIndexed { i, option ->
-            group.addView(RadioButton(this).apply {
-                id = i
-                // Said on the option itself, so the choice and its consequence arrive together.
-                text = if (tracking(option) == Tracking.MANUAL) {
-                    "${label(option)}  ·  you tap +1"
-                } else {
-                    label(option)
-                }
-                textSize = 15f
-                minHeight = dp(48)
-            })
-        }
-        group.check(options.indexOf(selected))
-        parent.addView(group)
-        return group
-    }
-
-    private fun applyProfile(chosen: CindyProfile) {
-        prefs().edit().putString(KEY_PROFILE, Variations.encode(chosen)).apply()
+    private fun syncMovements() {
+        if (inWorkout()) return
+        val chosen = profile.movements
+        val current = synchronized(engineLock) { engine.profile }
+        if (chosen == current) return
         synchronized(engineLock) { engine = WorkoutEngine(profile = chosen) }
         apply(runEngine { RepEvent.NONE })
-        renderChips()
-        renderControls()
-        toast(chosen.label())
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -1162,6 +1087,11 @@ class MainActivity : AppCompatActivity() {
         }
         if (!vibrator.hasVibrator()) return
         vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncMovements()
     }
 
     override fun onPause() {

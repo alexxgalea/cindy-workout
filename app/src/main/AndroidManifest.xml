@@ -36,6 +36,12 @@
             android:parentActivityName=".MainActivity" />
 
         <activity
+            android:name=".MenuActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
             android:name=".RecordsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
