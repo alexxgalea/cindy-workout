@@ -83,114 +83,98 @@
         app:barrierDirection="bottom"
         app:constraint_referenced_ids="timer,rounds" />
 
-    <!-- ── voice / music / records toggles ── -->
-    <LinearLayout
+    <!--
+      ── the chip row ──
+
+      Only what changes mid-set lives here: whether the count is spoken, whether music is
+      playing, and whether this one is being filmed. Records, help and the movement picker moved
+      behind MENU into MenuActivity — six chips at a 48dp minimum touch target plus their margins
+      want more width than a 360dp phone has, so the row ran off the edge of the screen.
+
+      Laid out by a Flow rather than a LinearLayout so that it cannot silently happen again. A
+      row pinned only to the parent's end grows off the *start* edge, taking its overflow
+      somewhere nothing can report it; a Flow spanning the full width wraps onto a second line
+      instead. At the largest font scale that is the difference between a control that is gone
+      and a HUD that is one line taller.
+    -->
+    <androidx.constraintlayout.helper.widget.Flow
         android:id="@+id/chips"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:orientation="horizontal"
+        app:constraint_referenced_ids="btnVoice,btnMusic,btnRec,btnMenu"
+        app:flow_horizontalBias="1"
+        app:flow_horizontalGap="6dp"
+        app:flow_horizontalStyle="packed"
+        app:flow_lastHorizontalBias="1"
+        app:flow_lastHorizontalStyle="packed"
+        app:flow_verticalGap="4dp"
+        app:flow_wrapMode="chain"
         app:layout_constraintTop_toBottomOf="@id/topRowBottom"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <TextView
-            android:id="@+id/btnVoice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="VOICE"
-            android:textColor="@color/accent"
-            android:textSize="11sp"
-            android:textStyle="bold" />
+    <TextView
+        android:id="@+id/btnVoice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_chip_tappable"
+        android:gravity="center"
+        android:maxLines="1"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        android:paddingHorizontal="12dp"
+        android:text="VOICE"
+        android:textColor="@color/accent"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnMusic"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="MUSIC"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="11sp"
-            android:textStyle="bold" />
+    <TextView
+        android:id="@+id/btnMusic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_chip_tappable"
+        android:gravity="center"
+        android:maxLines="1"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        android:paddingHorizontal="12dp"
+        android:text="MUSIC"
+        android:textColor="@color/on_surface_dim"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnRec"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="REC"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="11sp"
-            android:textStyle="bold" />
+    <TextView
+        android:id="@+id/btnRec"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_chip_tappable"
+        android:gravity="center"
+        android:maxLines="1"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        android:paddingHorizontal="12dp"
+        android:text="REC"
+        android:textColor="@color/on_surface_dim"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/btnRecords"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="RECORDS"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHelp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="HELP"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnMoves"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_tappable"
-            android:contentDescription="Choose your movements"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="12dp"
-            android:text="MOVES"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+    <TextView
+        android:id="@+id/btnMenu"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_chip_tappable"
+        android:gravity="center"
+        android:maxLines="1"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        android:paddingHorizontal="12dp"
+        android:text="MENU"
+        android:textColor="@color/on_surface_dim"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 
     <!-- ── status / coaching line ── -->
     <TextView

@@ -4,10 +4,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -197,40 +195,8 @@ class ResultsActivity : AppCompatActivity() {
         })
     }
 
-    /** Asks for body weight in kilograms, and redraws whatever depended on it. */
-    private fun askBodyWeight() {
-        val input = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            hint = "kg"
-            if (profile.hasBodyWeight) {
-                setText("%.0f".format(Locale.US, profile.bodyWeightKg))
-            }
-            setPadding(dp(24), dp(16), dp(24), dp(16))
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Your body weight")
-            .setMessage(
-                "Calories are estimated from body weight and how hard you worked. It stays on " +
-                    "this phone."
-            )
-            .setView(input)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Save") { _, _ ->
-                val kg = input.text.toString().trim().toDoubleOrNull()
-                if (kg == null || kg < Profile.MIN_KG || kg > Profile.MAX_KG) {
-                    android.widget.Toast.makeText(
-                        this,
-                        "Enter a weight between ${Profile.MIN_KG.toInt()} and " +
-                            "${Profile.MAX_KG.toInt()} kg",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                    return@setPositiveButton
-                }
-                profile.bodyWeightKg = kg
-                render(attempt, stoppedEarly)
-            }
-            .show()
-    }
+    /** Asks for body weight, and redraws whatever depended on it. Shared with [MenuActivity]. */
+    private fun askBodyWeight() = askBodyWeight(profile) { render(attempt, stoppedEarly) }
 
     private fun stat(label: String, value: String, onTap: (() -> Unit)? = null) {
         val row = LinearLayout(this).apply {
