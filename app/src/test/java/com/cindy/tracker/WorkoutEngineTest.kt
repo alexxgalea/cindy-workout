@@ -230,12 +230,14 @@ class WorkoutEngineTest {
     }
 
     @Test
-    fun `skip jumps to the next movement without scoring reps`() {
+    fun `skip jumps to the next movement and banks what was actually done`() {
         val e = WorkoutEngine()
         assertEquals(RepEvent.EXERCISE_DONE, e.skipExercise())
         assertEquals(Exercise.PUSHUP, e.exercise)
         assertEquals(0, e.reps)
-        assertEquals(5, e.repsThisRound)
+        // Skipped from zero, so zero. This used to credit the movement's full target, which is
+        // the bug a tester found by doing three push-ups and being recorded for ten.
+        assertEquals(0, e.repsThisRound)
     }
 
     @Test

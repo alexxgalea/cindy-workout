@@ -58,7 +58,6 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
-        const val KEY_VOICE = "voice_on"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
         /** What an unavailable control fades to: plainly off, still plainly there. */
@@ -106,8 +105,8 @@ class MainActivity : AppCompatActivity() {
      * An immutable read of the engine taken on the analysis thread.
      *
      * The engine is mutated from the camera thread and read from the main thread, so the UI is
-     * driven from a snapshot rather than from live fields. It also carries the movement that was
-     * just completed, which the engine has already advanced past by the time the UI sees it.
+     * driven from a snapshot rather than from live fields. It also carries the score the event
+     * belongs to, which the engine has already cleared by the time the UI sees it.
      */
     private data class Snapshot(
         val exercise: Exercise,
@@ -117,7 +116,14 @@ class MainActivity : AppCompatActivity() {
         val totalReps: Int,
         val hint: String,
         val event: RepEvent,
-        val completed: Exercise?,
+        /**
+         * The score the movement had reached when [event] fired.
+         *
+         * Not [reps], which the engine has already cleared when a movement is left, and not the
+         * movement's target either — after a skip those are three different numbers and only
+         * this one is what the athlete actually did.
+         */
+        val eventReps: Int,
         val signal: Float,
         val phase: RepCounter.Phase,
         val range: Float,
@@ -187,7 +193,6 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var state = State.IDLE
     private var remainingMs = WORKOUT_MS
     private var lastTickAt = 0L
-    private var lastAnnouncedSec = -1
     /** Wall time of each completed round, and when the current one started. */
     private val roundSplits = mutableListOf<Long>()
     /** Clock time at which the current round began, so a pause cannot inflate its split. */
@@ -219,7 +224,7 @@ class MainActivity : AppCompatActivity() {
                 finishWorkout()
             } else {
                 renderClock()
-                announceTime()
+                announceProgress()
                 ui.postDelayed(this, 200L)
             }
         }
@@ -280,7 +285,6 @@ class MainActivity : AppCompatActivity() {
         music = MusicPlayer(this)
         video = VideoRecorder(this)
         speaker = Speaker(this).apply {
-            enabled = prefs().getBoolean(KEY_VOICE, true)
             onSpeakingChanged = { speaking -> ui.post { music.duck(speaking) } }
         }
 
@@ -291,6 +295,7 @@ class MainActivity : AppCompatActivity() {
             status.text = "Pose model failed to load — manual counting only"
         }
 
+        syncVoice()
         syncMusic()
 
         binding.btnStart.setOnClickListener { toggleRun() }
@@ -311,10 +316,13 @@ class MainActivity : AppCompatActivity() {
         binding.btnAddRep.setOnClickListener { onManualRep() }
         binding.btnUndo.setOnClickListener { onUndoRep() }
         binding.btnSkipExercise.setOnClickListener { onSkip() }
-        binding.btnVoice.setOnClickListener { toggleVoice() }
         binding.btnRec.setOnClickListener { toggleRecording() }
         binding.btnMenu.setOnClickListener {
             startActivity(MenuActivity.intent(this, workoutLive = inWorkout()))
+            // The menu travels up over the camera and the camera holds still underneath, which
+            // is what makes it read as on top of this screen rather than instead of it.
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.menu_enter, R.anim.hold)
         }
         binding.statusRow.setOnLongClickListener {
             debug = !debug
@@ -420,7 +428,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnStart.describeAsButton()
         binding.btnEnd.describeAsButton("End the workout")
         binding.btnFlip.describeAsButton("Switch camera", longPress = "Switch pose model")
-        binding.btnVoice.describeAsButton()
         binding.btnRec.describeAsButton()
     }
 
@@ -614,7 +621,6 @@ class MainActivity : AppCompatActivity() {
 
     /** Mutates the engine under lock and returns what the UI needs to render the result. */
     private fun runEngine(block: () -> RepEvent): Snapshot = synchronized(engineLock) {
-        val before = engine.exercise
         val event = block()
         Snapshot(
             exercise = engine.exercise,
@@ -624,7 +630,7 @@ class MainActivity : AppCompatActivity() {
             totalReps = engine.totalReps,
             hint = engine.hint,
             event = event,
-            completed = if (event == RepEvent.EXERCISE_DONE || event == RepEvent.ROUND_DONE) before else null,
+            eventReps = engine.repsAtLastEvent,
             signal = engine.signal,
             phase = engine.phase,
             range = engine.learnedRange,
@@ -686,15 +692,16 @@ class MainActivity : AppCompatActivity() {
             RepEvent.NONE -> Unit
             RepEvent.REP -> {
                 buzz(35)
-                speaker.say("${snap.reps}")
+                speaker.say("${snap.eventReps}")
             }
             RepEvent.UNDO -> {
                 buzz(20)
-                speaker.say("${snap.reps}")
+                speaker.say("${snap.eventReps}")
             }
             RepEvent.EXERCISE_DONE -> {
                 buzz(90)
-                snap.completed?.let { speaker.say("${it.target}") }
+                // The count the movement reached, which a skip makes different from its target.
+                speaker.say("${snap.eventReps}")
                 speaker.queue(snap.exercise.spoken)
             }
             RepEvent.ROUND_DONE -> {
@@ -702,7 +709,7 @@ class MainActivity : AppCompatActivity() {
                 val split = elapsedMs - roundStartedAtElapsed
                 roundSplits += split
                 roundStartedAtElapsed = elapsedMs
-                snap.completed?.let { speaker.say("${it.target}") }
+                speaker.say("${snap.eventReps}")
                 speaker.queue("Round ${snap.rounds} in ${spokenDuration(split)}")
                 toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
@@ -954,7 +961,6 @@ class MainActivity : AppCompatActivity() {
     private fun resetWorkout() {
         state = State.IDLE
         remainingMs = WORKOUT_MS
-        lastAnnouncedSec = -1
         roundSplits.clear()
         elapsedMs = 0L
         pausedMs = 0L
@@ -1014,7 +1020,10 @@ class MainActivity : AppCompatActivity() {
             pausedMs = pausedMs,
             roundSplitsMs = roundSplits.toList(),
             profile = engine.profile,
-            manualReps = snap.manualReps
+            manualReps = snap.manualReps,
+            // Counted rather than inferred from the round tally: a skipped movement makes those
+            // two different numbers, and only this one is the work that was done.
+            countedReps = snap.totalReps
         )
         records.add(attempt)
 
@@ -1047,25 +1056,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun announceTime() {
-        val sec = (remainingMs / 1000L).toInt()
-        if (sec == lastAnnouncedSec) return
-        lastAnnouncedSec = sec
-        when (sec) {
-            600 -> speaker.queue("Ten minutes remaining")
-            300 -> speaker.queue("Five minutes remaining")
-            60 -> speaker.queue("One minute")
-            10 -> speaker.queue("Ten seconds")
-        }
+    /**
+     * Says where the workout has got to, at the marks [Coach] keeps.
+     *
+     * Queued rather than said, so a mark that lands on a rep waits its turn behind the count
+     * instead of cutting the number in half. The wording and the timing both belong to the coach;
+     * this only supplies the clock and the score and passes on whatever comes back.
+     */
+    private fun announceProgress() {
+        // Two fields rather than a whole snapshot: this runs five times a second and the lock it
+        // takes is the one the analysis thread is scoring through.
+        val (rounds, totalReps) = synchronized(engineLock) { engine.rounds to engine.totalReps }
+        coach.onClock(
+            elapsedMs = elapsedMs,
+            remainingMs = remainingMs,
+            rounds = rounds,
+            totalReps = totalReps
+        )?.let { speaker.queue(it) }
     }
 
     // ── voice & music ─────────────────────────────────────────────────────────
 
-    private fun toggleVoice() {
-        speaker.enabled = !speaker.enabled
-        prefs().edit().putBoolean(KEY_VOICE, speaker.enabled).apply()
-        if (!speaker.enabled) speaker.stop() else speaker.say("Voice on")
-        renderChips()
+    /**
+     * Brings the voice in line with what the menu says.
+     *
+     * Both settings live on [Profile] now rather than one of them on a HUD chip, so this screen
+     * reads them the same way it reads the track: on create, and on every resume, because coming
+     * back from the menu is exactly when the answer can have changed.
+     */
+    private fun syncVoice() {
+        speaker.enabled = profile.voiceOn
+        speaker.volume = profile.voiceVolume
+        if (!speaker.enabled) speaker.stop()
     }
 
     /**
@@ -1091,6 +1113,7 @@ class MainActivity : AppCompatActivity() {
                     toast("That track can no longer be played")
                 }
         }
+        music.volume = profile.musicVolume
         if (profile.musicOn && state == State.RUNNING) music.play() else music.pause()
     }
 
@@ -1107,8 +1130,6 @@ class MainActivity : AppCompatActivity() {
             view.imageTintList = ColorStateList.valueOf(colour)
             view.setBackgroundResource(if (lit) R.drawable.icon_pill_active else 0)
         }
-        paint(binding.btnVoice, if (speaker.enabled) label else neutral, speaker.enabled)
-
         // Lit red while filming, red but unlit while the countdown runs — the count itself is
         // on the picture, so the icon only has to say which of the three states REC is in.
         val counting = binding.countdown.isRunning
@@ -1120,8 +1141,6 @@ class MainActivity : AppCompatActivity() {
         paint(binding.btnMenu, getColor(R.color.label_secondary), false)
 
         // The chips carry no text at all now, so a screen reader has nothing but these.
-        binding.btnVoice.contentDescription =
-            if (speaker.enabled) "Voice counting, on" else "Voice counting, off"
         binding.btnRec.contentDescription = when {
             counting -> "Recording is about to start, tap to cancel"
             video.isRecording -> "Stop recording"
@@ -1317,6 +1336,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         syncMovements()
+        syncVoice()
         syncMusic()
     }
 

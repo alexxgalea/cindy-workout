@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The camera screen stays where it is while the menu travels over it.
+
+  Explicit rather than omitted: with no animation supplied the system supplies its own, and the
+  preview underneath would slide or fade along with the menu. Nothing behind a sheet-like screen
+  should move — the whole read of "this is on top of that" depends on the that staying put. The
+  duration matches the longer of the two travels so the hold outlasts them both.
+-->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromAlpha="1" android:toAlpha="1"
+    android:duration="300" />

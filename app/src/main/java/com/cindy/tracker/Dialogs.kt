@@ -1,11 +1,13 @@
 package com.cindy.tracker
 
 import android.app.Activity
+import android.content.Context
 import android.content.res.ColorStateList
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -70,6 +72,9 @@ fun Activity.askBodyWeight(profile: Profile, onSaved: () -> Unit) {
         setBackgroundResource(R.drawable.glass_card_small)
         setPadding(dp(20), dp(16), dp(20), dp(16))
         if (profile.hasBodyWeight) setText("%.0f".format(Locale.US, profile.bodyWeightKg))
+        // A weight already entered is there to be replaced, not appended to.
+        setSelectAllOnFocus(true)
+        isFocusableInTouchMode = true
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         )
@@ -82,6 +87,16 @@ fun Activity.askBodyWeight(profile: Profile, onSaved: () -> Unit) {
             "It stays on this phone."
     )
     sheet.add(input)
+    // The sheet is the only one here with a field in it, and the athlete opened it to type. The
+    // keyboard therefore comes up with it rather than waiting for a tap on a box they have
+    // already aimed at — [CindySheet] lifts the sheet clear of the IME, which is what makes this
+    // safe to do rather than a way of hiding the SAVE button behind a keyboard.
+    input.post {
+        if (input.requestFocus()) {
+            (input.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
     sheet.actions(
         primary = "SAVE",
         onPrimary = {

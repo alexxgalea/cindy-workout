@@ -74,12 +74,60 @@ class Profile(context: Context) {
             prefs.edit().putBoolean(KEY_MUSIC_ON, value).apply()
         }
 
+    /**
+     * Whether the voice counts reps out loud.
+     *
+     * Owned here rather than by the camera screen, which is where it used to live as a HUD chip.
+     * It moved for the same reason the music did: it is one of two audio settings that only make
+     * sense beside each other, and neither is a decision anyone makes mid-set.
+     */
+    var voiceOn: Boolean
+        get() = prefs.getBoolean(KEY_VOICE_ON, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_VOICE_ON, value).apply()
+        }
+
+    /**
+     * How loud the voice is, 0..1.
+     *
+     * Separate from the phone's own media volume, and not a replacement for it. The two mix
+     * against each other on purpose: the athlete is across the room from the phone, and getting
+     * the count audible over the music by turning *everything* up is not the same adjustment as
+     * getting it audible over the music.
+     */
+    var voiceVolume: Float
+        get() = prefs.getFloat(KEY_VOICE_VOLUME, DEFAULT_VOICE_VOLUME).coerceIn(0f, 1f)
+        set(value) {
+            prefs.edit().putFloat(KEY_VOICE_VOLUME, value.coerceIn(0f, 1f)).apply()
+        }
+
+    /** How loud the track is, 0..1, before the voice ducks it. */
+    var musicVolume: Float
+        get() = prefs.getFloat(KEY_MUSIC_VOLUME, DEFAULT_MUSIC_VOLUME).coerceIn(0f, 1f)
+        set(value) {
+            prefs.edit().putFloat(KEY_MUSIC_VOLUME, value.coerceIn(0f, 1f)).apply()
+        }
+
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
         private const val KEY_MOVEMENTS = "movement_profile"
         /** The key [MainActivity] used when it owned the track, so existing choices survive. */
         private const val KEY_MUSIC = "music_uri"
         private const val KEY_MUSIC_ON = "music_on"
+        /** The key the HUD chip used, so an athlete who had turned the voice off keeps it off. */
+        private const val KEY_VOICE_ON = "voice_on"
+        private const val KEY_VOICE_VOLUME = "voice_volume"
+        private const val KEY_MUSIC_VOLUME = "music_volume"
+
+        /**
+         * The voice starts at full and the music below it.
+         *
+         * Not symmetrical, and deliberately so: the count is information and the track is
+         * atmosphere, so the default mix is the one where a rep is never missed because of a
+         * setting the athlete has not found yet.
+         */
+        const val DEFAULT_VOICE_VOLUME = 1f
+        const val DEFAULT_MUSIC_VOLUME = 0.7f
         /** Above the heaviest recorded human, so typos are caught but nobody real is refused. */
         const val MAX_KG = 400f
         const val MIN_KG = 20f

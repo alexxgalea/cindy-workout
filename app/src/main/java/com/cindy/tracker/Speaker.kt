@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.content.Context
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -19,6 +20,19 @@ class Speaker(context: Context) {
     private val utteranceId = AtomicInteger(0)
 
     var enabled = true
+
+    /**
+     * How loud the voice speaks, 0..1, against whatever the phone's media volume is.
+     *
+     * Applied per utterance rather than once at start-up, because [TextToSpeech] has no volume
+     * of its own to set — [TextToSpeech.Engine.KEY_PARAM_VOLUME] is a property of the request.
+     * Changing this therefore takes effect on the next thing said, which for a rep count is the
+     * next rep, and is what makes the menu's slider audible while it is being dragged.
+     */
+    var volume = 1f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+        }
 
     /** Raised while speech is audible, so background music can duck out of the way. */
     var onSpeakingChanged: ((Boolean) -> Unit)? = null
@@ -49,9 +63,20 @@ class Speaker(context: Context) {
     /** Queues behind whatever is speaking — used for cues that must be heard. */
     fun queue(text: String) = speak(text, TextToSpeech.QUEUE_ADD)
 
-    private fun speak(text: String, mode: Int) {
-        if (!enabled || !ready) return
-        tts?.speak(text, mode, null, "cindy-${utteranceId.incrementAndGet()}")
+    /**
+     * Says [text] regardless of [enabled], for previewing the voice from the menu.
+     *
+     * The one caller is the volume slider, where refusing to speak because the voice is switched
+     * off would leave the athlete adjusting a number against silence.
+     */
+    fun preview(text: String) = speak(text, TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
+
+    private fun speak(text: String, mode: Int, ignoreEnabled: Boolean = false) {
+        if ((!enabled && !ignoreEnabled) || !ready) return
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
+        }
+        tts?.speak(text, mode, params, "cindy-${utteranceId.incrementAndGet()}")
     }
 
     fun stop() = run { tts?.stop(); Unit }

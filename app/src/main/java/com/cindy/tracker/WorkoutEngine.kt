@@ -236,6 +236,34 @@ class WorkoutEngine(
     var lastRepSource = Tracking.AUTO
         private set
 
+    /**
+     * The score the movement had actually reached when the last event fired.
+     *
+     * The count itself is cleared by [advance] on the way into the next movement, so by the time
+     * a caller reads [reps] after an EXERCISE_DONE it is looking at the new movement's zero. The
+     * voice used to work around that by announcing the *target* instead, which was right only
+     * because finishing was the only way to leave a movement. Skipping is the other way, and the
+     * athlete who did three push-ups and skipped is owed "three", not "ten".
+     */
+    var repsAtLastEvent = 0
+        private set
+
+    /**
+     * What each movement of the round in progress actually scored, filled in as each is left.
+     *
+     * Reps used to be inferred from position — "past the push-ups" was taken to mean ten of them
+     * — which is true only while the sole way past a movement is to finish it. SKIP means a
+     * round can be completed with fewer reps in it than its targets, and a tally that keeps
+     * crediting the targets is a tally that reports work nobody did.
+     */
+    private val bankedThisRound = linkedMapOf<Exercise, Int>()
+
+    /**
+     * The same, for every round already finished — kept per round rather than summed so that
+     * [undoRep] can step back over a round boundary into the score that was really there.
+     */
+    private val bankedRounds = mutableListOf<Map<Exercise, Int>>()
+
     /** Details used by the video-regression reports for the most recent frame. */
     var diagnostics = FrameDiagnostics()
         private set
@@ -330,11 +358,17 @@ class WorkoutEngine(
     val learnedRange: Float get() = counters.getValue(exercise).learnedRange
     val calibrated: Boolean get() = counters.getValue(exercise).calibrated
 
-    /** Reps completed since the start of the current round, across all three movements. */
+    /**
+     * Reps completed since the start of the current round, across all three movements.
+     *
+     * The movements already left contribute what they actually scored, not what they were asked
+     * for. Those two only differ when something was skipped, which is exactly the case this
+     * figure used to get wrong.
+     */
     val repsThisRound: Int
-        get() = Exercise.entries.take(exercise.ordinal).sumOf { it.target } + reps
+        get() = bankedThisRound.values.sum() + reps
 
-    val totalReps: Int get() = rounds * 30 + repsThisRound
+    val totalReps: Int get() = bankedRounds.sumOf { it.values.sum() } + repsThisRound
 
     fun reset() {
         counters.values.forEach { it.reset() }
@@ -357,6 +391,9 @@ class WorkoutEngine(
         blocked = false
         manualReps = 0
         lastRepSource = Tracking.AUTO
+        repsAtLastEvent = 0
+        bankedThisRound.clear()
+        bankedRounds.clear()
         diagnostics = FrameDiagnostics()
         bar.reset()
         barGuide = null
@@ -392,18 +429,35 @@ class WorkoutEngine(
         val counter = counters.getValue(exercise)
         if (counter.count > 0) {
             counter.forceDecrement()
+            repsAtLastEvent = counter.count
             return RepEvent.UNDO
         }
         if (exercise != Exercise.PULLUP) {
             exercise = exercise.previous()
-            counters.getValue(exercise).setCount(exercise.target - 1)
+            stepBackInto(exercise)
             return RepEvent.UNDO
         }
         if (rounds == 0) return RepEvent.NONE
         rounds--
+        // The round being stepped back into is the one whose banked counts were just filed away.
+        bankedThisRound.clear()
+        bankedRounds.removeLastOrNull()?.let { bankedThisRound.putAll(it) }
         exercise = Exercise.SQUAT
-        counters.getValue(exercise).setCount(Exercise.SQUAT.target - 1)
+        stepBackInto(Exercise.SQUAT)
         return RepEvent.UNDO
+    }
+
+    /**
+     * Re-enters a movement already left, at one rep below what it actually scored.
+     *
+     * "One below its target" was the old answer, and it silently handed back reps that were
+     * never done to anyone who had skipped the movement — undo would have been a way to invent
+     * a score. What it scored is banked, so that is what it returns to.
+     */
+    private fun stepBackInto(movement: Exercise) {
+        val banked = bankedThisRound.remove(movement) ?: movement.target
+        counters.getValue(movement).setCount((banked - 1).coerceAtLeast(0))
+        repsAtLastEvent = counters.getValue(movement).count
     }
 
     /**
@@ -564,10 +618,17 @@ class WorkoutEngine(
     }
 
     /** Advances to the next movement if the current one just hit its target. */
-    private fun settle(): RepEvent =
-        if (fixedExercise == null && reps >= exercise.target) advance() else RepEvent.REP
+    private fun settle(): RepEvent {
+        if (fixedExercise == null && reps >= exercise.target) return advance()
+        repsAtLastEvent = reps
+        return RepEvent.REP
+    }
 
     private fun advance(): RepEvent {
+        // Read before the counter is cleared: this is the number the movement really reached,
+        // and after a skip it is the only record that it was not the target.
+        repsAtLastEvent = reps
+        bankedThisRound[exercise] = reps
         counters.getValue(exercise).resetCount()
         val wasLast = exercise == Exercise.SQUAT
         exercise = exercise.next()
@@ -579,6 +640,8 @@ class WorkoutEngine(
         startReference = Float.NaN
         return if (wasLast) {
             rounds++
+            bankedRounds += bankedThisRound.toMap()
+            bankedThisRound.clear()
             RepEvent.ROUND_DONE
         } else {
             RepEvent.EXERCISE_DONE

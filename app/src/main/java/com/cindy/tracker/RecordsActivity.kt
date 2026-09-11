@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityRecordsBinding
 import java.text.SimpleDateFormat
@@ -40,22 +41,43 @@ class RecordsActivity : AppCompatActivity() {
         render()
     }
 
+    /**
+     * The one irreversible thing in the app, and it asks twice.
+     *
+     * A tester lost their history and the likeliest explanation was this button: the confirmation
+     * put CLEAR in the *filled* slot, which on every other sheet in the app is where the safe,
+     * expected action sits — and which is also where the thumb already is, having just tapped a
+     * filled button to get here. Two taps in the same place wiped the board.
+     *
+     * So the sheet is built the other way round: KEEP THEM is the filled primary, so a reflex
+     * second tap cancels; clearing is the quiet secondary, painted in the alert colour; and the
+     * question names the number of sessions at stake, because "your records" is abstract in a way
+     * that "41 sessions" is not. There is nothing to restore them from afterwards — the store is
+     * one preference string — which is exactly why the ask is this loud.
+     */
     private fun confirmClear() {
-        if (store.all().isEmpty()) return
+        val sessions = store.all().size
+        if (sessions == 0) return
         CindySheet(
             this,
-            title = "Clear your records?",
-            subtitle = "Every attempt logged on this phone will be deleted. The benchmark stays."
+            title = if (sessions == 1) "Delete your 1 session?" else "Delete all $sessions sessions?",
+            subtitle = "Every attempt logged on this phone goes, including your best. This " +
+                "cannot be undone. The benchmark stays."
         ).actions(
-            primary = "CLEAR",
-            onPrimary = {
+            primary = "KEEP THEM",
+            onPrimary = {},
+            secondary = "DELETE",
+            onSecondary = {
                 store.clear()
+                toast("Records cleared")
                 render()
             },
-            secondary = "CANCEL",
-            onSecondary = {}
+            secondaryTint = R.color.state_alert
         ).show()
     }
+
+    private fun toast(message: String) =
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     private fun render() {
         val rows = binding.rows
