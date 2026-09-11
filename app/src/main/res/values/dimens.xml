@@ -1,0 +1,17 @@
+<!-- A 4dp grid, and the handful of radii and control heights the design actually uses. -->
+<resources>
+    <dimen name="space_6">24dp</dimen>
+
+    <!-- Sub-pixel on purpose: a hairline should be the thinnest line the screen can draw. -->
+    <dimen name="hairline">0.5dp</dimen>
+
+    <dimen name="radius_pill">17dp</dimen>
+    <dimen name="radius_bar">18dp</dimen>
+    <dimen name="radius_card">20dp</dimen>
+    <dimen name="radius_rail">24dp</dimen>
+    <dimen name="radius_control">27dp</dimen>
+    <dimen name="radius_panel">30dp</dimen>
+
+    <!-- 54dp keeps every control clear of the 48dp minimum touch target. -->
+    <dimen name="screen_margin">16dp</dimen>
+</resources>

@@ -266,6 +266,7 @@ class RecordingOverlay {
 
     private companion object {
         const val MIN_SCORE = 0.30f
-        val ACCENT = Color.parseColor("#00E5A0")
+        /** The HUD's secondary label. Burned into the file, so it follows the app's palette. */
+        val ACCENT = Color.argb(168, 255, 255, 255)
     }
 }

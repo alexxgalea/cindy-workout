@@ -1,0 +1,100 @@
+<!--
+  One family, five sizes, and tabular figures wherever a number can change.
+
+  Manrope's default figures are PROPORTIONAL — its "1" is 908 units against "0" at 1348 — so a
+  ticking clock or a rep count shuffles sideways as it counts without fontFeatureSettings="tnum".
+  Every numeric appearance below sets it; none of the prose ones do, because tabular figures in a
+  sentence look like a spreadsheet.
+
+  letterSpacing is in em, not sp: -0.048em at 62sp is the -3px the design calls for.
+-->
+<resources>
+
+    <!-- ── numerals ── -->
+    <style name="Cindy.MetricXL" parent="">
+        <item name="android:fontFamily">@font/manrope_extrabold</item>
+        <item name="android:textSize">62sp</item>
+        <item name="android:letterSpacing">-0.048</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="Cindy.MetricL" parent="Cindy.MetricXL">
+        <item name="android:textSize">46sp</item>
+    </style>
+
+    <style name="Cindy.MetricM" parent="Cindy.MetricXL">
+        <item name="android:textSize">32sp</item>
+        <item name="android:letterSpacing">-0.034</item>
+    </style>
+
+    <style name="Cindy.MetricS" parent="">
+        <item name="android:fontFamily">@font/manrope_bold</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:letterSpacing">-0.023</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- ── prose ── -->
+    <style name="Cindy.Title" parent="">
+        <item name="android:fontFamily">@font/manrope_extrabold</item>
+        <item name="android:textSize">34sp</item>
+        <item name="android:letterSpacing">-0.026</item>
+        <item name="android:textColor">@color/label</item>
+    </style>
+
+    <style name="Cindy.Title2" parent="Cindy.Title">
+        <item name="android:textSize">25sp</item>
+        <item name="android:letterSpacing">-0.024</item>
+    </style>
+
+    <style name="Cindy.Headline" parent="">
+        <item name="android:fontFamily">@font/manrope_semibold</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:letterSpacing">-0.0125</item>
+        <item name="android:textColor">@color/label</item>
+    </style>
+
+    <style name="Cindy.Body" parent="">
+        <item name="android:fontFamily">@font/manrope_regular</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">-0.007</item>
+        <item name="android:textColor">@color/label_secondary</item>
+        <item name="android:lineSpacingMultiplier">1.32</item>
+    </style>
+
+    <style name="Cindy.Callout" parent="Cindy.Body">
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Cindy.Footnote" parent="Cindy.Body">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/label_tertiary</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+    </style>
+
+    <!-- Uppercase survives here and on the two buttons, and nowhere else. -->
+    <style name="Cindy.Eyebrow" parent="">
+        <item name="android:fontFamily">@font/manrope_bold</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.145</item>
+        <item name="android:textColor">@color/label_tertiary</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="Cindy.Button" parent="">
+        <item name="android:fontFamily">@font/manrope_bold</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:letterSpacing">0.018</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="Cindy.Button.Small" parent="Cindy.Button">
+        <item name="android:fontFamily">@font/manrope_semibold</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+</resources>

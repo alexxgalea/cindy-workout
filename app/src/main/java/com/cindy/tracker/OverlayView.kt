@@ -34,11 +34,14 @@ class OverlayView @JvmOverloads constructor(
     private var srcW = 0
     private var srcH = 0
 
-    private val accent = ContextCompat.getColor(context, R.color.accent)
-    private val warn = ContextCompat.getColor(context, R.color.warn)
+    // The gate's two states, and nothing else on this canvas is coloured. The skeleton used to
+    // be drawn in the accent — the same colour as titles, chips, streaks and scores — so seeing
+    // green on screen told the athlete nothing at all. Now it means one thing: this would count.
+    private val ok = ContextCompat.getColor(context, R.color.state_ok)
+    private val alert = ContextCompat.getColor(context, R.color.state_alert)
 
     private val bonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = accent
+        color = ContextCompat.getColor(context, R.color.label)
         strokeWidth = 7f
         strokeCap = Paint.Cap.ROUND
         style = Paint.Style.STROKE
@@ -60,7 +63,7 @@ class OverlayView @JvmOverloads constructor(
         style = Paint.Style.STROKE
     }
     private val resetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.on_surface_dim)
+        color = ContextCompat.getColor(context, R.color.label_secondary)
         strokeWidth = 3f
         style = Paint.Style.STROKE
         pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
@@ -99,7 +102,7 @@ class OverlayView @JvmOverloads constructor(
 
         // Under the skeleton, so the body is never obscured by its own gate.
         bar?.let { guide ->
-            val colour = if (guide.gateOpen) accent else warn
+            val colour = if (guide.gateOpen) ok else alert
             val left = sx(guide.zone.left)
             val right = sx(guide.zone.right)
             zoneFillPaint.color = colour

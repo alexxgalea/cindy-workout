@@ -1,9 +1,58 @@
+<!--
+  The palette is white at four opacities on black, plus three iOS system colours that mean
+  something. Nothing is coloured for decoration.
+
+  Green is the affirmative: this rep would count, a tier reached, a score up on your best. Red is
+  blocked, unreadable, or stopping. Orange cautions. The mint accent this replaced was used for
+  titles AND chips AND streaks AND scores AND the skeleton, so it told the athlete nothing.
+-->
 <resources>
-    <color name="bg">#0B0D10</color>
-    <color name="accent">#00E5A0</color>
-    <color name="warn">#FF5A5F</color>
-    <color name="scrim">#99000000</color>
-    <color name="on_surface">#FFFFFFFF</color>
-    <color name="on_surface_dim">#99FFFFFF</color>
-    <color name="ic_launcher_background">#0B0D10</color>
+
+    <!-- ── ground ── -->
+    <color name="bg">#FF000000</color>
+
+    <!-- ── labels: iOS dark-mode label ramp ── -->
+    <color name="label">#FFFFFFFF</color>
+    <color name="label_secondary">#9EEBEBF5</color>
+    <!-- Reading prose sits between label and label_secondary: dimmer than a title, brighter
+         than a caption, because a screen of it at 62% is tiring to read. -->
+    <color name="label_body">#CCEBEBF5</color>
+    <color name="label_tertiary">#52EBEBF5</color>
+    <color name="label_quaternary">#2EEBEBF5</color>
+
+    <!-- ── state ── -->
+    <color name="state_ok">#FF30D158</color>
+    <color name="state_alert">#FFFF453A</color>
+    <color name="state_caution">#FFFF9F0A</color>
+
+    <!-- ── material ── -->
+    <!-- Glass over a page: a light film lifting off black. -->
+    <color name="surface_glass">#0EFFFFFF</color>
+    <color name="surface_glass_raised">#17FFFFFF</color>
+    <!-- Glass over the camera: dark enough to read text on, translucent enough to see through. -->
+    <color name="glass_cam_top">#BD1A1C20</color>
+    <color name="glass_cam_bottom">#CC0C0D0F</color>
+    <!-- The 1dp inner top highlight. This is the part that reads as glass. -->
+    <color name="specular">#3DFFFFFF</color>
+    <color name="hairline">#1FFFFFFF</color>
+    <color name="hairline_strong">#21FFFFFF</color>
+
+    <!-- ── the one filled control per screen ── -->
+    <color name="primary_fill">#FFFFFFFF</color>
+    <color name="on_primary">#FF000000</color>
+
+    <!--
+      ── the two bands the HUD lives in ──
+
+      Translucent, not opaque, and that is the whole point: the picture carries on underneath
+      them, so the athlete can see a head or a foot that has drifted out of the bright middle.
+      The camera apps this borrows from blur what is behind the band; this one cannot, because
+      Android will not backdrop-blur a live preview at any sane cost and RenderEffect wants API
+      31 against minSdk 26. Darkening alone still separates the picture from the chrome, and
+      still reads over any gym, which is what the old gradient scrims were for.
+    -->
+    <color name="band_top">#B8000000</color>
+    <color name="band_bottom">#C4000000</color>
+
+    <color name="ic_launcher_background">#FF000000</color>
 </resources>

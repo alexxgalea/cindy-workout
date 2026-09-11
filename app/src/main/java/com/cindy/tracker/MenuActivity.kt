@@ -2,19 +2,9 @@ package com.cindy.tracker
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.AccessibilityDelegateCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.cindy.tracker.databinding.ActivityMenuBinding
 import java.util.Locale
 
@@ -62,7 +52,9 @@ class MenuActivity : AppCompatActivity() {
         records = RecordStore(this)
         workoutLive = intent.getBooleanExtra(EXTRA_WORKOUT_LIVE, false)
 
-        binding.btnBack.setOnClickListener { finish() }
+        binding.actions.addView(primaryButton("DONE").apply {
+            setOnClickListener { finish() }
+        })
         render()
     }
 
@@ -74,115 +66,54 @@ class MenuActivity : AppCompatActivity() {
         binding.rows.removeAllViews()
 
         val movements = profile.movements
-        row(
-            title = "MOVEMENTS",
-            value = movements.label()
-        ) {
-            if (workoutLive) {
-                toast("Reset the workout first to change movements")
-            } else {
-                chooseMovements(movements) { chosen ->
-                    profile.movements = chosen
-                    toast(chosen.label())
-                    render()
-                }
-            }
-        }
-
         val sessions = records.all().size
-        row(
-            title = "RECORDS",
-            value = when (sessions) {
-                0 -> "No sessions yet"
-                1 -> "1 session"
-                else -> "$sessions sessions"
-            }
-        ) { startActivity(Intent(this, RecordsActivity::class.java)) }
 
-        row(
-            title = "BODY WEIGHT",
-            value = if (profile.hasBodyWeight) {
-                "%.0f kg".format(Locale.US, profile.bodyWeightKg)
-            } else {
-                "Not set — calories need it"
-            }
-        ) { askBodyWeight(profile) { render() } }
-
-        row(
-            title = "HELP",
-            value = "What Cindy is, how it is scored, and where to stand"
-        ) { startActivity(Intent(this, HelpActivity::class.java)) }
-    }
-
-    /**
-     * A tappable row: what it is, what it is currently set to, and a chevron.
-     *
-     * The subtitle is part of the row's name for a screen reader as well as for the eye —
-     * announcing only "body weight" would hide the very thing the row exists to report.
-     */
-    private fun row(
-        title: String,
-        value: String,
-        onTap: () -> Unit
-    ) {
-        val text = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-            addView(TextView(context).apply {
-                this.text = title
-                letterSpacing = 0.12f
-                setTextColor(getColor(R.color.on_surface))
-                textSize = 15f
-                setTypeface(typeface, Typeface.BOLD)
-            })
-            addView(TextView(context).apply {
-                this.text = value
-                setTextColor(getColor(R.color.on_surface_dim))
-                textSize = 12f
-                setPadding(0, dp(3), 0, 0)
-            })
-        }
-
-        val chevron = TextView(this).apply {
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            this.text = "›"
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 22f
-            setPadding(dp(12), 0, 0, 0)
-        }
-
-        binding.rows.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundResource(R.drawable.bg_row)
-            minimumHeight = dp(64)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(10) }
-            addView(text)
-            addView(chevron)
-            isClickable = true
-            isFocusable = true
-            contentDescription = "$title, $value"
-            setOnClickListener { onTap() }
-            // A styled LinearLayout draws like a button and is silent to a screen reader. Its
-            // own children are hidden above, so the row arrives as one node rather than three.
-            ViewCompat.setAccessibilityDelegate(this, object : AccessibilityDelegateCompat() {
-                override fun onInitializeAccessibilityNodeInfo(
-                    host: View,
-                    info: AccessibilityNodeInfoCompat
-                ) {
-                    super.onInitializeAccessibilityNodeInfo(host, info)
-                    info.className = Button::class.java.name
+        binding.rows.addView(insetGroup {
+            row(navRow("Movements", movements.label()) {
+                if (workoutLive) {
+                    toast("Reset the workout first to change movements")
+                } else {
+                    chooseMovements(movements) { chosen ->
+                        profile.movements = chosen
+                        toast(chosen.label())
+                        render()
+                    }
                 }
             })
+            row(navRow(
+                "Records",
+                when (sessions) {
+                    0 -> "No sessions yet"
+                    1 -> "1 session"
+                    else -> "$sessions sessions"
+                }
+            ) { startActivity(Intent(this@MenuActivity, RecordsActivity::class.java)) })
+            row(navRow(
+                "Body weight",
+                if (profile.hasBodyWeight) {
+                    "%.0f kg".format(Locale.US, profile.bodyWeightKg)
+                } else {
+                    "Not set — calories need it"
+                }
+            ) { askBodyWeight(profile) { render() } })
+            row(navRow(
+                "Help",
+                "What Cindy is, how it is scored, and where to stand"
+            ) { startActivity(Intent(this@MenuActivity, HelpActivity::class.java)) })
         })
+
+        // Said here rather than only when the row is tapped, because it explains why the row
+        // will refuse rather than reporting the refusal after the fact.
+        if (workoutLive) {
+            binding.rows.addView(
+                styledText(
+                    R.style.Cindy_Footnote,
+                    "Movements can only be changed between workouts — they have to mean one " +
+                        "thing for the whole score."
+                ).apply { setPadding(dp(4), dp(14), dp(4), 0) }
+            )
+        }
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

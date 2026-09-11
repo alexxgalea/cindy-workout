@@ -1,9 +1,45 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+
     <style name="Theme.Cindy" parent="Theme.MaterialComponents.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimary">@color/label</item>
         <item name="android:windowBackground">@color/bg</item>
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:textColor">@color/label</item>
+    </style>
+
+    <!--
+      The launch window. It paints the same black the app opens onto, so the handoff from the
+      system splash to LaunchView is invisible: nothing flashes, nothing resizes. The real
+      animation is LaunchView's — this only has to cover process start, which is over before
+      MainActivity can draw anything of its own.
+    -->
+    <style name="Theme.Cindy.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Cindy</item>
+    </style>
+    <!--
+      The sheet window. windowIsFloating=false so it fills the screen and the content can sit
+      hard against the bottom edge; the dim behind it is what puts the camera preview back.
+    -->
+    <style name="Theme.Cindy.Sheet" parent="android:Theme.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimAmount">0.66</item>
+        <item name="android:windowAnimationStyle">@style/Animation.Cindy.Sheet</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:textColor">@color/label</item>
+    </style>
+
+    <style name="Animation.Cindy.Sheet" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@anim/sheet_enter</item>
+        <item name="android:windowExitAnimation">@anim/sheet_exit</item>
     </style>
 </resources>

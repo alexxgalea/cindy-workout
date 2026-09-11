@@ -2,14 +2,18 @@ package com.cindy.tracker
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.TextViewCompat
 import com.cindy.tracker.databinding.ActivityHelpBinding
 
 /**
@@ -37,9 +41,19 @@ class HelpActivity : AppCompatActivity() {
         binding = ActivityHelpBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.btnBack.setOnClickListener { finish() }
-        binding.btnSource.setOnClickListener { openSource() }
-        binding.btnSource.contentDescription = "Open the CrossFit page for Cindy"
+        binding.actions.addView(glassButton("CROSSFIT.COM").apply {
+            // An arrow, because this one leaves the app.
+            setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_external, 0)
+            compoundDrawablePadding = dp(8)
+            TextViewCompat.setCompoundDrawableTintList(
+                this, ColorStateList.valueOf(getColor(R.color.label_secondary))
+            )
+            setOnClickListener { openSource() }
+            describeAsButton("Open the CrossFit page for Cindy")
+        })
+        binding.actions.addView(primaryButton("DONE").apply {
+            setOnClickListener { finish() }
+        })
 
         render()
     }
@@ -54,12 +68,7 @@ class HelpActivity : AppCompatActivity() {
 
     private fun render() {
         heading("THE WORKOUT")
-        card {
-            big("AMRAP 20:00")
-            body("5 pull-ups\n10 push-ups\n15 air squats")
-            quiet("One round is 30 reps. The score is rounds completed, plus any reps of the " +
-                "round you are part-way through when the clock stops.")
-        }
+        workoutCard()
         quote(
             "Complete as many rounds and reps as possible in 20 minutes of: " +
                 "5 pull-ups, 10 push-ups, 15 squats"
@@ -207,6 +216,59 @@ class HelpActivity : AppCompatActivity() {
     // ── building blocks ───────────────────────────────────────────────────────
 
     /**
+     * The rep scheme beside the mark whose proportions it is: the arcs are 270°, 180° and 90° of
+     * a circle, which is fifteen, ten and five. The pips repeat the arcs' own weights, so the
+     * mark on the launcher and the list in the card are visibly the same fact.
+     */
+    private fun workoutCard() {
+        val weights = intArrayOf(R.color.label, R.color.label_secondary, R.color.label_tertiary)
+        val scheme = listOf("5" to "Pull-ups", "10" to "Push-ups", "15" to "Air squats")
+
+        card {
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+
+                addView(ImageView(context).apply {
+                    setImageResource(R.drawable.mark_arcs)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, LinearLayout.LayoutParams(dp(62), dp(62)))
+
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    ).apply { marginStart = dp(18) }
+
+                    addView(styledText(R.style.Cindy_Title2, "AMRAP 20:00"))
+                    scheme.forEachIndexed { i, (count, name) ->
+                        addView(LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(0, if (i == 0) dp(12) else dp(7), 0, 0)
+                            addView(View(context).apply {
+                                background = dotDrawable(weights[i])
+                            }, LinearLayout.LayoutParams(dp(6), dp(6)))
+                            addView(styledText(R.style.Cindy_Headline, count).apply {
+                                gravity = Gravity.END
+                                layoutParams = LinearLayout.LayoutParams(
+                                    dp(22), ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply { marginStart = dp(10) }
+                            })
+                            addView(styledText(R.style.Cindy_Body, name).apply {
+                                setTextColor(getColor(R.color.label_body))
+                            }.withStartMargin(dp(10)))
+                        })
+                    }
+                })
+            })
+            rule()
+            quiet("One round is 30 reps. The score is rounds completed, plus any reps of the " +
+                "round you are part-way through when the clock stops.")
+        }
+    }
+
+    /**
      * The placement diagram, in its permanent home.
      *
      * It is offered once before the first setup check and can be dismissed for good there, so it
@@ -214,84 +276,87 @@ class HelpActivity : AppCompatActivity() {
      * in words.
      */
     private fun diagram() = binding.sections.addView(
-        PlacementGuideView(this),
-        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)).apply {
+        PlacementGuideView(this).apply {
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(12), dp(14), dp(12), dp(8))
+        },
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)).apply {
             topMargin = dp(4)
-            bottomMargin = dp(12)
+            bottomMargin = dp(14)
         }
     )
 
-    private fun heading(text: String) = binding.sections.addView(
-        TextView(this).apply {
-            this.text = text
-            letterSpacing = 0.12f
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 12f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(22), 0, dp(8))
-        }
-    )
+    private fun heading(text: String) {
+        // A new section ends whatever group of tiers was being collected.
+        tierGroup = null
+        binding.sections.addView(eyebrow(text).apply { setPadding(dp(4), dp(24), 0, dp(10)) })
+    }
 
     private fun paragraph(text: String) = binding.sections.addView(
-        TextView(this).apply {
-            this.text = text
-            setTextColor(getColor(R.color.on_surface))
-            textSize = 14f
-            setLineSpacing(dp(4).toFloat(), 1f)
-            setPadding(0, 0, 0, dp(8))
+        styledText(R.style.Cindy_Body, text).apply {
+            setTextColor(getColor(R.color.label_body))
+            setPadding(dp(4), 0, dp(4), dp(10))
         }
     )
 
     private fun quiet(text: String) = binding.sections.addView(
-        TextView(this).apply {
-            this.text = text
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 12f
-            setLineSpacing(dp(3).toFloat(), 1f)
-            setPadding(0, dp(2), 0, dp(8))
-        }
+        styledText(R.style.Cindy_Footnote, text).apply { setPadding(dp(4), dp(2), dp(4), dp(10)) }
     )
 
-    /** CrossFit's words, marked as theirs by an accent rule rather than by quote marks alone. */
+    /**
+     * CrossFit's words, marked as theirs by attribution rather than by a coloured bar.
+     *
+     * The bar down the side said "this is special"; the credit underneath says whose it is, which
+     * is both the more useful fact and the one the screen is obliged to carry.
+     */
     private fun quote(text: String) = binding.sections.addView(
         LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(20), dp(18), dp(20), dp(15))
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(10) }
-            addView(TextView(context).apply {
-                setBackgroundColor(getColor(R.color.accent))
-                layoutParams = LinearLayout.LayoutParams(dp(3), ViewGroup.LayoutParams.MATCH_PARENT)
-            })
-            addView(TextView(context).apply {
-                this.text = "“$text”"
-                setTextColor(getColor(R.color.on_surface))
-                textSize = 14f
+
+            addView(styledText(R.style.Cindy_Body, "\u201C$text\u201D").apply {
+                setTextColor(getColor(R.color.label_body))
                 setTypeface(typeface, Typeface.ITALIC)
-                setLineSpacing(dp(4).toFloat(), 1f)
-                setPadding(dp(12), dp(2), 0, dp(2))
             })
+            addView(View(context).apply {
+                setBackgroundColor(getColor(R.color.hairline))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, hairlinePx()
+                ).apply { topMargin = dp(14) }
+            })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(11), 0, 0)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                addView(ImageView(context).apply {
+                    setImageResource(R.drawable.ic_link)
+                    imageTintList = ColorStateList.valueOf(getColor(R.color.label_tertiary))
+                }, LinearLayout.LayoutParams(dp(12), dp(12)))
+                addView(eyebrow("CROSSFIT.COM").apply {
+                    textSize = 10f
+                    setPadding(dp(7), 0, 0, 0)
+                })
+            })
+            contentDescription = "Quotation from crossfit.com: $text"
         }
     )
 
     private fun bullets(vararg items: String) = items.forEach { item ->
         binding.sections.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(8) }
-            addView(TextView(context).apply {
-                text = "·"
-                setTextColor(getColor(R.color.accent))
-                textSize = 14f
-                setTypeface(typeface, Typeface.BOLD)
-                width = dp(16)
-            })
-            addView(TextView(context).apply {
-                this.text = item
-                setTextColor(getColor(R.color.on_surface))
-                textSize = 14f
-                setLineSpacing(dp(4).toFloat(), 1f)
+            setPadding(dp(4), 0, dp(4), dp(12))
+            addView(View(context).apply {
+                background = dotDrawable(R.color.label_tertiary)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(5), dp(5)).apply { topMargin = dp(9) })
+            addView(styledText(R.style.Cindy_Body, item).apply {
+                setTextColor(getColor(R.color.label_body))
+                setPadding(dp(12), 0, 0, 0)
             })
         })
     }
@@ -299,81 +364,84 @@ class HelpActivity : AppCompatActivity() {
     private fun card(build: LinearLayout.() -> Unit) = binding.sections.addView(
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_row)
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(20), dp(18), dp(20), dp(18))
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(10) }
             build()
         }
     )
 
-    private fun LinearLayout.big(text: String) = addView(TextView(context).apply {
-        this.text = text
-        setTextColor(getColor(R.color.accent))
-        textSize = 22f
-        typeface = Typeface.MONOSPACE
-        setTypeface(typeface, Typeface.BOLD)
-    })
+    private fun LinearLayout.rule() = addView(View(context).apply {
+        setBackgroundColor(getColor(R.color.hairline))
+    }, LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.MATCH_PARENT, hairlinePx()
+    ).apply { topMargin = dp(16) })
 
-    private fun LinearLayout.body(text: String) = addView(TextView(context).apply {
-        this.text = text
-        setTextColor(getColor(R.color.on_surface))
-        textSize = 16f
-        setLineSpacing(dp(5).toFloat(), 1f)
-        setPadding(0, dp(6), 0, 0)
-    })
+    private fun LinearLayout.big(text: String) =
+        addView(styledText(R.style.Cindy_Title2, text))
 
-    private fun LinearLayout.quiet(text: String) = addView(TextView(context).apply {
-        this.text = text
-        setTextColor(getColor(R.color.on_surface_dim))
-        textSize = 12f
-        setLineSpacing(dp(3).toFloat(), 1f)
-        setPadding(0, dp(10), 0, 0)
-    })
+    private fun LinearLayout.body(text: String) =
+        addView(styledText(R.style.Cindy_Body, text).apply {
+            setTextColor(getColor(R.color.label_body))
+            textSize = 16f
+            setPadding(0, dp(8), 0, 0)
+        })
+
+    private fun LinearLayout.quiet(text: String) =
+        addView(styledText(R.style.Cindy_Footnote, text).apply { setPadding(0, dp(12), 0, 0) })
+
+    /** The tiers of the section being built, so four calls make one card rather than four. */
+    private var tierGroup: InsetGroup? = null
 
     /**
-     * One of CrossFit's score tiers, lit up when the athlete's best has reached it.
+     * One of CrossFit's score tiers, ticked when the athlete's best has reached it.
      *
      * A null [minRounds] is a tier this app cannot judge, and is never ticked.
      */
     private fun tier(name: String, detail: String, minRounds: Int?, best: Attempt?) {
+        val group = tierGroup ?: InsetGroup(this).also {
+            tierGroup = it
+            binding.sections.addView(it)
+        }
         val reached = minRounds != null && best != null && best.rounds >= minRounds
-        binding.sections.addView(LinearLayout(this).apply {
+
+        group.row(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundResource(if (reached) R.drawable.bg_row_benchmark else R.drawable.bg_row)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(8) }
-            contentDescription =
-                if (reached) "$name, $detail, reached" else "$name, $detail, not yet reached"
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            if (reached) setBackgroundColor(getColor(R.color.surface_glass))
 
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                addView(TextView(context).apply {
-                    text = name
-                    setTextColor(getColor(if (reached) R.color.accent else R.color.on_surface))
-                    textSize = 16f
-                    setTypeface(typeface, Typeface.BOLD)
-                })
-                addView(TextView(context).apply {
-                    text = detail
-                    setTextColor(getColor(R.color.on_surface_dim))
-                    textSize = 12f
+                layoutParams = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                )
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                addView(styledText(R.style.Cindy_Headline, name))
+                addView(styledText(R.style.Cindy_Footnote, detail).apply {
+                    setPadding(0, dp(2), 0, 0)
                 })
             })
-            if (reached) {
-                addView(TextView(context).apply {
-                    text = "✓"
-                    setTextColor(getColor(R.color.accent))
-                    textSize = 20f
-                    setTypeface(typeface, Typeface.BOLD)
+
+            if (minRounds == null) {
+                // Never ticked, and said so rather than left ambiguously empty: this app counts
+                // the prescribed rep scheme, so it cannot know whether the work was scaled.
+                addView(eyebrow("not scored").apply {
+                    textSize = 10f
+                    letterSpacing = 0.04f
+                    setTextColor(getColor(R.color.label_quaternary))
                 })
+            } else {
+                addView(ImageView(context).apply {
+                    setImageResource(
+                        if (reached) R.drawable.ic_check_filled else R.drawable.ic_ring_empty
+                    )
+                }, LinearLayout.LayoutParams(dp(22), dp(22)))
             }
+            contentDescription =
+                if (reached) "$name, $detail, reached" else "$name, $detail, not yet reached"
         })
     }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }
