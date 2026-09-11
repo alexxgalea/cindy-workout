@@ -41,9 +41,18 @@
     <color name="primary_fill">#FFFFFFFF</color>
     <color name="on_primary">#FF000000</color>
 
-    <!-- ── scrims over the preview, so the HUD reads against any gym ── -->
-    <color name="scrim_top">#9E000000</color>
-    <color name="scrim_bottom">#D1000000</color>
+    <!--
+      ── the two bands the HUD lives in ──
+
+      Translucent, not opaque, and that is the whole point: the picture carries on underneath
+      them, so the athlete can see a head or a foot that has drifted out of the bright middle.
+      The camera apps this borrows from blur what is behind the band; this one cannot, because
+      Android will not backdrop-blur a live preview at any sane cost and RenderEffect wants API
+      31 against minSdk 26. Darkening alone still separates the picture from the chrome, and
+      still reads over any gym, which is what the old gradient scrims were for.
+    -->
+    <color name="band_top">#B8000000</color>
+    <color name="band_bottom">#C4000000</color>
 
     <color name="ic_launcher_background">#FF000000</color>
 </resources>

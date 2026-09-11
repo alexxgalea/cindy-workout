@@ -2,6 +2,7 @@ package com.cindy.tracker
 
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,9 @@ import org.robolectric.annotation.Config
  * have. They are not a claim about how anything looks.
  *
  * [MainActivity] is absent on purpose: it binds CameraX and loads a TFLite interpreter in
- * `onCreate`, neither of which Robolectric can stand in for honestly.
+ * `onCreate`, neither of which Robolectric can stand in for honestly. Its *layout* is not
+ * absent, though — see the last test, which is the closest this suite can get to the screen the
+ * app actually opens on.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -45,6 +48,32 @@ class ScreenSmokeTest {
         root.layout(0, 0, 1080, 2400)
         assertTrue("nothing was laid out", root.width > 0 && root.height > 0)
         controller.destroy()
+    }
+
+    /**
+     * The camera HUD's layout, which [MainActivity]'s own exclusion would otherwise leave as the
+     * only screen in the app with no coverage at all.
+     *
+     * Inflating it without the activity skips CameraX and the interpreter while still catching
+     * what a layout rewrite actually gets wrong: an attribute the platform will not take, a
+     * drawable that is not there, a custom view that throws on inflate, a style that fails to
+     * resolve during measure.
+     */
+    @Test
+    fun `the camera HUD inflates`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.setTheme(R.style.Theme_Cindy)
+        val binding = com.cindy.tracker.databinding.ActivityMainBinding
+            .inflate(android.view.LayoutInflater.from(context))
+        binding.root.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(2400, android.view.View.MeasureSpec.EXACTLY)
+        )
+        binding.root.layout(0, 0, 1080, 2400)
+        // The bands have to reach both edges, or the picture shows through beside the HUD.
+        assertEquals("the top band is inset from the glass", 1080, binding.bandTop.width)
+        assertEquals("the bottom band is inset from the glass", 1080, binding.bandBottom.width)
+        assertTrue("the bands ate the whole screen", binding.bandTop.height + binding.bandBottom.height < 2400)
     }
 
     @Test

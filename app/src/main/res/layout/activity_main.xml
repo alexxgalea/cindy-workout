@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The camera runs edge to edge; the HUD is kept clear of the system bars from code, because
-  padding this root would letterbox the preview instead of the overlay.
+  The camera runs edge to edge; the HUD is kept clear of the cutout from code, because padding
+  this root would letterbox the preview instead of the overlay.
 
-  Four floating boxes became two surfaces and a rail. The clock and the round used to be separate
-  chips; they are one bar. The four labelled chips (VOICE MUSIC REC MENU) wanted 330dp of width
-  at a 48dp touch target and wrapped onto a second line on a 360dp phone; as icons they need
-  about 204dp and cannot. The rep readout and the four controls under it were a box plus four
-  equally-weighted buttons with nothing leading; they are one panel with a single filled action.
+  The HUD is no longer a set of cards floating on the picture. It is the two bands at the edges
+  of it, the way a camera app does it: everything the athlete can touch lives in a band, and the
+  bright middle is left alone for the body. The bands are translucent, so the picture carries on
+  underneath and a foot that has drifted low is still visible — dimmed, but there.
+
+  Two surfaces, then, where there were four. The clock bar and the icon rail are one band; the
+  status line joins them rather than floating beneath; the rep panel is the other band, with the
+  progress bar as the band's own top edge, which is both one row less and a boundary you can see.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -36,176 +39,129 @@
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
     <!--
-      Scrims, as a camera app darkens its own chrome strips. Without them the HUD is legible over
-      a dark gym and invisible over a bright one, and no amount of translucency in the glass fixes
-      that on its own.
+      ── the top band: the clock, what changes mid-set, and the coaching line ──
+
+      Height is whatever its rows need, so a large font scale grows the band rather than clipping
+      it. The system bars are hidden on this screen, so the only thing pushing the first row down
+      is the camera cutout, applied as padding from code.
     -->
-    <View
-        android:id="@+id/scrimTop"
-        android:layout_width="0dp"
-        android:layout_height="248dp"
-        android:background="@drawable/scrim_top"
-        android:importantForAccessibility="no"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <View
-        android:id="@+id/scrimBottom"
-        android:layout_width="0dp"
-        android:layout_height="360dp"
-        android:background="@drawable/scrim_bottom"
-        android:importantForAccessibility="no"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- ── clock and round: one surface ── -->
     <LinearLayout
-        android:id="@+id/topBar"
+        android:id="@+id/bandTop"
         android:layout_width="0dp"
-        android:layout_height="54dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginHorizontal="@dimen/screen_margin"
-        android:background="@drawable/glass_bar"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="22dp"
-        android:paddingEnd="20dp"
+        android:layout_height="wrap_content"
+        android:background="@color/band_top"
+        android:orientation="vertical"
+        android:paddingTop="14dp"
+        android:paddingBottom="11dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:id="@+id/timer"
-            style="@style/Cindy.MetricM"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingEnd="12dp">
+
+            <TextView
+                android:id="@+id/timer"
+                style="@style/Cindy.MetricM"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="20:00"
+                app:autoSizeMaxTextSize="30sp"
+                app:autoSizeMinTextSize="20sp"
+                app:autoSizeTextType="uniform" />
+
+            <!-- Icons, not words: four labelled chips wanted 330dp of row and this one has 320. -->
+            <ImageView
+                android:id="@+id/btnVoice"
+                android:layout_width="44dp"
+                android:layout_height="40dp"
+                android:padding="11dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_voice"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/btnMusic"
+                android:layout_width="44dp"
+                android:layout_height="40dp"
+                android:padding="11dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_music"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/btnRec"
+                android:layout_width="44dp"
+                android:layout_height="40dp"
+                android:padding="11dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_rec"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/btnMenu"
+                android:layout_width="44dp"
+                android:layout_height="40dp"
+                android:padding="11dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_menu"
+                tools:ignore="ContentDescription" />
+        </LinearLayout>
+
+        <!-- The coaching line. It sat in a pill over the athlete; on the band it needs no pill. -->
+        <LinearLayout
+            android:id="@+id/statusRow"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="20:00"
-            app:autoSizeMaxTextSize="32sp"
-            app:autoSizeMinTextSize="20sp"
-            app:autoSizeTextType="uniform" />
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:minHeight="22dp"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp">
 
-        <TextView
-            android:id="@+id/roundsLabel"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="9dp"
-            android:importantForAccessibility="no"
-            android:text="ROUND" />
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:layout_marginEnd="8dp"
+                android:importantForAccessibility="no" />
 
-        <TextView
-            android:id="@+id/rounds"
-            style="@style/Cindy.MetricS"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="1" />
-    </LinearLayout>
-
-    <!-- ── what changes mid-set, as icons so the row cannot outgrow the screen ── -->
-    <LinearLayout
-        android:id="@+id/rail"
-        android:layout_width="wrap_content"
-        android:layout_height="48dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="@dimen/screen_margin"
-        android:background="@drawable/glass_rail"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="6dp"
-        app:layout_constraintTop_toBottomOf="@id/topBar"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <ImageView
-            android:id="@+id/btnVoice"
-            android:layout_width="44dp"
-            android:layout_height="40dp"
-            android:padding="11dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_voice"
-            tools:ignore="ContentDescription" />
-
-        <ImageView
-            android:id="@+id/btnMusic"
-            android:layout_width="44dp"
-            android:layout_height="40dp"
-            android:padding="11dp"
-            android:scaleType="fitCenter"
-            tools:ignore="ContentDescription"
-            android:src="@drawable/ic_music" />
-
-        <ImageView
-            android:id="@+id/btnRec"
-            android:layout_width="44dp"
-            android:layout_height="40dp"
-            android:padding="11dp"
-            android:scaleType="fitCenter"
-            tools:ignore="ContentDescription"
-            android:src="@drawable/ic_rec" />
-
-        <ImageView
-            android:id="@+id/btnMenu"
-            android:layout_width="44dp"
-            android:layout_height="40dp"
-            android:padding="11dp"
-            android:scaleType="fitCenter"
-            tools:ignore="ContentDescription"
-            android:src="@drawable/ic_menu" />
-    </LinearLayout>
-
-    <!-- ── the coaching line: sized to its words, colour carries the state ── -->
-    <LinearLayout
-        android:id="@+id/statusPill"
-        android:layout_width="wrap_content"
-        android:layout_height="34dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginHorizontal="@dimen/screen_margin"
-        android:background="@drawable/glass_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="13dp"
-        android:paddingEnd="16dp"
-        app:layout_constraintTop_toBottomOf="@id/rail"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <View
-            android:id="@+id/statusDot"
-            android:layout_width="7dp"
-            android:layout_height="7dp"
-            android:layout_marginEnd="8dp"
-            android:importantForAccessibility="no" />
-
-        <TextView
-            android:id="@+id/status"
-            style="@style/Cindy.Headline"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:text="Grant camera access to begin"
-            android:textSize="14sp" />
+            <TextView
+                android:id="@+id/status"
+                style="@style/Cindy.Headline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:text="Grant camera access to begin"
+                android:textSize="14sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!--
       ── the start-position demonstrator ──
 
-      Down the left edge, clear of where a body stands. It is the status pill grown up rather than
-      a second voice: while it is showing, the pill hides, so the cue is never given twice.
+      The one thing still allowed to stand on the picture, because it shows before a set rather
+      than during one, and because it is the status line grown up: while it is showing, that line
+      hides, so the cue is never given twice.
     -->
     <LinearLayout
         android:id="@+id/coachCard"
         android:layout_width="132dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/screen_margin"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="20dp"
         android:background="@drawable/glass_panel"
         android:orientation="vertical"
         android:paddingHorizontal="10dp"
         android:paddingVertical="12dp"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/statusPill"
+        app:layout_constraintTop_toBottomOf="@id/bandTop"
         app:layout_constraintStart_toStartOf="parent">
 
 <!--
@@ -249,138 +205,166 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ══ the main zone: the metric and its controls on one slab ══ -->
+    <!-- ══ the bottom band: the metric and everything that acts on it ══ -->
     <LinearLayout
-        android:id="@+id/panel"
+        android:id="@+id/bandBottom"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:layout_marginHorizontal="@dimen/screen_margin"
-        android:background="@drawable/glass_panel"
+        android:background="@color/band_bottom"
         android:orientation="vertical"
-        android:paddingHorizontal="18dp"
-        android:paddingTop="18dp"
-        android:paddingBottom="20dp"
+        android:paddingBottom="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
+
+        <!--
+          Edge to edge, and it is the band's own top edge: readable from across the room when the
+          digits are not, and it draws the line the picture ends on.
+        -->
+        <ProgressBar
+            android:id="@+id/repProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:importantForAccessibility="no"
+            android:max="100"
+            android:progressDrawable="@drawable/track" />
+
+        <!-- The round moved down off the clock bar: 72 + 55 + 176dp of row against 320 available. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:baselineAligned="true"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp">
+
+            <TextView
+                android:id="@+id/roundsLabel"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:importantForAccessibility="no"
+                android:text="ROUND" />
+
+            <TextView
+                android:id="@+id/rounds"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:fontFeatureSettings="tnum"
+                android:text="1"
+                android:textColor="@color/label_secondary" />
+
+            <TextView
+                android:id="@+id/exercise"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:text="PULL-UPS"
+                android:textColor="@color/label_secondary"
+                app:autoSizeMaxTextSize="11sp"
+                app:autoSizeMinTextSize="8sp"
+                app:autoSizeTextType="uniform" />
+        </LinearLayout>
 
         <!-- Rep edits sit either side of the number they change, not lost among the actions. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp">
 
             <ImageView
                 android:id="@+id/btnUndo"
-                android:layout_width="54dp"
-                android:layout_height="54dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:background="@drawable/btn_glass"
-                android:padding="16dp"
+                android:padding="15dp"
                 android:scaleType="fitCenter"
-            tools:ignore="ContentDescription"
-                android:src="@drawable/ic_minus" />
+                android:src="@drawable/ic_minus"
+                tools:ignore="ContentDescription" />
 
             <LinearLayout
                 android:id="@+id/repBlock"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginHorizontal="10dp"
                 android:layout_weight="1"
+                android:baselineAligned="true"
                 android:gravity="center"
-                android:orientation="vertical">
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/exercise"
-                    style="@style/Cindy.Eyebrow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:letterSpacing="0.155"
-                    android:text="PULL-UPS"
-                    android:textColor="@color/label_secondary"
-                    app:autoSizeMaxTextSize="11sp"
-                    app:autoSizeMinTextSize="8sp"
-                    app:autoSizeTextType="uniform" />
-
-                <LinearLayout
+                    android:id="@+id/reps"
+                    style="@style/Cindy.MetricXL"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:baselineAligned="true"
-                    android:orientation="horizontal">
+                    android:text="0"
+                    android:textSize="56sp"
+                    app:autoSizeMaxTextSize="56sp"
+                    app:autoSizeMinTextSize="30sp"
+                    app:autoSizeTextType="uniform" />
 
-                    <TextView
-                        android:id="@+id/reps"
-                        style="@style/Cindy.MetricXL"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="0"
-                        app:autoSizeMaxTextSize="62sp"
-                        app:autoSizeMinTextSize="30sp"
-                        app:autoSizeTextType="uniform" />
-
-                    <!-- Drops back a weight and a shade so the eye lands on the number that moves. -->
-                    <TextView
-                        android:id="@+id/repsTarget"
-                        style="@style/Cindy.MetricXL"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="@font/manrope_bold"
-                        android:text="/5"
-                        android:textColor="@color/label_tertiary"
-                        android:textSize="34sp" />
-                </LinearLayout>
+                <!-- Drops back a weight and a shade so the eye lands on the number that moves. -->
+                <TextView
+                    android:id="@+id/repsTarget"
+                    style="@style/Cindy.MetricXL"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/manrope_bold"
+                    android:text="/5"
+                    android:textColor="@color/label_tertiary"
+                    android:textSize="30sp" />
             </LinearLayout>
 
             <ImageView
                 android:id="@+id/btnSkip"
-                android:layout_width="54dp"
-                android:layout_height="54dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:background="@drawable/btn_glass"
-                android:padding="16dp"
+                android:padding="15dp"
                 android:scaleType="fitCenter"
-            tools:ignore="ContentDescription"
-                android:src="@drawable/ic_plus" />
+                android:src="@drawable/ic_plus"
+                tools:ignore="ContentDescription" />
         </LinearLayout>
 
-        <!-- Readable from across the room, when the digits are not. -->
-        <ProgressBar
-            android:id="@+id/repProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginTop="16dp"
-            android:importantForAccessibility="no"
-            android:max="100"
-            android:progressDrawable="@drawable/track" />
-
+        <!--
+          The left control is FLIP outside a workout and STOP inside one, so it is an icon; the
+          primary says five different things across the states, three of which — SKIP, RESUME,
+          AGAIN — no mark carries on its own, so it keeps the word and takes a mark as well.
+        -->
         <LinearLayout
-            android:id="@+id/controls"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="horizontal">
+            android:layout_height="52dp"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp">
 
-            <TextView
+            <ImageView
                 android:id="@+id/btnFlip"
-                style="@style/Cindy.Button.Small"
-                android:layout_width="wrap_content"
-                android:layout_height="54dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:layout_marginEnd="10dp"
                 android:background="@drawable/btn_glass"
-                android:minWidth="72dp"
-                android:paddingHorizontal="16dp"
-                android:text="FLIP" />
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_flip"
+                tools:ignore="ContentDescription" />
 
             <TextView
                 android:id="@+id/btnStart"
                 style="@style/Cindy.Button"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:background="@drawable/btn_primary"
+                android:drawablePadding="10dp"
                 android:text="START"
                 android:textColor="@color/on_primary"
                 app:autoSizeMaxTextSize="17sp"

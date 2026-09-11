@@ -35,12 +35,14 @@ import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.annotation.DrawableRes
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.updateLayoutParams
 import androidx.camera.view.PreviewView
@@ -250,6 +252,7 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        hideSystemBars()
 
         clock = HudText(binding.timer)
         round = HudText(binding.rounds)
@@ -263,6 +266,10 @@ class MainActivity : AppCompatActivity() {
         neutral = getColor(R.color.label_tertiary)
         label = getColor(R.color.label)
         binding.coachDot.background = dotDrawable(R.color.state_alert)
+        // The one filled control on the screen is white, so its mark has to be painted black.
+        binding.btnStart.compoundDrawableTintList =
+            ColorStateList.valueOf(getColor(R.color.on_primary))
+        primary("START", R.drawable.ic_play)
 
         // The launch screen goes when the preview delivers a frame, which is the moment the app
         // is actually ready. The timeout covers the cases where that never happens — a refused
@@ -318,7 +325,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMenu.setOnClickListener {
             startActivity(MenuActivity.intent(this, workoutLive = inWorkout()))
         }
-        binding.statusPill.setOnLongClickListener {
+        binding.statusRow.setOnLongClickListener {
             debug = !debug
             toast(if (debug) "Debug readout on" else "Debug readout off")
             true
@@ -342,43 +349,62 @@ class MainActivity : AppCompatActivity() {
     // ── window and accessibility ──────────────────────────────────────────────
 
     /**
-     * Re-margins the overlaid HUD by whatever the system bars and the cutout are covering.
+     * Puts the status and navigation bars away for the workout, the way a camera app does.
      *
-     * Only the edge each view is actually anchored to is adjusted: adding the top inset to the
-     * status line, which hangs off the chips above it, would just push it down the screen.
+     * The strip they occupy is a HUD row's worth of the picture, and the only clock that matters
+     * mid-Cindy is the one this screen prints itself. They stay reachable: a swipe brings them
+     * back over the top, transiently, without moving the layout underneath.
+     */
+    private fun hideSystemBars() {
+        WindowInsetsControllerCompat(window, binding.root).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** A dialog, a permission prompt or a task switch brings them back; put them away again. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    /**
+     * Keeps the HUD clear of whatever the display cutout is covering.
+     *
+     * The system bars are hidden on this screen, so usually there is nothing to clear — but a
+     * punch-hole or a notch still reports an inset, and the top band's first row sits exactly
+     * where one lives. The bands take it as *padding*, not margin: their backgrounds have to go
+     * on reaching the edges of the glass, and a margin would leave a bright strip of preview
+     * above the band.
      */
     private fun keepHudClearOfSystemBars() {
-        val hud = listOf<View>(
-            binding.topBar, binding.rail, binding.statusPill, binding.coachCard, binding.panel
-        )
-        val base = hud.associateWith { view ->
-            val lp = view.layoutParams as ViewGroup.MarginLayoutParams
-            intArrayOf(lp.marginStart, lp.topMargin, lp.marginEnd, lp.bottomMargin)
+        val bands = listOf(binding.bandTop, binding.bandBottom)
+        val base = bands.associateWith { view ->
+            intArrayOf(view.paddingLeft, view.paddingTop, view.paddingRight, view.paddingBottom)
         }
+        val coachBase =
+            (binding.coachCard.layoutParams as ViewGroup.MarginLayoutParams).marginStart
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { root, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val rtl = root.layoutDirection == View.LAYOUT_DIRECTION_RTL
-            val start = if (rtl) bars.right else bars.left
-            val end = if (rtl) bars.left else bars.right
 
-            fun View.push(startBy: Int = 0, topBy: Int = 0, endBy: Int = 0, bottomBy: Int = 0) {
-                val b = base.getValue(this)
-                updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                    marginStart = b[0] + startBy
-                    topMargin = b[1] + topBy
-                    marginEnd = b[2] + endBy
-                    bottomMargin = b[3] + bottomBy
-                }
+            base.getValue(binding.bandTop).let { b ->
+                binding.bandTop.setPadding(
+                    b[0] + bars.left, b[1] + bars.top, b[2] + bars.right, b[3]
+                )
             }
-
-            binding.topBar.push(startBy = start, topBy = bars.top, endBy = end)
-            binding.rail.push(endBy = end)
-            binding.statusPill.push(startBy = start, endBy = end)
-            binding.coachCard.push(startBy = start)
-            binding.panel.push(startBy = start, endBy = end, bottomBy = bars.bottom)
+            base.getValue(binding.bandBottom).let { b ->
+                binding.bandBottom.setPadding(
+                    b[0] + bars.left, b[1], b[2] + bars.right, b[3] + bars.bottom
+                )
+            }
+            binding.coachCard.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                marginStart = coachBase + if (rtl) bars.right else bars.left
+            }
             insets
         }
     }
@@ -397,7 +423,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnUndo.describeAsButton("Take back a rep")
         binding.btnSkip.describeAsButton("Add a rep", longPress = "Skip to the next movement")
         binding.btnMenu.describeAsButton("Menu: records, movements, body weight and help")
-        binding.statusPill.describeAsButton(longPress = "Show the debug readout")
+        binding.statusRow.describeAsButton(longPress = "Show the debug readout")
         // The rest change job with the workout: renderControls and renderChips name those, and
         // only the long presses, which never change, are declared here.
         binding.btnStart.describeAsButton()
@@ -717,7 +743,7 @@ class MainActivity : AppCompatActivity() {
         renderControls()
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
-        binding.btnStart.text = "SKIP"
+        primary("SKIP", R.drawable.ic_skip)
         exercise.text = "SET UP"
         reps.text = "—"
         repsTarget.text = ""
@@ -769,7 +795,7 @@ class MainActivity : AppCompatActivity() {
         roundSplits.clear()
         elapsedMs = 0L
         pausedMs = 0L
-        binding.btnStart.text = "PAUSE"
+        primary("PAUSE", R.drawable.ic_pause)
         statusDot(neutral)
         status.text = "Counting…"
         if (musicEnabled) music.play()
@@ -790,7 +816,7 @@ class MainActivity : AppCompatActivity() {
                     pauseStartedAt = 0L
                 }
                 lastTickAt = now
-                binding.btnStart.text = "PAUSE"
+                primary("PAUSE", R.drawable.ic_pause)
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
@@ -804,7 +830,7 @@ class MainActivity : AppCompatActivity() {
                 state = State.PAUSED
                 coach.interrupted()
                 pauseStartedAt = SystemClock.elapsedRealtime()
-                binding.btnStart.text = "RESUME"
+                primary("RESUME", R.drawable.ic_play)
                 status.text = "Paused"
                 music.pause()
                 speaker.stop()
@@ -816,14 +842,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Sets the primary control's word and its mark together, because they have to agree.
+     *
+     * Play, pause and stop are universal marks. Three of the five states are not: no icon on its
+     * own says "skip the setup check", "resume" rather than "start", or "go around again". So the
+     * word stays and takes a mark alongside it, rather than being replaced by one.
+     */
+    private fun primary(word: String, @DrawableRes icon: Int) {
+        binding.btnStart.text = word
+        binding.btnStart.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0)
+    }
+
+    /**
      * The left button is FLIP outside a workout and STOP inside one. Flipping the camera
-     * mid-Cindy is not a thing anyone does; ending early is.
+     * mid-Cindy is not a thing anyone does; ending early is. It carries no word at all now, so
+     * its colour and its mark are the whole of it, and the spoken name below matters more.
      */
     private fun renderControls() {
-        binding.btnFlip.text = if (inWorkout()) "STOP" else "FLIP"
-        binding.btnFlip.setTextColor(if (inWorkout()) alert else label)
-        binding.btnFlip.contentDescription =
-            if (inWorkout()) "End the workout" else "Switch camera"
+        val live = inWorkout()
+        binding.btnFlip.setImageResource(if (live) R.drawable.ic_stop else R.drawable.ic_flip)
+        binding.btnFlip.imageTintList = ColorStateList.valueOf(if (live) alert else label)
+        binding.btnFlip.contentDescription = if (live) "End the workout" else "Switch camera"
         binding.btnStart.contentDescription = when (state) {
             State.IDLE -> "Start the workout"
             State.SETUP -> "Skip the setup check"
@@ -866,7 +905,7 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.reset() }
         coach.reset()
         detector?.resetRoi()
-        binding.btnStart.text = "START"
+        primary("START", R.drawable.ic_play)
         statusDot(neutral)
         status.text = "Press START to set up"
         reps.colour(label)
@@ -920,7 +959,7 @@ class MainActivity : AppCompatActivity() {
         )
         records.add(attempt)
 
-        binding.btnStart.text = "RESET"
+        primary("AGAIN", R.drawable.ic_again)
         renderControls()
         // Kept as it was: the finished count is painted in the alert colour so a glance at a
         // phone across the room says the clock has stopped rather than that it is still running.
@@ -1081,7 +1120,7 @@ class MainActivity : AppCompatActivity() {
         binding.coachCard.visibility = if (show) View.VISIBLE else View.GONE
         // One voice: while the figure is up it carries the cue, so the pill stands down. INVISIBLE
         // rather than GONE, because the card hangs off the pill's bottom edge.
-        binding.statusPill.visibility = if (show) View.INVISIBLE else View.VISIBLE
+        binding.statusRow.visibility = if (show) View.INVISIBLE else View.VISIBLE
     }
 
     private fun toggleRecording() {
