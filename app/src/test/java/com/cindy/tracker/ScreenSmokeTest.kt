@@ -94,6 +94,21 @@ class ScreenSmokeTest {
         )
     }
 
+    /**
+     * With a track chosen, which is the other branch of the music row's subtitle — and of the
+     * sheet behind it, which grows a toggle only once there is something to toggle.
+     */
+    @Test
+    fun `the menu builds with a track chosen`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val profile = Profile(context)
+        profile.musicTrack = "content://fake/track.mp3"
+        profile.musicOn = false
+        smoke<MenuActivity>(MenuActivity.intent(context, workoutLive = false))
+        profile.musicTrack = null
+        profile.musicOn = true
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 

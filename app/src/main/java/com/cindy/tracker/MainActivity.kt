@@ -1,7 +1,6 @@
 package com.cindy.tracker
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -59,7 +58,6 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
-        const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
@@ -197,7 +195,6 @@ class MainActivity : AppCompatActivity() {
     private var elapsedMs = 0L
     private var pausedMs = 0L
     private var pauseStartedAt = 0L
-    private var musicEnabled = true
     private var debug = false
     /** Decides what the voice says about the athlete's position. Tested on its own.  */
     private val coach = Coach()
@@ -234,10 +231,6 @@ class MainActivity : AppCompatActivity() {
         if (granted) startCamera()
         else status.text = "Camera permission is required to count reps"
     }
-
-    private val pickMusic = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { adoptTrack(it) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, so the launch window is in place for the whole of the cold start rather
@@ -298,7 +291,7 @@ class MainActivity : AppCompatActivity() {
             status.text = "Pose model failed to load — manual counting only"
         }
 
-        restoreTrack()
+        syncMusic()
 
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnEnd.setOnClickListener { confirmStop() }
@@ -319,8 +312,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnUndo.setOnClickListener { onUndoRep() }
         binding.btnSkipExercise.setOnClickListener { onSkip() }
         binding.btnVoice.setOnClickListener { toggleVoice() }
-        binding.btnMusic.setOnClickListener { onMusicTapped() }
-        binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
         binding.btnRec.setOnClickListener { toggleRecording() }
         binding.btnMenu.setOnClickListener {
             startActivity(MenuActivity.intent(this, workoutLive = inWorkout()))
@@ -422,14 +413,13 @@ class MainActivity : AppCompatActivity() {
     private fun describeControls() {
         binding.btnUndo.describeAsButton("Take back a rep")
         binding.btnAddRep.describeAsButton("Add a rep")
-        binding.btnMenu.describeAsButton("Menu: records, movements, body weight and help")
+        binding.btnMenu.describeAsButton("Menu: records, movements, music, body weight and help")
         binding.statusRow.describeAsButton(longPress = "Show the debug readout")
         // The rest change job with the workout: renderControls and renderChips name those, and
         // only the long presses, which never change, are declared here.
         binding.btnStart.describeAsButton()
         binding.btnEnd.describeAsButton("End the workout")
         binding.btnFlip.describeAsButton("Switch camera", longPress = "Switch pose model")
-        binding.btnMusic.describeAsButton(longPress = "Choose a track")
         binding.btnVoice.describeAsButton()
         binding.btnRec.describeAsButton()
     }
@@ -803,7 +793,7 @@ class MainActivity : AppCompatActivity() {
         renderControls()
         statusDot(neutral)
         status.text = "Counting…"
-        if (musicEnabled) music.play()
+        if (profile.musicOn) music.play()
         speaker.say(if (calibrated) "Calibrated. Go." else "Go. Pull ups")
         apply(runEngine { RepEvent.NONE })
         ui.post(ticker)
@@ -830,7 +820,7 @@ class MainActivity : AppCompatActivity() {
                 synchronized(engineLock) { engine.recalibrate() }
                 detector?.resetRoi()
                 status.text = "Recalibrating…"
-                if (musicEnabled) music.play()
+                if (profile.musicOn) music.play()
                 speaker.say("Resume")
                 ui.post(ticker)
             }
@@ -1078,37 +1068,30 @@ class MainActivity : AppCompatActivity() {
         renderChips()
     }
 
-    private fun onMusicTapped() {
-        if (!music.hasTrack) {
-            pickMusic.launch(arrayOf("audio/*"))
-            return
+    /**
+     * Brings the player in line with what the menu says, on create and on every resume.
+     *
+     * The track is chosen in [MenuActivity] and stored in [Profile]; this screen is the only one
+     * that ever plays it, so the two have to be reconciled somewhere, and the moment of coming
+     * back from the menu is exactly when the answer can have changed. Loading is skipped when
+     * the chosen track is already the loaded one, because a reload is a decode and a seek back
+     * to the top of a track that may be playing.
+     *
+     * A track that will not load has had its grant lapse — deleted, or reinstalled out from
+     * under the app — and the preference is cleared rather than retried on every resume, so the
+     * menu stops offering a track that cannot play.
+     */
+    private fun syncMusic() {
+        val chosen = profile.musicTrack
+        when {
+            chosen == null -> music.release()
+            music.trackUri?.toString() != chosen ->
+                if (!music.load(Uri.parse(chosen))) {
+                    profile.musicTrack = null
+                    toast("That track can no longer be played")
+                }
         }
-        musicEnabled = !musicEnabled
-        if (musicEnabled && state == State.RUNNING) music.play() else music.pause()
-        renderChips()
-    }
-
-    private fun adoptTrack(uri: Uri) {
-        try {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (t: Throwable) {
-            Log.w(TAG, "no persistable permission for $uri", t)
-        }
-        if (!music.load(uri)) {
-            toast("Could not play that file")
-            return
-        }
-        prefs().edit().putString(KEY_MUSIC, uri.toString()).apply()
-        musicEnabled = true
-        if (state == State.RUNNING) music.play()
-        renderChips()
-        toast("Music: ${music.trackName ?: "track loaded"}")
-    }
-
-    /** Reloads last session's track, quietly forgetting it if the permission has lapsed. */
-    private fun restoreTrack() {
-        val saved = prefs().getString(KEY_MUSIC, null) ?: return
-        if (!music.load(Uri.parse(saved))) prefs().edit().remove(KEY_MUSIC).apply()
+        if (profile.musicOn && state == State.RUNNING) music.play() else music.pause()
     }
 
     // ── rendering ─────────────────────────────────────────────────────────────
@@ -1126,17 +1109,6 @@ class MainActivity : AppCompatActivity() {
         }
         paint(binding.btnVoice, if (speaker.enabled) label else neutral, speaker.enabled)
 
-        val musicOn = music.hasTrack && musicEnabled
-        // Three states, not two: no track at all is dimmer again than a track that is paused.
-        paint(
-            binding.btnMusic,
-            when {
-                musicOn -> label
-                music.hasTrack -> neutral
-                else -> getColor(R.color.label_quaternary)
-            },
-            musicOn
-        )
         // Lit red while filming, red but unlit while the countdown runs — the count itself is
         // on the picture, so the icon only has to say which of the three states REC is in.
         val counting = binding.countdown.isRunning
@@ -1150,11 +1122,6 @@ class MainActivity : AppCompatActivity() {
         // The chips carry no text at all now, so a screen reader has nothing but these.
         binding.btnVoice.contentDescription =
             if (speaker.enabled) "Voice counting, on" else "Voice counting, off"
-        binding.btnMusic.contentDescription = when {
-            !music.hasTrack -> "Music, no track chosen"
-            musicEnabled -> "Music, on"
-            else -> "Music, off"
-        }
         binding.btnRec.contentDescription = when {
             counting -> "Recording is about to start, tap to cancel"
             video.isRecording -> "Stop recording"
@@ -1350,6 +1317,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         syncMovements()
+        syncMusic()
     }
 
     override fun onPause() {
