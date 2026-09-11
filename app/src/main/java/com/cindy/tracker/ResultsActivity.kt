@@ -1,13 +1,12 @@
 package com.cindy.tracker
 
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityResultsBinding
 import java.util.Locale
@@ -67,10 +66,12 @@ class ResultsActivity : AppCompatActivity() {
         )
         stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
 
-        binding.btnDone.setOnClickListener { finish() }
-        binding.btnRecords.setOnClickListener {
-            startActivity(Intent(this, RecordsActivity::class.java))
-        }
+        binding.actions.addView(glassButton("HISTORY").apply {
+            setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
+        })
+        binding.actions.addView(primaryButton("DONE").apply {
+            setOnClickListener { finish() }
+        })
         render(attempt, stoppedEarly)
     }
 
@@ -85,7 +86,12 @@ class ResultsActivity : AppCompatActivity() {
 
     private fun render(a: Attempt, stopped: Boolean) {
         binding.headline.text = if (stopped) "STOPPED" else "TIME"
-        binding.score.text = a.scoreLabel()
+
+        // Rounds are the score; loose reps are a footnote on it, so they drop a weight and a
+        // shade rather than sitting in the same 72sp as the number that matters.
+        binding.score.text = "${a.rounds}"
+        binding.scoreReps.visibility = if (a.reps > 0) View.VISIBLE else View.GONE
+        if (a.reps > 0) binding.scoreReps.text = "+${a.reps}"
 
         // The record this score was actually chasing: the best previous attempt at the same
         // movements. Ranking it against a different prescription would flatter or insult it
@@ -100,6 +106,10 @@ class ResultsActivity : AppCompatActivity() {
         renderLevel(a)
 
         binding.stats.removeAllViews()
+        val group = InsetGroup(this)
+        fun stat(label: String, value: CharSequence, onTap: (() -> Unit)? = null) =
+            group.row(statRow(label, value, onTap))
+
         stat("Rounds completed", "${a.rounds}")
         stat("Workout time", formatDuration(a.durationMs))
         if (a.pausedMs > 0L) {
@@ -114,30 +124,45 @@ class ResultsActivity : AppCompatActivity() {
         // Said out loud rather than folded into the total: the app saw most of these and was
         // told about the rest, and those are different kinds of claim.
         if (a.manualReps > 0) stat("Added by hand", "${a.manualReps} of ${a.totalReps}")
-        energy(a)
+        energy(a, group)
         previousBest?.let {
             val delta = a.totalReps - it.totalReps
-            val sign = if (delta >= 0) "+" else ""
-            stat("Against your best", "${it.scoreLabel()}  ($sign$delta reps)")
+            stat("Against your best", deltaText(it.scoreLabel(), delta))
         }
+        binding.stats.addView(group)
 
         val splits = a.roundSplitsMs
         if (splits.isEmpty()) {
-            binding.splitsTitle.visibility = android.view.View.GONE
-            binding.splits.visibility = android.view.View.GONE
+            binding.splitsTitle.visibility = View.GONE
+            binding.splits.visibility = View.GONE
             binding.splitsNote.text = "No complete rounds to chart."
         } else {
             val fastest = splits.indexOf(splits.min())
             binding.splits.setValues(
                 splits,
                 highlightIndex = fastest,
-                labels = splits.indices.map { "${it + 1}" }
+                labels = splits.indices.map { "${it + 1}" },
+                meanLabel = a.avgRoundMs?.let { "AVG ${formatDuration(it)}" }
             )
             // Taller is slower here, so say which way to read it.
             binding.splitsNote.text = buildString {
                 append("Taller is slower. Fastest was round ${fastest + 1} at ${formatDuration(splits[fastest])}.")
                 if (a.pausedMs > 0L) append(" Splits exclude paused time.")
             }
+        }
+    }
+
+    /** "17  +22", with the delta green when it is one. Green is the affirmative everywhere. */
+    private fun deltaText(score: String, delta: Int): CharSequence {
+        val sign = if (delta >= 0) "+" else "−"
+        val text = "$score  $sign${kotlin.math.abs(delta)}"
+        return SpannableString(text).apply {
+            setSpan(
+                ForegroundColorSpan(
+                    getColor(if (delta >= 0) R.color.state_ok else R.color.label_tertiary)
+                ),
+                score.length + 2, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
         }
     }
 
@@ -153,8 +178,10 @@ class ResultsActivity : AppCompatActivity() {
         val level = a.level
         if (level != null) {
             binding.levelTitle.text = level.title
+            binding.levelRung.text = "${level.ordinal + 1} of ${Level.entries.size}"
+            binding.levelRung.visibility = View.VISIBLE
             binding.levelBlurb.text = level.blurb
-            binding.levelProgress.visibility = android.view.View.VISIBLE
+            binding.levelProgress.visibility = View.VISIBLE
             binding.levelProgress.progress = (Level.progress(a.rounds) * 100).toInt()
             binding.levelNext.text = Level.roundsToNext(a.rounds)?.let { need ->
                 "$need more round${if (need == 1) "" else "s"} to ${Level.next(level)?.title}"
@@ -163,10 +190,11 @@ class ResultsActivity : AppCompatActivity() {
         }
         val profile = a.profile
         binding.levelTitle.text = profile?.mode?.label ?: "Adaptive Cindy"
+        binding.levelRung.visibility = View.GONE
         binding.levelBlurb.text = profile?.changedMovements()?.takeIf { it.isNotEmpty() }
             ?: "Movements this version does not recognise."
         // No rung, so no bar to fill: an empty progress bar would read as "no progress".
-        binding.levelProgress.visibility = android.view.View.GONE
+        binding.levelProgress.visibility = View.GONE
         binding.levelNext.text =
             "Ranked against your own sessions at these movements, not the strict ladder."
     }
@@ -178,55 +206,24 @@ class ResultsActivity : AppCompatActivity() {
      * MET table and the athlete's weight, and the answer carries real uncertainty. Saying so is
      * cheaper than being quietly wrong.
      */
-    private fun energy(a: Attempt) {
+    private fun energy(a: Attempt, group: InsetGroup) {
         val kcal = Calories.burned(a.totalReps, a.durationMs, profile.bodyWeightKg)
         if (kcal == null) {
-            stat("Calories", "set weight →") { askBodyWeight() }
+            group.row(statRow("Calories", "Set your weight") { askBodyWeight() })
             return
         }
         val kg = profile.bodyWeightKg
-        stat("Calories (est.)", "$kcal kcal") { askBodyWeight() }
-        binding.stats.addView(TextView(this).apply {
-            text = "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
+        group.row(statRow("Calories (est.)", "$kcal kcal") { askBodyWeight() })
+        group.attach(styledText(
+            R.style.Cindy_Footnote,
+            "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
                 .format(Locale.US, kg, Calories.met(a.totalReps, a.durationMs))
-            setTextColor(getColor(R.color.on_surface_dim))
+        ).apply {
             textSize = 11f
-            setPadding(0, 0, 0, dp(6))
+            setPadding(dp(18), 0, dp(18), dp(14))
         })
     }
 
     /** Asks for body weight, and redraws whatever depended on it. Shared with [MenuActivity]. */
     private fun askBodyWeight() = askBodyWeight(profile) { render(attempt, stoppedEarly) }
-
-    private fun stat(label: String, value: String, onTap: (() -> Unit)? = null) {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(9), 0, dp(9))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            addView(TextView(context).apply {
-                text = label
-                setTextColor(getColor(R.color.on_surface_dim))
-                textSize = 14f
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            addView(TextView(context).apply {
-                text = value
-                setTextColor(getColor(if (onTap == null) R.color.on_surface else R.color.accent))
-                textSize = 16f
-                typeface = android.graphics.Typeface.MONOSPACE
-            })
-            onTap?.let { tap ->
-                isClickable = true
-                setOnClickListener { tap() }
-                contentDescription = "$label, $value, tap to change"
-            }
-        }
-        binding.stats.addView(row)
-    }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

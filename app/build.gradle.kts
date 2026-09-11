@@ -66,6 +66,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    // The launch window. Backports the API 31 SplashScreen to minSdk 26, so the arcs cover
+    // process start on every device rather than a white flash on most of them.
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     val cameraX = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraX")

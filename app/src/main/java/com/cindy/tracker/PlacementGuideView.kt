@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import androidx.core.content.ContextCompat
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.atan2
@@ -45,6 +46,15 @@ class PlacementGuideView @JvmOverloads constructor(
         const val LENS_Y = 0.435f
         const val ATHLETE_X = 0.66f
         const val DIMENSION_Y = 0.90f
+
+        /**
+         * Where the upper edge of the shot leaves the top of the drawing.
+         *
+         * The ray runs from the lens at (PHONE_X, LENS_Y) to (0.823, 0.03); continued, it meets
+         * y = 0 at 0.09 + 0.435 / 0.5525. Kept as a constant so the wedge and the ray drawn over
+         * it cannot disagree.
+         */
+        const val TOP_EXIT = 0.877f
     }
 
     private val density = resources.displayMetrics.density
@@ -56,9 +66,14 @@ class PlacementGuideView @JvmOverloads constructor(
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11f * density }
 
-    private val accent = Color.parseColor("#00E5A0")
-    private val dim = Color.parseColor("#99FFFFFF")
-    private val faint = Color.parseColor("#59FFFFFF")
+    // Monochrome on purpose. What the lens takes in is a filled wedge rather than two coloured
+    // rays: a shape reads as "the camera sees this" at a glance, and it leaves green and red to
+    // mean on this screen what they mean on every other one.
+    private val ink = ContextCompat.getColor(context, R.color.label)
+    private val dim = ContextCompat.getColor(context, R.color.label_secondary)
+    private val faint = ContextCompat.getColor(context, R.color.label_quaternary)
+
+    private val fov = Path()
 
     private fun x(f: Float) = f * width
     private fun y(f: Float) = f * height
@@ -67,9 +82,10 @@ class PlacementGuideView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
 
+        // The wedge goes down first so everything else sits inside the shot rather than under it.
+        drawFieldOfView(canvas)
         drawFloor(canvas)
         drawPhone(canvas)
-        drawFieldOfView(canvas)
         drawAthlete(canvas)
         drawDistance(canvas)
     }
@@ -92,7 +108,7 @@ class PlacementGuideView @JvmOverloads constructor(
         fill.color = Color.parseColor("#FF16191E")
         canvas.drawRect(x(0.076f), y(0.42f), x(0.104f), y(0.66f), fill)
 
-        fill.color = accent
+        fill.color = ink
         canvas.drawCircle(x(PHONE_X), y(LENS_Y), 2.5f * density, fill)
 
         label.color = dim
@@ -107,12 +123,26 @@ class PlacementGuideView @JvmOverloads constructor(
      * the bottom of the shot — drawing it on through the ground would say the opposite.
      */
     private fun drawFieldOfView(canvas: Canvas) {
-        line.color = accent
+        // Lens, up the top ray to where it leaves the drawing, across and down the far edge, then
+        // back along the floor to where the lower ray lands.
+        fov.reset()
+        fov.moveTo(x(PHONE_X), y(LENS_Y))
+        fov.lineTo(x(TOP_EXIT), 0f)
+        fov.lineTo(width.toFloat(), 0f)
+        fov.lineTo(width.toFloat(), y(GROUND))
+        fov.lineTo(x(0.34f), y(GROUND))
+        fov.close()
+        fill.color = Color.WHITE
+        fill.alpha = 14
+        canvas.drawPath(fov, fill)
+        fill.alpha = 255
+
+        line.color = dim
         line.strokeWidth = 1f * density
         canvas.drawLine(x(PHONE_X), y(LENS_Y), x(0.823f), y(0.03f), line)
         canvas.drawLine(x(PHONE_X), y(LENS_Y), x(0.34f), y(GROUND), line)
 
-        label.color = accent
+        label.color = dim
         label.textAlign = Paint.Align.CENTER
         canvas.drawText("head and feet both in shot", x(0.60f), y(0.155f), label)
     }
@@ -142,7 +172,7 @@ class PlacementGuideView @JvmOverloads constructor(
         arrow(canvas, from = 0.30f, to = PHONE_X)
         arrow(canvas, from = 0.45f, to = ATHLETE_X)
 
-        label.color = Color.WHITE
+        label.color = ink
         label.textSize = 13f * density
         label.textAlign = Paint.Align.CENTER
         canvas.drawText("2–3 m  ·  7–10 ft", x(0.375f), y(DIMENSION_Y + 0.02f), label)

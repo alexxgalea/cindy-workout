@@ -2,10 +2,17 @@
 <!--
   The camera runs edge to edge; the HUD is kept clear of the system bars from code, because
   padding this root would letterbox the preview instead of the overlay.
+
+  Four floating boxes became two surfaces and a rail. The clock and the round used to be separate
+  chips; they are one bar. The four labelled chips (VOICE MUSIC REC MENU) wanted 330dp of width
+  at a 48dp touch target and wrapped onto a second line on a 360dp phone; as icons they need
+  about 204dp and cannot. The rep readout and the four controls under it were a box plus four
+  equally-weighted buttons with nothing leading; they are one panel with a single filled action.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
@@ -28,291 +35,368 @@
         app:layout_constraintStart_toStartOf="@id/preview"
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
-    <!-- ── top row: clock + round ── -->
-    <TextView
-        android:id="@+id/timer"
+    <!--
+      Scrims, as a camera app darkens its own chrome strips. Without them the HUD is legible over
+      a dark gym and invisible over a bright one, and no amount of translucency in the glass fixes
+      that on its own.
+    -->
+    <View
+        android:id="@+id/scrimTop"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="8dp"
-        android:background="@drawable/bg_chip"
-        android:paddingHorizontal="18dp"
-        android:paddingVertical="6dp"
-        android:fontFamily="monospace"
-        android:maxLines="1"
-        android:text="20:00"
-        android:textColor="@color/on_surface"
-        android:textSize="34sp"
-        android:textStyle="bold"
-        app:autoSizeMaxTextSize="34sp"
-        app:autoSizeMinTextSize="20sp"
-        app:autoSizeTextType="uniform"
-        app:layout_constraintWidth_default="wrap"
-        app:layout_constraintHorizontal_bias="0"
+        android:layout_height="248dp"
+        android:background="@drawable/scrim_top"
+        android:importantForAccessibility="no"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/rounds" />
-
-    <TextView
-        android:id="@+id/rounds"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="16dp"
-        android:background="@drawable/bg_chip"
-        android:maxLines="1"
-        android:paddingHorizontal="18dp"
-        android:paddingVertical="6dp"
-        android:text="ROUND 1"
-        android:textColor="@color/on_surface"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-
-    <!--
-      Below the taller of the timer and round chips, not just round: the timer's 34sp text makes
-      it deeper than ROUND 1's 16sp, so anchoring to round alone let the chip row ride up under it.
-    -->
-    <androidx.constraintlayout.widget.Barrier
-        android:id="@+id/topRowBottom"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:barrierDirection="bottom"
-        app:constraint_referenced_ids="timer,rounds" />
-
-    <!--
-      ── the chip row ──
-
-      Only what changes mid-set lives here: whether the count is spoken, whether music is
-      playing, and whether this one is being filmed. Records, help and the movement picker moved
-      behind MENU into MenuActivity — six chips at a 48dp minimum touch target plus their margins
-      want more width than a 360dp phone has, so the row ran off the edge of the screen.
-
-      Laid out by a Flow rather than a LinearLayout so that it cannot silently happen again. A
-      row pinned only to the parent's end grows off the *start* edge, taking its overflow
-      somewhere nothing can report it; a Flow spanning the full width wraps onto a second line
-      instead. At the largest font scale that is the difference between a control that is gone
-      and a HUD that is one line taller.
-    -->
-    <androidx.constraintlayout.helper.widget.Flow
-        android:id="@+id/chips"
+    <View
+        android:id="@+id/scrimBottom"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        app:constraint_referenced_ids="btnVoice,btnMusic,btnRec,btnMenu"
-        app:flow_horizontalBias="1"
-        app:flow_horizontalGap="6dp"
-        app:flow_horizontalStyle="packed"
-        app:flow_lastHorizontalBias="1"
-        app:flow_lastHorizontalStyle="packed"
-        app:flow_verticalGap="4dp"
-        app:flow_wrapMode="chain"
-        app:layout_constraintTop_toBottomOf="@id/topRowBottom"
+        android:layout_height="360dp"
+        android:background="@drawable/scrim_bottom"
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <TextView
-        android:id="@+id/btnVoice"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_chip_tappable"
-        android:gravity="center"
-        android:maxLines="1"
-        android:minWidth="48dp"
-        android:minHeight="48dp"
-        android:paddingHorizontal="12dp"
-        android:text="VOICE"
-        android:textColor="@color/accent"
-        android:textSize="11sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/btnMusic"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_chip_tappable"
-        android:gravity="center"
-        android:maxLines="1"
-        android:minWidth="48dp"
-        android:minHeight="48dp"
-        android:paddingHorizontal="12dp"
-        android:text="MUSIC"
-        android:textColor="@color/on_surface_dim"
-        android:textSize="11sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/btnRec"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_chip_tappable"
-        android:gravity="center"
-        android:maxLines="1"
-        android:minWidth="48dp"
-        android:minHeight="48dp"
-        android:paddingHorizontal="12dp"
-        android:text="REC"
-        android:textColor="@color/on_surface_dim"
-        android:textSize="11sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/btnMenu"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_chip_tappable"
-        android:gravity="center"
-        android:maxLines="1"
-        android:minWidth="48dp"
-        android:minHeight="48dp"
-        android:paddingHorizontal="12dp"
-        android:text="MENU"
-        android:textColor="@color/on_surface_dim"
-        android:textSize="11sp"
-        android:textStyle="bold" />
-
-    <!-- ── status / coaching line ── -->
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:background="@drawable/bg_chip"
-        android:gravity="center"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="6dp"
-        android:text="Grant camera access to begin"
-        android:textColor="@color/on_surface_dim"
-        android:textSize="14sp"
-        app:layout_constraintTop_toBottomOf="@id/chips"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- ── the big rep readout ── -->
+    <!-- ── clock and round: one surface ── -->
     <LinearLayout
-        android:id="@+id/repBlock"
+        android:id="@+id/topBar"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="18dp"
-        android:layout_marginHorizontal="16dp"
-        android:background="@drawable/bg_chip"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingHorizontal="34dp"
-        android:paddingVertical="10dp"
-        app:layout_constrainedWidth="true"
-        app:layout_constraintWidth_default="wrap"
-        app:layout_constraintBottom_toTopOf="@id/controls"
+        android:layout_height="54dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginHorizontal="@dimen/screen_margin"
+        android:background="@drawable/glass_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="22dp"
+        android:paddingEnd="20dp"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
-            android:id="@+id/exercise"
-            android:layout_width="match_parent"
+            android:id="@+id/timer"
+            style="@style/Cindy.MetricM"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:letterSpacing="0.15"
-            android:maxLines="1"
-            android:text="PULL-UPS"
-            android:textColor="@color/accent"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:autoSizeMaxTextSize="20sp"
-            app:autoSizeMinTextSize="13sp"
+            android:layout_weight="1"
+            android:text="20:00"
+            app:autoSizeMaxTextSize="32sp"
+            app:autoSizeMinTextSize="20sp"
             app:autoSizeTextType="uniform" />
 
         <TextView
-            android:id="@+id/reps"
-            android:layout_width="match_parent"
+            android:id="@+id/roundsLabel"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:gravity="center"
-            android:maxLines="1"
-            android:text="0 / 5"
-            android:textColor="@color/on_surface"
-            android:textSize="64sp"
-            android:textStyle="bold"
-            app:autoSizeMaxTextSize="64sp"
-            app:autoSizeMinTextSize="30sp"
-            app:autoSizeTextType="uniform" />
+            android:layout_marginEnd="9dp"
+            android:importantForAccessibility="no"
+            android:text="ROUND" />
+
+        <TextView
+            android:id="@+id/rounds"
+            style="@style/Cindy.MetricS"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1" />
     </LinearLayout>
 
-    <!-- ── controls ── -->
+    <!-- ── what changes mid-set, as icons so the row cannot outgrow the screen ── -->
     <LinearLayout
-        android:id="@+id/controls"
-        android:layout_width="match_parent"
+        android:id="@+id/rail"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="@dimen/screen_margin"
+        android:background="@drawable/glass_rail"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="6dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/btnVoice"
+            android:layout_width="44dp"
+            android:layout_height="40dp"
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_voice"
+            tools:ignore="ContentDescription" />
+
+        <ImageView
+            android:id="@+id/btnMusic"
+            android:layout_width="44dp"
+            android:layout_height="40dp"
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            tools:ignore="ContentDescription"
+            android:src="@drawable/ic_music" />
+
+        <ImageView
+            android:id="@+id/btnRec"
+            android:layout_width="44dp"
+            android:layout_height="40dp"
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            tools:ignore="ContentDescription"
+            android:src="@drawable/ic_rec" />
+
+        <ImageView
+            android:id="@+id/btnMenu"
+            android:layout_width="44dp"
+            android:layout_height="40dp"
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            tools:ignore="ContentDescription"
+            android:src="@drawable/ic_menu" />
+    </LinearLayout>
+
+    <!-- ── the coaching line: sized to its words, colour carries the state ── -->
+    <LinearLayout
+        android:id="@+id/statusPill"
+        android:layout_width="wrap_content"
+        android:layout_height="34dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginHorizontal="@dimen/screen_margin"
+        android:background="@drawable/glass_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="13dp"
+        android:paddingEnd="16dp"
+        app:layout_constraintTop_toBottomOf="@id/rail"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_marginEnd="8dp"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/status"
+            style="@style/Cindy.Headline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:text="Grant camera access to begin"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <!--
+      ── the start-position demonstrator ──
+
+      Down the left edge, clear of where a body stands. It is the status pill grown up rather than
+      a second voice: while it is showing, the pill hides, so the cue is never given twice.
+    -->
+    <LinearLayout
+        android:id="@+id/coachCard"
+        android:layout_width="132dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/glass_panel"
+        android:orientation="vertical"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="12dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/statusPill"
+        app:layout_constraintStart_toStartOf="parent">
+
+<!--
+          No caption. A figure walking into a hang, over the words "Hang from the bar", does not
+          also need to be labelled "start position" — and at 132dp wide the label only fitted at
+          9sp, which is below the size anything should be set in.
+        -->
+        <com.cindy.tracker.StartPoseView
+            android:id="@+id/coachPose"
+            android:layout_width="match_parent"
+            android:layout_height="126dp"
+            android:importantForAccessibility="no" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="10dp"
+            android:background="@color/hairline"
+            android:importantForAccessibility="no" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/coachDot"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="7dp"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/coachCue"
+                style="@style/Cindy.Headline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ══ the main zone: the metric and its controls on one slab ══ -->
+    <LinearLayout
+        android:id="@+id/panel"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:layout_marginHorizontal="16dp"
-        android:gravity="center"
-        android:orientation="horizontal"
-        app:layout_constraintBottom_toBottomOf="parent">
+        android:layout_marginHorizontal="@dimen/screen_margin"
+        android:background="@drawable/glass_panel"
+        android:orientation="vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="20dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:id="@+id/btnFlip"
-            android:layout_width="wrap_content"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_button_ghost"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="56dp"
-            android:paddingHorizontal="18dp"
-            android:text="FLIP"
-            android:textColor="@color/on_surface"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+        <!-- Rep edits sit either side of the number they change, not lost among the actions. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/btnStart"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="56dp"
-            android:layout_marginHorizontal="8dp"
-            android:background="@drawable/bg_button"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="88dp"
-            android:text="START"
-            android:textColor="#0B0D10"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            app:autoSizeMaxTextSize="18sp"
-            app:autoSizeMinTextSize="12sp"
-            app:autoSizeTextType="uniform" />
+            <ImageView
+                android:id="@+id/btnUndo"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:background="@drawable/btn_glass"
+                android:padding="16dp"
+                android:scaleType="fitCenter"
+            tools:ignore="ContentDescription"
+                android:src="@drawable/ic_minus" />
 
-        <TextView
-            android:id="@+id/btnUndo"
-            android:layout_width="wrap_content"
-            android:layout_height="56dp"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/bg_button_ghost"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="56dp"
-            android:paddingHorizontal="18dp"
-            android:text="−1"
-            android:textColor="@color/on_surface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            <LinearLayout
+                android:id="@+id/repBlock"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/btnSkip"
-            android:layout_width="wrap_content"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_button_ghost"
-            android:gravity="center"
-            android:maxLines="1"
-            android:minWidth="56dp"
-            android:paddingHorizontal="18dp"
-            android:text="+1"
-            android:textColor="@color/on_surface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/exercise"
+                    style="@style/Cindy.Eyebrow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:letterSpacing="0.155"
+                    android:text="PULL-UPS"
+                    android:textColor="@color/label_secondary"
+                    app:autoSizeMaxTextSize="11sp"
+                    app:autoSizeMinTextSize="8sp"
+                    app:autoSizeTextType="uniform" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:baselineAligned="true"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/reps"
+                        style="@style/Cindy.MetricXL"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        app:autoSizeMaxTextSize="62sp"
+                        app:autoSizeMinTextSize="30sp"
+                        app:autoSizeTextType="uniform" />
+
+                    <!-- Drops back a weight and a shade so the eye lands on the number that moves. -->
+                    <TextView
+                        android:id="@+id/repsTarget"
+                        style="@style/Cindy.MetricXL"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/manrope_bold"
+                        android:text="/5"
+                        android:textColor="@color/label_tertiary"
+                        android:textSize="34sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/btnSkip"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:background="@drawable/btn_glass"
+                android:padding="16dp"
+                android:scaleType="fitCenter"
+            tools:ignore="ContentDescription"
+                android:src="@drawable/ic_plus" />
+        </LinearLayout>
+
+        <!-- Readable from across the room, when the digits are not. -->
+        <ProgressBar
+            android:id="@+id/repProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="16dp"
+            android:importantForAccessibility="no"
+            android:max="100"
+            android:progressDrawable="@drawable/track" />
+
+        <LinearLayout
+            android:id="@+id/controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/btnFlip"
+                style="@style/Cindy.Button.Small"
+                android:layout_width="wrap_content"
+                android:layout_height="54dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/btn_glass"
+                android:minWidth="72dp"
+                android:paddingHorizontal="16dp"
+                android:text="FLIP" />
+
+            <TextView
+                android:id="@+id/btnStart"
+                style="@style/Cindy.Button"
+                android:layout_width="0dp"
+                android:layout_height="54dp"
+                android:layout_weight="1"
+                android:background="@drawable/btn_primary"
+                android:text="START"
+                android:textColor="@color/on_primary"
+                app:autoSizeMaxTextSize="17sp"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeTextType="uniform" />
+        </LinearLayout>
     </LinearLayout>
+
+    <!-- Over everything, and gone as soon as the preview has a frame. -->
+    <com.cindy.tracker.LaunchView
+        android:id="@+id/launch"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -26,10 +26,11 @@ class CalendarView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     private companion object {
-        val ACCENT = Color.parseColor("#00E5A0")
+        /** A trained day is filled white; everything else is the label ramp. */
+        val ACCENT = Color.WHITE
         val ON_SURFACE = Color.WHITE
-        val DIM = Color.parseColor("#99FFFFFF")
-        val FAINT = Color.parseColor("#33FFFFFF")
+        val DIM = Color.parseColor("#9EEBEBF5")
+        val FAINT = Color.parseColor("#2EEBEBF5")
         const val WEEKS_SHOWN = 6
     }
 
@@ -117,7 +118,7 @@ class CalendarView @JvmOverloads constructor(
             }
 
             dayText.color = when {
-                didTrain -> Color.parseColor("#0B0D10")
+                didTrain -> Color.BLACK
                 isToday -> ACCENT
                 date.isAfter(today) -> FAINT
                 else -> ON_SURFACE

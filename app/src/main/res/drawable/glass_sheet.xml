@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The bottom sheet. Only the top corners round; the specular runs along its lip. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/specular"
+        android:centerColor="#F01E2024"
+        android:endColor="#F70A0B0D"
+        android:centerY="0.003" />
+    <corners
+        android:topLeftRadius="@dimen/radius_panel"
+        android:topRightRadius="@dimen/radius_panel"
+        android:bottomLeftRadius="0dp"
+        android:bottomRightRadius="0dp" />
+</shape>

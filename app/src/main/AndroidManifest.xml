@@ -18,10 +18,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Cindy">
 
+        <!--
+          The launch window is the splash theme; installSplashScreen() in onCreate hands over to
+          Theme.Cindy. Both paint the same black, so nothing flashes between them.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
+            android:theme="@style/Theme.Cindy.Splash"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

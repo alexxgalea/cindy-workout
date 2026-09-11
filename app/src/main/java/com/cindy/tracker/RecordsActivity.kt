@@ -1,11 +1,12 @@
 package com.cindy.tracker
 
-import android.app.AlertDialog
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityRecordsBinding
 import java.text.SimpleDateFormat
@@ -30,22 +31,30 @@ class RecordsActivity : AppCompatActivity() {
         setContentView(binding.root)
         store = RecordStore(this)
 
-        binding.btnBack.setOnClickListener { finish() }
-        binding.btnClear.setOnClickListener { confirmClear() }
+        binding.actions.addView(glassButton("CLEAR", R.color.state_alert).apply {
+            setOnClickListener { confirmClear() }
+        })
+        binding.actions.addView(primaryButton("DONE").apply {
+            setOnClickListener { finish() }
+        })
         render()
     }
 
     private fun confirmClear() {
         if (store.all().isEmpty()) return
-        AlertDialog.Builder(this)
-            .setTitle("Clear your records?")
-            .setMessage("Every attempt logged on this phone will be deleted. The benchmark stays.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Clear") { _, _ ->
+        CindySheet(
+            this,
+            title = "Clear your records?",
+            subtitle = "Every attempt logged on this phone will be deleted. The benchmark stays."
+        ).actions(
+            primary = "CLEAR",
+            onPrimary = {
                 store.clear()
                 render()
-            }
-            .show()
+            },
+            secondary = "CANCEL",
+            onSecondary = {}
+        ).show()
     }
 
     private fun render() {
@@ -54,40 +63,57 @@ class RecordsActivity : AppCompatActivity() {
 
         streak()
         history()
+
         val mine = Records.ranked(store.all())
         val beaten = mine.firstOrNull()?.let { Records.beatsBenchmark(it) } == true
 
-        rows.addView(
-            row(
-                rank = if (beaten) "2" else "1",
-                name = Records.BENCHMARK_NAME,
-                score = Records.BENCHMARK.scoreLabel(),
-                detail = "the benchmark · ${Records.BENCHMARK.totalReps} reps",
-                benchmark = true
-            )
-        )
+        rows.addView(section("LEADERBOARD"))
 
         if (mine.isEmpty()) {
-            rows.addView(empty())
+            rows.addView(insetGroup {
+                row(benchmarkRow(if (beaten) "2" else "1"))
+            })
+            rows.addView(styledText(
+                R.style.Cindy_Footnote,
+                "No attempts yet. Finish a 20-minute Cindy and it lands here."
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(28), 0, 0)
+            })
             return
         }
 
         val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
-        mine.forEachIndexed { i, a ->
-            val outranks = Records.beatsBenchmark(a)
-            rows.addView(
-                row(
+        rows.addView(insetGroup {
+            row(benchmarkRow(if (beaten) "2" else "1"))
+            mine.forEachIndexed { i, a ->
+                val outranks = Records.beatsBenchmark(a)
+                row(rankRow(
                     rank = if (outranks) "${i + 1}" else "${i + 2}",
-                    // "Best" means best at these movements. Across categories it would be
-                    // comparing a band-assisted Cindy with a strict one and calling one better.
-                    name = if (a == Records.bestIn(mine, a.profile)) "You · best" else "You",
-                    score = a.scoreLabel(),
+                    name = "You",
                     detail = "${dateFormat.format(Date(a.atMillis))} · ${a.caption}" +
                         (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
-                    benchmark = false
-                )
-            )
-        }
+                    score = a.scoreLabel(),
+                    mine = true,
+                    // "Best" means best at these movements. Across categories it would be
+                    // comparing a band-assisted Cindy with a strict one and calling one better.
+                    best = a == Records.bestIn(mine, a.profile)
+                ))
+            }
+        })
+    }
+
+    private fun benchmarkRow(rank: String) = rankRow(
+        rank = rank,
+        name = Records.BENCHMARK_NAME,
+        detail = "the benchmark · ${Records.BENCHMARK.totalReps} reps",
+        score = Records.BENCHMARK.scoreLabel(),
+        mine = false,
+        best = false
+    )
+
+    private fun section(title: String) = eyebrow(title).apply {
+        setPadding(dp(4), dp(10), 0, dp(10))
     }
 
     /**
@@ -107,50 +133,49 @@ class RecordsActivity : AppCompatActivity() {
         val longest = Streak.longest(days)
         val atRisk = Streak.atRisk(days, today)
 
-        binding.rows.addView(TextView(this).apply {
-            text = "STREAK"
-            letterSpacing = 0.12f
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 12f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, dp(8))
-        })
-
         binding.rows.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_row)
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(20), dp(18), dp(20), dp(20))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(10) }
+            ).apply { bottomMargin = dp(12) }
 
-            addView(TextView(context).apply {
-                text = if (current == 0) "No streak" else
-                    "$current day${if (current == 1) "" else "s"}"
-                setTextColor(getColor(R.color.accent))
-                textSize = 28f
-                typeface = android.graphics.Typeface.MONOSPACE
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            addView(eyebrow("STREAK"))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.BOTTOM
+                setPadding(0, dp(8), 0, 0)
+                addView(styledText(R.style.Cindy_MetricL, if (current == 0) "0" else "$current"))
+                addView(styledText(
+                    R.style.Cindy_Title2,
+                    if (current == 1) "day" else "days"
+                ).apply {
+                    setTextColor(getColor(R.color.label_secondary))
+                    setPadding(dp(7), 0, 0, dp(4))
+                })
             })
-            addView(TextView(context).apply {
-                text = when {
-                    // Said plainly, because it is the one fact that changes what they do today.
-                    atRisk && current > 0 -> "Train today to keep it going."
-                    current > 0 -> "Trained today. Longest: $longest."
-                    longest > 0 -> "Longest was $longest day${if (longest == 1) "" else "s"}."
-                    else -> ""
-                }
-                setTextColor(getColor(if (atRisk && current > 0) R.color.warn else R.color.on_surface_dim))
-                textSize = 13f
-                setPadding(0, dp(4), 0, 0)
-            })
-            addView(TextView(context).apply {
-                text = "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
-                    "${attempts.size} attempt${if (attempts.size == 1) "" else "s"}"
-                setTextColor(getColor(R.color.on_surface_dim))
-                textSize = 12f
+            addView(styledText(R.style.Cindy_Callout, when {
+                // Said plainly, because it is the one fact that changes what they do today.
+                atRisk && current > 0 -> "Train today to keep it going."
+                current > 0 -> "Trained today. Longest: $longest."
+                longest > 0 -> "Longest was $longest day${if (longest == 1) "" else "s"}."
+                else -> "No streak yet."
+            }).apply {
+                if (atRisk && current > 0) setTextColor(getColor(R.color.state_alert))
                 setPadding(0, dp(8), 0, 0)
             })
+            addView(View(context).apply {
+                setBackgroundColor(getColor(R.color.hairline))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, hairlinePx()
+                ).apply { topMargin = dp(14) }
+            })
+            addView(styledText(
+                R.style.Cindy_Footnote,
+                "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
+                    "${attempts.size} attempt${if (attempts.size == 1) "" else "s"}"
+            ).apply { setPadding(0, dp(13), 0, 0) })
         })
 
         calendar(days, today)
@@ -163,57 +188,62 @@ class RecordsActivity : AppCompatActivity() {
         if (shownMonth > latest) shownMonth = latest
         if (shownMonth < earliest) shownMonth = earliest
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        binding.rows.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(16), dp(12), dp(16), dp(16))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
-        header.addView(monthArrow("‹", enabled = shownMonth > earliest) {
-            shownMonth = shownMonth.minusMonths(1)
-            render()
-        })
-        header.addView(TextView(this).apply {
-            text = "%s %d".format(
-                Locale.getDefault(),
-                shownMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
-                shownMonth.year
-            )
-            gravity = Gravity.CENTER
-            setTextColor(getColor(R.color.on_surface))
-            textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        header.addView(monthArrow("›", enabled = shownMonth < latest) {
-            shownMonth = shownMonth.plusMonths(1)
-            render()
-        })
-        binding.rows.addView(header)
+            ).apply { bottomMargin = dp(12) }
 
-        binding.rows.addView(CalendarView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(18) }
-            show(shownMonth, days, today)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(monthArrow(R.drawable.ic_chevron_left, shownMonth > earliest) {
+                    shownMonth = shownMonth.minusMonths(1)
+                    render()
+                })
+                addView(styledText(R.style.Cindy_Headline, "%s %d".format(
+                    Locale.getDefault(),
+                    shownMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+                    shownMonth.year
+                )).apply {
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    )
+                })
+                addView(monthArrow(R.drawable.ic_chevron_right, shownMonth < latest) {
+                    shownMonth = shownMonth.plusMonths(1)
+                    render()
+                })
+            })
+
+            addView(CalendarView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(4) }
+                show(shownMonth, days, today)
+            })
         })
     }
 
-    private fun monthArrow(glyph: String, enabled: Boolean, onTap: () -> Unit): TextView =
-        TextView(this).apply {
-            text = glyph
-            gravity = Gravity.CENTER
-            setTextColor(getColor(if (enabled) R.color.on_surface else R.color.on_surface_dim))
-            alpha = if (enabled) 1f else 0.3f
-            textSize = 22f
-            // A 48dp target, because these are small glyphs on a screen used with wet hands.
-            minWidth = dp(48)
-            minHeight = dp(48)
-            contentDescription = if (glyph == "‹") "Previous month" else "Next month"
+    /** A 48dp target, because these are small glyphs on a screen used with wet hands. */
+    private fun monthArrow(icon: Int, enabled: Boolean, onTap: () -> Unit): ImageView =
+        ImageView(this).apply {
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(
+                getColor(if (enabled) R.color.label_secondary else R.color.label_quaternary)
+            )
+            setPadding(dp(15), dp(15), dp(15), dp(15))
+            layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+            contentDescription =
+                if (icon == R.drawable.ic_chevron_left) "Previous month" else "Next month"
             if (enabled) {
-                isClickable = true
                 setOnClickListener { onTap() }
+                describeAsButton()
+            } else {
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
         }
 
@@ -222,91 +252,28 @@ class RecordsActivity : AppCompatActivity() {
         val past = store.chronological()
         if (past.size < 2) return
 
-        binding.rows.addView(TextView(this).apply {
-            text = "PROGRESS"
-            letterSpacing = 0.12f
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 12f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, dp(8))
-        })
+        binding.rows.addView(section("PROGRESS"))
         binding.rows.addView(SplitsChartView(this).apply {
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(120)
-            ).apply { bottomMargin = dp(6) }
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(150)
+            )
             val best = past.indexOf(past.maxByOrNull { it.totalReps })
-            setValues(past.map { it.totalReps.toLong() }, highlightIndex = best)
+            setValues(
+                past.map { it.totalReps.toLong() },
+                highlightIndex = best,
+                meanLabel = "AVG ${past.sumOf { it.totalReps } / past.size}"
+            )
         })
-        binding.rows.addView(TextView(this).apply {
-            val first = past.first().totalReps
-            val last = past.last().totalReps
-            val delta = last - first
-            text = "${past.size} attempts · " + when {
+        binding.rows.addView(styledText(R.style.Cindy_Footnote, buildString {
+            val delta = past.last().totalReps - past.first().totalReps
+            append("${past.size} attempts · ")
+            append(when {
                 delta > 0 -> "up $delta reps since your first"
                 delta < 0 -> "${-delta} reps below your first"
                 else -> "level with your first"
-            }
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 12f
-            setPadding(0, 0, 0, dp(18))
-        })
-    }
-
-    private fun empty(): TextView = TextView(this).apply {
-        text = "No attempts yet.\nFinish a 20-minute Cindy and it lands here."
-        gravity = Gravity.CENTER
-        setTextColor(getColor(R.color.on_surface_dim))
-        textSize = 14f
-        setPadding(0, dp(40), 0, 0)
-    }
-
-    private fun row(
-        rank: String,
-        name: String,
-        score: String,
-        detail: String,
-        benchmark: Boolean
-    ): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setBackgroundResource(if (benchmark) R.drawable.bg_row_benchmark else R.drawable.bg_row)
-        setPadding(dp(16), dp(14), dp(16), dp(14))
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(10) }
-
-        addView(TextView(context).apply {
-            text = rank
-            setTextColor(getColor(R.color.on_surface_dim))
-            textSize = 16f
-            width = dp(28)
-        })
-
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply {
-                text = name
-                setTextColor(getColor(R.color.on_surface))
-                textSize = 17f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
-            addView(TextView(context).apply {
-                text = detail
-                setTextColor(getColor(R.color.on_surface_dim))
-                textSize = 12f
-            })
-        })
-
-        addView(TextView(context).apply {
-            text = score
-            setTextColor(getColor(if (benchmark) R.color.accent else R.color.on_surface))
-            textSize = 26f
-            typeface = android.graphics.Typeface.MONOSPACE
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
+        }).apply { setPadding(dp(4), dp(10), 0, dp(6)) })
     }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

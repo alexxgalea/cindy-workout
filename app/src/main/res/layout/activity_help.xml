@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shape every secondary screen shares: a large title, a line saying what the screen is, the
+  content, and the actions in the thumb's reach at the bottom. Rows are built in code from
+  CindyViews so that Menu, Records, Results and Help cannot drift apart again.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
@@ -6,29 +11,30 @@
     android:background="@color/bg"
     android:fitsSystemWindows="true"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:paddingHorizontal="@dimen/screen_margin"
+    android:paddingTop="@dimen/space_6"
+    android:paddingBottom="@dimen/space_6">
 
     <TextView
+        style="@style/Cindy.Title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:letterSpacing="0.18"
-        android:text="CINDY"
-        android:textColor="@color/accent"
-        android:textSize="26sp"
-        android:textStyle="bold" />
+        android:text="Cindy" />
 
     <TextView
+        style="@style/Cindy.Body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="18dp"
-        android:text="The benchmark workout, and how this app scores it"
-        android:textColor="@color/on_surface_dim"
-        android:textSize="13sp" />
+        android:layout_marginTop="5dp"
+        android:text="The benchmark workout, and how this app scores it" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginTop="@dimen/space_6"
         android:layout_weight="1"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
         android:scrollbars="none">
 
         <LinearLayout
@@ -39,36 +45,8 @@
     </ScrollView>
 
     <LinearLayout
+        android:id="@+id/actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/btnSource"
-            android:layout_width="wrap_content"
-            android:layout_height="52dp"
-            android:layout_marginEnd="10dp"
-            android:background="@drawable/bg_button_ghost"
-            android:gravity="center"
-            android:maxLines="1"
-            android:paddingHorizontal="20dp"
-            android:text="CROSSFIT.COM"
-            android:textColor="@color/on_surface_dim"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnBack"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="52dp"
-            android:background="@drawable/bg_button"
-            android:gravity="center"
-            android:maxLines="1"
-            android:text="BACK"
-            android:textColor="#0B0D10"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+        android:orientation="horizontal" />
 </LinearLayout>
