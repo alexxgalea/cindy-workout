@@ -1,0 +1,21 @@
+#!/bin/sh
+# This history carries no attribution trailers. Tools that add one — Claude Code and the
+# like — do it at the moment the message is written, so the only reliable place to take it
+# back out is here, on the way into the commit.
+#
+# Enable it once per clone:  git config core.hooksPath .githooks
+
+msg="$1"
+tmp="$msg.nocoauthor"
+
+# Drop the trailers, then drop the blank lines they left stranded at the end.
+grep -viE '^[[:space:]]*(co-authored-by|signed-off-by[[:space:]]*:[[:space:]]*claude)[[:space:]]*:' "$msg" \
+    | awk '{ lines[NR] = $0 } END { last = 0; for (i = 1; i <= NR; i++) if (lines[i] ~ /[^[:space:]]/) last = i; for (i = 1; i <= last; i++) print lines[i] }' \
+    > "$tmp"
+
+if ! cmp -s "$msg" "$tmp"; then
+    mv "$tmp" "$msg"
+    echo "commit-msg: removed attribution trailer(s) from the message"
+else
+    rm -f "$tmp"
+fi
