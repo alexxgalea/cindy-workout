@@ -324,7 +324,7 @@
             </LinearLayout>
 
             <ImageView
-                android:id="@+id/btnSkip"
+                android:id="@+id/btnAddRep"
                 android:layout_width="52dp"
                 android:layout_height="52dp"
                 android:background="@drawable/btn_glass"
@@ -335,44 +335,77 @@
         </LinearLayout>
 
         <!--
-          The left control is FLIP outside a workout and STOP inside one, so it is an icon; the
-          primary says five different things across the states, three of which — SKIP, RESUME,
-          AGAIN — no mark carries on its own, so it keeps the word and takes a mark as well.
-          The pair is one centred group at a fixed size: a primary stretched to the screen edges
-          reads as a bar rather than a button, and it would change width with every label.
+          The action row, laid out the way a camera lays one out: the shutter dead centre of the
+          screen with a satellite parked at a fixed inset from either edge, rather than hung off
+          the shutter, so the middle of the band stays the middle at any width.
+
+          The primary carries a mark and no word. Play, pause, again — the states it takes are
+          ones a player already draws, and the word it used to hold forced a pill wide enough for
+          the longest label, which is most of what made this band feel crowded. The status line
+          above narrates the state, and the spoken description names the action for anyone who
+          cannot see the mark.
+
+          SKIP is its own control on the right and is there in every state, because it means one
+          thing — leave this movement — and a control that means one thing should not be a long
+          press on a control that means another.
+
+          The left slot holds one control at a time: FLIP until the clock starts, END in red once
+          it has. They are two views sharing a position rather than one view swapping its icon,
+          so each keeps its own mark, tint and spoken name. Carrying both at once was tried and
+          the band was too crowded — and a camera flip is not something anyone reaches for
+          mid-Cindy, while a way out of the workout is.
         -->
-        <LinearLayout
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="14dp"
-            android:gravity="center"
-            android:orientation="horizontal"
+            android:layout_height="@dimen/shutter"
+            android:layout_marginTop="12dp"
             android:paddingHorizontal="20dp">
 
             <ImageView
                 android:id="@+id/btnFlip"
                 android:layout_width="52dp"
                 android:layout_height="52dp"
-                android:layout_marginEnd="10dp"
+                android:layout_gravity="start|center_vertical"
                 android:background="@drawable/btn_glass"
                 android:padding="14dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_flip"
                 tools:ignore="ContentDescription" />
 
-            <TextView
+            <!-- Stacked on FLIP, which is gone by the time this is here. -->
+            <ImageView
+                android:id="@+id/btnEnd"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="@drawable/btn_glass"
+                android:padding="15dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_stop"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
                 android:id="@+id/btnStart"
-                style="@style/Cindy.Button"
-                android:layout_width="@dimen/primary_width"
-                android:layout_height="match_parent"
-                android:background="@drawable/btn_primary"
-                android:drawablePadding="10dp"
-                android:text="START"
-                android:textColor="@color/on_primary"
-                app:autoSizeMaxTextSize="17sp"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeTextType="uniform" />
-        </LinearLayout>
+                android:layout_width="@dimen/shutter"
+                android:layout_height="@dimen/shutter"
+                android:layout_gravity="center"
+                android:background="@drawable/btn_shutter"
+                android:padding="19dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_play"
+                tools:ignore="ContentDescription" />
+
+            <ImageView
+                android:id="@+id/btnSkipExercise"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="end|center_vertical"
+                android:background="@drawable/btn_glass"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_skip"
+                tools:ignore="ContentDescription" />
+        </FrameLayout>
     </LinearLayout>
 
     <!-- Over everything, and gone as soon as the preview has a frame. -->

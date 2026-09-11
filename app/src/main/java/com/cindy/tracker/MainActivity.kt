@@ -62,6 +62,9 @@ class MainActivity : AppCompatActivity() {
         const val KEY_MUSIC = "music_uri"
         const val KEY_VOICE = "voice_on"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
+
+        /** What an unavailable control fades to: plainly off, still plainly there. */
+        const val DIMMED = 0.3f
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
@@ -267,9 +270,8 @@ class MainActivity : AppCompatActivity() {
         label = getColor(R.color.label)
         binding.coachDot.background = dotDrawable(R.color.state_alert)
         // The one filled control on the screen is white, so its mark has to be painted black.
-        binding.btnStart.compoundDrawableTintList =
-            ColorStateList.valueOf(getColor(R.color.on_primary))
-        primary("START", R.drawable.ic_play)
+        binding.btnStart.imageTintList = ColorStateList.valueOf(getColor(R.color.on_primary))
+        primary(R.drawable.ic_play)
 
         // The launch screen goes when the preview delivers a frame, which is the moment the app
         // is actually ready. The timeout covers the cases where that never happens — a refused
@@ -299,7 +301,8 @@ class MainActivity : AppCompatActivity() {
         restoreTrack()
 
         binding.btnStart.setOnClickListener { toggleRun() }
-        binding.btnFlip.setOnClickListener { onLeftButton() }
+        binding.btnEnd.setOnClickListener { confirmStop() }
+        binding.btnFlip.setOnClickListener { flipCamera() }
         binding.btnFlip.setOnLongClickListener {
             // Whether Thunder's accuracy is worth its latency is a question about this phone,
             // so make it answerable on this phone.
@@ -312,12 +315,9 @@ class MainActivity : AppCompatActivity() {
             toast("Switching to ${if (next == PoseDetector.THUNDER) "Thunder" else "Lightning"}")
             true
         }
-        binding.btnSkip.setOnClickListener { onManualRep() }
+        binding.btnAddRep.setOnClickListener { onManualRep() }
         binding.btnUndo.setOnClickListener { onUndoRep() }
-        binding.btnSkip.setOnLongClickListener {
-            if (state == State.RUNNING) apply(runEngine { engine.skipExercise() })
-            true
-        }
+        binding.btnSkipExercise.setOnClickListener { onSkip() }
         binding.btnVoice.setOnClickListener { toggleVoice() }
         binding.btnMusic.setOnClickListener { onMusicTapped() }
         binding.btnMusic.setOnLongClickListener { pickMusic.launch(arrayOf("audio/*")); true }
@@ -421,13 +421,14 @@ class MainActivity : AppCompatActivity() {
      */
     private fun describeControls() {
         binding.btnUndo.describeAsButton("Take back a rep")
-        binding.btnSkip.describeAsButton("Add a rep", longPress = "Skip to the next movement")
+        binding.btnAddRep.describeAsButton("Add a rep")
         binding.btnMenu.describeAsButton("Menu: records, movements, body weight and help")
         binding.statusRow.describeAsButton(longPress = "Show the debug readout")
         // The rest change job with the workout: renderControls and renderChips name those, and
         // only the long presses, which never change, are declared here.
         binding.btnStart.describeAsButton()
-        binding.btnFlip.describeAsButton(longPress = "Switch pose model")
+        binding.btnEnd.describeAsButton("End the workout")
+        binding.btnFlip.describeAsButton("Switch camera", longPress = "Switch pose model")
         binding.btnMusic.describeAsButton(longPress = "Choose a track")
         binding.btnVoice.describeAsButton()
         binding.btnRec.describeAsButton()
@@ -436,7 +437,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        status.text = "Press START to set up"
+        status.text = "Tap to set up"
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -743,7 +744,7 @@ class MainActivity : AppCompatActivity() {
         renderControls()
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
-        primary("SKIP", R.drawable.ic_skip)
+        primary(R.drawable.ic_play)
         exercise.text = "SET UP"
         reps.text = "—"
         repsTarget.text = ""
@@ -795,7 +796,11 @@ class MainActivity : AppCompatActivity() {
         roundSplits.clear()
         elapsedMs = 0L
         pausedMs = 0L
-        primary("PAUSE", R.drawable.ic_pause)
+        primary(R.drawable.ic_pause)
+        // The check hands over to the workout without going through [toggleRun], so this is the
+        // only place the row learns there is a workout now: without it END never appears and the
+        // rep editors stay dimmed for the whole session.
+        renderControls()
         statusDot(neutral)
         status.text = "Counting…"
         if (musicEnabled) music.play()
@@ -807,7 +812,10 @@ class MainActivity : AppCompatActivity() {
     private fun toggleRun() {
         when (state) {
             State.IDLE -> showPlacementGuide { enterSetup() }
-            State.SETUP -> beginWorkout(calibrated = false)
+            // Unreachable: the shutter is disabled for the duration of the check, and SKIP is
+            // the way out of it. Named rather than left to `else` so the state machine stays
+            // readable from this one when-block.
+            State.SETUP -> Unit
             State.PAUSED -> {
                 state = State.RUNNING
                 val now = SystemClock.elapsedRealtime()
@@ -816,7 +824,7 @@ class MainActivity : AppCompatActivity() {
                     pauseStartedAt = 0L
                 }
                 lastTickAt = now
-                primary("PAUSE", R.drawable.ic_pause)
+                primary(R.drawable.ic_pause)
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
@@ -830,7 +838,7 @@ class MainActivity : AppCompatActivity() {
                 state = State.PAUSED
                 coach.interrupted()
                 pauseStartedAt = SystemClock.elapsedRealtime()
-                primary("RESUME", R.drawable.ic_play)
+                primary(R.drawable.ic_play)
                 status.text = "Paused"
                 music.pause()
                 speaker.stop()
@@ -842,42 +850,101 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Sets the primary control's word and its mark together, because they have to agree.
-     *
-     * Play, pause and stop are universal marks. Three of the five states are not: no icon on its
-     * own says "skip the setup check", "resume" rather than "start", or "go around again". So the
-     * word stays and takes a mark alongside it, rather than being replaced by one.
+     * Sets the shutter's mark. The word that used to sit beside it is gone: the states it takes
+     * are the ones a player already draws, and carrying the longest of five labels is what made
+     * the control wide. What the mark cannot say on its own is said twice over instead — by the
+     * status line above it, and by the spoken description [renderControls] keeps in step.
      */
-    private fun primary(word: String, @DrawableRes icon: Int) {
-        binding.btnStart.text = word
-        binding.btnStart.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0)
+    private fun primary(@DrawableRes icon: Int) {
+        binding.btnStart.setImageResource(icon)
     }
 
     /**
-     * The left button is FLIP outside a workout and STOP inside one. Flipping the camera
-     * mid-Cindy is not a thing anyone does; ending early is. It carries no word at all now, so
-     * its colour and its mark are the whole of it, and the spoken name below matters more.
+     * The controls of the action row, and what each is for at this moment.
+     *
+     * The left slot is FLIP before the clock starts and END once it is running. Only one of the
+     * two is ever present: they share a position in the frame, and showing both crowded the band
+     * for no gain, since flipping the camera is not something anyone does mid-Cindy while
+     * getting out of a workout is.
+     *
+     * The shutter is the run control and nothing else. It goes inert during the setup check,
+     * because there is no workout yet to run or to pause — SKIP is the way out of the check.
+     *
+     * The rest follow one rule: a control keeps its place and dims when it has nothing to act
+     * on. Hiding them instead was tried and was worse — a band that empties out does not read as
+     * tidy, it reads as a band that has lost its buttons, and you cannot learn where a control
+     * lives if it is only there half the time. The left slot is not an exception to that: it
+     * never empties, it changes hands.
      */
     private fun renderControls() {
         val live = inWorkout()
-        binding.btnFlip.setImageResource(if (live) R.drawable.ic_stop else R.drawable.ic_flip)
-        binding.btnFlip.imageTintList = ColorStateList.valueOf(if (live) alert else label)
-        binding.btnFlip.contentDescription = if (live) "End the workout" else "Switch camera"
+
+        binding.btnFlip.visibility = if (live) View.GONE else View.VISIBLE
+        binding.btnFlip.setImageResource(R.drawable.ic_flip)
+        binding.btnFlip.imageTintList = ColorStateList.valueOf(label)
+        binding.btnFlip.contentDescription = "Switch camera"
+
+        binding.btnEnd.visibility = if (live) View.VISIBLE else View.GONE
+        binding.btnEnd.imageTintList = ColorStateList.valueOf(alert)
+
+        // The editors act on a count, and the count only moves while the clock is running —
+        // onManualRep and onUndoRep both refuse outside RUNNING — so a paused workout dims them
+        // too, rather than offering a lit button that quietly does nothing.
+        val canEdit = state == State.RUNNING
+        for (editor in listOf(binding.btnUndo, binding.btnAddRep)) {
+            editor.isEnabled = canEdit
+            editor.alpha = if (canEdit) 1f else DIMMED
+        }
+
+        // Inert during the check, and dimmed so that it reads as unavailable rather than broken.
+        val canRun = state != State.SETUP
+        binding.btnStart.isEnabled = canRun
+        binding.btnStart.alpha = if (canRun) 1f else DIMMED
         binding.btnStart.contentDescription = when (state) {
             State.IDLE -> "Start the workout"
-            State.SETUP -> "Skip the setup check"
+            State.SETUP -> "Start — available once the setup check finishes"
             State.RUNNING -> "Pause"
             State.PAUSED -> "Resume"
             State.FINISHED -> "Start again"
+        }
+
+        // There is a movement to leave during the check and during the workout, and none before
+        // the clock starts or after it stops.
+        val canSkip = state == State.SETUP || live
+        binding.btnSkipExercise.isEnabled = canSkip
+        binding.btnSkipExercise.alpha = if (canSkip) 1f else DIMMED
+        binding.btnSkipExercise.contentDescription = when (state) {
+            State.SETUP -> "Skip the setup check"
+            else -> "Skip to the next movement"
+        }
+    }
+
+    /**
+     * SKIP means the same thing everywhere — leave this movement — but leaving it during the
+     * check means starting Cindy with no calibration at all, which is worth a question first.
+     * Mid-workout it is not: a skipped movement is a scoring decision the athlete has made, and
+     * asking twenty times a session would be the wrong trade.
+     */
+    private fun onSkip() {
+        when (state) {
+            State.SETUP -> CindySheet(
+                this,
+                title = "Skip the setup check?",
+                subtitle = "Cindy will start counting straight away, without calibrating to " +
+                    "your bar. Reps may be missed or counted twice."
+            ).actions(
+                primary = "SKIP",
+                onPrimary = { beginWorkout(calibrated = false) },
+                secondary = "KEEP CHECKING",
+                onSecondary = {}
+            ).show()
+            State.RUNNING, State.PAUSED -> apply(runEngine { engine.skipExercise() })
+            State.IDLE, State.FINISHED -> Unit
         }
     }
 
     /** A workout is live once the clock has started, whether or not it is ticking right now. */
     private fun inWorkout(): Boolean = state == State.RUNNING || state == State.PAUSED
-
-    private fun onLeftButton() {
-        if (state == State.RUNNING || state == State.PAUSED) confirmStop() else flipCamera()
-    }
 
     private fun confirmStop() {
         val wasRunning = state == State.RUNNING
@@ -905,9 +972,9 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.reset() }
         coach.reset()
         detector?.resetRoi()
-        primary("START", R.drawable.ic_play)
+        primary(R.drawable.ic_play)
         statusDot(neutral)
-        status.text = "Press START to set up"
+        status.text = "Tap to set up"
         reps.colour(label)
         music.stop()
         renderClock()
@@ -959,7 +1026,7 @@ class MainActivity : AppCompatActivity() {
         )
         records.add(attempt)
 
-        primary("AGAIN", R.drawable.ic_again)
+        primary(R.drawable.ic_again)
         renderControls()
         // Kept as it was: the finished count is painted in the alert colour so a glance at a
         // phone across the room says the clock has stopped rather than that it is still running.
