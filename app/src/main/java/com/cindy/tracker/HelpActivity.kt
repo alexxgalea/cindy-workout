@@ -257,8 +257,7 @@ class HelpActivity : AppCompatActivity() {
                             })
                             addView(styledText(R.style.Cindy_Body, name).apply {
                                 setTextColor(getColor(R.color.label_body))
-                                (layoutParams as LinearLayout.LayoutParams).marginStart = dp(10)
-                            })
+                            }.withStartMargin(dp(10)))
                         })
                     }
                 })
@@ -340,7 +339,6 @@ class HelpActivity : AppCompatActivity() {
                 }, LinearLayout.LayoutParams(dp(12), dp(12)))
                 addView(eyebrow("CROSSFIT.COM").apply {
                     textSize = 10f
-                    (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dp(7)
                     setPadding(dp(7), 0, 0, 0)
                 })
             })
@@ -358,7 +356,6 @@ class HelpActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(dp(5), dp(5)).apply { topMargin = dp(9) })
             addView(styledText(R.style.Cindy_Body, item).apply {
                 setTextColor(getColor(R.color.label_body))
-                (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dp(12)
                 setPadding(dp(12), 0, 0, 0)
             })
         })

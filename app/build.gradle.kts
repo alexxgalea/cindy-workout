@@ -52,6 +52,14 @@ android {
         viewBinding = true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric inflates the real layouts and applies the real styles, so the smoke
+            // tests need the resource table rather than the stub android.jar.
+            isIncludeAndroidResources = true
+        }
+    }
+
     sourceSets {
         // Keep licenced/large fixtures at the repository root, outside the application APK and
         // outside git. The instrumentation APK sees them as assets/fixtures and assets/scenarios.
@@ -82,6 +90,10 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     testImplementation("junit:junit:4.13.2")
+    // Builds the screens for real on the JVM. The suite was 200 tests of pure logic and none of
+    // a single view, which is how a null layoutParams reached a device.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

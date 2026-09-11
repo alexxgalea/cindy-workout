@@ -45,6 +45,22 @@ fun Context.dpf(value: Float): Float = value * resources.displayMetrics.density
 fun Context.styledText(styleRes: Int, text: CharSequence? = null): TextView =
     TextView(this, null, 0, styleRes).apply { text?.let { this.text = it } }
 
+/**
+ * Gives a view row layout params with a leading margin.
+ *
+ * A view built in code has **no** layoutParams until a parent adds it, so reaching for
+ * `(layoutParams as LinearLayout.LayoutParams).marginStart` inside an `apply {}` is either a
+ * crash (unsafe cast on null) or, with `as?`, a margin that silently never appears. Both of
+ * those shipped; this exists so the choice cannot come up again.
+ */
+fun <T : View> T.withStartMargin(
+    margin: Int,
+    width: Int = ViewGroup.LayoutParams.WRAP_CONTENT,
+    height: Int = ViewGroup.LayoutParams.WRAP_CONTENT
+): T = apply {
+    layoutParams = LinearLayout.LayoutParams(width, height).apply { marginStart = margin }
+}
+
 fun Context.eyebrow(text: String): TextView = styledText(R.style.Cindy_Eyebrow, text)
 
 /** A filled circle: the status dot on the HUD, and the pips beside a list of movements. */
@@ -221,16 +237,13 @@ fun Context.rankRow(
             addView(styledText(R.style.Cindy_Headline, name).apply {
                 if (mine) useExtraBold()
             })
-            if (best) addView(badge("BEST").apply {
-                (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dp(7)
-            })
+            if (best) addView(badge("BEST").withStartMargin(dp(7)))
         })
         addView(styledText(R.style.Cindy_Footnote, detail).apply { setPadding(0, dp(2), 0, 0) })
     })
     addView(styledText(R.style.Cindy_MetricS, score).apply {
         if (!mine) setTextColor(getColor(R.color.label_secondary))
-        (layoutParams as? LinearLayout.LayoutParams)?.marginStart = dp(10)
-    })
+    }.withStartMargin(dp(10)))
     contentDescription = "$rank, $name, $score, $detail"
 }
 
