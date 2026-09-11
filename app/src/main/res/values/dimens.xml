@@ -15,7 +15,7 @@
     <!-- 54dp keeps every control clear of the 48dp minimum touch target. -->
     <dimen name="screen_margin">16dp</dimen>
 
-    <!-- The primary holds this width in every state — START, PAUSE, RESUME, SKIP, AGAIN —
-         so the control never resizes under the label, and it stays a button, not a bar. -->
-    <dimen name="primary_width">196dp</dimen>
+    <!-- The shutter outsizes the glass circles around it, because it is the one control the
+         athlete reaches for from across the room. -->
+    <dimen name="shutter">68dp</dimen>
 </resources>
