@@ -1,15 +1,21 @@
 package com.cindy.tracker
 
 /**
- * Decides what the voice should say about the athlete's position.
+ * Decides what the voice should say about the athlete's position, and about the clock.
  *
  * Silence is ambiguous. An athlete who has just got on the bar cannot tell "you are in a good
  * position and the next rep will count" from "the app has lost you and is saying nothing about
  * it", and mid-set there is no way to check the screen. So this speaks in both directions: it
  * says what is wrong when something is, and it confirms when the movement is countable again.
  *
- * Free of Android types on purpose — the whole value here is in the timing rules, and those are
- * only worth having if they can be tested. [WorkoutEngine.blocked] supplies the input.
+ * The clock half is here for the same reason. The time announcements used to be a `when` over
+ * seconds-remaining on the camera screen, saying only the time; an athlete mid-Cindy already has
+ * the clock in front of them, and what they cannot work out on the bar is whether the pace they
+ * are keeping gets them where they wanted to be. So each mark now carries a figure with it.
+ *
+ * Free of Android types on purpose — the whole value here is in the timing rules and the wording,
+ * and those are only worth having if they can be tested. [WorkoutEngine.blocked] supplies the
+ * position input; the workout clock supplies the rest.
  */
 class Coach {
 
@@ -28,6 +34,8 @@ class Coach {
         /** How long the good position must hold, so a single lucky frame does not confirm. */
         const val CONFIRM_HOLD_MS = 400L
         const val READY = "Ready"
+        /** The length of a Cindy, which is what a pace is projected against. */
+        const val WORKOUT_MS = 20 * 60_000L
     }
 
     /** The movement the last frame belonged to, so a new one earns its own confirmation. */
@@ -99,6 +107,66 @@ class Coach {
         lastFaultAt = 0L
     }
 
+    // ── the clock ─────────────────────────────────────────────────────────────
+
+    /**
+     * The marks the voice speaks at, as milliseconds *remaining*.
+     *
+     * Counted down rather than up because Cindy is a twenty-minute AMRAP and what an athlete
+     * mid-round wants is how much is left, not how much is gone. Chosen so no two land close
+     * enough to run together, and so the last one is early enough to still be worth acting on.
+     */
+    private val marks = listOf(
+        15 * 60_000L, 10 * 60_000L, 5 * 60_000L, 2 * 60_000L, 60_000L, 10_000L
+    )
+
+    /** Marks already spoken, so a 200ms ticker cannot say one five times. */
+    private val spokenMarks = mutableSetOf<Long>()
+
+    /**
+     * What to say about the clock, or null between marks.
+     *
+     * Every line pairs the time with something the athlete has actually done, because the time
+     * alone is the half they can already read off the screen. The pace figure is the one a
+     * twenty-minute AMRAP turns on: rounds so far, projected forward at the rate they have kept
+     * so far, is the number that tells them whether to push or to settle — and it is only worth
+     * saying once there is enough of the workout behind them for it to mean anything.
+     *
+     * Encouragement is attached to a fact rather than issued on its own. "You're doing great" at
+     * minute ten is noise; "Halfway. Six rounds — on for twelve" is the same reassurance, earned.
+     */
+    fun onClock(elapsedMs: Long, remainingMs: Long, rounds: Int, totalReps: Int): String? {
+        val mark = marks.firstOrNull { remainingMs <= it && it !in spokenMarks } ?: return null
+        spokenMarks += mark
+        return when (mark) {
+            10_000L -> "Ten seconds. Everything you have."
+            60_000L -> "One minute left. $rounds rounds down — finish the one you're in."
+            2 * 60_000L -> "Two minutes. " + push(rounds, totalReps)
+            5 * 60_000L -> "Five minutes left. " + pace(elapsedMs, rounds)
+            10 * 60_000L -> "Halfway. " + pace(elapsedMs, rounds)
+            else -> "Five minutes in. " + pace(elapsedMs, rounds)
+        }
+    }
+
+    /**
+     * Rounds so far, and where that rate lands at twenty minutes.
+     *
+     * Projected from elapsed time rather than from the round splits, so a workout that started
+     * slowly and sped up is described by all of itself. Falls back to the plain count before the
+     * first round is in, where a projection off a fraction of a round would be a wild number
+     * stated confidently.
+     */
+    private fun pace(elapsedMs: Long, rounds: Int): String {
+        if (rounds < 1 || elapsedMs < 60_000L) return "Keep the pace you're on."
+        val projected = (rounds * WORKOUT_MS / elapsedMs).toInt()
+        return "$rounds rounds — on for $projected."
+    }
+
+    private fun push(rounds: Int, totalReps: Int): String = when {
+        rounds < 1 -> "$totalReps reps. Keep going."
+        else -> "$rounds rounds and $totalReps reps. Hold the pace."
+    }
+
     /**
      * The workout stopped. Nothing said before the break should carry over it, and coming back
      * to the bar afterwards is exactly the moment a confirmation is worth hearing.
@@ -114,5 +182,8 @@ class Coach {
         interrupted()
         exercise = null
         confirmOwed = false
+        // Not cleared by [interrupted]: a pause is the middle of one workout, and hearing
+        // "halfway" a second time on the way back to the bar would be a lie about the clock.
+        spokenMarks.clear()
     }
 }

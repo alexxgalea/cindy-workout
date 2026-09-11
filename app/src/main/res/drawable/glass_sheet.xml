@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The bottom sheet. Only the top corners round; the specular runs along its lip. -->
+<!--
+  The bottom sheet. Square, like the bands it opens over: the camera screen stopped being a
+  stack of rounded cards when the HUD became the two bands around the picture, and a 30dp
+  radius on the one surface that slides over them was the last thing still curving. The
+  specular runs along its lip and is now the only thing marking the top edge.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:angle="270"
@@ -7,9 +12,4 @@
         android:centerColor="#F01E2024"
         android:endColor="#F70A0B0D"
         android:centerY="0.003" />
-    <corners
-        android:topLeftRadius="@dimen/radius_panel"
-        android:topRightRadius="@dimen/radius_panel"
-        android:bottomLeftRadius="0dp"
-        android:bottomRightRadius="0dp" />
 </shape>

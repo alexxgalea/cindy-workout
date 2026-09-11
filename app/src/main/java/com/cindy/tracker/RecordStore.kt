@@ -30,9 +30,20 @@ data class Attempt(
      * Kept because "87 reps" and "87 reps, 12 of them by hand" are different claims, and the
      * app is not entitled to make the first one when the second is true.
      */
-    val manualReps: Int = 0
+    val manualReps: Int = 0,
+    /**
+     * Reps actually performed, across the whole attempt, or null for an attempt recorded before
+     * the app counted them.
+     *
+     * A round used to be worth thirty reps by definition, because finishing one was the only way
+     * to leave it. SKIP is the other way: a round can now be completed with fewer reps in it
+     * than its movements asked for, and inferring the tally from the round count would report
+     * work nobody did. Null rather than a computed default so that an old record keeps saying
+     * what it always said instead of being quietly restated.
+     */
+    val countedReps: Int? = null
 ) {
-    val totalReps: Int get() = rounds * 30 + reps
+    val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
      * The ladder rung this score earns, or null when the ladder does not describe it.
@@ -94,10 +105,11 @@ object Records {
 
     private const val V3 = "v3"
     private const val V4 = "v4"
+    private const val V5 = "v5"
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
         listOf(
-            V4,
+            V5,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -107,7 +119,10 @@ object Records {
             a.profile?.pull?.name.orEmpty(),
             a.profile?.push?.name.orEmpty(),
             a.profile?.squat?.name.orEmpty(),
-            a.manualReps.toString()
+            a.manualReps.toString(),
+            // Empty for an attempt recorded before the count existed, so that reading it back
+            // leaves it unknown rather than restating it as the round tally times thirty.
+            a.countedReps?.toString().orEmpty()
         ).joinToString("|")
     }
 
@@ -115,6 +130,7 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V5|") -> decodeV5(line)
                 line.startsWith("$V4|") -> decodeV4(line)
                 // Attempts written before the movement profile was recorded. They predate the
                 // choice existing, so standard is what they were, not an assumption about them.
@@ -125,9 +141,21 @@ object Records {
         }.toList()
     }
 
+    /** V4 plus the reps actually counted, which a skipped movement makes unguessable. */
+    private fun decodeV5(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 12) return null
+        return decodeCommon(p)?.copy(countedReps = p[11].toIntOrNull())
+    }
+
     private fun decodeV4(line: String): Attempt? {
         val p = line.split("|")
         if (p.size != 11) return null
+        return decodeCommon(p)
+    }
+
+    /** The ten fields V4 and V5 share, in the same places. */
+    private fun decodeCommon(p: List<String>): Attempt? {
         val rounds = p[1].toIntOrNull() ?: return null
         val reps = p[2].toIntOrNull() ?: return null
         val at = p[3].toLongOrNull() ?: return null

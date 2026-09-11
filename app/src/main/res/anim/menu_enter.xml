@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The menu arrives the way the sheets do: up from the bottom edge, decelerating into place. It
+  is the same gesture because it is the same kind of thing — somewhere you go and come back from,
+  not somewhere you travel to. The fade rides the last of the travel so the rows are legible
+  before they stop, rather than appearing at full strength against a screen still moving.
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="false">
+    <translate
+        android:fromYDelta="100%p" android:toYDelta="0"
+        android:duration="300"
+        android:interpolator="@android:interpolator/decelerate_quint" />
+    <alpha
+        android:fromAlpha="0.4" android:toAlpha="1"
+        android:duration="200"
+        android:interpolator="@android:interpolator/decelerate_cubic" />
+</set>

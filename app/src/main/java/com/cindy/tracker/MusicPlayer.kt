@@ -21,6 +21,18 @@ class MusicPlayer(private val context: Context) {
     private var ducked = false
 
     /**
+     * How loud the track plays, 0..1, before [duck] takes anything off it.
+     *
+     * Held here rather than written straight through to the player so that a volume chosen with
+     * nothing loaded survives until something is, and so that ducking has a level to return to.
+     */
+    var volume = 1f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            applyVolume()
+        }
+
+    /**
      * What is loaded, so [MainActivity] can tell whether the chosen track is the one playing and
      * skip a reload — which is a decode, and a seek back to the top of a track that may be
      * playing. Null when nothing is loaded, which is also the answer to "is there any music?".
@@ -44,6 +56,7 @@ class MusicPlayer(private val context: Context) {
                 prepare()
             }
             trackUri = uri
+            applyVolume()
             true
         } catch (t: Throwable) {
             Log.e("Cindy", "could not load track", t)
@@ -71,11 +84,21 @@ class MusicPlayer(private val context: Context) {
     fun duck(on: Boolean) {
         if (ducked == on) return
         ducked = on
-        val v = if (on) DUCKED_VOLUME else 1f
+        applyVolume()
+    }
+
+    /**
+     * Puts the chosen level, ducked or not, onto the player.
+     *
+     * Ducking multiplies rather than replaces: a track already turned down to a third should not
+     * get *louder* because the voice started talking, which is what a fixed ducked level does.
+     */
+    private fun applyVolume() {
+        val v = if (ducked) volume * DUCKED_SHARE else volume
         try {
             player?.setVolume(v, v)
         } catch (t: Throwable) {
-            Log.w("Cindy", "duck failed", t)
+            Log.w("Cindy", "volume failed", t)
         }
     }
 
@@ -91,7 +114,8 @@ class MusicPlayer(private val context: Context) {
     }
 
     companion object {
-        private const val DUCKED_VOLUME = 0.18f
+        /** What share of the chosen level survives while the voice is speaking over it. */
+        private const val DUCKED_SHARE = 0.18f
 
         /**
          * What to call a track, without opening it.

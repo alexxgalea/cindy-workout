@@ -245,6 +245,12 @@ class WorkoutEngine:
         self._bar_settle_since = 0
         #: Hand position the current still run is measured from, or None while broken.
         self._bar_settle_hands: Keypoint | None = None
+        #: The score the movement had reached when the last event fired.
+        self.reps_at_last_event = 0
+        #: What each movement of the round in progress actually scored, as it was left.
+        self._banked_this_round: dict[Exercise, int] = {}
+        #: The same for every finished round, kept per round so undo can step back into one.
+        self._banked_rounds: list[dict[Exercise, int]] = []
 
     # -- observable state -------------------------------------------------
 
@@ -279,11 +285,16 @@ class WorkoutEngine:
 
     @property
     def reps_this_round(self) -> int:
-        return sum(e.target for e in list(Exercise)[: self.exercise.ordinal]) + self.reps
+        """Reps since the round started, counting what each movement actually scored.
+
+        The movements already left contribute their real counts, not their targets. Those two
+        only differ when something was skipped, which is the case this used to get wrong.
+        """
+        return sum(self._banked_this_round.values()) + self.reps
 
     @property
     def total_reps(self) -> int:
-        return self.rounds * 30 + self.reps_this_round
+        return sum(sum(r.values()) for r in self._banked_rounds) + self.reps_this_round
 
     # -- configuration ----------------------------------------------------
 
@@ -328,6 +339,9 @@ class WorkoutEngine:
         self._start_smoothed = NAN
         self._start_reference = NAN
         self.blocked = False
+        self.reps_at_last_event = 0
+        self._banked_this_round.clear()
+        self._banked_rounds.clear()
         self.diagnostics = FrameDiagnostics()
         self._bar.reset()
 
@@ -343,17 +357,32 @@ class WorkoutEngine:
         counter = self._counters[self.exercise]
         if counter.count > 0:
             counter.force_decrement()
+            self.reps_at_last_event = counter.count
             return RepEvent.UNDO
         if self.exercise is not Exercise.PULLUP:
             self.exercise = self.exercise.previous()
-            self._counters[self.exercise].set_count(self.exercise.target - 1)
+            self._step_back_into(self.exercise)
             return RepEvent.UNDO
         if self.rounds == 0:
             return RepEvent.NONE
         self.rounds -= 1
+        # The round being stepped back into is the one just filed away.
+        self._banked_this_round.clear()
+        if self._banked_rounds:
+            self._banked_this_round.update(self._banked_rounds.pop())
         self.exercise = Exercise.SQUAT
-        self._counters[self.exercise].set_count(Exercise.SQUAT.target - 1)
+        self._step_back_into(Exercise.SQUAT)
         return RepEvent.UNDO
+
+    def _step_back_into(self, movement: Exercise) -> None:
+        """Re-enters a movement already left, at one rep below what it actually scored.
+
+        "One below its target" was the old answer, and it handed back reps nobody did to anyone
+        who had skipped the movement.
+        """
+        banked = self._banked_this_round.pop(movement, movement.target)
+        self._counters[movement].set_count(max(banked - 1, 0))
+        self.reps_at_last_event = self._counters[movement].count
 
     def recalibrate(self) -> None:
         for counter in self._counters.values():
@@ -507,9 +536,14 @@ class WorkoutEngine:
     def _settle(self) -> RepEvent:
         if self._fixed_exercise is None and self.reps >= self.exercise.target:
             return self._advance()
+        self.reps_at_last_event = self.reps
         return RepEvent.REP
 
     def _advance(self) -> RepEvent:
+        # Read before the counter is cleared: after a skip this is the only record that the
+        # movement did not reach its target.
+        self.reps_at_last_event = self.reps
+        self._banked_this_round[self.exercise] = self.reps
         self._counters[self.exercise].reset_count()
         was_last = self.exercise is Exercise.SQUAT
         self.exercise = self.exercise.next()
@@ -521,6 +555,8 @@ class WorkoutEngine:
         self._start_reference = NAN
         if was_last:
             self.rounds += 1
+            self._banked_rounds.append(dict(self._banked_this_round))
+            self._banked_this_round.clear()
             return RepEvent.ROUND_DONE
         return RepEvent.EXERCISE_DONE
 

@@ -78,18 +78,12 @@
 
             <!--
               Icons, not words: four labelled chips wanted 330dp of row and this one has 320.
-              Three of them now — music went to the menu, where the track can be chosen with a
-              tap rather than found behind a long press.
+              Two of them now. Music went to the menu, where the track can be chosen with a tap
+              rather than found behind a long press, and the voice followed it there — it is a
+              switch and a volume, which only read as one setting when they sit together, and
+              neither is an adjustment anyone makes between two pull-ups. REC stays: it carries
+              live state the athlete changes mid-session, which is the whole test for this row.
             -->
-            <ImageView
-                android:id="@+id/btnVoice"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_voice"
-                tools:ignore="ContentDescription" />
-
             <ImageView
                 android:id="@+id/btnRec"
                 android:layout_width="44dp"
