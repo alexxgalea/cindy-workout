@@ -338,11 +338,14 @@
           The left control is FLIP outside a workout and STOP inside one, so it is an icon; the
           primary says five different things across the states, three of which — SKIP, RESUME,
           AGAIN — no mark carries on its own, so it keeps the word and takes a mark as well.
+          The pair is one centred group at a fixed size: a primary stretched to the screen edges
+          reads as a bar rather than a button, and it would change width with every label.
         -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="14dp"
+            android:gravity="center"
             android:orientation="horizontal"
             android:paddingHorizontal="20dp">
 
@@ -360,9 +363,8 @@
             <TextView
                 android:id="@+id/btnStart"
                 style="@style/Cindy.Button"
-                android:layout_width="0dp"
+                android:layout_width="@dimen/primary_width"
                 android:layout_height="match_parent"
-                android:layout_weight="1"
                 android:background="@drawable/btn_primary"
                 android:drawablePadding="10dp"
                 android:text="START"
