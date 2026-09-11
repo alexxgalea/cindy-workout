@@ -1002,6 +1002,8 @@ class MainActivity : AppCompatActivity() {
         state = State.FINISHED
         ui.removeCallbacks(ticker)
         buzz(600)
+        // A recording that has not begun has nothing left to film.
+        binding.countdown.cancel()
         music.stop()
         renderClock()
         renderControls()
@@ -1135,7 +1137,14 @@ class MainActivity : AppCompatActivity() {
             },
             musicOn
         )
-        paint(binding.btnRec, if (video.isRecording) alert else neutral, video.isRecording)
+        // Lit red while filming, red but unlit while the countdown runs — the count itself is
+        // on the picture, so the icon only has to say which of the three states REC is in.
+        val counting = binding.countdown.isRunning
+        paint(
+            binding.btnRec,
+            if (video.isRecording || counting) alert else neutral,
+            video.isRecording
+        )
         paint(binding.btnMenu, getColor(R.color.label_secondary), false)
 
         // The chips carry no text at all now, so a screen reader has nothing but these.
@@ -1146,8 +1155,11 @@ class MainActivity : AppCompatActivity() {
             musicEnabled -> "Music, on"
             else -> "Music, off"
         }
-        binding.btnRec.contentDescription =
-            if (video.isRecording) "Stop recording" else "Record this workout"
+        binding.btnRec.contentDescription = when {
+            counting -> "Recording is about to start, tap to cancel"
+            video.isRecording -> "Stop recording"
+            else -> "Record this workout"
+        }
     }
 
     /** Paints the status dot, and only when the colour actually changes. */
@@ -1190,7 +1202,22 @@ class MainActivity : AppCompatActivity() {
         binding.statusRow.visibility = if (show) View.INVISIBLE else View.VISIBLE
     }
 
+    /**
+     * REC in its three states: counting down, filming, and neither.
+     *
+     * The countdown is what a tap buys — not a recording. Filming used to begin on the tap
+     * itself, so every clip opened on the athlete still at the phone, and nothing on screen had
+     * said it was about to. Tapping again during the count calls it off, because a countdown you
+     * cannot stop is a recording you cannot refuse; that is also why the second tap cancels
+     * rather than restarting, which is what the view would do on its own.
+     */
     private fun toggleRecording() {
+        if (binding.countdown.isRunning) {
+            binding.countdown.cancel()
+            renderChips()
+            toast("Recording cancelled")
+            return
+        }
         if (video.isRecording) {
             video.stop()
             renderChips()
@@ -1200,11 +1227,18 @@ class MainActivity : AppCompatActivity() {
             toast("Recording is not available on this camera")
             return
         }
+        binding.countdown.start { beginRecording() }
+        renderChips()
+    }
+
+    /** The far side of the countdown. Nothing else calls this. */
+    private fun beginRecording() {
         val started = video.start { name ->
             renderChips()
             toast(if (name != null) "Saved $name to Movies/Cindy" else "Recording failed")
         }
         if (!started) toast("Could not start recording")
+        buzz(40L)
         renderChips()
     }
 
@@ -1320,6 +1354,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // The three seconds were for walking to the bar, not for leaving the app.
+        if (binding.countdown.isRunning) {
+            binding.countdown.cancel()
+            renderChips()
+        }
         // Do not keep playing over whatever the athlete opens next.
         if (state == State.RUNNING && !isChangingConfigurations) toggleRun() else music.pause()
     }

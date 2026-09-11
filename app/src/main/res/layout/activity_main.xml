@@ -408,6 +408,23 @@
         </FrameLayout>
     </LinearLayout>
 
+    <!--
+      ── the record countdown ──
+
+      Constrained to the picture rather than the whole screen: it belongs in the bright middle
+      with the athlete, and a ring centred on the window instead of on the frame would sit low,
+      behind the rep panel. Gone until REC is tapped.
+    -->
+    <com.cindy.tracker.CountdownView
+        android:id="@+id/countdown"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/bandTop"
+        app:layout_constraintBottom_toTopOf="@id/bandBottom"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Over everything, and gone as soon as the preview has a frame. -->
     <com.cindy.tracker.LaunchView
         android:id="@+id/launch"
