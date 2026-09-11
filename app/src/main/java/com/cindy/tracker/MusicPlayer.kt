@@ -11,17 +11,22 @@ import android.util.Log
  * Loops one user-chosen track for the duration of the workout.
  *
  * The track is picked through the storage access framework rather than bundled, so the app
- * ships no audio of its own and plays whatever the athlete already owns.
+ * ships no audio of its own and plays whatever the athlete already owns. Choosing it is
+ * [MenuActivity]'s job and remembering it is [Profile]'s; this class only plays what it is
+ * handed, and [MainActivity] is the only thing that starts and stops it.
  */
 class MusicPlayer(private val context: Context) {
 
     private var player: MediaPlayer? = null
     private var ducked = false
 
-    var trackName: String? = null
+    /**
+     * What is loaded, so [MainActivity] can tell whether the chosen track is the one playing and
+     * skip a reload — which is a decode, and a seek back to the top of a track that may be
+     * playing. Null when nothing is loaded, which is also the answer to "is there any music?".
+     */
+    var trackUri: Uri? = null
         private set
-
-    val hasTrack: Boolean get() = player != null
 
     /** @return true if the track loaded and is ready to play. */
     fun load(uri: Uri): Boolean {
@@ -38,22 +43,13 @@ class MusicPlayer(private val context: Context) {
                 isLooping = true
                 prepare()
             }
-            trackName = displayName(uri)
+            trackUri = uri
             true
         } catch (t: Throwable) {
             Log.e("Cindy", "could not load track", t)
             release()
             false
         }
-    }
-
-    private fun displayName(uri: Uri): String? = try {
-        context.contentResolver.query(uri, null, null, null, null)?.use { c ->
-            val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (i >= 0 && c.moveToFirst()) c.getString(i).substringBeforeLast('.') else null
-        }
-    } catch (t: Throwable) {
-        null
     }
 
     fun play() {
@@ -90,11 +86,27 @@ class MusicPlayer(private val context: Context) {
             Log.w("Cindy", "release failed", t)
         }
         player = null
-        trackName = null
+        trackUri = null
         ducked = false
     }
 
-    private companion object {
-        const val DUCKED_VOLUME = 0.18f
+    companion object {
+        private const val DUCKED_VOLUME = 0.18f
+
+        /**
+         * What to call a track, without opening it.
+         *
+         * [MenuActivity] names the chosen track in a row subtitle and must not spin up a
+         * [MediaPlayer] to do it. A null answer means the URI could not be read at all, which
+         * is how a lapsed permission shows up before anything tries to play.
+         */
+        fun displayName(context: Context, uri: Uri): String? = try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (i >= 0 && c.moveToFirst()) c.getString(i).substringBeforeLast('.') else null
+            }
+        } catch (t: Throwable) {
+            null
+        }
     }
 }

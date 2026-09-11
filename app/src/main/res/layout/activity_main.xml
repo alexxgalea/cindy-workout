@@ -76,7 +76,11 @@
                 app:autoSizeMinTextSize="20sp"
                 app:autoSizeTextType="uniform" />
 
-            <!-- Icons, not words: four labelled chips wanted 330dp of row and this one has 320. -->
+            <!--
+              Icons, not words: four labelled chips wanted 330dp of row and this one has 320.
+              Three of them now — music went to the menu, where the track can be chosen with a
+              tap rather than found behind a long press.
+            -->
             <ImageView
                 android:id="@+id/btnVoice"
                 android:layout_width="44dp"
@@ -84,15 +88,6 @@
                 android:padding="11dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_voice"
-                tools:ignore="ContentDescription" />
-
-            <ImageView
-                android:id="@+id/btnMusic"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_music"
                 tools:ignore="ContentDescription" />
 
             <ImageView
@@ -407,6 +402,23 @@
                 tools:ignore="ContentDescription" />
         </FrameLayout>
     </LinearLayout>
+
+    <!--
+      ── the record countdown ──
+
+      Constrained to the picture rather than the whole screen: it belongs in the bright middle
+      with the athlete, and a ring centred on the window instead of on the frame would sit low,
+      behind the rep panel. Gone until REC is tapped.
+    -->
+    <com.cindy.tracker.CountdownView
+        android:id="@+id/countdown"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/bandTop"
+        app:layout_constraintBottom_toTopOf="@id/bandBottom"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Over everything, and gone as soon as the preview has a frame. -->
     <com.cindy.tracker.LaunchView

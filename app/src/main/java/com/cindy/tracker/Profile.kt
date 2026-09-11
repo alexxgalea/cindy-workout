@@ -5,10 +5,12 @@ import android.content.Context
 /**
  * What the athlete has told the app about themselves and about how they intend to train.
  *
- * Two settings, both edited from [MenuActivity] and both stored here rather than at their point
- * of use, so that a preference key has exactly one owner. They were separate before the menu
- * existed: body weight lived on the results screen and the movement profile on [MainActivity],
- * and a second reader of either would have meant a second copy of its key string.
+ * Every setting here is edited from [MenuActivity] and stored here rather than at its point of
+ * use, so that a preference key has exactly one owner. They were separate before the menu
+ * existed: body weight lived on the results screen, the movement profile and the music track on
+ * [MainActivity], and a second reader of any of them would have meant a second copy of its key
+ * string. The music settings in particular now have two readers — the menu writes them and the
+ * camera screen acts on them — which is precisely why they belong here.
  */
 class Profile(context: Context) {
 
@@ -42,9 +44,42 @@ class Profile(context: Context) {
             prefs.edit().putString(KEY_MOVEMENTS, Variations.encode(value)).apply()
         }
 
+    /**
+     * The chosen track, as a content URI string, or null for none.
+     *
+     * A string rather than a `Uri` because that is what a preference holds and what both readers
+     * compare; parsing is the caller's business. Clearing it is how a track is removed, and the
+     * camera screen clears it by itself if the grant behind it has lapsed — a URI the app can no
+     * longer open is not a track the menu should keep offering to play.
+     */
+    var musicTrack: String?
+        get() = prefs.getString(KEY_MUSIC, null)
+        set(value) {
+            val edit = prefs.edit()
+            if (value == null) edit.remove(KEY_MUSIC) else edit.putString(KEY_MUSIC, value)
+            edit.apply()
+        }
+
+    val hasMusic: Boolean get() = musicTrack != null
+
+    /**
+     * Whether the chosen track plays during the workout.
+     *
+     * Separate from [musicTrack] so that turning the music off for one session does not throw
+     * away the choice of track, which is the slow part to redo.
+     */
+    var musicOn: Boolean
+        get() = prefs.getBoolean(KEY_MUSIC_ON, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_MUSIC_ON, value).apply()
+        }
+
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
         private const val KEY_MOVEMENTS = "movement_profile"
+        /** The key [MainActivity] used when it owned the track, so existing choices survive. */
+        private const val KEY_MUSIC = "music_uri"
+        private const val KEY_MUSIC_ON = "music_on"
         /** Above the heaviest recorded human, so typos are caught but nobody real is refused. */
         const val MAX_KG = 400f
         const val MIN_KG = 20f

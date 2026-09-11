@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Unreferenced since music moved to the menu, whose rows carry no icons. Kept, as the glass
+  colours were, because it is part of the stroke icon set rather than one screen's asset.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
     android:viewportWidth="24" android:viewportHeight="24"
