@@ -66,6 +66,17 @@ data class FrameDiagnostics(
     val minimumConfidence: Float = 0f,
     /** True only when the keypoints used to construct the current exercise signal are usable. */
     val scoringConfidenceAdequate: Boolean = false,
+    /**
+     * True when *every* joint the current movement scores from was confidently seen.
+     *
+     * Stricter than [scoringConfidenceAdequate] on purpose. That flag asks whether this frame
+     * could be scored, and the geometry helpers behind it fall back to whichever side of the
+     * body is visible, so it stays true through the single-sided view that precedes a real
+     * failure. This asks the blunter question — how well can the camera read the athlete at all
+     * — so that it degrades *before* counting does. TrackingHealthMonitor is the only consumer,
+     * and an early warning is worthless if it arrives with the miscount.
+     */
+    val poseLegible: Boolean = false,
     val identityStable: Boolean = false,
     val barGateOpen: Boolean = false,
     val headAboveBar: Boolean = false,
@@ -147,6 +158,26 @@ class WorkoutEngine(
         const val BAR_SETTLE_DRIFT_TORSOS = 0.2f
         /** How far below the bar the head must return before another pull-up can arm. */
         const val HEAD_RESET_TORSOS = 0.25f
+        /**
+         * Consecutive overhead frames before a bar may be learned *on the strength of a nose that
+         * could not be seen*.
+         *
+         * [handsOverhead] answers true when the nose is not confidently seen, deliberately, so
+         * that rear-view and occluded footage is not locked out. But that turns a missing keypoint
+         * into permission, and a single dropped nose frame was enough to open the one gate
+         * standing between a band held at chest height and a bar learned there. Measured on the
+         * band fixture at one light level: the nose fell below confidence on exactly one frame in
+         * sixty, a false bar was taught at y=458 instead of the real one at y=235, and because
+         * refinement requires already passing the gate it could never recover — 401 of 532 frames
+         * refused and the whole clip scored zero.
+         *
+         * So only the inferred case waits. A hang with the nose visible below the hands is real
+         * evidence and still establishes the bar on the first frame; a rear view has to hold the
+         * posture for a fifth of a second, which a genuine hang does without trying. The same
+         * "a dwell, not a frame" argument [BAR_SETTLE_MS] and [START_POSITION_MS] already make,
+         * applied only where the evidence is absent rather than present.
+         */
+        const val OVERHEAD_HOLD_FRAMES = 5
         /**
          * Unusable frames tolerated mid-rep before the cycle is abandoned.
          *
@@ -289,6 +320,8 @@ class WorkoutEngine(
     private var barTorso = Float.NaN
     /** Consecutive dead hangs a bar learned at a very different scale has refused. */
     private var barContradictions = 0
+    /** Consecutive frames the hands have been overhead, gating what a bar may be learned from. */
+    private var overheadFrames = 0
     /** When the current run of still, overhead hands began, or 0 while broken. */
     private var barSettleSince = 0L
     /** Hand position the current still run is measured from, or null while broken. */
@@ -347,6 +380,7 @@ class WorkoutEngine(
             xMax = xMaxNormalized * frameWidth
         )
         pullupDownSeen = false
+        overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
         counters.getValue(Exercise.PULLUP).requireFreshDown()
@@ -382,6 +416,7 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
         awaitingStart = false
@@ -476,6 +511,7 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
         diagnostics = FrameDiagnostics()
@@ -661,6 +697,7 @@ class WorkoutEngine(
         pullupExtendedElbow = Float.NaN
         barTorso = Float.NaN
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
         diagnostics = FrameDiagnostics()
@@ -953,8 +990,13 @@ class WorkoutEngine(
         // refinement requires already passing the gate, it could never recover. Strict pull-ups
         // have no such phase, which is why only band footage found it.
         val overhead = handsOverhead(k, hands)
+        overheadFrames = if (overhead) overheadFrames + 1 else 0
+        // Seeing the nose below the hands is evidence, and is acted on at once — a real dead hang
+        // still locates the bar on the first frame, which strict pull-ups depend on. Permission
+        // inferred from a nose that could *not* be seen is not evidence, and has to persist.
+        val mayLearn = overhead && (ok(k[KP.NOSE]) || overheadFrames >= OVERHEAD_HOLD_FRAMES)
         if (elbow >= deadHang &&
-            (if (bar.established) bar.holds(leftWrist, rightWrist, torso) else overhead)
+            (if (bar.established) bar.holds(leftWrist, rightWrist, torso) else mayLearn)
         ) {
             val wasEstablished = bar.established
             val half = gripHalfWidth(k) ?: 0f
@@ -1160,6 +1202,7 @@ class WorkoutEngine(
     ) = FrameDiagnostics(
         minimumConfidence = k.minOfOrNull { it.score } ?: 0f,
         scoringConfidenceAdequate = scoringConfidenceAdequate,
+        poseLegible = poseLegible(k),
         identityStable = identityStable,
         barGateOpen = barGateOpen,
         headAboveBar = headAboveBar,
@@ -1167,6 +1210,32 @@ class WorkoutEngine(
         resetBelowBarSeen = pullupDownSeen,
         rejectionReason = rejection
     )
+
+    /**
+     * Whether every joint the current movement scores from was confidently seen.
+     *
+     * The joint lists are the ones each signal actually consults: pull-ups and push-ups both run
+     * on the shoulder-elbow-wrist chain with the hips supplying torso scale, and squats on the
+     * hip-knee-ankle chain with the shoulders doing the same. Asking for *all* of them, rather
+     * than enough of them to compute an angle, is what makes this fall before the score does.
+     *
+     * Wrists are the joint that matters most here and the one that goes first: darkening a clip
+     * until it stopped counting left "Show both hands" as the dominant refusal every time, which
+     * is why pull-ups fail so much sooner than the other two movements.
+     */
+    private fun poseLegible(k: Array<Keypoint>): Boolean {
+        val joints = when (exercise) {
+            Exercise.PULLUP, Exercise.PUSHUP -> intArrayOf(
+                KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, KP.LEFT_ELBOW, KP.RIGHT_ELBOW,
+                KP.LEFT_WRIST, KP.RIGHT_WRIST, KP.LEFT_HIP, KP.RIGHT_HIP
+            )
+            Exercise.SQUAT -> intArrayOf(
+                KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, KP.LEFT_HIP, KP.RIGHT_HIP,
+                KP.LEFT_KNEE, KP.RIGHT_KNEE, KP.LEFT_ANKLE, KP.RIGHT_ANKLE
+            )
+        }
+        return joints.all { ok(k[it]) }
+    }
 
     // ── geometry helpers ──────────────────────────────────────────────────────
 

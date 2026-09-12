@@ -41,9 +41,30 @@ data class Attempt(
      * work nobody did. Null rather than a computed default so that an old record keeps saying
      * what it always said instead of being quietly restated.
      */
-    val countedReps: Int? = null
+    val countedReps: Int? = null,
+    /**
+     * How long the camera could not read the athlete while the workout clock was running.
+     *
+     * Recorded because a score produced while the camera was blind is a *lower bound*, not a
+     * result. Darkening a clip whose ground truth is five reps showed the count bleeding away
+     * quietly — 5, 3, 2, 1, 0 — with the app looking like it was working throughout. Nothing in
+     * the saved record said the number had stopped being true, so the attempt was filed as fact.
+     * This is what stops that happening twice.
+     */
+    val untrackedMs: Long = 0L
 ) {
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
+
+    /**
+     * True when the camera lost the athlete for long enough that reps were probably missed.
+     *
+     * The error only ever runs one way: an unreadable frame produces an *absent* rep, never an
+     * invented one, measured across every light level tested. So the honest reading of a flagged
+     * attempt is "at least this much", which is why one is still kept, still shown and still
+     * counted towards the streak — it is only barred from claiming a record, because a record is
+     * a claim about a precise number.
+     */
+    val scoreIsLowerBound: Boolean get() = untrackedMs >= Records.UNTRACKED_TOLERANCE_MS
 
     /**
      * The ladder rung this score earns, or null when the ladder does not describe it.
@@ -106,10 +127,22 @@ object Records {
     private const val V3 = "v3"
     private const val V4 = "v4"
     private const val V5 = "v5"
+    private const val V6 = "v6"
+
+    /**
+     * Untracked time a score can carry and still be treated as exact.
+     *
+     * Half a minute of a twenty-minute workout, which is about 2.5% of it. Long enough that
+     * stepping out of shot for a drink does not tarnish a session, short enough that a fading
+     * light cannot take a dozen reps before anything is said. The app cannot tell resting out of
+     * frame from being unreadable in frame, so the flag it raises says only what it knows: the
+     * score may be a lower bound.
+     */
+    const val UNTRACKED_TOLERANCE_MS = 30_000L
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
         listOf(
-            V5,
+            V6,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -122,7 +155,8 @@ object Records {
             a.manualReps.toString(),
             // Empty for an attempt recorded before the count existed, so that reading it back
             // leaves it unknown rather than restating it as the round tally times thirty.
-            a.countedReps?.toString().orEmpty()
+            a.countedReps?.toString().orEmpty(),
+            a.untrackedMs.toString()
         ).joinToString("|")
     }
 
@@ -130,6 +164,7 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V6|") -> decodeV6(line)
                 line.startsWith("$V5|") -> decodeV5(line)
                 line.startsWith("$V4|") -> decodeV4(line)
                 // Attempts written before the movement profile was recorded. They predate the
@@ -139,6 +174,16 @@ object Records {
                 else -> decodeV1(line)
             }
         }.toList()
+    }
+
+    /** V5 plus the time the camera spent unable to read the athlete. */
+    private fun decodeV6(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 13) return null
+        // An attempt written before this was measured decodes as zero, which is the right
+        // reading: nothing was known to be missed, rather than nothing was missed.
+        return decodeCommon(p)
+            ?.copy(countedReps = p[11].toIntOrNull(), untrackedMs = p[12].toLongOrNull() ?: 0L)
     }
 
     /** V4 plus the reps actually counted, which a skipped movement makes unguessable. */
@@ -211,7 +256,7 @@ object Records {
      * happened to flatter.
      */
     fun beatsBenchmark(a: Attempt): Boolean =
-        a.profile?.isStandard == true && a.totalReps > BENCHMARK.totalReps
+        a.profile?.isStandard == true && !a.scoreIsLowerBound && a.totalReps > BENCHMARK.totalReps
 
     /**
      * The attempts a given score may honestly be ranked against: the same movements, exactly.
@@ -230,8 +275,17 @@ object Records {
     fun personalRecord(attempts: List<Attempt>, of: Attempt): Attempt? =
         bestIn(attempts.filter { it.atMillis != of.atMillis }, of.profile)
 
-    /** True when [of] is the best score yet recorded for its own movements. */
+    /**
+     * True when [of] is the best score yet recorded for its own movements.
+     *
+     * A score the camera could not stand behind is never one, however large. It is still kept,
+     * still shown and still ranked — the athlete did at least that much — but "a new record" is
+     * a claim about an exact number, and an attempt with minutes of blind camera in it has not
+     * earned that claim. This is the same line [beatsBenchmark] already drew for adaptive
+     * movements: rank it honestly rather than withhold it.
+     */
     fun isPersonalRecord(attempts: List<Attempt>, of: Attempt): Boolean {
+        if (of.scoreIsLowerBound) return false
         val previous = personalRecord(attempts, of) ?: return of.totalReps > 0
         return of.totalReps > previous.totalReps
     }

@@ -27,6 +27,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -131,7 +135,12 @@ class MainActivity : AppCompatActivity() {
         val bodyVisible: Boolean,
         val blocked: Boolean,
         val awaitingStart: Boolean,
-        val manualReps: Int
+        val manualReps: Int,
+        /** Whether every joint this movement scores from was confidently seen this frame. */
+        val poseLegible: Boolean = false,
+        /** Filled in after the monitor has seen this frame; see [analyse]. */
+        val health: TrackingHealth = TrackingHealth.GOOD,
+        val advice: String? = null
     )
 
     private lateinit var binding: ActivityMainBinding
@@ -203,6 +212,66 @@ class MainActivity : AppCompatActivity() {
     private var debug = false
     /** Decides what the voice says about the athlete's position. Tested on its own.  */
     private val coach = Coach()
+
+    /**
+     * Watches whether the camera can still read the athlete.
+     *
+     * Touched only from the analysis thread. Kept beside [coach] rather than inside the engine
+     * because it judges the *camera*, not the movement, and because — like the coach — the value
+     * is all in rules that are worth testing without a phone attached.
+     */
+    private val tracking = TrackingHealthMonitor()
+
+    /**
+     * Notices the phone itself being moved, which invalidates the bar the pull-up gate learned.
+     *
+     * Optional hardware: a device with no rotation vector simply never reports a move, and
+     * everything else carries on. That is the same bargain the app already takes with the torch
+     * and the recorder — the counting must not depend on a sensor being present.
+     */
+    private val stability = CameraStabilityMonitor()
+    private var sensors: SensorManager? = null
+    private var rotationSensor: Sensor? = null
+
+    /** Scratch for the rotation-vector maths, reused so the sensor callback allocates nothing. */
+    private val rotationMatrix = FloatArray(9)
+    private val orientation = FloatArray(3)
+
+    private val rotationListener = object : SensorEventListener {
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+        override fun onSensorChanged(event: SensorEvent) {
+            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+            SensorManager.getOrientation(rotationMatrix, orientation)
+            stability.update(
+                yaw = Math.toDegrees(orientation[0].toDouble()).toFloat(),
+                pitch = Math.toDegrees(orientation[1].toDouble()).toFloat(),
+                now = SystemClock.elapsedRealtime()
+            )
+            if (stability.consumeReframed()) onCameraMoved()
+        }
+    }
+
+    /**
+     * Throws away everything that was measured in the old framing.
+     *
+     * The engine's own comment on [WorkoutEngine.recalibrate] has said for a long time that a
+     * moved camera invalidates the bar; this is the thing that finally calls it when one moves.
+     * The clock is deliberately left running — the athlete may well be mid-set, and stopping
+     * their Cindy because a bag brushed the phone would be a worse failure than the one being
+     * fixed.
+     */
+    private fun onCameraMoved() {
+        if (state != State.RUNNING && state != State.SETUP) return
+        synchronized(engineLock) { engine.recalibrate() }
+        tracking.reframe()
+        detector?.resetRoi()
+        binding.overlay.clear()
+        if (state == State.RUNNING) {
+            status.text = "Phone moved — checking framing"
+            speaker.queue("Phone moved. Check the framing.")
+        }
+    }
     /** Set from the UI, acted on by the analysis thread, which owns the detector. */
     @Volatile private var pendingModel: String? = null
 
@@ -243,6 +312,11 @@ class MainActivity : AppCompatActivity() {
         // LaunchView is invisible.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        sensors = getSystemService(SENSOR_SERVICE) as? SensorManager
+        // TYPE_ROTATION_VECTOR is fused and absolute, so it does not drift the way a raw
+        // gyroscope integrates itself off over twenty minutes. Absent on some cheap hardware,
+        // in which case the guard is simply never armed and nothing else changes.
+        rotationSensor = sensors?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         // The camera fills the window; the HUD is moved off the system bars in code, because
         // padding the root would letterbox the preview along with the overlay.
         // The screen must not sleep mid-workout. This has to be the window flag set in code:
@@ -541,6 +615,7 @@ class MainActivity : AppCompatActivity() {
         binding.overlay.clear()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
+        tracking.reframe()
         bindUseCases()
     }
 
@@ -566,7 +641,11 @@ class MainActivity : AppCompatActivity() {
             val keypoints = det.detect(frame)
             val now = SystemClock.elapsedRealtime()
             val snap = if (state == State.RUNNING) {
-                runEngine { engine.onFrame(keypoints, now, det.tracking) }
+                val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }
+                // Touched only from this thread, so it needs no lock of its own; the legibility
+                // it reads was captured under the engine's.
+                tracking.update(scored.exercise, scored.poseLegible, det.softGain, now)
+                scored.copy(health = tracking.health, advice = tracking.advice)
             } else {
                 null
             }
@@ -638,7 +717,8 @@ class MainActivity : AppCompatActivity() {
             bodyVisible = engine.bodyVisible,
             blocked = engine.blocked,
             awaitingStart = engine.awaitingStart,
-            manualReps = engine.manualReps
+            manualReps = engine.manualReps,
+            poseLegible = engine.diagnostics.poseLegible
         )
     }
 
@@ -671,6 +751,11 @@ class MainActivity : AppCompatActivity() {
         if (state == State.RUNNING) {
             status.text = when {
                 debug -> debugLine(snap)
+                // Said first, and instead of the engine's own hint. When the light goes the
+                // engine refuses frames for "Show both hands" and then "Step into frame" —
+                // which tells someone hanging on the bar in front of the camera that they are
+                // not there, and sends them to fix their position instead of the light.
+                snap.advice != null -> snap.advice
                 !snap.calibrated -> "Recalibrating…"
                 else -> snap.hint
             }
@@ -679,7 +764,9 @@ class MainActivity : AppCompatActivity() {
             // is harder to read, and white on glass is the most legible thing on this screen.
             statusDot(
                 when {
+                    snap.health == TrackingHealth.LOST -> alert
                     !snap.bodyVisible -> alert
+                    snap.health == TrackingHealth.WEAK -> neutral
                     snap.blocked -> neutral
                     else -> ok
                 }
@@ -726,8 +813,11 @@ class MainActivity : AppCompatActivity() {
     private fun speakAboutPosition(snap: Snapshot) {
         val say = coach.onFrame(
             exercise = snap.exercise,
-            blocked = snap.blocked,
-            hint = snap.hint,
+            // Losing the athlete is a fault whether or not the current frame was refused: the
+            // whole failure is that individual frames keep looking survivable while the score
+            // quietly drains away.
+            blocked = snap.blocked || snap.health != TrackingHealth.GOOD,
+            hint = snap.advice ?: snap.hint,
             now = SystemClock.elapsedRealtime()
         )
         // Queued, so it never cuts off a rep count mid-number.
@@ -825,6 +915,7 @@ class MainActivity : AppCompatActivity() {
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
+                tracking.reframe()
                 detector?.resetRoi()
                 status.text = "Recalibrating…"
                 if (profile.musicOn) music.play()
@@ -966,6 +1057,7 @@ class MainActivity : AppCompatActivity() {
         pausedMs = 0L
         pauseStartedAt = 0L
         synchronized(engineLock) { engine.reset() }
+        tracking.reset()
         coach.reset()
         detector?.resetRoi()
         primary(R.drawable.ic_play)
@@ -1023,7 +1115,9 @@ class MainActivity : AppCompatActivity() {
             manualReps = snap.manualReps,
             // Counted rather than inferred from the round tally: a skipped movement makes those
             // two different numbers, and only this one is the work that was done.
-            countedReps = snap.totalReps
+            countedReps = snap.totalReps,
+            // What the camera could not see is part of the result, not a detail about it.
+            untrackedMs = tracking.lostMs
         )
         records.add(attempt)
 
@@ -1335,6 +1429,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        rotationSensor?.let {
+            // Slowest rate that still catches a knock. A bumped phone is not a subtle signal,
+            // and this runs for the whole of a twenty minute workout.
+            sensors?.registerListener(rotationListener, it, SensorManager.SENSOR_DELAY_UI)
+        }
         syncMovements()
         syncVoice()
         syncMusic()
@@ -1342,6 +1441,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        sensors?.unregisterListener(rotationListener)
+        stability.reset()
         // The three seconds were for walking to the bar, not for leaving the app.
         if (binding.countdown.isRunning) {
             binding.countdown.cancel()

@@ -91,6 +91,15 @@ class FrameDiagnostics:
     minimum_confidence: float = 0.0
     #: True only when the keypoints building the current exercise signal are usable.
     scoring_confidence_adequate: bool = False
+    #: True when *every* joint the current movement scores from was confidently seen.
+    #:
+    #: Stricter than `scoring_confidence_adequate` on purpose. That flag asks whether this frame
+    #: could be scored, and the geometry helpers behind it fall back to whichever side of the body
+    #: is visible, so it stays true through the single-sided view that precedes a real failure.
+    #: This asks the blunter question -- how well can the camera read the athlete at all -- so
+    #: that it degrades *before* counting does. An early warning is worthless if it arrives with
+    #: the miscount.
+    pose_legible: bool = False
     identity_stable: bool = False
     bar_gate_open: bool = False
     head_above_bar: bool = False
@@ -176,6 +185,12 @@ class WorkoutEngine:
     BAR_SETTLE_DRIFT_TORSOS = 0.2
     #: How far below the bar the head must return before another pull-up can arm.
     HEAD_RESET_TORSOS = 0.25
+    #: Consecutive overhead frames before a bar may be learned on the strength of a nose that
+    #: could not be seen. `_hands_overhead` answers true when the nose is unseen, deliberately, so
+    #: rear views are not locked out -- but that turns a missing keypoint into permission, and one
+    #: dropped nose frame was enough to teach a false bar at chest height that can never recover.
+    #: A visible nose below the hands is real evidence and still learns on the first frame.
+    OVERHEAD_HOLD_FRAMES = 5
     #: Unusable frames tolerated mid-rep before the cycle is abandoned. A pull-up occludes its
     #: own keypoints exactly where it matters -- at the top, where the head tilts back and the
     #: wrists disappear behind it -- so treating the first sub-threshold frame as "left the bar"
@@ -242,6 +257,7 @@ class WorkoutEngine:
         #: Consecutive dead hangs a bar learned at a very different scale has refused.
         self._bar_contradictions = 0
         #: When the current run of still, overhead hands began, or 0 while broken.
+        self._overhead_frames = 0
         self._bar_settle_since = 0
         #: Hand position the current still run is measured from, or None while broken.
         self._bar_settle_hands: Keypoint | None = None
@@ -315,6 +331,7 @@ class WorkoutEngine:
             x_max=x_max_normalized * frame_width,
         )
         self._pullup_down_seen = False
+        self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
         self._counters[Exercise.PULLUP].require_fresh_down()
@@ -332,6 +349,7 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
         self.awaiting_start = False
@@ -392,6 +410,7 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
         self.diagnostics = FrameDiagnostics()
@@ -571,6 +590,7 @@ class WorkoutEngine:
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
         self._bar_contradictions = 0
+        self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
         self.diagnostics = FrameDiagnostics()
@@ -799,9 +819,15 @@ class WorkoutEngine:
         # already passing the gate. Strict pull-ups have no such phase, so only band footage
         # found it.
         overhead = self._hands_overhead(k, hands)
+        self._overhead_frames = self._overhead_frames + 1 if overhead else 0
+        # Seeing the nose below the hands is evidence and is acted on at once; permission inferred
+        # from a nose that could *not* be seen is not, and has to persist.
+        may_learn = overhead and (
+            self._ok(k[KP.NOSE]) or self._overhead_frames >= self.OVERHEAD_HOLD_FRAMES
+        )
         gate_ok = (
             self._bar.holds(left_wrist, right_wrist, torso)
-            if self._bar.established else overhead
+            if self._bar.established else may_learn
         )
         if elbow >= dead_hang and gate_ok:
             was_established = self._bar.established
@@ -981,6 +1007,7 @@ class WorkoutEngine:
         return FrameDiagnostics(
             minimum_confidence=min((p.score for p in k), default=0.0),
             scoring_confidence_adequate=scoring_confidence_adequate,
+            pose_legible=self._pose_legible(k),
             identity_stable=identity_stable,
             bar_gate_open=bar_gate_open,
             head_above_bar=head_above_bar,
@@ -988,6 +1015,26 @@ class WorkoutEngine:
             reset_below_bar_seen=self._pullup_down_seen,
             rejection_reason=rejection,
         )
+
+    def _pose_legible(self, k: Sequence[Keypoint]) -> bool:
+        """Whether every joint the current movement scores from was confidently seen.
+
+        The joint lists are the ones each signal actually consults: pull-ups and push-ups both run
+        on the shoulder-elbow-wrist chain with the hips supplying torso scale, and squats on the
+        hip-knee-ankle chain with the shoulders doing the same. Asking for *all* of them, rather
+        than enough of them to compute an angle, is what makes this fall before the score does.
+
+        Wrists are the joint that matters most here and the one that goes first: darkening a clip
+        until it stopped counting left "Show both hands" as the dominant refusal every time, which
+        is why pull-ups fail so much sooner than the other two movements.
+        """
+        if self.exercise is Exercise.SQUAT:
+            joints = (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, KP.LEFT_HIP, KP.RIGHT_HIP,
+                      KP.LEFT_KNEE, KP.RIGHT_KNEE, KP.LEFT_ANKLE, KP.RIGHT_ANKLE)
+        else:
+            joints = (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, KP.LEFT_ELBOW, KP.RIGHT_ELBOW,
+                      KP.LEFT_WRIST, KP.RIGHT_WRIST, KP.LEFT_HIP, KP.RIGHT_HIP)
+        return all(self._ok(k[i]) for i in joints)
 
     # -- geometry helpers -------------------------------------------------
 

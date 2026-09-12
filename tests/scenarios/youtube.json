@@ -1,135 +1,209 @@
 {
-  "version": 1,
-  "source": "youtube",
-  "comment": "Expectations are ground truth \u2014 what a human scores the clip at \u2014 never what the engine currently produces. countTolerance is an evaluation policy for footage annotated as visually ambiguous; the signed error against ground truth is reported either way. Provision clips with tools/video_regression/fetch_youtube.py.",
-  "scenarios": [
-    {
-      "id": "youtube_pullups_ten_rep_set",
-      "video": "tests/fixtures/youtube/pullups/AB5LE7WDvcQ.mp4",
-      "exercise": "pullup",
-      "expectedReps": 10,
-      "tags": [
-        "youtube",
-        "pullups",
-        "occlusion",
-        "known-gap"
-      ],
-      "notes": "Ten weighted pull-ups, rear view, static camera. Scored 1 before the occlusion fix; now 9.",
-      "countTolerance": 1,
-      "quality": "severe_occlusion",
-      "knownIssue": "Counts 9. Classified DEAD_HANG_NARROWLY_MISSED by diagnose_pullups.py: after the rep at 3003ms the athlete's deepest extension on the following cycle peaks at 149.0 degrees against a 150.0 threshold, so no dead hang arms the next rep. Reproduces on one clip only, so it is recorded rather than tuned for."
-    },
-    {
-      "id": "youtube_pushups_four_rep_demo",
-      "video": "tests/fixtures/youtube/pushups/WDIpL0pjun0.mp4",
-      "exercise": "pushup",
-      "expectedReps": 4,
-      "tags": [
-        "youtube",
-        "pushups"
-      ],
-      "notes": "Side-view push-up form demo. Currently scored correctly."
-    },
-    {
-      "id": "youtube_squats_two_rep_demo",
-      "video": "tests/fixtures/youtube/squats/l83R5PblSMA.mp4",
-      "exercise": "squat",
-      "expectedReps": 2,
-      "tags": [
-        "youtube",
-        "squats"
-      ],
-      "notes": "Side-view bodyweight squat demo. Currently scored correctly."
-    },
-    {
-      "id": "youtube_squats_camera_cut",
-      "video": "tests/fixtures/youtube/squats/eJBtfEgw__A.mp4",
-      "exercise": "squat",
-      "expectedReps": 2,
-      "tags": [
-        "youtube",
-        "squats",
-        "camera-cut"
-      ],
-      "notes": "Barbell back squat in two shots with a hard camera cut at about 5.5s, one rep per shot. Guards the learned band against a mid-clip geometry change."
-    },
-    {
-      "id": "youtube_pushups_are_not_pullups",
-      "video": "tests/fixtures/youtube/pushups/WDIpL0pjun0.mp4",
-      "exercise": "pullup",
-      "expectedReps": 0,
-      "tags": [
-        "youtube",
-        "must-not-count",
-        "false-positive-guard"
-      ],
-      "notes": "Side-view push-ups scored as pull-ups. The same elbow swing with the hands on the floor must never reach the bar gate."
-    },
-    {
-      "id": "youtube_long_pushups_are_not_pullups",
-      "video": "tests/fixtures/youtube/pushups/IODxDxX7oi4.mp4",
-      "exercise": "pullup",
-      "expectedReps": 0,
-      "tags": [
-        "youtube",
-        "must-not-count",
-        "false-positive-guard"
-      ],
-      "notes": "Long push-up tutorial with cuts and talking segments, scored as pull-ups. Guards the dropout tolerance against inventing reps across scene changes."
-    },
-    {
-      "id": "youtube_squats_are_not_pullups",
-      "video": "tests/fixtures/youtube/squats/xqvCmoLULNY.mp4",
-      "exercise": "pullup",
-      "expectedReps": 0,
-      "tags": [
-        "youtube",
-        "must-not-count",
-        "false-positive-guard"
-      ],
-      "notes": "Squat tutorial scored as pull-ups; the hands never go overhead."
-    },
-    {
-      "id": "youtube_pushups_twelve_rep_knee_set",
-      "video": "tests/fixtures/youtube/pushups/EgIMk-PZwo0.mp4",
-      "exercise": "pushup",
-      "expectedReps": 12,
-      "tags": [
-        "youtube",
-        "pushups",
-        "knee-pushup",
-        "variation"
-      ],
-      "notes": "Twelve KNEE push-ups, three-quarter view, static camera. The variation fixture for the claim that a knee push-up is the same measurement as a standard one: the push-up path reads the elbow chain and the torso direction and never looks at the legs. Counted 12/12 with no gate rejection during the set."
-    },
-    {
-      "id": "youtube_pullups_band_assisted_five",
-      "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
-      "exercise": "pullup",
-      "pull": "band_assisted",
-      "expectedReps": 5,
-      "tags": [
-        "youtube",
-        "pullups",
-        "band-assisted",
-        "variation",
-        "regression"
-      ],
-      "notes": "Five band-assisted pull-ups, front view, static portrait shot. The regression fixture for the false-bar bug: the band setup must not teach a bar at chest height. Scored 0 before the fix, 5/5 after."
-    },
-    {
-      "id": "youtube_pullups_machine_assisted_four",
-      "video": "tests/fixtures/youtube/pullups/75tpN6zeR8U.mp4",
-      "exercise": "pullup",
-      "pull": "band_assisted",
-      "expectedReps": 4,
-      "tags": [
-        "youtube",
-        "pullups",
-        "machine-assisted",
-        "variation"
-      ],
-      "notes": "Four machine-assisted pull-ups, rear three-quarter view. Scored under band_assisted since there is no MACHINE_ASSISTED variant. Clip opens mid-set, so the first count's descent precedes the footage."
-    }
-  ]
+ "version": 1,
+ "source": "youtube",
+ "comment": "Expectations are ground truth — what a human scores the clip at — never what the engine currently produces. countTolerance is an evaluation policy for footage annotated as visually ambiguous; the signed error against ground truth is reported either way. Provision clips with tools/video_regression/fetch_youtube.py.",
+ "scenarios": [
+  {
+   "id": "youtube_pullups_ten_rep_set",
+   "video": "tests/fixtures/youtube/pullups/AB5LE7WDvcQ.mp4",
+   "exercise": "pullup",
+   "expectedReps": 10,
+   "tags": [
+    "youtube",
+    "pullups",
+    "occlusion"
+   ],
+   "notes": "Ten weighted pull-ups, rear view, static camera. Scored 1 before the occlusion fix, then 9, and 10 since the analysis crop was brightness-normalised.",
+   "countTolerance": 0,
+   "quality": "severe_occlusion"
+  },
+  {
+   "id": "youtube_pushups_four_rep_demo",
+   "video": "tests/fixtures/youtube/pushups/WDIpL0pjun0.mp4",
+   "exercise": "pushup",
+   "expectedReps": 4,
+   "tags": [
+    "youtube",
+    "pushups"
+   ],
+   "notes": "Side-view push-up form demo. Currently scored correctly."
+  },
+  {
+   "id": "youtube_squats_two_rep_demo",
+   "video": "tests/fixtures/youtube/squats/l83R5PblSMA.mp4",
+   "exercise": "squat",
+   "expectedReps": 2,
+   "tags": [
+    "youtube",
+    "squats"
+   ],
+   "notes": "Side-view bodyweight squat demo. Currently scored correctly."
+  },
+  {
+   "id": "youtube_squats_camera_cut",
+   "video": "tests/fixtures/youtube/squats/eJBtfEgw__A.mp4",
+   "exercise": "squat",
+   "expectedReps": 2,
+   "tags": [
+    "youtube",
+    "squats",
+    "camera-cut"
+   ],
+   "notes": "Barbell back squat in two shots with a hard camera cut at about 5.5s, one rep per shot. Guards the learned band against a mid-clip geometry change."
+  },
+  {
+   "id": "youtube_pushups_are_not_pullups",
+   "video": "tests/fixtures/youtube/pushups/WDIpL0pjun0.mp4",
+   "exercise": "pullup",
+   "expectedReps": 0,
+   "tags": [
+    "youtube",
+    "must-not-count",
+    "false-positive-guard"
+   ],
+   "notes": "Side-view push-ups scored as pull-ups. The same elbow swing with the hands on the floor must never reach the bar gate."
+  },
+  {
+   "id": "youtube_long_pushups_are_not_pullups",
+   "video": "tests/fixtures/youtube/pushups/IODxDxX7oi4.mp4",
+   "exercise": "pullup",
+   "expectedReps": 0,
+   "tags": [
+    "youtube",
+    "must-not-count",
+    "false-positive-guard"
+   ],
+   "notes": "Long push-up tutorial with cuts and talking segments, scored as pull-ups. Guards the dropout tolerance against inventing reps across scene changes."
+  },
+  {
+   "id": "youtube_squats_are_not_pullups",
+   "video": "tests/fixtures/youtube/squats/xqvCmoLULNY.mp4",
+   "exercise": "pullup",
+   "expectedReps": 0,
+   "tags": [
+    "youtube",
+    "must-not-count",
+    "false-positive-guard"
+   ],
+   "notes": "Squat tutorial scored as pull-ups; the hands never go overhead."
+  },
+  {
+   "id": "youtube_pushups_twelve_rep_knee_set",
+   "video": "tests/fixtures/youtube/pushups/EgIMk-PZwo0.mp4",
+   "exercise": "pushup",
+   "expectedReps": 12,
+   "tags": [
+    "youtube",
+    "pushups",
+    "knee-pushup",
+    "variation"
+   ],
+   "notes": "Twelve KNEE push-ups, three-quarter view, static camera. The variation fixture for the claim that a knee push-up is the same measurement as a standard one: the push-up path reads the elbow chain and the torso direction and never looks at the legs. Counted 12/12 with no gate rejection during the set."
+  },
+  {
+   "id": "youtube_pullups_band_assisted_five",
+   "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 5,
+   "tags": [
+    "youtube",
+    "pullups",
+    "band-assisted",
+    "variation",
+    "regression"
+   ],
+   "notes": "Five band-assisted pull-ups, front view, static portrait shot. The regression fixture for the false-bar bug: the band setup must not teach a bar at chest height. Scored 0 before the fix, 5/5 after."
+  },
+  {
+   "id": "youtube_pullups_machine_assisted_four",
+   "video": "tests/fixtures/youtube/pullups/75tpN6zeR8U.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 4,
+   "tags": [
+    "youtube",
+    "pullups",
+    "machine-assisted",
+    "variation"
+   ],
+   "notes": "Four machine-assisted pull-ups, rear three-quarter view. Scored under band_assisted since there is no MACHINE_ASSISTED variant. Clip opens mid-set, so the first count's descent precedes the footage."
+  },
+  {
+   "id": "youtube_pullups_band_assisted_five_dim",
+   "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 5,
+   "light": {
+    "gain": 0.07,
+    "model": "uncompensated"
+   },
+   "tags": [
+    "youtube",
+    "pullups",
+    "low-light",
+    "regression"
+   ],
+   "notes": "The same clip at a fourteenth of its light, which is roughly where a sunset takes a phone that has run out of exposure. Before the analysis crop was brightness-normalised this scored 0 with 78% of frames refused for unreadable joints; it must keep scoring 5. This is the fixture for the failure a tester reported and nobody recorded."
+  },
+  {
+   "id": "youtube_pullups_band_assisted_five_very_dim",
+   "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 5,
+   "light": {
+    "gain": 0.03,
+    "model": "uncompensated"
+   },
+   "tags": [
+    "youtube",
+    "pullups",
+    "low-light",
+    "regression"
+   ],
+   "notes": "Darker still, to hold the margin the normalisation bought rather than sit on its edge. Counting survives about 3.3x further into the dark than it did."
+  },
+  {
+   "id": "youtube_pullups_noise_limited_is_noticed",
+   "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 0,
+   "countTolerance": 1,
+   "light": {
+    "gain": 0.03,
+    "model": "iso"
+   },
+   "expectedTracking": "LOST",
+   "tags": [
+    "youtube",
+    "pullups",
+    "low-light",
+    "must-not-count",
+    "regression"
+   ],
+   "notes": "The regime software cannot rescue: the camera has already raised its own gain, so the picture is bright (mean luma ~43) and full of noise, and brightening it further only amplifies the noise -- measured at no improvement at all. The counting rules are therefore EXPECTED to fail here. What must not fail is noticing: the monitor has to reach LOST so the athlete is told and the score is filed as a lower bound. This is the fixture that proves the app stops lying rather than the one that proves it counts."
+  },
+  {
+   "id": "youtube_pullups_dropped_head_keeps_the_bar",
+   "video": "tests/fixtures/youtube/pullups/3aRP4o23HXo.mp4",
+   "exercise": "pullup",
+   "pull": "band_assisted",
+   "expectedReps": 5,
+   "light": {
+    "gain": 0.15,
+    "model": "uncompensated"
+   },
+   "tags": [
+    "youtube",
+    "pullups",
+    "low-light",
+    "false-bar",
+    "regression"
+   ],
+   "notes": "The light level that exposed a latent false-bar bug. Here the nose falls below confidence on exactly one frame in the first sixty, and because the hands-overhead guard reads an unseen nose as permission, that single frame taught a bar at the athlete's chest (y=458 rather than y=235) during the band setup. A wrong bar can never recover, so the clip scored 0 with 401 of 532 frames refused for 'Get on the bar'. Learning now requires the overhead posture to be HELD when the evidence is absent, and this must keep scoring 5."
+  }
+ ]
 }

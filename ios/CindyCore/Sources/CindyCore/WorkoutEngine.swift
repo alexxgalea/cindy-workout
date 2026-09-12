@@ -93,6 +93,15 @@ public struct FrameDiagnostics: Equatable, Sendable {
     public var minimumConfidence: Float = 0
     /// True only when the keypoints used to construct the current exercise signal are usable.
     public var scoringConfidenceAdequate: Bool = false
+    /// True when *every* joint the current movement scores from was confidently seen.
+    ///
+    /// Stricter than `scoringConfidenceAdequate` on purpose. That flag asks whether this frame
+    /// could be scored, and the geometry helpers behind it fall back to whichever side of the body
+    /// is visible, so it stays true through the single-sided view that precedes a real failure.
+    /// This asks the blunter question — how well can the camera read the athlete at all — so that
+    /// it degrades *before* counting does. An early warning is worthless if it arrives with the
+    /// miscount.
+    public var poseLegible: Bool = false
     public var identityStable: Bool = false
     public var barGateOpen: Bool = false
     public var headAboveBar: Bool = false
@@ -118,6 +127,13 @@ public final class WorkoutEngine {
 
     /// MoveNet/Vision confidence below which a keypoint is treated as unseen.
     private static let minScore: Float = 0.30
+    /// Consecutive overhead frames before an unknown bar may be learned from a dead hang.
+    ///
+    /// `handsOverhead` answers true when the nose is not confidently seen — on purpose, so
+    /// rear-view footage is not locked out — so a *single* dropped nose keypoint was enough to let
+    /// a band held at chest height be taught as the bar, which can never recover. Measured: one
+    /// frame in sixty did exactly that and cost a whole clip its score.
+    private static let overheadHoldFrames = 5
     /// Reps to watch before trusting the learned band.
     private static let calibrationReps = 2
     /// How long to wait for a believable range before calling the setup bad.
@@ -263,6 +279,8 @@ public final class WorkoutEngine {
     /// Consecutive dead hangs a bar learned at a very different scale has refused.
     private var barContradictions = 0
     /// When the current run of still, overhead hands began, or 0 while broken.
+    /// Consecutive frames the hands have been overhead, gating what a bar may be learned from.
+    private var overheadFrames = 0
     private var barSettleSince: Int64 = 0
     /// Hand position the current still run is measured from, or nil while broken.
     private var barSettleHands: Keypoint?
@@ -326,6 +344,7 @@ public final class WorkoutEngine {
         pullupExtendedElbow = .nan
         barTorso = .nan
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
         awaitingStart = false
@@ -399,6 +418,7 @@ public final class WorkoutEngine {
         pullupExtendedElbow = .nan
         barTorso = .nan
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
         diagnostics = FrameDiagnostics()
@@ -561,6 +581,7 @@ public final class WorkoutEngine {
         pullupExtendedElbow = .nan
         barTorso = .nan
         barContradictions = 0
+        overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
         diagnostics = FrameDiagnostics()
@@ -631,6 +652,7 @@ public final class WorkoutEngine {
                             xMin: xMinNormalized * Float(frameWidth),
                             xMax: xMaxNormalized * Float(frameWidth))
         pullupDownSeen = false
+        overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
         counters[.pullup]!.requireFreshDown()
@@ -822,7 +844,7 @@ public final class WorkoutEngine {
                     barGuide = nil
                     barTorso = .nan
                     barContradictions = 0
-                    barSettleSince = 0
+        barSettleSince = 0
                     barSettleHands = nil
                 }
             }
@@ -842,9 +864,13 @@ public final class WorkoutEngine {
         // requires already passing the gate. Strict pull-ups have no such phase, which is why
         // only band footage found it.
         let overhead = handsOverhead(k, hands: hands)
+        overheadFrames = overhead ? overheadFrames + 1 : 0
+        // Seeing the nose below the hands is evidence and is acted on at once; permission inferred
+        // from a nose that could *not* be seen is not, and has to persist.
+        let learnable = overhead && (ok(k[KP.nose]) || overheadFrames >= Self.overheadHoldFrames)
         let mayLearn = bar.established
             ? bar.holds(left: leftWrist, right: rightWrist, torso: torso)
-            : overhead
+            : learnable
         if elbow >= deadHang, mayLearn {
             let wasEstablished = bar.established
             let half = gripHalfWidth(k) ?? 0
@@ -852,13 +878,13 @@ public final class WorkoutEngine {
             if !wasEstablished { barTorso = torso }
         }
         if bar.established {
-            barSettleSince = 0
+        barSettleSince = 0
             barSettleHands = nil
         } else if overhead {
             settleBar(hands, halfGrip: gripHalfWidth(k) ?? 0, torso: torso, now: now)
         } else {
             // Not a hang, so the stillness of holding a band must not accumulate toward one.
-            barSettleSince = 0
+        barSettleSince = 0
             barSettleHands = nil
         }
         let onBar = bar.holds(left: leftWrist, right: rightWrist, torso: torso)
@@ -1025,6 +1051,7 @@ public final class WorkoutEngine {
         FrameDiagnostics(
             minimumConfidence: k.map(\.score).min() ?? 0,
             scoringConfidenceAdequate: scoringConfidenceAdequate,
+            poseLegible: poseLegible(k),
             identityStable: identityStable,
             barGateOpen: barGateOpen,
             headAboveBar: headAboveBar,
@@ -1032,6 +1059,29 @@ public final class WorkoutEngine {
             resetBelowBarSeen: pullupDownSeen,
             rejectionReason: rejection
         )
+    }
+
+    /// Whether every joint the current movement scores from was confidently seen.
+    ///
+    /// The joint lists are the ones each signal actually consults: pull-ups and push-ups both run
+    /// on the shoulder-elbow-wrist chain with the hips supplying torso scale, and squats on the
+    /// hip-knee-ankle chain with the shoulders doing the same. Asking for *all* of them, rather
+    /// than enough of them to compute an angle, is what makes this fall before the score does.
+    ///
+    /// Wrists are the joint that matters most here and the one that goes first: darkening a clip
+    /// until it stopped counting left "Show both hands" as the dominant refusal every time, which
+    /// is why pull-ups fail so much sooner than the other two movements.
+    private func poseLegible(_ k: [Keypoint]) -> Bool {
+        let joints: [Int]
+        switch exercise {
+        case .squat:
+            joints = [KP.leftShoulder, KP.rightShoulder, KP.leftHip, KP.rightHip,
+                      KP.leftKnee, KP.rightKnee, KP.leftAnkle, KP.rightAnkle]
+        default:
+            joints = [KP.leftShoulder, KP.rightShoulder, KP.leftElbow, KP.rightElbow,
+                      KP.leftWrist, KP.rightWrist, KP.leftHip, KP.rightHip]
+        }
+        return joints.allSatisfy { ok(k[$0]) }
     }
 
     // MARK: - geometry
