@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r \".tool_input.command // \\\"\\\"\" | grep -qE \"assembleDebug|installDebug|assembleRelease\" && { out=\"$(\"${CLAUDE_PROJECT_DIR:-.}/tools/deploy_apk.sh\" 2>&1)\"; [ -n \"$out\" ] && jq -n --arg m \"$out\" \"{systemMessage:\\$m}\"; }; true",
+            "timeout": 60,
+            "statusMessage": "Deploying APK to the phone's install server"
+          }
+        ]
+      }
+    ]
+  }
+}
