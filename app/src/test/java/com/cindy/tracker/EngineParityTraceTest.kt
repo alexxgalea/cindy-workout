@@ -72,6 +72,7 @@ class EngineParityTraceTest {
                         engine.hint,
                         round(d.minimumConfidence.toDouble()),
                         d.scoringConfidenceAdequate.toString(),
+                        d.poseLegible.toString(),
                         d.barGateOpen.toString(),
                         d.headAboveBar.toString(),
                         d.resetBelowBarSeen.toString(),
@@ -108,7 +109,7 @@ class EngineParityTraceTest {
         const val ANGLE = 5
         const val PULL = 6
         const val HEADER = "traceId,step,tMs,angle,kpSum,event,count,state,signal,learnedRange," +
-            "calibrated,hint,minConfidence,confidenceAdequate,barGateOpen,headAboveBar," +
+            "calibrated,hint,minConfidence,confidenceAdequate,poseLegible,barGateOpen,headAboveBar," +
             "resetSeen,rejection"
     }
 }

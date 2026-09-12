@@ -153,4 +153,68 @@ class RecordsTest {
     fun `best of nothing is nothing`() {
         assertNull(Records.best(emptyList()))
     }
+
+    // ── a score the camera could not stand behind ─────────────────────────────
+
+    @Test
+    fun `time the camera was blind survives a round trip`() {
+        val a = attempt(12, 7).copy(untrackedMs = 91_000L, countedReps = 367)
+        val back = Records.decode(Records.encode(listOf(a))).single()
+        assertEquals(91_000L, back.untrackedMs)
+        assertEquals(367, back.countedReps)
+    }
+
+    @Test
+    fun `an attempt recorded before this was measured reads as nothing known missing`() {
+        // A v5 line, which is what the previous build wrote. Zero is the right reading: nothing
+        // was known to be missed, which is not the same claim as nothing was missed.
+        val v5 = "v5|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367"
+        val back = Records.decode(v5).single()
+        assertEquals(0L, back.untrackedMs)
+        assertFalse(back.scoreIsLowerBound)
+        assertEquals(367, back.countedReps)
+    }
+
+    @Test
+    fun `a few seconds of lost tracking does not tarnish a score`() {
+        assertFalse(attempt(20).copy(untrackedMs = 12_000L).scoreIsLowerBound)
+    }
+
+    @Test
+    fun `half a minute of blind camera makes the score a floor`() {
+        assertTrue(attempt(20).copy(untrackedMs = 30_000L).scoreIsLowerBound)
+    }
+
+    @Test
+    fun `a score the camera could not stand behind is not a personal record`() {
+        val history = listOf(attempt(10, 0, 100L))
+        val degraded = attempt(20, 0, 500L).copy(untrackedMs = 120_000L)
+        // Twice the previous best, and still not a record: the number itself is not trustworthy.
+        assertTrue(degraded.totalReps > history.single().totalReps)
+        assertFalse(Records.isPersonalRecord(history + degraded, degraded))
+    }
+
+    @Test
+    fun `a clean score still sets a personal record`() {
+        val history = listOf(attempt(10, 0, 100L))
+        val clean = attempt(20, 0, 500L)
+        assertTrue(Records.isPersonalRecord(history + clean, clean))
+    }
+
+    @Test
+    fun `a degraded session cannot claim the benchmark`() {
+        val big = Attempt(30, 0, 0L, untrackedMs = 60_000L)
+        assertTrue(big.totalReps > Records.BENCHMARK.totalReps)
+        assertFalse(Records.beatsBenchmark(big))
+        assertTrue(Records.beatsBenchmark(big.copy(untrackedMs = 0L)))
+    }
+
+    @Test
+    fun `a degraded session is still kept and still ranked`() {
+        // The athlete did at least this much, so withholding it would be its own dishonesty.
+        val degraded = attempt(20, 0, 500L).copy(untrackedMs = 120_000L)
+        val all = listOf(attempt(10, 0, 100L), degraded)
+        assertEquals(20, Records.best(all)?.rounds)
+        assertEquals(2, Records.ranked(all).size)
+    }
 }

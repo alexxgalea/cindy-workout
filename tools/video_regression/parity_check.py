@@ -27,7 +27,7 @@ from cindy_sim.workout_engine import CindyProfile, Exercise, PullVariant, Workou
 
 HEADER = [
     "traceId", "step", "tMs", "angle", "kpSum", "event", "count", "state", "signal",
-    "learnedRange", "calibrated", "hint", "minConfidence", "confidenceAdequate",
+    "learnedRange", "calibrated", "hint", "minConfidence", "confidenceAdequate", "poseLegible",
     "barGateOpen", "headAboveBar", "resetSeen", "rejection",
 ]
 EXERCISES = {"pullup": Exercise.PULLUP, "pushup": Exercise.PUSHUP, "squat": Exercise.SQUAT}
@@ -72,6 +72,7 @@ def run_plan(plan_path: Path) -> list[list[str]]:
                 engine.hint,
                 rounded(d.minimum_confidence),
                 str(d.scoring_confidence_adequate).lower(),
+                str(d.pose_legible).lower(),
                 str(d.bar_gate_open).lower(),
                 str(d.head_above_bar).lower(),
                 str(d.reset_below_bar_seen).lower(),

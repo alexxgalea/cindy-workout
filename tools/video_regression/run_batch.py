@@ -20,15 +20,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim.pose_detector import PoseDetector
+from cindy_sim.tracking_health import TrackingHealth, TrackingHealthMonitor
 from cindy_sim.workout_engine import (
     CindyProfile, Exercise, PullVariant, RepEvent, SetupStage, WorkoutEngine,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+#: Read noise of a phone sensor at base gain, in 8-bit counts. Conservative.
+READ_NOISE = 2.0
+#: Ceiling on how far a camera will push its own gain to hold the brightness up.
+ISO_CAP = 12.0
+
 EXERCISES = {
     "pullup": Exercise.PULLUP, "pull-up": Exercise.PULLUP,
     "pullups": Exercise.PULLUP, "pull-ups": Exercise.PULLUP,
@@ -62,6 +69,8 @@ class InferredFrame:
     height: int
     tracking_stable: bool
     keypoints: list
+    #: What the detector had to brighten this crop by; 1.0 means it needed no help.
+    soft_gain: float = 1.0
 
 
 @dataclass
@@ -76,6 +85,9 @@ class ScenarioReport:
     failures: list[str]
     tags: list[str] = field(default_factory=list)
     tolerance: int = 0
+    #: Worst tracking health the monitor reported over the clip, and the time it spent lost.
+    worst_health: str = "GOOD"
+    lost_ms: int = 0
 
     @property
     def ok(self) -> bool:
@@ -112,7 +124,41 @@ class ScenarioReport:
         return "clean-valid"
 
 
-def infer_video(path: Path, model_asset: str, errors: list[str]) -> list[InferredFrame]:
+def dim(frame: np.ndarray, light: dict, rng) -> np.ndarray:
+    """Applies a low-light model to one frame, so a fixture can describe the conditions it tests.
+
+    The point is to reproduce a failure nobody recorded. A tester lost pull-up tracking around the
+    tenth round of a Cindy at sunset, and with no footage of it the only honest way to work on the
+    problem was to take clips whose correct score is known and take the light away.
+
+    Two models, because a phone does not sit still while the sun goes down:
+
+    ``uncompensated``
+        ``out = frame * gain``. The exposure is already at its limit, so less light simply means a
+        darker picture. Also what happens at *any* light level when auto-exposure meters on a
+        bright background and leaves the subject underexposed.
+
+    ``iso``
+        ``out = frame * gain * iso + noise(sigma * iso)``. What the camera does first: raise gain
+        to hold the brightness up, amplifying read noise with it. The picture stays bright and
+        gets dirty -- and this is the regime nothing in software can rescue, which is exactly why
+        it is worth having a fixture for.
+    """
+    gain = float(light.get("gain", 1.0))
+    model = str(light.get("model", "uncompensated"))
+    f = frame.astype(np.float32)
+    if model == "iso":
+        iso = min(1.0 / max(gain, 1e-6), ISO_CAP)
+        out = f * gain * iso
+        out = out + rng.normal(0.0, READ_NOISE * iso, size=f.shape).astype(np.float32)
+    else:
+        out = f * gain
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def infer_video(
+    path: Path, model_asset: str, errors: list[str], light: dict | None = None
+) -> list[InferredFrame]:
     """Decodes every frame and runs the production MoveNet crop/track pipeline over it."""
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
@@ -127,12 +173,16 @@ def infer_video(path: Path, model_asset: str, errors: list[str]) -> list[Inferre
     detector = PoseDetector(str(ROOT / "app/src/main/assets" / model_asset), model_asset)
     frames: list[InferredFrame] = []
     index = 0
+    # Seeded, so a fixture that adds sensor noise still fails and passes for the same reasons.
+    rng = np.random.default_rng(7) if light else None
     try:
         while True:
             ok, bgr = capture.read()
             if not ok:
                 break
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            if light:
+                rgb = dim(rgb, light, rng)
             # The Android runner reads `detector.tracking` before calling detect(), so the flag it
             # feeds the engine describes the *previous* frame. Replicated deliberately: the point
             # of this harness is to reproduce the phone, quirks included.
@@ -144,6 +194,7 @@ def infer_video(path: Path, model_asset: str, errors: list[str]) -> list[Inferre
                     height=rgb.shape[0],
                     tracking_stable=tracking,
                     keypoints=detector.detect(rgb),
+                    soft_gain=detector.soft_gain,
                 )
             )
             index += 1
@@ -225,7 +276,9 @@ def run_scenario(scenario: dict) -> ScenarioReport:
         return ScenarioReport(scenario["id"], name, int(scenario.get("expectedReps", 0)), 0,
                               None, [], [], [f"missing fixture: {video}"])
 
-    inferred = infer_video(video, model, errors)
+    # A scenario may describe the light it is testing under, which is how a failure nobody
+    # recorded gets a regression fixture at all.
+    inferred = infer_video(video, model, errors, scenario.get("light"))
     if not inferred:
         return ScenarioReport(scenario["id"], name, int(scenario.get("expectedReps", 0)), 0,
                               None, [], [], errors)
@@ -247,11 +300,18 @@ def run_scenario(scenario: dict) -> ScenarioReport:
 
     engine = WorkoutEngine(fixed_exercise=exercise, profile=profile)
     configure_manual_bar(engine, scenario, inferred[0])
+    health = TrackingHealthMonitor()
+    worst = TrackingHealth.GOOD
     frames: list[dict] = []
     count_times: list[int] = []
     for frame in inferred:
         event = engine.on_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
         d = engine.diagnostics
+        health.update(engine.exercise, d.pose_legible, frame.soft_gain, frame.timestamp_ms)
+        if health.health is TrackingHealth.LOST or (
+            health.health is TrackingHealth.WEAK and worst is TrackingHealth.GOOD
+        ):
+            worst = health.health
         if event is not RepEvent.NONE:
             count_times.append(frame.timestamp_ms)
             if not d.scoring_confidence_adequate:
@@ -278,6 +338,9 @@ def run_scenario(scenario: dict) -> ScenarioReport:
             "headAboveBar": d.head_above_bar,
             "resetSeen": d.reset_below_bar_seen,
             "rejection": d.rejection_reason,
+            "poseLegible": d.pose_legible,
+            "softGain": round(frame.soft_gain, 3),
+            "health": health.health.name,
         })
 
     expected_reps = int(scenario.get("expectedReps", 0))
@@ -292,10 +355,18 @@ def run_scenario(scenario: dict) -> ScenarioReport:
         errors.append(f"expected final state '{wanted_state}', observed '{engine.counting_state}'")
     check_events(scenario, count_times, errors)
 
+    # A fixture may assert what the *monitor* was supposed to notice, not only what was counted.
+    # That is the half of this feature a rep count cannot test: the failure it exists for is one
+    # where the score looks plausible and is quietly wrong.
+    wanted_health = scenario.get("expectedTracking")
+    if wanted_health and worst.name != wanted_health.upper():
+        errors.append(f"expected tracking to reach {wanted_health.upper()}, observed {worst.name}")
+
     return ScenarioReport(
         id=scenario["id"], exercise=name, expected_reps=expected_reps, observed_reps=engine.reps,
         setup=setup.stage.name.lower() if setup else None, count_times=count_times,
         frames=frames, failures=errors, tags=scenario.get("tags", []), tolerance=tolerance,
+        worst_health=worst.name, lost_ms=health.lost_ms,
     )
 
 

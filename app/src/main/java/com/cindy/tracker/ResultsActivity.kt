@@ -26,6 +26,7 @@ class ResultsActivity : AppCompatActivity() {
         private const val EXTRA_PUSH = "push"
         private const val EXTRA_SQUAT = "squat"
         private const val EXTRA_MANUAL = "manual"
+        private const val EXTRA_UNTRACKED = "untracked"
 
         fun intent(context: Context, a: Attempt, stoppedEarly: Boolean): Intent =
             Intent(context, ResultsActivity::class.java).apply {
@@ -40,6 +41,7 @@ class ResultsActivity : AppCompatActivity() {
                 putExtra(EXTRA_PUSH, a.profile?.push?.name)
                 putExtra(EXTRA_SQUAT, a.profile?.squat?.name)
                 putExtra(EXTRA_MANUAL, a.manualReps)
+                putExtra(EXTRA_UNTRACKED, a.untrackedMs)
             }
     }
 
@@ -62,7 +64,8 @@ class ResultsActivity : AppCompatActivity() {
             pausedMs = intent.getLongExtra(EXTRA_PAUSED, 0L),
             roundSplitsMs = intent.getLongArrayExtra(EXTRA_SPLITS)?.toList() ?: emptyList(),
             profile = intentProfile(),
-            manualReps = intent.getIntExtra(EXTRA_MANUAL, 0)
+            manualReps = intent.getIntExtra(EXTRA_MANUAL, 0),
+            untrackedMs = intent.getLongExtra(EXTRA_UNTRACKED, 0L)
         )
         stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
 
@@ -124,6 +127,13 @@ class ResultsActivity : AppCompatActivity() {
         // Said out loud rather than folded into the total: the app saw most of these and was
         // told about the rest, and those are different kinds of claim.
         if (a.manualReps > 0) stat("Added by hand", "${a.manualReps} of ${a.totalReps}")
+        // Said plainly and next to the score it qualifies, rather than buried. A total the
+        // camera could not stand behind is a floor, and the athlete is owed that distinction
+        // here — where they are reading the number — not in a settings screen.
+        if (a.untrackedMs > 0L) {
+            stat("Camera lost you", formatDuration(a.untrackedMs))
+            if (a.scoreIsLowerBound) stat("Score", "At least ${a.totalReps} — some reps may be missing")
+        }
         energy(a, group)
         previousBest?.let {
             val delta = a.totalReps - it.totalReps

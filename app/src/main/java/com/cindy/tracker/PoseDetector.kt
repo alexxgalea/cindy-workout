@@ -99,6 +99,13 @@ class PoseDetector(
         const val MIN_CROP_FRACTION = 0.25f
         /** Per-frame follow rate of the crop, damping jitter. */
         const val FOLLOW = 0.35f
+        /**
+         * Mean luma a dark crop is lifted towards before inference. Below the ~116 a well-exposed
+         * fixture measures, so ordinary footage passes through untouched and cannot move.
+         */
+        const val TARGET_LUMA = 110f
+        /** Ceiling on that lift. Past this the frame is noise, and gain only amplifies it. */
+        const val MAX_SOFT_GAIN = 16f
     }
 
     private val interpreter: Interpreter
@@ -124,6 +131,16 @@ class PoseDetector(
     /** True while the model is being fed a tracked crop rather than the whole frame. */
     @Volatile
     var tracking: Boolean = false
+        private set
+
+    /**
+     * What the last crop had to be brightened by. 1.0 means the picture needed no help.
+     *
+     * Read by TrackingHealthMonitor, which is the only evidence the app has about whether a frame
+     * it could not read was dark or merely empty.
+     */
+    @Volatile
+    var softGain: Float = 1f
         private set
 
     init {
@@ -162,6 +179,7 @@ class PoseDetector(
         roi = null
         misses = 0
         tracking = false
+        softGain = 1f
     }
 
     /**
@@ -181,18 +199,20 @@ class PoseDetector(
         canvas.drawBitmap(frame, matrix, paint)
 
         square.getPixels(squarePixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        val gain = normalisingGain(squarePixels)
+        softGain = gain
         inputBuffer.rewind()
         if (inputIsFloat) {
             for (p in squarePixels) {
-                inputBuffer.putFloat(((p shr 16) and 0xFF).toFloat())
-                inputBuffer.putFloat(((p shr 8) and 0xFF).toFloat())
-                inputBuffer.putFloat((p and 0xFF).toFloat())
+                inputBuffer.putFloat(lift((p shr 16) and 0xFF, gain))
+                inputBuffer.putFloat(lift((p shr 8) and 0xFF, gain))
+                inputBuffer.putFloat(lift(p and 0xFF, gain))
             }
         } else {
             for (p in squarePixels) {
-                inputBuffer.put(((p shr 16) and 0xFF).toByte())
-                inputBuffer.put(((p shr 8) and 0xFF).toByte())
-                inputBuffer.put((p and 0xFF).toByte())
+                inputBuffer.put(lift((p shr 16) and 0xFF, gain).toInt().toByte())
+                inputBuffer.put(lift((p shr 8) and 0xFF, gain).toInt().toByte())
+                inputBuffer.put(lift(p and 0xFF, gain).toInt().toByte())
             }
         }
         inputBuffer.rewind()
@@ -214,6 +234,58 @@ class PoseDetector(
         updateRoi(keypoints, frame.width, frame.height)
         return keypoints
     }
+
+    /**
+     * How much the crop must be brightened to reach [Tune.TARGET_LUMA], clamped so it can only
+     * ever lift a dark frame and never touch a well-exposed one.
+     *
+     * MoveNet does not normalise its own input, so a picture the camera left underexposed fails
+     * for a reason that is representational rather than informational: the detail is still there,
+     * the numbers are just small. Measured against a clip whose ground truth is five reps and
+     * which had been darkened until it scored zero, this brings back all five, and extends the
+     * usable range at least 3.3x further into the dark. It also turned out to fix a documented
+     * miscount on an ordinary fixture — a rear-view clip that scored 9 of 10 because a dead hang
+     * projected 149 degrees against a 150 degree threshold now scores 10 — which says that clip
+     * was underexposed all along and nobody had noticed.
+     *
+     * Measured on the *crop*, not the frame, which is the point. Auto-exposure meters the whole
+     * scene, so an athlete against a window or a bright ceiling is left dark inside a frame whose
+     * average looks perfectly healthy. The crop is already centred on the body.
+     *
+     * What it cannot do is rescue a noisy frame. Once the camera has raised its own gain to the
+     * limit the information is gone, and multiplying amplifies the noise along with the signal —
+     * measured at no improvement at all. That is what makes the returned value worth reporting:
+     * a large gain that does not restore legibility means the light is genuinely gone.
+     */
+    private fun normalisingGain(pixels: IntArray): Float {
+        var red = 0.0
+        var green = 0.0
+        var blue = 0.0
+        var lit = 0
+        for (p in pixels) {
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            // Pure black is either the letterbox around a crop that reached outside the frame or
+            // a pixel carrying nothing anyway. Excluding it stops the letterbox dragging the mean
+            // down and over-brightening the part that matters, and biases what is left towards
+            // under-correcting, which is the safe direction.
+            if (r or g or b == 0) continue
+            red += r
+            green += g
+            blue += b
+            lit++
+        }
+        if (lit == 0) return 1f
+        // Channel means first, then the weighted sum, which is the order the Python port takes
+        // them in; summing per pixel instead would round differently and the two would drift.
+        val mean = (0.299 * red + 0.587 * green + 0.114 * blue).toFloat() / lit
+        return (Tune.TARGET_LUMA / max(mean, 1f)).coerceIn(1f, Tune.MAX_SOFT_GAIN)
+    }
+
+    /** Applies [gain] to one 0-255 channel, clamped so a bright pixel cannot wrap to black. */
+    private fun lift(channel: Int, gain: Float): Float =
+        if (gain <= 1f) channel.toFloat() else min(channel * gain, 255f)
 
     /** The whole frame expressed as a square, so a portrait image is letterboxed not cropped. */
     private fun fullFrameSquare(frame: Bitmap): RectF {

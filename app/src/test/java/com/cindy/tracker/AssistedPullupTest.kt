@@ -124,6 +124,64 @@ class AssistedPullupTest {
         assertFalse("the hands are below the head, so this is not a hang", d.engine.barKnown)
     }
 
+    /**
+     * And a single frame of the head going missing must not teach one either.
+     *
+     * The guard that stops the band setup teaching a bar asks whether the hands are above the
+     * nose, and deliberately answers *yes* when the nose is not confidently seen — otherwise
+     * rear-view and occluded footage, which already counts, would be locked out. That turns a
+     * missing keypoint into permission, and one dropped frame is all it takes: found on the band
+     * fixture at one light level, where the nose fell below confidence on a single frame in sixty,
+     * a false bar was taught at the chest, and the whole clip then scored zero with 401 of 532
+     * frames refused for "Get on the bar".
+     */
+    @Test
+    fun `one dropped head keypoint during the band setup does not teach a bar`() {
+        val d = Driver(engineFor(PullVariant.BAND_ASSISTED_PULL_UP))
+        val blind = PoseFixtures.bandSetup().copyOf().also {
+            it[KP.NOSE] = Keypoint(it[KP.NOSE].x, it[KP.NOSE].y, 0.1f)
+        }
+
+        d.hold(PoseFixtures.bandSetup(), frames = 30)
+        d.hold(blind, frames = 1)
+        d.hold(PoseFixtures.bandSetup(), frames = 30)
+
+        assertFalse("one unseen nose is not evidence of a hang", d.engine.barKnown)
+    }
+
+    /**
+     * A rear view, where the head is never seen at all, still finds its bar — just not instantly.
+     *
+     * The counterweight to the test above: the relaxation exists for footage filmed from behind,
+     * and tightening it must not cost that. So the permission is still granted, it merely has to
+     * be *held* rather than taken from a single frame. A real dead hang lasts seconds and clears
+     * this without trying; the stray frame that taught a false bar never could.
+     */
+    @Test
+    fun `a hang filmed from behind still teaches the bar once it is held`() {
+        val headless = PoseFixtures.pullup(175f).copyOf().also {
+            it[KP.NOSE] = Keypoint(it[KP.NOSE].x, it[KP.NOSE].y, 0.1f)
+        }
+
+        val brief = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+        brief.hold(headless, frames = 2)
+        assertFalse("two frames is a dropout, not a hang", brief.engine.barKnown)
+
+        val held = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+        held.hold(headless, frames = 6)
+        assertTrue("a sustained hang with no visible head is still a hang", held.engine.barKnown)
+    }
+
+    /** A hang with the head plainly visible is believed at once, as it always was. */
+    @Test
+    fun `a dead hang with the head in shot still teaches the bar on the first frame`() {
+        val d = Driver(engineFor(PullVariant.STRICT_PULL_UP))
+
+        d.hold(PoseFixtures.pullup(175f), frames = 1)
+
+        assertTrue("seeing the head below the hands is evidence, not an absence", d.engine.barKnown)
+    }
+
     /** And the bar the athlete then actually hangs from is still found normally. */
     @Test
     fun `a hang after the band setup still finds the bar`() {
