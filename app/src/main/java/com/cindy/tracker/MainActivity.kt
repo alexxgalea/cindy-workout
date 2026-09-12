@@ -1131,7 +1131,11 @@ class MainActivity : AppCompatActivity() {
         status.text = "${attempt.scoreLabel()} · ${attempt.caption}"
 
         speaker.say(if (stoppedEarly) "Stopped." else "Time.")
-        speaker.queue("${snap.rounds} rounds and ${snap.repsThisRound} reps")
+        // The reps of the round in progress are zero the moment a round completes, so reading
+        // the score off that field told an athlete who had just finished one that they had done
+        // none. Said with the same tally the results screen headlines, by the same coach that
+        // has been calling the score out all workout.
+        speaker.queue(coach.score(snap.rounds, snap.totalReps))
         attempt.avgRoundMs?.let { speaker.queue("Averaging ${spokenDuration(it)} a round") }
         if (beat) speaker.queue("You beat ${Records.BENCHMARK_NAME}")
 
