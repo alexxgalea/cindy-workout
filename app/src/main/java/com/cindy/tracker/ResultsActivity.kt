@@ -15,33 +15,26 @@ import java.util.Locale
 class ResultsActivity : AppCompatActivity() {
 
     companion object {
-        private const val EXTRA_ROUNDS = "rounds"
-        private const val EXTRA_REPS = "reps"
-        private const val EXTRA_AT = "at"
-        private const val EXTRA_DURATION = "duration"
-        private const val EXTRA_PAUSED = "paused"
-        private const val EXTRA_SPLITS = "splits"
+        private const val EXTRA_ATTEMPT = "attempt"
         private const val EXTRA_STOPPED = "stopped"
-        private const val EXTRA_PULL = "pull"
-        private const val EXTRA_PUSH = "push"
-        private const val EXTRA_SQUAT = "squat"
-        private const val EXTRA_MANUAL = "manual"
-        private const val EXTRA_UNTRACKED = "untracked"
 
+        /**
+         * Carries the attempt in the record format, rather than a field per extra.
+         *
+         * Taking it apart into a dozen extras meant every new field had to be remembered in
+         * three places, and [Attempt.countedReps] was remembered in two: it reached the record
+         * board and was dropped on the way to this screen, where the missing value falls back to
+         * `rounds * 30 + reps` — the inferred tally countedReps exists to replace. A session
+         * with the pull-ups skipped was therefore *saved* as 25 reps and *shown* as 30, with the
+         * voice saying the true number over a screen contradicting it.
+         *
+         * One encoder, already versioned and already round-trip tested, is what stops the next
+         * field being forgotten. It also makes the screen show exactly what was filed.
+         */
         fun intent(context: Context, a: Attempt, stoppedEarly: Boolean): Intent =
             Intent(context, ResultsActivity::class.java).apply {
-                putExtra(EXTRA_ROUNDS, a.rounds)
-                putExtra(EXTRA_REPS, a.reps)
-                putExtra(EXTRA_AT, a.atMillis)
-                putExtra(EXTRA_DURATION, a.durationMs)
-                putExtra(EXTRA_PAUSED, a.pausedMs)
-                putExtra(EXTRA_SPLITS, a.roundSplitsMs.toLongArray())
+                putExtra(EXTRA_ATTEMPT, Records.encode(listOf(a)))
                 putExtra(EXTRA_STOPPED, stoppedEarly)
-                putExtra(EXTRA_PULL, a.profile?.pull?.name)
-                putExtra(EXTRA_PUSH, a.profile?.push?.name)
-                putExtra(EXTRA_SQUAT, a.profile?.squat?.name)
-                putExtra(EXTRA_MANUAL, a.manualReps)
-                putExtra(EXTRA_UNTRACKED, a.untrackedMs)
             }
     }
 
@@ -56,17 +49,12 @@ class ResultsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         profile = Profile(this)
-        attempt = Attempt(
-            rounds = intent.getIntExtra(EXTRA_ROUNDS, 0),
-            reps = intent.getIntExtra(EXTRA_REPS, 0),
-            atMillis = intent.getLongExtra(EXTRA_AT, System.currentTimeMillis()),
-            durationMs = intent.getLongExtra(EXTRA_DURATION, 0L),
-            pausedMs = intent.getLongExtra(EXTRA_PAUSED, 0L),
-            roundSplitsMs = intent.getLongArrayExtra(EXTRA_SPLITS)?.toList() ?: emptyList(),
-            profile = intentProfile(),
-            manualReps = intent.getIntExtra(EXTRA_MANUAL, 0),
-            untrackedMs = intent.getLongExtra(EXTRA_UNTRACKED, 0L)
-        )
+        // Nothing to report on without one, and inventing an empty score to show instead would
+        // be the same lie in a different place.
+        attempt = Records.decode(intent.getStringExtra(EXTRA_ATTEMPT)).firstOrNull() ?: run {
+            finish()
+            return
+        }
         stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
 
         binding.actions.addView(glassButton("HISTORY").apply {
@@ -76,15 +64,6 @@ class ResultsActivity : AppCompatActivity() {
             setOnClickListener { finish() }
         })
         render(attempt, stoppedEarly)
-    }
-
-    /** The movements the workout was run with, or null if this build does not know one of them. */
-    private fun intentProfile(): CindyProfile? {
-        val pull = PullVariant.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_PULL) }
-        val push = PushVariant.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_PUSH) }
-        val squat = SquatVariant.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_SQUAT) }
-        if (pull == null || push == null || squat == null) return null
-        return CindyProfile(pull, push, squat)
     }
 
     private fun render(a: Attempt, stopped: Boolean) {
