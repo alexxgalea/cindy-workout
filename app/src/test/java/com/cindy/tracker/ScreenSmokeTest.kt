@@ -157,6 +157,35 @@ class ScreenSmokeTest {
     }
 
     /**
+     * A skipped movement survives the trip to the results screen.
+     *
+     * The screen used to be handed a field per extra, and `countedReps` was not one of them. It
+     * therefore rebuilt the attempt with that field null and fell back to `rounds * 30 + reps`:
+     * a round with the pull-ups skipped was *filed* as 25 reps and *displayed* as 30, while the
+     * voice read out the true 25 over the top of it. The attempt now travels whole.
+     */
+    @Test
+    fun `the results screen shows the reps that were counted, not the round tally`() {
+        val skipped = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 116_000L,
+            // Pull-ups skipped: ten push-ups and fifteen squats is the whole round's work.
+            countedReps = 25
+        )
+        val intent = ResultsActivity.intent(
+            ApplicationProvider.getApplicationContext(), skipped, stoppedEarly = true
+        )
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        val shown = activity.findViewById<android.widget.TextView>(R.id.scoreDetail).text.toString()
+        assertTrue(shown, shown.contains("25 reps"))
+        assertTrue(shown, !shown.contains("30 reps"))
+        activity.finish()
+    }
+
+    /**
      * A session at non-standard movements takes the other branch of the level panel — no rung,
      * no progress bar, and a different line under the title.
      */
