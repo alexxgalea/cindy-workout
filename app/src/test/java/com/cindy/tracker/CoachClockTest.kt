@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,6 +57,40 @@ class CoachClockTest {
         val lastMinute = said.last()
         assertTrue(lastMinute, lastMinute.startsWith("One minute left."))
         assertTrue(lastMinute, lastMinute.contains("11 rounds"))
+    }
+
+    @Test
+    fun `a finished round is never reported as zero reps`() {
+        // The bug this exists to stop: the score was read off the reps of the round in
+        // progress, which a completed round leaves at zero. One clean round is thirty reps of
+        // work and was being announced as none, over a results screen reading thirty.
+        val said = coach.score(rounds = 1, totalReps = 30)
+        assertTrue(said, said.contains("30 reps"))
+        // Word-boundary, because "30 reps" contains "0 reps" as plain text.
+        assertFalse(said, Regex("\\b0 reps").containsMatchIn(said))
+    }
+
+    @Test
+    fun `the rep figure is the whole tally, said as one`() {
+        // "and 30 reps" would invite hearing a round plus thirty more. The total includes the
+        // round, so the line has to say which of the two it means.
+        assertEquals("1 round — 30 reps in total", coach.score(rounds = 1, totalReps = 30))
+        assertEquals("6 rounds — 185 reps in total", coach.score(rounds = 6, totalReps = 185))
+    }
+
+    @Test
+    fun `a score with no round behind it is just the reps`() {
+        assertEquals("12 reps", coach.score(rounds = 0, totalReps = 12))
+        assertEquals("1 rep", coach.score(rounds = 0, totalReps = 1))
+        // An athlete who stopped before anything counted is owed the honest zero.
+        assertEquals("0 reps", coach.score(rounds = 0, totalReps = 0))
+    }
+
+    @Test
+    fun `the clock says the score the same way the ending does`() {
+        val said = runTo(2 * 60_000L - 200L, rounds = 1, totalReps = 30).last()
+        assertTrue(said, said.startsWith("Two minutes."))
+        assertTrue(said, said.contains(coach.score(1, 30)))
     }
 
     @Test

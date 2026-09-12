@@ -140,7 +140,7 @@ class Coach {
         spokenMarks += mark
         return when (mark) {
             10_000L -> "Ten seconds. Everything you have."
-            60_000L -> "One minute left. $rounds rounds down — finish the one you're in."
+            60_000L -> "One minute left. ${rounds(rounds)} down — finish the one you're in."
             2 * 60_000L -> "Two minutes. " + push(rounds, totalReps)
             5 * 60_000L -> "Five minutes left. " + pace(elapsedMs, rounds)
             10 * 60_000L -> "Halfway. " + pace(elapsedMs, rounds)
@@ -159,13 +159,31 @@ class Coach {
     private fun pace(elapsedMs: Long, rounds: Int): String {
         if (rounds < 1 || elapsedMs < 60_000L) return "Keep the pace you're on."
         val projected = (rounds * WORKOUT_MS / elapsedMs).toInt()
-        return "$rounds rounds — on for $projected."
+        return "${rounds(rounds)} — on for $projected."
     }
 
-    private fun push(rounds: Int, totalReps: Int): String = when {
-        rounds < 1 -> "$totalReps reps. Keep going."
-        else -> "$rounds rounds and $totalReps reps. Hold the pace."
+    private fun push(rounds: Int, totalReps: Int): String =
+        score(rounds, totalReps) + if (rounds < 1) ". Keep going." else ". Hold the pace."
+
+    /**
+     * A score in words: the rounds done, and the *whole* rep tally behind them.
+     *
+     * The rep figure has to be the total, not the part of the round in progress. Those two
+     * differ by a whole round's work at exactly the wrong moment — the reps of the current
+     * round are zero the instant one completes, so an athlete who stopped having just finished
+     * a clean round was told "1 rounds and 0 reps" over a screen reading thirty. Zero is the
+     * one number a result must never say about work that was done.
+     *
+     * "In total" is spelled out because the other reading — a round *and then* thirty more —
+     * is the one a listener reaches for, and a score is not worth saying ambiguously.
+     */
+    fun score(rounds: Int, totalReps: Int): String {
+        val reps = "$totalReps rep${if (totalReps == 1) "" else "s"}"
+        return if (rounds < 1) reps else "${rounds(rounds)} — $reps in total"
     }
+
+    /** "1 round", "6 rounds" — said often enough to be worth getting right. */
+    private fun rounds(rounds: Int): String = "$rounds round${if (rounds == 1) "" else "s"}"
 
     /**
      * The workout stopped. Nothing said before the break should carry over it, and coming back
