@@ -37,6 +37,23 @@ data class Affine(
     fun mapX(x: Float, y: Float) = a * x + c * y + tx
     fun mapY(x: Float, y: Float) = b * x + d * y + ty
 
+    /**
+     * The transform that undoes this one, or null if it collapses the plane.
+     *
+     * Needed to walk a destination backwards to its source: filling a model input by asking, for
+     * each output pixel, which camera pixel feeds it. That is the direction a sampler works in,
+     * and it is the opposite of the direction everything else here is built to go.
+     */
+    fun invert(): Affine? {
+        val det = a * d - c * b
+        if (abs(det) < 1e-9f) return null
+        val ia = d / det
+        val ib = -b / det
+        val ic = -c / det
+        val id = a / det
+        return Affine(ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty))
+    }
+
     /** In the order `android.graphics.Matrix.setValues` wants. */
     fun values() = floatArrayOf(a, c, tx, b, d, ty, 0f, 0f, 1f)
 
@@ -128,6 +145,60 @@ object OverlayTransform {
             top = min(top, turn.mapY(x, y))
         }
         return m.then(Affine.translate(-left, -top))
+    }
+
+    /**
+     * The map from the camera's raw analysis buffer onto the upright frame the app reasons in.
+     *
+     * ### Why this exists instead of a rotated bitmap
+     *
+     * The frame used to be turned upright by allocating a second full-frame bitmap
+     * (`Bitmap.createBitmap(raw, …, matrix, true)`) and handing that to the detector, which then
+     * cropped a square out of it and scaled that into the model's input. Two resamples of every
+     * pixel, a second 1.2MB allocation per frame, and — measured on the test handset — 26ms of a
+     * 175ms glass-to-skeleton budget, all to produce an intermediate nobody ever looked at.
+     *
+     * The detector already draws through a matrix. Composing this in front of that one gets the
+     * rotation for free: one resample instead of two, no intermediate bitmap, and a *sharper*
+     * input, because the old first pass bilinearly resampled a pure quarter-turn that needed no
+     * resampling at all.
+     *
+     * Returned as an [Affine] rather than a `Matrix` for the reason this whole file exists: the
+     * geometry can then be checked on the JVM instead of only on a phone.
+     */
+    fun upright(srcWidth: Int, srcHeight: Int, rotationDegrees: Int, mirror: Boolean): Affine {
+        if (srcWidth <= 0 || srcHeight <= 0) return Affine.IDENTITY
+        val rotation = ((rotationDegrees % 360) + 360) % 360
+        val turn = Affine.rotate(rotation.toFloat())
+
+        // Rotating about the origin walks the frame off it; bring its corner back to (0,0).
+        var left = Float.MAX_VALUE
+        var top = Float.MAX_VALUE
+        val w = srcWidth.toFloat()
+        val h = srcHeight.toFloat()
+        for ((x, y) in listOf(0f to 0f, w to 0f, 0f to h, w to h)) {
+            left = min(left, turn.mapX(x, y))
+            top = min(top, turn.mapY(x, y))
+        }
+        var m = turn.then(Affine.translate(-left, -top))
+
+        // Mirrored after the rotation, matching how PreviewView flips the front camera.
+        if (mirror) {
+            m = m.then(Affine.scaleAbout(-1f, 1f, uprightWidth(srcWidth, srcHeight, rotation) / 2f, 0f))
+        }
+        return m
+    }
+
+    /** Width of the frame [upright] produces. At a quarter turn the axes swap. */
+    fun uprightWidth(srcWidth: Int, srcHeight: Int, rotationDegrees: Int): Float {
+        val rotation = ((rotationDegrees % 360) + 360) % 360
+        return if (rotation % 180 != 0) srcHeight.toFloat() else srcWidth.toFloat()
+    }
+
+    /** Height of the frame [upright] produces. */
+    fun uprightHeight(srcWidth: Int, srcHeight: Int, rotationDegrees: Int): Float {
+        val rotation = ((rotationDegrees % 360) + 360) % 360
+        return if (rotation % 180 != 0) srcWidth.toFloat() else srcHeight.toFloat()
     }
 
     /**

@@ -2,8 +2,6 @@ package com.cindy.tracker
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -31,6 +29,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -209,7 +208,20 @@ class MainActivity : AppCompatActivity() {
     private var elapsedMs = 0L
     private var pausedMs = 0L
     private var pauseStartedAt = 0L
-    private var debug = false
+    /**
+     * What the status line is showing instead of coaching, cycled by a long press on it.
+     *
+     * There are two readouts rather than one because the line is a single 14sp row on the top
+     * band and will not hold both, and because they answer different questions: [COUNTING] is
+     * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third mode
+     * is the second one with the predicted skeleton switched on, so the numbers and the thing
+     * they are meant to explain can be read at the same time.
+     */
+    private enum class Readout { OFF, COUNTING, LATENCY, LATENCY_PREDICT }
+
+    private var readout = Readout.OFF
+    /** Kept as the old flag so the recording overlay and the coaching suppressions read the same. */
+    private val debug: Boolean get() = readout != Readout.OFF
     /** Decides what the voice says about the athlete's position. Tested on its own.  */
     private val coach = Coach()
 
@@ -277,7 +289,49 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var cameraProvider: ProcessCameraProvider? = null
+    /** The bound camera, kept only so its timestamp clock can be asked about. See [FrameLatency]. */
+    private var camera: Camera? = null
     private val analysing = AtomicBoolean(false)
+
+    /** Where the skeleton's lag actually comes from, measured rather than reasoned about. */
+    private val latency = LatencyProbe()
+
+    /** The analysis frame's planes, reused every frame. Touched only by the analysis thread. */
+    private val yuv = YuvFrame()
+
+    /** One frame's worth of main-thread work: the counters, the coaching, the recorded HUD. */
+    private class UiFrame(
+        val snap: Snapshot?,
+        val setup: Setup?,
+        val keypoints: Array<Keypoint>,
+        val width: Int,
+        val height: Int,
+        val mirrored: Boolean,
+        val readyNanos: Long
+    )
+
+    /** Stale state is dropped, events never are. The reasoning lives in [FrameHandoff]. */
+    private val handoff = FrameHandoff<UiFrame>()
+
+    private val renderPending = Runnable { handoff.drain(::render) }
+
+    private fun render(frame: UiFrame) {
+        latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
+        if (frame.snap != null && state == State.RUNNING) apply(frame.snap)
+        if (frame.setup != null && state == State.SETUP) applySetup(frame.setup)
+        // Feed the burned-in overlay the same numbers the screen is showing.
+        video.overlay.update(
+            keypoints = frame.keypoints,
+            width = frame.width,
+            height = frame.height,
+            mirrored = frame.mirrored,
+            clock = clock.text,
+            round = recordedRound,
+            exercise = exercise.text,
+            reps = recordedReps,
+            debug = debug
+        )
+    }
 
     private val ui = Handler(Looper.getMainLooper())
     private val ticker = object : Runnable {
@@ -399,8 +453,18 @@ class MainActivity : AppCompatActivity() {
             overridePendingTransition(R.anim.menu_enter, R.anim.hold)
         }
         binding.statusRow.setOnLongClickListener {
-            debug = !debug
-            toast(if (debug) "Debug readout on" else "Debug readout off")
+            readout = Readout.entries[(readout.ordinal + 1) % Readout.entries.size]
+            binding.overlay.predict = readout == Readout.LATENCY_PREDICT
+            binding.status.maxLines = if (readout == Readout.COUNTING || !debug) 1 else 2
+            latency.reset()
+            toast(
+                when (readout) {
+                    Readout.OFF -> "Debug readout off"
+                    Readout.COUNTING -> "Counting readout"
+                    Readout.LATENCY -> "Latency readout"
+                    Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
+                }
+            )
             true
         }
 
@@ -540,7 +604,10 @@ class MainActivity : AppCompatActivity() {
         val analysis = ImageAnalysis.Builder()
             .setResolutionSelector(resolution)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            // YUV, not RGBA. Asking CameraX for RGBA makes it convert all 307,200 pixels of
+            // every frame so the detector can use one 256x256 crop of them; the detector now
+            // reads the planes itself and converts only what it samples. See [YuvCrop].
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .build()
             .also { it.setAnalyzer(analysisExecutor, ::analyse) }
 
@@ -554,6 +621,11 @@ class MainActivity : AppCompatActivity() {
             bindPlainRecording(provider, selector, preview, analysis) ||
             bindCountingOnly(provider, selector, preview, analysis)
         if (!bound) status.text = "Could not open the camera"
+        // Which clock this camera stamps frames with, so capture age can be stated or honestly
+        // withheld rather than guessed. Re-asked on every bind because flipping the lens can
+        // change the answer.
+        camera?.cameraInfo?.let { latency.clock.resolve(it) }
+        latency.reset()
         renderChips()
     }
 
@@ -570,7 +642,7 @@ class MainActivity : AppCompatActivity() {
             .addUseCase(video.buildUseCase())
             .apply { effect?.let { addEffect(it) } }
             .build()
-        provider.bindToLifecycle(this, selector, group)
+        camera = provider.bindToLifecycle(this, selector, group)
         true
     } catch (t: Throwable) {
         Log.w(TAG, "could not bind the overlay effect, recording without it", t)
@@ -584,7 +656,7 @@ class MainActivity : AppCompatActivity() {
         analysis: ImageAnalysis
     ): Boolean = try {
         provider.unbindAll()
-        provider.bindToLifecycle(this, selector, preview, analysis, video.buildUseCase())
+        camera = provider.bindToLifecycle(this, selector, preview, analysis, video.buildUseCase())
         true
     } catch (t: Throwable) {
         Log.w(TAG, "could not bind the recorder, continuing without it", t)
@@ -599,7 +671,7 @@ class MainActivity : AppCompatActivity() {
     ): Boolean = try {
         provider.unbindAll()
         video.forgetUseCase()
-        provider.bindToLifecycle(this, selector, preview, analysis)
+        camera = provider.bindToLifecycle(this, selector, preview, analysis)
         true
     } catch (t: Throwable) {
         Log.e(TAG, "bindToLifecycle failed", t)
@@ -613,6 +685,8 @@ class MainActivity : AppCompatActivity() {
             CameraSelector.LENS_FACING_BACK
         }
         binding.overlay.clear()
+        // Anything still owed was analysed through the other lens, so its mirroring is wrong.
+        handoff.clear()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
         tracking.reframe()
@@ -637,8 +711,19 @@ class MainActivity : AppCompatActivity() {
         }
         try {
             val mirrored = lensFacing == CameraSelector.LENS_FACING_FRONT
-            val frame = proxy.toUprightBitmap(mirror = mirrored)
-            val keypoints = det.detect(frame)
+            val captureNanos = proxy.imageInfo.timestamp
+            val tEntry = System.nanoTime()
+            readPlanes(proxy)
+            val tConverted = System.nanoTime()
+            // The frame is neither converted nor turned upright here; the map that would have
+            // done it is handed to the detector and composed into the crop it samples through.
+            val rotation = proxy.imageInfo.rotationDegrees
+            val rawW = proxy.width
+            val rawH = proxy.height
+            val upright = OverlayTransform.upright(rawW, rawH, rotation, mirrored)
+            val frameW = OverlayTransform.uprightWidth(rawW, rawH, rotation).toInt()
+            val frameH = OverlayTransform.uprightHeight(rawW, rawH, rotation).toInt()
+            val keypoints = det.detect(yuv, upright, frameW, frameH)
             val now = SystemClock.elapsedRealtime()
             val snap = if (state == State.RUNNING) {
                 val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }
@@ -658,23 +743,43 @@ class MainActivity : AppCompatActivity() {
             val guide = synchronized(engineLock) {
                 engine.barGuide.takeIf { engine.exercise == Exercise.PULLUP }
             }
-            ui.post {
-                binding.overlay.setPose(keypoints, frame.width, frame.height, guide)
-                if (snap != null && state == State.RUNNING) apply(snap)
-                if (setup != null && state == State.SETUP) applySetup(setup)
-                // Feed the burned-in overlay the same numbers the screen is showing.
-                video.overlay.update(
-                    keypoints = keypoints,
-                    width = frame.width,
-                    height = frame.height,
-                    mirrored = mirrored,
-                    clock = clock.text,
-                    round = recordedRound,
-                    exercise = exercise.text,
-                    reps = recordedReps,
-                    debug = debug
-                )
-            }
+            val convertMs = (tConverted - tEntry) / 1_000_000L
+            val captureAgeMs = latency.clock.sinceCapture(captureNanos)
+
+            // How far behind the body this pose already is, which is the horizon the predicted
+            // skeleton has to cover. Measured from the sensor stamp where the camera will say
+            // which clock it is on; where it will not, the stages this code timed itself are a
+            // floor — an undercorrection, which is the safe direction to be wrong in.
+            val pipelineAgeMs = captureAgeMs
+                ?: (convertMs + det.lastPrepMs + det.lastInferenceMs)
+
+            // Straight to the overlay from this thread. The skeleton is the one thing on screen
+            // whose whole job is to be current, and a posted runnable would put a queue between
+            // it and the camera — see OverlayView's note on why that queue is the bug.
+            binding.overlay.submit(
+                keypoints, frameW, frameH, guide, pipelineAgeMs.toFloat()
+            )
+
+            latency.analysed(
+                captureAgeMs = captureAgeMs,
+                convertMs = convertMs,
+                prepMs = det.lastPrepMs,
+                inferMs = det.lastInferenceMs
+            )
+
+            // Everything else the frame feeds — the counters, the coaching, the burned-in video
+            // HUD — goes to the main thread as a latest value, not as one runnable per frame.
+            // Whoever gets there first does the work with the newest numbers available; the rest
+            // are dropped rather than drawn late.
+            // A frame carrying a RepEvent is the only notice that a rep was counted or a round
+            // finished — the round's split is appended when it is rendered — so those are never
+            // allowed to be the frame that gets dropped.
+            val outcome = handoff.submit(
+                UiFrame(snap, setup, keypoints, frameW, frameH, mirrored, System.nanoTime()),
+                isEvent = snap != null && snap.event != RepEvent.NONE
+            )
+            latency.posted(replacedUnrendered = outcome == FrameHandoff.Outcome.REPLACED_PENDING)
+            if (outcome == FrameHandoff.Outcome.SCHEDULE) ui.post(renderPending)
         } catch (t: Throwable) {
             Log.e(TAG, "analysis failed", t)
         } finally {
@@ -683,20 +788,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Rotates the analysis frame to display orientation, mirroring it for the selfie camera. */
-    private fun ImageProxy.toUprightBitmap(mirror: Boolean): Bitmap {
-        val raw = toBitmap()
-        val rotation = imageInfo.rotationDegrees
-        if (rotation == 0 && !mirror) return raw
-        val m = Matrix().apply {
-            postRotate(rotation.toFloat())
-            // Mirror after rotation so it matches how PreviewView flips the front camera.
-            if (mirror) postScale(-1f, 1f)
-        }
-        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
-    }
 
     // ── engine access ─────────────────────────────────────────────────────────
+
+    /**
+     * Copies the three planes out of [proxy] into reusable arrays.
+     *
+     * Copied rather than read through the `ByteBuffer`s because the buffers are only valid until
+     * `close()`, and because array indexing is cheaper than a bounds-checked direct-buffer read
+     * done 65,536 times with four luma taps each. The copy is a memcpy of about 460KB and does
+     * not appear in the timings; the conversion it replaces did.
+     */
+    private fun readPlanes(proxy: ImageProxy) {
+        val planes = proxy.planes
+        val yBuf = planes[0].buffer
+        val uBuf = planes[1].buffer
+        val vBuf = planes[2].buffer
+        val yBytes = yuv.sized(yuv.y, yBuf.remaining())
+        val uBytes = yuv.sized(yuv.u, uBuf.remaining())
+        val vBytes = yuv.sized(yuv.v, vBuf.remaining())
+        yBuf.get(yBytes)
+        uBuf.get(uBytes)
+        vBuf.get(vBytes)
+        yuv.set(
+            width = proxy.width,
+            height = proxy.height,
+            y = yBytes,
+            yRowStride = planes[0].rowStride,
+            yPixelStride = planes[0].pixelStride,
+            u = uBytes,
+            v = vBytes,
+            uvRowStride = planes[1].rowStride,
+            uvPixelStride = planes[1].pixelStride
+        )
+    }
 
     /** Mutates the engine under lock and returns what the UI needs to render the result. */
     private fun runEngine(block: () -> RepEvent): Snapshot = synchronized(engineLock) {
@@ -736,6 +861,15 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * The second readout: where the skeleton's lag is spent.
+     *
+     * Two lines, and the only two-line thing on this band — see [LatencyProbe] for why this is a
+     * screen readout at all rather than a log.
+     */
+    private fun latencyLine(): String =
+        latency.line(detector?.modelLabel ?: "none", binding.overlay.drawRate.perSecond())
+
     private fun apply(snap: Snapshot) {
         exercise.text = snap.exercise.label
         reps.text = "${snap.reps}"
@@ -750,7 +884,8 @@ class MainActivity : AppCompatActivity() {
             snap.reps * 100 / snap.exercise.target.coerceAtLeast(1)
         if (state == State.RUNNING) {
             status.text = when {
-                debug -> debugLine(snap)
+                readout == Readout.COUNTING -> debugLine(snap)
+                debug -> latencyLine()
                 // Said first, and instead of the engine's own hint. When the light goes the
                 // engine refuses frames for "Show both hands" and then "Step into frame" —
                 // which tells someone hanging on the bar in front of the camera that they are
@@ -855,7 +990,7 @@ class MainActivity : AppCompatActivity() {
                 repsTarget.text = "/2"
                 reps.spoken("${setup.reps} of 2 calibration reps")
                 statusDot(neutral)
-                status.text = if (debug) {
+                status.text = if (readout == Readout.COUNTING) {
                     "calibrating · rng %.0f / %.0f".format(Locale.US, setup.range, setup.needed)
                 } else {
                     "Do 2 slow pull-ups to calibrate"
@@ -1459,6 +1594,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         ui.removeCallbacks(ticker)
+        handoff.clear()
         analysisExecutor.shutdown()
         detector?.close()
         speaker.shutdown()
