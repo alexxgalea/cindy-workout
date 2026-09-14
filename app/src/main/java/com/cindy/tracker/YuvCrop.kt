@@ -68,7 +68,18 @@ object YuvCrop {
      * [modelToSource] maps a model-square coordinate to a coordinate in the camera's raw buffer —
      * the inverse of the crop-and-rotate the forward path applies.
      */
-    fun sample(frame: YuvFrame, modelToSource: Affine, out: IntArray, size: Int) {
+    fun sample(
+        frame: YuvFrame,
+        modelToSource: Affine,
+        out: IntArray,
+        size: Int,
+        /**
+         * Optional [red, green, blue, lit] accumulator, summed over non-black pixels as they are
+         * written. Filling it here saves a second full pass for the low-light gain, which
+         * otherwise walks all 65,536 pixels again to work out the same totals.
+         */
+        tally: LongArray? = null
+    ) {
         val w = frame.width
         val h = frame.height
         val yp = frame.y
@@ -114,6 +125,14 @@ object YuvCrop {
                 val g = clamp(luma - 0.344136f * cb - 0.714136f * cr)
                 val b = clamp(luma + 1.772f * cb)
                 out[i++] = (r shl 16) or (g shl 8) or b
+                // Pure black is letterbox or carries nothing; excluded for the same reason the
+                // separate pass excludes it, so the two produce identical totals.
+                if (tally != null && (r or g or b) != 0) {
+                    tally[0] += r.toLong()
+                    tally[1] += g.toLong()
+                    tally[2] += b.toLong()
+                    tally[3]++
+                }
             }
         }
     }

@@ -80,7 +80,13 @@ class PoseDetector(
      * the number of cores on it. Benchmarked per device rather than assumed; see
      * PoseDetectorBenchmark.
      */
-    private val threads: Int = DEFAULT_THREADS
+    private val threads: Int = DEFAULT_THREADS,
+    /**
+     * XNNPACK. On by default for float models; whether it covers this project's uint8 models
+     * without being asked is version- and build-dependent, so it is a parameter that gets
+     * benchmarked rather than an assumption.
+     */
+    private val xnnpack: Boolean = true
 ) {
 
     companion object {
@@ -125,6 +131,20 @@ class PoseDetector(
 
     private val square: Bitmap
     private val squarePixels: IntArray
+
+    /**
+     * The model input staged in a plain array before one bulk copy into the direct buffer.
+     *
+     * The previous version wrote 196,608 channels one `ByteBuffer.put` at a time. Each of those
+     * is a bounds-checked write into off-heap memory; an array fill followed by a single bulk
+     * copy is the same bytes for a fraction of the work.
+     */
+    private val inputBytes: ByteArray
+    private val inputFloats: FloatArray
+    private val inputFloatView: java.nio.FloatBuffer?
+
+    /** [red, green, blue, lit] for the brightness pass, when sampling already counted them. */
+    private val tally = LongArray(4)
     private val canvas: Canvas
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val matrix = Matrix()
@@ -164,7 +184,10 @@ class PoseDetector(
         private set
 
     init {
-        val opts = Interpreter.Options().apply { numThreads = threads }
+        val opts = Interpreter.Options().apply {
+            numThreads = threads
+            setUseXNNPACK(xnnpack)
+        }
         interpreter = Interpreter(loadModel(context, modelAsset), opts)
 
         val inTensor = interpreter.getInputTensor(0)
@@ -180,6 +203,11 @@ class PoseDetector(
         square = Bitmap.createBitmap(inputSize, inputSize, Bitmap.Config.ARGB_8888)
         squarePixels = IntArray(inputSize * inputSize)
         canvas = Canvas(square)
+
+        val channels = inputSize * inputSize * 3
+        inputBytes = if (inputIsFloat) ByteArray(0) else ByteArray(channels)
+        inputFloats = if (inputIsFloat) FloatArray(channels) else FloatArray(0)
+        inputFloatView = if (inputIsFloat) inputBuffer.asFloatBuffer() else null
     }
 
     private fun loadModel(context: Context, asset: String): ByteBuffer {
@@ -229,7 +257,7 @@ class PoseDetector(
         canvas.drawBitmap(frame, matrix, paint)
 
         square.getPixels(squarePixels, 0, inputSize, 0, 0, inputSize, inputSize)
-        return infer(region, uprightWidth, uprightHeight, tPrep)
+        return infer(region, uprightWidth, uprightHeight, tPrep, counted = false)
     }
 
     /**
@@ -247,12 +275,13 @@ class PoseDetector(
         val tPrep = System.nanoTime()
         val region = beginFrame(uprightWidth, uprightHeight)
         val inverse = sourceToModel(upright, region).invert()
+        tally.fill(0L)
         if (inverse == null) {
             squarePixels.fill(0)
         } else {
-            YuvCrop.sample(frame, inverse, squarePixels, inputSize)
+            YuvCrop.sample(frame, inverse, squarePixels, inputSize, tally)
         }
-        return infer(region, uprightWidth, uprightHeight, tPrep)
+        return infer(region, uprightWidth, uprightHeight, tPrep, counted = inverse != null)
     }
 
     /** Picks this frame's crop and records whether it is a tracked one. */
@@ -275,23 +304,32 @@ class PoseDetector(
         region: RectF,
         uprightWidth: Int,
         uprightHeight: Int,
-        tPrep: Long
+        tPrep: Long,
+        counted: Boolean
     ): Array<Keypoint> {
-        val gain = normalisingGain(squarePixels)
+        val gain = if (counted) {
+            gainFrom(tally[0].toDouble(), tally[1].toDouble(), tally[2].toDouble(), tally[3].toInt())
+        } else {
+            normalisingGain(squarePixels)
+        }
         softGain = gain
-        inputBuffer.rewind()
+        var j = 0
         if (inputIsFloat) {
             for (p in squarePixels) {
-                inputBuffer.putFloat(lift((p shr 16) and 0xFF, gain))
-                inputBuffer.putFloat(lift((p shr 8) and 0xFF, gain))
-                inputBuffer.putFloat(lift(p and 0xFF, gain))
+                inputFloats[j++] = lift((p shr 16) and 0xFF, gain)
+                inputFloats[j++] = lift((p shr 8) and 0xFF, gain)
+                inputFloats[j++] = lift(p and 0xFF, gain)
             }
+            inputFloatView!!.rewind()
+            inputFloatView.put(inputFloats)
         } else {
             for (p in squarePixels) {
-                inputBuffer.put(lift((p shr 16) and 0xFF, gain).toInt().toByte())
-                inputBuffer.put(lift((p shr 8) and 0xFF, gain).toInt().toByte())
-                inputBuffer.put(lift(p and 0xFF, gain).toInt().toByte())
+                inputBytes[j++] = lift((p shr 16) and 0xFF, gain).toInt().toByte()
+                inputBytes[j++] = lift((p shr 8) and 0xFF, gain).toInt().toByte()
+                inputBytes[j++] = lift(p and 0xFF, gain).toInt().toByte()
             }
+            inputBuffer.rewind()
+            inputBuffer.put(inputBytes)
         }
         inputBuffer.rewind()
 
@@ -358,9 +396,17 @@ class PoseDetector(
             blue += b
             lit++
         }
+        return gainFrom(red, green, blue, lit)
+    }
+
+    /**
+     * The gain itself, split out so the separate pass and the sampling tally cannot drift.
+     *
+     * Channel means first, then the weighted sum, which is the order the Python port takes them
+     * in; summing per pixel instead would round differently and the two engines would disagree.
+     */
+    private fun gainFrom(red: Double, green: Double, blue: Double, lit: Int): Float {
         if (lit == 0) return 1f
-        // Channel means first, then the weighted sum, which is the order the Python port takes
-        // them in; summing per pixel instead would round differently and the two would drift.
         val mean = (0.299 * red + 0.587 * green + 0.114 * blue).toFloat() / lit
         return (Tune.TARGET_LUMA / max(mean, 1f)).coerceIn(1f, Tune.MAX_SOFT_GAIN)
     }

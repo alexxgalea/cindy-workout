@@ -90,6 +90,46 @@ class PoseDetectorBenchmark {
      * geometry is unchanged, and that is a claim about this model on this device, not about the
      * matrix algebra, which is checked on the JVM in UprightTransformTest.
      */
+    /**
+     * Whether XNNPACK is doing anything for these models, and whether it helps.
+     *
+     * XNNPACK is enabled by default for float models. Whether its quantised (QU8) kernels are
+     * compiled into the Android AAR and picked up without being asked is a property of the build,
+     * not something the docs settle for a given version. If the flag makes no difference at all
+     * it was already on; if it makes a large one it was not, and this is the cheapest win left.
+     */
+    @Test
+    fun xnnpackOnVersusOff() {
+        val frame = syntheticFrame()
+        val lines = mutableListOf<String>()
+        // Interleaved on/off/on/off so thermal drift falls on both settings alike.
+        for (model in listOf(PoseDetector.THUNDER, PoseDetector.LIGHTNING)) {
+            val label = if (model == PoseDetector.THUNDER) "thndr" else "lite"
+            val got = linkedMapOf<String, Long>()
+            for (pass in listOf(true, false, true, false)) {
+                val d = PoseDetector(context, model, PoseDetector.DEFAULT_THREADS, xnnpack = pass)
+                try {
+                    repeat(WARMUP) { d.detect(frame) }
+                    val t = LongArray(MEASURED)
+                    for (i in 0 until MEASURED) {
+                        d.detect(frame)
+                        t[i] = d.lastInferenceMs
+                    }
+                    val key = if (pass) "on" else "off"
+                    // Keep the better of the two passes for each setting: the loser is thermal.
+                    got[key] = minOf(got[key] ?: Long.MAX_VALUE, median(t))
+                } finally { d.close() }
+            }
+            val on = got.getValue("on")
+            val off = got.getValue("off")
+            lines += "%-6s xnnpack_on=%3dms  xnnpack_off=%3dms  delta=%+3dms".format(
+                label, on, off, off - on)
+        }
+        lines.forEach { Log.i(TAG, it) }
+        java.io.File(context.getExternalFilesDir(null), "xnnpack.txt").writeText(
+            "device=${android.os.Build.MODEL} thermal=${thermalNote()}\n" + lines.joinToString("\n") + "\n")
+    }
+
     @Test
     fun rotationFoldVersusRotatedBitmap() {
         val raw = syntheticFrame()                    // 480x640 standing in for a sensor buffer

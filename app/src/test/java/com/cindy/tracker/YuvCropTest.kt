@@ -134,6 +134,48 @@ class YuvCropTest {
     }
 
     @Test
+    fun `the tally matches a separate pass over the pixels it wrote`() {
+        // The low-light gain used to be computed by walking the finished square a second time.
+        // Sampling now counts as it writes, and the two must agree exactly or the brightness
+        // correction drifts from the Python engine that mirrors it.
+        val cases = listOf(
+            flat(128) to Affine.IDENTITY,                       // every pixel lit
+            flat(200) to Affine.translate(-8f, 0f),             // half letterboxed to black
+            ramp() to Affine.scale(2f, 1f),                     // a column of true black at x=0
+            flat(0) to Affine.IDENTITY                          // nothing lit at all
+        )
+        for ((i, case) in cases.withIndex()) {
+            val (frame, map) = case
+            val size = 16
+            val out = IntArray(size * size)
+            val tally = LongArray(4)
+            YuvCrop.sample(frame, map, out, size, tally)
+
+            var red = 0L; var green = 0L; var blue = 0L; var lit = 0L
+            for (p in out) {
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                if (r or g or b == 0) continue
+                red += r; green += g; blue += b; lit++
+            }
+            assertEquals("case $i red", red, tally[0])
+            assertEquals("case $i green", green, tally[1])
+            assertEquals("case $i blue", blue, tally[2])
+            assertEquals("case $i lit", lit, tally[3])
+        }
+    }
+
+    @Test
+    fun `sampling without a tally still writes the same pixels`() {
+        val f = ramp()
+        val a = IntArray(256); val b = IntArray(256)
+        YuvCrop.sample(f, Affine.IDENTITY, a, 16)
+        YuvCrop.sample(f, Affine.IDENTITY, b, 16, LongArray(4))
+        assertTrue("the optional accumulator must not change the output", a.contentEquals(b))
+    }
+
+    @Test
     fun `inverting a crop-and-rotate returns the original point`() {
         val upright = OverlayTransform.upright(640, 480, 90, mirror = true)
         val forward = upright
