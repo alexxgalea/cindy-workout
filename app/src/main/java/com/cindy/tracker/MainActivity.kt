@@ -429,17 +429,21 @@ class MainActivity : AppCompatActivity() {
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnEnd.setOnClickListener { confirmStop() }
         binding.btnFlip.setOnClickListener { flipCamera() }
-        binding.btnFlip.setOnLongClickListener {
-            // Whether Thunder's accuracy is worth its latency is a question about this phone,
-            // so make it answerable on this phone.
-            val next = if (detector?.modelAsset == PoseDetector.THUNDER) {
-                PoseDetector.LIGHTNING
-            } else {
-                PoseDetector.THUNDER
+        // Debug builds only. A stranger who discovers the model swap can silently halve their
+        // own tracking accuracy with a long press and never know why the count got worse.
+        if (BuildConfig.DEBUG) {
+            binding.btnFlip.setOnLongClickListener {
+                // Whether Thunder's accuracy is worth its latency is a question about this phone,
+                // so make it answerable on this phone.
+                val next = if (detector?.modelAsset == PoseDetector.THUNDER) {
+                    PoseDetector.LIGHTNING
+                } else {
+                    PoseDetector.THUNDER
+                }
+                pendingModel = next
+                toast("Switching to ${if (next == PoseDetector.THUNDER) "Thunder" else "Lightning"}")
+                true
             }
-            pendingModel = next
-            toast("Switching to ${if (next == PoseDetector.THUNDER) "Thunder" else "Lightning"}")
-            true
         }
         binding.btnAddRep.setOnClickListener { onManualRep() }
         binding.btnUndo.setOnClickListener { onUndoRep() }
@@ -452,20 +456,23 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             overridePendingTransition(R.anim.menu_enter, R.anim.hold)
         }
-        binding.statusRow.setOnLongClickListener {
-            readout = Readout.entries[(readout.ordinal + 1) % Readout.entries.size]
-            binding.overlay.predict = readout == Readout.LATENCY_PREDICT
-            binding.status.maxLines = if (readout == Readout.COUNTING || !debug) 1 else 2
-            latency.reset()
-            toast(
-                when (readout) {
-                    Readout.OFF -> "Debug readout off"
-                    Readout.COUNTING -> "Counting readout"
-                    Readout.LATENCY -> "Latency readout"
-                    Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
-                }
-            )
-            true
+        // Also debug only: the athlete's coaching line is not the place for millisecond counters.
+        if (BuildConfig.DEBUG) {
+            binding.statusRow.setOnLongClickListener {
+                readout = Readout.entries[(readout.ordinal + 1) % Readout.entries.size]
+                binding.overlay.predict = readout == Readout.LATENCY_PREDICT
+                binding.status.maxLines = if (readout == Readout.COUNTING || !debug) 1 else 2
+                latency.reset()
+                toast(
+                    when (readout) {
+                        Readout.OFF -> "Debug readout off"
+                        Readout.COUNTING -> "Counting readout"
+                        Readout.LATENCY -> "Latency readout"
+                        Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
+                    }
+                )
+                true
+            }
         }
 
         keepHudClearOfSystemBars()

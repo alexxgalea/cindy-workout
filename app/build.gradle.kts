@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,14 @@ plugins {
 
 val videoRegressionEnabled = providers.gradleProperty("cindyVideoRegression").orNull == "true"
 val recordVideoGoldens = providers.gradleProperty("cindyVideoGolden").orNull == "true"
+
+// Upload signing. Absent on a machine that has never released — the release build then falls
+// back to unsigned, which fails loudly at upload time rather than quietly producing a build
+// nobody can install. Never committed; see RELEASING.md.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
 
 android {
     namespace = "com.cindy.tracker"
@@ -26,8 +36,24 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystoreProperties.getProperty("storeFile") != null) {
+            create("upload") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("upload")
+            // Deliberately off. proguard-rules.pro is empty, and TFLite reaches for classes
+            // reflectively — R8 would strip them with nothing failing at compile time, and the
+            // first sign of it would be a crash on a stranger's phone. Turning this on means
+            // writing keep rules AND re-running the on-device benchmarks, not flipping a flag.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -50,6 +76,9 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        // BuildConfig.DEBUG gates the measurement instruments (the model swap and the latency
+        // readout) out of release builds. AGP 8 does not generate the class unless asked.
+        buildConfig = true
     }
 
     testOptions {

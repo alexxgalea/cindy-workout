@@ -53,3 +53,7 @@ __pycache__/
 
 # Ad-hoc screen recordings from device testing.
 /*.mp4
+
+# Upload signing. The keystore and its passwords never enter git; see RELEASING.md.
+/keystore.properties
+/*.jks
