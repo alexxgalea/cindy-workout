@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 and above. Two separate questions, deliberately answered differently.
+
+  cloud-backup  — the athlete's own Drive, so records and settings travel to a new phone.
+  device-transfer — phone to phone directly, same content.
+
+  Only the domains named are carried; recordings in shared Movies/ are out by omission.
+  See backup_rules.xml for why backup is permitted at all.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="." />
+    </device-transfer>
+</data-extraction-rules>

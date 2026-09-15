@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below. What Auto Backup may carry to the athlete's own Drive.
+
+  Backup is allowed, and the distinction matters: this goes to the *user's* Google account,
+  not to us. "Nothing leaves the phone" in this project means no server, no account, no upload
+  to anyone operating the app — it was never a claim that the athlete may not keep their own
+  records when they change handset, and a streak that resets on a new phone is a bad reason to
+  lose one.
+
+  Included by naming, not by default, so a file added later is not swept up unnoticed.
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="file" path="." />
+    <!--
+      No <exclude> for external storage: only the domains named above are ever backed up, so
+      recordings in shared Movies/ are already out. They are the athlete's to manage and would
+      dwarf a backup quota besides.
+    -->
+</full-backup-content>
