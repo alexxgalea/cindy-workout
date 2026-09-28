@@ -1,7 +1,6 @@
 package com.cindy.tracker
 
 import kotlin.math.abs
-import kotlin.math.acos
 import kotlin.math.hypot
 
 /** One round of Cindy: 5 pull-ups, 10 push-ups, 15 air squats. */
@@ -110,8 +109,6 @@ class WorkoutEngine(
 ) {
 
     private companion object {
-        /** MoveNet confidence below which a keypoint is treated as unseen. */
-        const val MIN_SCORE = 0.30f
         /** Reps to watch before trusting the learned band. */
         const val CALIBRATION_REPS = 2
         /** How long to wait for a believable range before calling the setup bad. */
@@ -162,7 +159,7 @@ class WorkoutEngine(
          * Consecutive overhead frames before a bar may be learned *on the strength of a nose that
          * could not be seen*.
          *
-         * [handsOverhead] answers true when the nose is not confidently seen, deliberately, so
+         * [PoseGeometry.handsOverhead] answers true when the nose is not confidently seen, deliberately, so
          * that rear-view and occluded footage is not locked out. But that turns a missing keypoint
          * into permission, and a single dropped nose frame was enough to open the one gate
          * standing between a band held at chest height and a bar learned there. Measured on the
@@ -188,30 +185,6 @@ class WorkoutEngine(
          * frame, far too short to cover someone actually dropping off the bar.
          */
         const val MAX_DROPOUT_FRAMES = 8
-        /**
-         * How far the shoulders must sit above the hips, in torso lengths, to call the athlete
-         * upright.
-         *
-         * A plank and a standing body both have straight legs, so the knee angle cannot tell
-         * them apart — only the direction the torso is pointing can. A vertical torso scores
-         * 1.0 and a horizontal one 0.0; the threshold leaves room for the forward lean of a
-         * real squat and for a phone standing on the floor looking up.
-         */
-        const val UPRIGHT_TORSOS = 0.7f
-        /**
-         * How far the knees must sit below the hips, in torso lengths, to call the athlete stood
-         * up rather than gathered in a crouch.
-         *
-         * A vertical torso is not standing. People get up off the floor by bringing the torso
-         * upright first and collecting themselves on their haunches, which reads as upright for
-         * most of a second — long enough to open a gate waiting only for that, after which the
-         * drive out of the crouch scored as a rep. Standing carries the hips a whole thigh above
-         * the knees; a crouch puts them level with, or below, them.
-         *
-         * An offset rather than a knee angle, on purpose: an angle threshold is what locked out
-         * the athlete whose foreshortened full extension only read 145 degrees.
-         */
-        const val STANDING_TORSOS = 0.5f
         /**
          * How long the starting posture must hold, without extending further, to be taken up.
          *
@@ -531,7 +504,7 @@ class WorkoutEngine(
             diagnostics = frameDiagnostics(k, identityStable, rejection = hint)
             return RepEvent.NONE
         }
-        val torso = torsoLength(k)
+        val torso = PoseGeometry.torsoLength(k)
         if (torso == null || torso < 1f) {
             bodyVisible = false
             hint = "Step into frame"
@@ -624,33 +597,8 @@ class WorkoutEngine(
     private fun inStartPosition(k: Array<Keypoint>): Boolean = when (exercise) {
         // The bar, head and dead-hang gates already refuse anything that is not a pull-up.
         Exercise.PULLUP -> true
-        Exercise.PUSHUP -> !upright(k)
-        Exercise.SQUAT -> standing(k)
-    }
-
-    /**
-     * True when the shoulders sit well above the hips: torso vertical, not lying down.
-     *
-     * Shared by both movement families, and the only thing that tells them apart. It decides
-     * whether a push-up has been taken up from the floor, and whether a pull is a hang rather
-     * than an inverted row. Signed on purpose — it asks that the shoulders are above the hips,
-     * not merely that the torso is vertical, so an upside-down body fails it too.
-     */
-    private fun upright(k: Array<Keypoint>): Boolean {
-        val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
-        val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
-        val torso = hypot(sh.x - hp.x, sh.y - hp.y)
-        if (torso < 1f) return false
-        return (hp.y - sh.y) >= UPRIGHT_TORSOS * torso
-    }
-
-    /** Upright *and* stood up on the legs, rather than folded over them in a crouch. */
-    private fun standing(k: Array<Keypoint>): Boolean {
-        if (!upright(k)) return false
-        val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
-        val kn = midpoint(k, KP.LEFT_KNEE, KP.RIGHT_KNEE) ?: return false
-        val torso = torsoLength(k) ?: return false
-        return (kn.y - hp.y) >= STANDING_TORSOS * torso
+        Exercise.PUSHUP -> !PoseGeometry.upright(k)
+        Exercise.SQUAT -> PoseGeometry.standing(k)
     }
 
     /** Advances to the next movement if the current one just hit its target. */
@@ -713,7 +661,7 @@ class WorkoutEngine(
      */
     fun onSetupFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): Setup {
         val counter = counters.getValue(exercise)
-        val missing = missingJoints(k)
+        val missing = PoseGeometry.missingJoints(k, exercise)
         if (missing.isNotEmpty()) {
             movingSince = 0L
             if (exercise == Exercise.PULLUP) toleratePullupDropout()
@@ -750,26 +698,6 @@ class WorkoutEngine(
         // has to begin with a fresh dead hang below the reset line.
         pullupDownSeen = false
         if (exercise == Exercise.PULLUP) counters.getValue(exercise).requireFreshDown()
-    }
-
-    /** Joints the current movement cannot be judged without, named for a human. */
-    private fun missingJoints(k: Array<Keypoint>): List<String> {
-        val needed = when (exercise) {
-            Exercise.PULLUP, Exercise.PUSHUP -> listOf(
-                "shoulders" to (KP.LEFT_SHOULDER to KP.RIGHT_SHOULDER),
-                "elbows" to (KP.LEFT_ELBOW to KP.RIGHT_ELBOW),
-                "hands" to (KP.LEFT_WRIST to KP.RIGHT_WRIST),
-                "hips" to (KP.LEFT_HIP to KP.RIGHT_HIP)
-            )
-            Exercise.SQUAT -> listOf(
-                "shoulders" to (KP.LEFT_SHOULDER to KP.RIGHT_SHOULDER),
-                "hips" to (KP.LEFT_HIP to KP.RIGHT_HIP),
-                "knees" to (KP.LEFT_KNEE to KP.RIGHT_KNEE),
-                "ankles" to (KP.LEFT_ANKLE to KP.RIGHT_ANKLE)
-            )
-        }
-        // midpoint() accepts either side, so a joint counts as seen if one of the pair is.
-        return needed.filter { midpoint(k, it.second.first, it.second.second) == null }.map { it.first }
     }
 
     private fun signalFor(k: Array<Keypoint>): Float = when (exercise) {
@@ -900,11 +828,11 @@ class WorkoutEngine(
     private fun pullupSample(k: Array<Keypoint>, now: Long): PullupSample? {
         val leftWrist = k[KP.LEFT_WRIST]
         val rightWrist = k[KP.RIGHT_WRIST]
-        if (!ok(leftWrist) || !ok(rightWrist)) {
+        if (!PoseGeometry.ok(leftWrist) || !PoseGeometry.ok(rightWrist)) {
             hint = "Show both hands"
             return null
         }
-        if (!hangingFromBar(k)) {
+        if (!PoseGeometry.hangingFromBar(k)) {
             hint = "Hang from the bar"
             return null
         }
@@ -931,7 +859,7 @@ class WorkoutEngine(
         // Returning null routes the frame through toleratePullupDropout(), so a brief wobble
         // mid-rep is absorbed by the existing dropout window, while a sustained row never arms a
         // cycle at all. That is the hysteresis, without a second state machine to keep in step.
-        if (!upright(k)) {
+        if (!PoseGeometry.upright(k)) {
             hint = "Hang vertically from the bar"
             return null
         }
@@ -940,11 +868,11 @@ class WorkoutEngine(
             (leftWrist.y + rightWrist.y) / 2f,
             minOf(leftWrist.score, rightWrist.score)
         )
-        val torso = torsoLength(k) ?: run {
+        val torso = PoseGeometry.torsoLength(k) ?: run {
             hint = "Step into frame"
             return null
         }
-        val elbow = bilateralAngle(
+        val elbow = PoseGeometry.bilateralAngle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
             KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST
@@ -989,12 +917,12 @@ class WorkoutEngine(
         // the real one. Every subsequent rep was then refused with "Get on the bar", and because
         // refinement requires already passing the gate, it could never recover. Strict pull-ups
         // have no such phase, which is why only band footage found it.
-        val overhead = handsOverhead(k, hands)
+        val overhead = PoseGeometry.handsOverhead(k, hands)
         overheadFrames = if (overhead) overheadFrames + 1 else 0
         // Seeing the nose below the hands is evidence, and is acted on at once — a real dead hang
         // still locates the bar on the first frame, which strict pull-ups depend on. Permission
         // inferred from a nose that could *not* be seen is not evidence, and has to persist.
-        val mayLearn = overhead && (ok(k[KP.NOSE]) || overheadFrames >= OVERHEAD_HOLD_FRAMES)
+        val mayLearn = overhead && (PoseGeometry.ok(k[KP.NOSE]) || overheadFrames >= OVERHEAD_HOLD_FRAMES)
         if (elbow >= deadHang &&
             (if (bar.established) bar.holds(leftWrist, rightWrist, torso) else mayLearn)
         ) {
@@ -1028,8 +956,8 @@ class WorkoutEngine(
 
         val nose = k[KP.NOSE]
         val barY = bar.lineY
-        if (!ok(nose) || barY == null) {
-            hint = if (!ok(nose)) "Show your head" else "Hang from the bar"
+        if (!PoseGeometry.ok(nose) || barY == null) {
+            hint = if (!PoseGeometry.ok(nose)) "Show your head" else "Hang from the bar"
             return null
         }
         return PullupSample(
@@ -1132,53 +1060,22 @@ class WorkoutEngine(
         barSettleHands = null
     }
 
-    /**
-     * Whether the hands are above the head, which is what separates hanging from a grip that
-     * merely happens to sit above the hips.
-     *
-     * At a dead hang the arms are overhead by definition, so the hands are clearly above the
-     * nose; holding a band, a rope or a towel in front of the chest puts them clearly below it.
-     * Only used to decide whether an *unknown* bar may be learned from this frame — once a bar
-     * exists, [BarZone.holds] already constrains what may refine it.
-     *
-     * A head that cannot be seen does not block anything. Refusing to learn a bar whenever the
-     * nose is missing would lock out the rear-view and occluded footage that already counts, and
-     * this test exists to reject a specific wrong posture, not to demand a clear view of the face.
-     */
-    private fun handsOverhead(k: Array<Keypoint>, hands: Keypoint): Boolean {
-        val nose = k[KP.NOSE]
-        return !ok(nose) || hands.y < nose.y
-    }
-
     /** Half the distance between the hands, for the bar's horizontal span. */
     private fun gripHalfWidth(k: Array<Keypoint>): Float? {
         val l = k[KP.LEFT_WRIST]
         val r = k[KP.RIGHT_WRIST]
-        if (!ok(l) || !ok(r)) return null
+        if (!PoseGeometry.ok(l) || !PoseGeometry.ok(r)) return null
         return abs(l.x - r.x) / 2f
-    }
-
-    /**
-     * Hands overhead, tested against the hips rather than the shoulders.
-     *
-     * The shoulders climb past the hands at the top of a good rep, so gating on them rejects the
-     * peak of the movement. The hips stay well below the hands throughout, which separates
-     * hanging from a push-up without discarding the reps worth counting.
-     */
-    private fun hangingFromBar(k: Array<Keypoint>): Boolean {
-        val hip = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return false
-        val wr = midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
-        return wr.y < hip.y
     }
 
     /** Mean elbow angle in degrees; small at the bottom of a push-up, ~180 at lockout. */
     private fun pushupSignal(k: Array<Keypoint>): Float {
         // Guard against a pull-up being scored as a push-up, using the same overhead test.
-        if (hangingFromBar(k)) {
+        if (PoseGeometry.hangingFromBar(k)) {
             hint = "Get on the floor"
             return Float.NaN
         }
-        return bilateralAngle(
+        return PoseGeometry.bilateralAngle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
             KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST
@@ -1186,7 +1083,7 @@ class WorkoutEngine(
     }
 
     /** Mean knee angle in degrees; small in the hole, ~180 standing. */
-    private fun squatSignal(k: Array<Keypoint>): Float = bilateralAngle(
+    private fun squatSignal(k: Array<Keypoint>): Float = PoseGeometry.bilateralAngle(
         k,
         KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE,
         KP.RIGHT_HIP, KP.RIGHT_KNEE, KP.RIGHT_ANKLE
@@ -1234,56 +1131,6 @@ class WorkoutEngine(
                 KP.LEFT_KNEE, KP.RIGHT_KNEE, KP.LEFT_ANKLE, KP.RIGHT_ANKLE
             )
         }
-        return joints.all { ok(k[it]) }
-    }
-
-    // ── geometry helpers ──────────────────────────────────────────────────────
-
-    private fun ok(p: Keypoint) = p.score >= MIN_SCORE
-
-    private fun midpoint(k: Array<Keypoint>, a: Int, b: Int): Keypoint? {
-        val pa = k[a]
-        val pb = k[b]
-        return when {
-            ok(pa) && ok(pb) -> Keypoint((pa.x + pb.x) / 2f, (pa.y + pb.y) / 2f, minOf(pa.score, pb.score))
-            ok(pa) -> pa
-            ok(pb) -> pb
-            else -> null
-        }
-    }
-
-    private fun torsoLength(k: Array<Keypoint>): Float? {
-        val sh = midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return null
-        val hp = midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP) ?: return null
-        return hypot(sh.x - hp.x, sh.y - hp.y)
-    }
-
-    /** Averages the same joint angle on both sides, using whichever sides are confidently seen. */
-    private fun bilateralAngle(
-        k: Array<Keypoint>,
-        la: Int, lb: Int, lc: Int,
-        ra: Int, rb: Int, rc: Int
-    ): Float {
-        val l = angle(k[la], k[lb], k[lc])
-        val r = angle(k[ra], k[rb], k[rc])
-        return when {
-            !l.isNaN() && !r.isNaN() -> (l + r) / 2f
-            !l.isNaN() -> l
-            !r.isNaN() -> r
-            else -> Float.NaN
-        }
-    }
-
-    /** Interior angle at [b], in degrees, or NaN if any vertex is not confidently seen. */
-    private fun angle(a: Keypoint, b: Keypoint, c: Keypoint): Float {
-        if (!ok(a) || !ok(b) || !ok(c)) return Float.NaN
-        val abx = a.x - b.x
-        val aby = a.y - b.y
-        val cbx = c.x - b.x
-        val cby = c.y - b.y
-        val mag = hypot(abx, aby) * hypot(cbx, cby)
-        if (mag < 1e-4f) return Float.NaN
-        val cos = ((abx * cbx + aby * cby) / mag).coerceIn(-1f, 1f)
-        return Math.toDegrees(acos(cos).toDouble()).toFloat()
+        return joints.all { PoseGeometry.ok(k[it]) }
     }
 }
