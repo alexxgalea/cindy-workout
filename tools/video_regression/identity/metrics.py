@@ -128,14 +128,20 @@ def classify_frame(
     this works identically on a synthetic composite and a real two-person clip.
 
     `detected` is the keypoints the detector under test produced this frame; `truth` is the same
-    clip's clean (no-neighbour, or real-clip-labelled) torso at the same instant. Returns NOTHING
-    if `truth` itself has no torso this frame (nothing to score against -- section 5.1's "scored
-    frames" already excludes these), matching `truth` being `None`-torso'd rather than raising.
+    clip's clean (no-neighbour, or real-clip-labelled) torso at the same instant.
+
+    When `truth` itself has no torso this frame, the rate metrics exclude the frame anyway (via
+    `ScoredFrame.truth_has_torso`, matching section 5.1's "scored frames" convention) -- but this
+    function still needs to answer sensibly for the metrics that do not filter on it, chiefly the
+    startup ones: before the athlete arrives, truth has no torso by construction, and if the
+    detector confidently reports *somebody* right then, that is definitely not the athlete, not
+    nothing. So a torso detected while truth has none is OTHER; only detecting nobody, while truth
+    has nobody either, is NOTHING.
     """
     a = torso_centre(truth)
-    if a is None:
-        return Classification.NOTHING
     c = torso_centre(detected) if detected is not None else None
+    if a is None:
+        return Classification.OTHER if c is not None else Classification.NOTHING
     if c is None:
         return Classification.NOTHING
     dist = math.hypot(c[0] - a[0], c[1] - a[1])
