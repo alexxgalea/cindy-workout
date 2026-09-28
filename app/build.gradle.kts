@@ -10,7 +10,7 @@ val recordVideoGoldens = providers.gradleProperty("cindyVideoGolden").orNull == 
 
 // Upload signing. Absent on a machine that has never released — the release build then falls
 // back to unsigned, which fails loudly at upload time rather than quietly producing a build
-// nobody can install. Never committed; see RELEASING.md.
+// nobody can install. Never committed.
 val keystoreProperties = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
