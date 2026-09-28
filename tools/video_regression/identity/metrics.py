@@ -1,45 +1,47 @@
-"""Scoring identity: every metric Phase 0 task 3 asks for, against the plan section 5.1
-definitions.
+"""Scoring identity: turns a per-frame stream of "who is this" verdicts into every rate a fix
+should be judged by, against ground truth rather than against the counter it feeds.
 
 This module is deliberately variant-agnostic. It never touches ``PoseDetector``, ``AthleteLock``
 or ``WorkoutEngine`` directly, and no function here may use the counter under test to decide
 whether a frame is stolen -- that would grade the counter against itself. Instead a caller (today,
-``run_identity.py``'s production variant; later, a lock variant) supplies a :class:`Verdict` per
-frame however it sees fit, and this module scores it against ground truth from ``composite.py`` or
-a real-clip catalogue (Phase 0 task 7).
+``run_identity.py``'s production variant; later, a variant built around a real lock) supplies a
+:class:`Verdict` per frame however it sees fit, and this module scores it against ground truth
+from ``composite.py`` or a real-clip catalogue.
 
-Verdict mapping for the production pipeline (task 3's required documentation)
-------------------------------------------------------------------------------
-Production has no ``AthleteLock`` yet, so there is no real CONFIRMED/UNCERTAIN/REFUSED verdict to
-read. ``run_identity.py``'s ``ProductionVariant`` synthesises one, matching what the engine
-actually does today (plan section 2.4, section 0 finding 3):
+Verdict mapping for the production pipeline (documented here because it has to be defined
+somewhere: production has no identity lock yet, so there is no real CONFIRMED/UNCERTAIN/REFUSED
+verdict to read)
+------------------------------------------------------------------------------------------------
+``run_identity.py``'s ``ProductionVariant`` synthesises a verdict matching what the engine
+actually does today:
 
 - no torso seen at all -> :attr:`Verdict.NONE` (the engine's existing no-torso path, unchanged by
   identity, and excluded from every verdict-based rate below);
 - a torso is seen, and the movement is a pull-up -> :attr:`Verdict.CONFIRMED` if the detector's own
-  ``tracking`` flag is true that frame (today's ``identityStable`` is exactly that flag), else
+  ``tracking`` flag is true that frame (today, a pull-up is only scored while a crop is being
+  tracked at all -- that flag is the whole of today's identity check), else
   :attr:`Verdict.UNCERTAIN`;
 - a torso is seen, and the movement is a push-up or squat -> always :attr:`Verdict.CONFIRMED`,
-  because push-ups and squats read no identity signal at all today ("count whatever skeleton
-  arrives", plan section 2.4).
+  because push-ups and squats count whatever skeleton the detector hands them today, with no
+  identity check of any kind.
 
 :attr:`Verdict.REFUSED` therefore never occurs in the production mapping: nothing today actively
 refuses a frame it can read, it either trusts it (push-up/squat, or a tracked pull-up) or ignores
 identity (an untracked pull-up becomes UNCERTAIN, not REFUSED, since a lost crop is not evidence
 that the *body in view* is the wrong one -- it is evidence that there is no crop). Metrics that are
 specifically about refusal (``max_refused_run_ms``) read zero for production, which documents the
-absence of a defence rather than a bug in the metric. A lock variant (Phase 2+) can and should
-produce real REFUSED verdicts.
+absence of a defence rather than a bug in the metric. A variant built around a real identity lock
+can and should produce real REFUSED verdicts.
 
-Per-frame classification (task 3's first bullet)
--------------------------------------------------
+Per-frame classification
+-------------------------
 :func:`classify_frame` answers "on the athlete / on someone else / nothing" using only geometry:
 whether a torso was detected at all, and if so, how far its centre sits from the athlete's own
-*clean* torso centre (the ground-truth run, section 5.1) -- never whether the counter would accept
-it. This is deliberately a *looser* test than section 5.1's own "stolen" definition, which also
-requires landing inside the neighbour's placement rectangle; that rectangle-gated definition is
-reproduced exactly by :func:`whole_skeleton_stolen` and :func:`stolen_joint_count` for section 5.3,
-and used nowhere else, because a real clip's neighbour has no such rectangle.
+*clean* torso centre (the ground-truth run) -- never whether the counter would accept it. This is
+deliberately a *looser* test than the "stolen" definition below, which also requires landing inside
+the neighbour's placement rectangle; that rectangle-gated definition is reproduced exactly by
+:func:`whole_skeleton_stolen` and :func:`stolen_joint_count` for comparing against a known theft-
+rate table, and used nowhere else, because a real clip's neighbour has no such rectangle.
 """
 from __future__ import annotations
 

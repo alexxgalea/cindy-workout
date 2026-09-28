@@ -1,30 +1,37 @@
 """Two people, one frame: synthetic two-athlete composites for the identity harness.
 
-A clean rewrite of the identity prototype's ``composite2.Scene`` (see the identity plan's
-Appendix C for the method this ports). The base clip is one athlete's own Cindy footage; the
-neighbour is cut out of a second clip against its own static-camera background and pasted in.
-Every frame comes with the ground truth the metrics need: where the athlete's own silhouette is,
-where the neighbour's is, and whether the neighbour is currently drawn over the athlete.
+The base clip is one athlete's own Cindy footage; the neighbour is cut out of a second clip
+against its own static-camera background and pasted in. Every frame comes with the ground truth
+the metrics need: where the athlete's own silhouette is, where the neighbour's is, and whether the
+neighbour is currently drawn over the athlete.
 
-Five fixed placements reproduce the plan's layouts A-E (their (scale, at) pairs are recorded in
-``run_identity.py``, which owns the named layout sets). This module adds what Phase 0 task 2 asks
-for beyond the fixed layouts:
+Five fixed placements (named A-E; their (scale, at) pairs are recorded in ``run_identity.py``,
+which owns the named layout sets) put the neighbour beside, in front of, and behind the athlete's
+own stations. This module also builds three other kinds of scene:
 
 - ``Scene(..., frozen_at_s=...)`` and :func:`stationary_bystander_frames` -- a startup composite
-  where the neighbour holds one position from the lead-in through the athlete's arrival, with no
-  splice jump. v1's ``startup.py`` recovered the athlete only because its neighbour's video
-  position reset at the splice, dropped out of the crop and triggered the whole-frame fallback
-  (plan section 5.6); a real stationary bystander does not do that, so this rewrite never restarts
-  the neighbour's position at all, and the lead-in is the clip's own empty background rather than
-  a real frame with the athlete papered over -- there is no athlete pixel to leak.
+  where the neighbour holds one position from before the athlete arrives through their whole
+  clip, with no jump in the neighbour's position at the moment the athlete appears. An earlier,
+  throwaway version of this experiment built the lead-in by splicing together two independently-
+  opened readers of the neighbour clip, which silently restarted the neighbour's read position at
+  the join; that restart made the neighbour's frame jump, drop out of the tracked crop, and trip a
+  fallback to scanning the whole frame right as the athlete arrived, so the "recovery" it measured
+  was an artefact of the splice rather than of anything a real detector or lock did. This version
+  never restarts anything, because a real bystander does not jump. The lead-in is also composited
+  from the base clip's own empty background rather than a real frame with the athlete erased from
+  only part of it -- that same earlier version erased the athlete outside the neighbour's placement
+  rectangle only, which let the athlete leak into the lead-in whenever a placement overlapped their
+  real position. Background-subtracting a frame against itself leaves nothing, so `athlete_box` is
+  `None` throughout the lead-in with no special-casing needed.
 - :func:`walk_through_scene` -- the neighbour crosses the frame twice, once behind the athlete and
-  once in front. The in-front pass can occlude the athlete, which v1 never tested; ``Frame.occluded``
-  says when it does.
+  once in front. The in-front pass can occlude the athlete; ``Frame.occluded`` says when it does.
 - :func:`synchronised_pullups_scene` -- the neighbour's own pull-up-like activity at an adjacent
   position, aligned in time with the athlete's pull-ups (the group-class start).
 
-Nothing here is graded on realism. Appendix A's judgement stands: the composite is fair for
-ranking a fix against a same-time distractor, not for quoting its rates as real-world rates.
+Nothing here is graded on realism: a cut-out pasted into someone else's footage is a weaker
+distractor than a real second person would be, so treat every rate measured against it as a lower
+bound, useful for ranking a fix against a same-time distractor rather than for quoting as a
+real-world rate.
 """
 from __future__ import annotations
 
@@ -38,17 +45,17 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests/fixtures/youtube/cindy"
 
-#: The garage Cindy clip: pull-ups at the back, push-ups and squats close to the camera (plan
-#: section 4.1). Cut from 16:9 to the phone's 3:4 around the athlete's stations.
+#: The garage Cindy clip: pull-ups at the back, push-ups and squats close to the camera. Cut from
+#: 16:9 to the phone's 3:4 around the athlete's stations.
 BASE_CLIP = FIXTURES / "IGeeTmrkGDM.mp4"
 #: The outdoor Cindy clip. Its athlete is cut out and pasted in as the neighbour.
 NEIGHBOUR_CLIP = FIXTURES / "UxhKoj3jyQ4.mp4"
-#: x-window of the 1280-wide garage clip that becomes the 480x640 output (Appendix C, method 1).
+#: x-window of the 1280-wide garage clip that becomes the 480x640 output.
 BASE_CROP = (498, 1038)
 #: The neighbour's patch in the 1280x720 outdoor frame, before scaling.
 NEIGHBOUR_BOX = (440, 200, 760, 720)
 OUT_SIZE = (480, 640)  # (width, height), matching the phone's portrait analysis frame
-#: Both source clips are 30 fps; the harness scores every second frame (15 fps -- plan section 5.1).
+#: Both source clips are 30 fps; the harness scores every second frame (15 fps).
 SOURCE_FPS = 30.0
 
 MASK_THRESHOLD = 38  # per-pixel max-channel difference from the background that counts as "body"
@@ -74,8 +81,7 @@ PasteOrder = Union[str, Callable[[float], "str | None"]]
 class Frame:
     """One composited frame, plus everything the metrics need to grade it."""
 
-    #: 1-based count of *source* frames read from the base clip, matching the prototype's ``i``
-    #: so a cache keyed on it lines up frame-for-frame with ``docs/identity-prototype``'s pickles.
+    #: 1-based count of *source* frames read from the base clip (every `step`-th one is yielded).
     index: int
     #: Seconds into the base clip (``index / SOURCE_FPS``).
     time_s: float
@@ -90,10 +96,11 @@ class Frame:
     #: The neighbour's silhouette after scaling and placement, tight to the body. ``None`` when
     #: the neighbour is not placed this frame (absent, or between walk-through passes).
     neighbour_box: Box | None
-    #: The full placement rectangle the neighbour's patch was scaled into this frame -- always
-    #: at least as big as ``neighbour_box``. This is what section 5.1's "inside the neighbour's
-    #: rectangle" theft definition means, and what layouts A-E were sized against; prefer it over
-    #: ``neighbour_box`` when reproducing section 5.3.
+    #: The full placement rectangle the neighbour's patch was scaled into this frame -- always at
+    #: least as big as ``neighbour_box``. A joint or torso landing inside this rectangle, far
+    #: enough from the athlete's own matching point, is what "stolen" means below; it is also what
+    #: layouts A-E were sized against, so prefer it over the tighter ``neighbour_box`` when
+    #: reproducing a theft-rate table measured that way.
     neighbour_cell: Box | None
     #: True only when the neighbour was pasted *over* the athlete (``paste_order="front"``) and
     #: its mask actually overlaps the athlete's silhouette in the shared region -- not merely
@@ -207,13 +214,24 @@ class Scene:
             patch = bgr[y0:y1, x0:x1]
             self._frozen = (patch, _silhouette_mask(patch, self.bg_neighbour))
 
-    def _placement_rect(self, x: int, y: int) -> Box:
+    def _placement_size(self) -> tuple[int, int]:
         x0, y0, x1, y1 = self.neighbour_box
-        w, h = round((x1 - x0) * self.scale), round((y1 - y0) * self.scale)
-        return Box(float(x), float(y), float(min(x + w, OUT_SIZE[0])), float(min(y + h, OUT_SIZE[1])))
+        return round((x1 - x0) * self.scale), round((y1 - y0) * self.scale)
 
-    #: Layout A's placement (the prototype's `composite2.Scene()` default), for callers that want
-    #: a rect without stepping frames -- `run_identity.py` uses this to report a set's geometry.
+    def _placement_rect(self, x: int, y: int) -> Box:
+        """The on-frame part of a placement cell at top-left (x, y): the full-size cell clamped
+        to the output frame on every side. `x`/`y` may be negative, or push the cell past the
+        frame's far edge (a neighbour still walking on or off screen); the box is empty
+        (`right <= left` or `bottom <= top`) when none of the cell is on-frame at all.
+        """
+        w, h = self._placement_size()
+        left, top = max(x, 0), max(y, 0)
+        right = max(min(x + w, OUT_SIZE[0]), left)
+        bottom = max(min(y + h, OUT_SIZE[1]), top)
+        return Box(float(left), float(top), float(right), float(bottom))
+
+    #: This scene's placement rectangle without stepping any frames -- `run_identity.py` uses this
+    #: to report a layout's geometry.
     @property
     def rect(self) -> Box:
         at = self.at(0.0) if callable(self.at) else self.at
@@ -261,7 +279,7 @@ class Scene:
         neighbour_wanted: bool, phase: str,
     ) -> Frame:
         """Pastes the neighbour into `frame` (BGR, already cropped/resized) and turns it into a
-        :class:`Frame`. `frame` is mutated in place, same as the prototype.
+        :class:`Frame`. `frame` is mutated in place.
         """
         x0, y0, x1, y1 = self.neighbour_box
         athlete_mask = _silhouette_mask(frame, self.bg_base, keep_largest=False)
@@ -273,47 +291,56 @@ class Scene:
         order = (self.paste_order(t) if callable(self.paste_order) else self.paste_order) if at else None
         if at is not None and order is not None:
             ax, ay = at
+            w, h = self._placement_size()
             rx0, ry0, rx1, ry1 = (int(v) for v in self._placement_rect(ax, ay))
-            neighbour_cell = Box(float(rx0), float(ry0), float(rx1), float(ry1))
-            patch = self._frozen[0] if self._frozen is not None else live_patch[y0:y1, x0:x1]
-            mask = self._frozen[1] if self._frozen is not None else _silhouette_mask(patch, self.bg_neighbour)
-            size = (rx1 - rx0, ry1 - ry0)
-            patch = cv2.resize(patch, size, interpolation=cv2.INTER_AREA)
-            mask = cv2.resize(mask.astype(np.uint8), size, interpolation=cv2.INTER_NEAREST).astype(bool)
+            if rx1 > rx0 and ry1 > ry0:
+                neighbour_cell = Box(float(rx0), float(ry0), float(rx1), float(ry1))
+                patch = self._frozen[0] if self._frozen is not None else live_patch[y0:y1, x0:x1]
+                mask = self._frozen[1] if self._frozen is not None else _silhouette_mask(patch, self.bg_neighbour)
+                # A placement clamped by the frame's *far* edge (right/bottom) is resized straight
+                # to the clamped size, matching every fixed layout exactly (A and D both clip a
+                # few pixels this way). A placement pushed off the *near* edge (left/top -- only
+                # the walk-through crossing does this) is resized to its full, unclamped size
+                # first and then cropped, so a neighbour still walking onto screen is not squeezed
+                # thinner the further off-frame they start; there is no fixed layout to match here.
+                resize_w = (rx1 - rx0) if ax >= 0 else w
+                resize_h = (ry1 - ry0) if ay >= 0 else h
+                patch = cv2.resize(patch, (resize_w, resize_h), interpolation=cv2.INTER_AREA)
+                mask = cv2.resize(mask.astype(np.uint8), (resize_w, resize_h), interpolation=cv2.INTER_NEAREST).astype(bool)
+                crop_x0 = (rx0 - ax) if ax < 0 else 0
+                crop_y0 = (ry0 - ay) if ay < 0 else 0
+                patch = patch[crop_y0:crop_y0 + (ry1 - ry0), crop_x0:crop_x0 + (rx1 - rx0)]
+                mask = mask[crop_y0:crop_y0 + (ry1 - ry0), crop_x0:crop_x0 + (rx1 - rx0)]
 
-            region = frame[ry0:ry1, rx0:rx1]
-            athlete_here = cv2.dilate(athlete_mask.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
-            athlete_in_rect = athlete_here[ry0:ry1, rx0:rx1]
-            if order == "front":
-                paste = mask
-                overlap = (mask & athlete_in_rect).sum()
-                occluded = overlap > max(20, 0.02 * max(int(athlete_in_rect.sum()), 1))
-            else:
-                paste = mask & ~athlete_in_rect
-            region[paste] = patch[paste]
-            neighbour_box = _mask_bbox(mask, offset=(rx0, ry0))
+                region = frame[ry0:ry1, rx0:rx1]
+                athlete_here = cv2.dilate(athlete_mask.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+                athlete_in_rect = athlete_here[ry0:ry1, rx0:rx1]
+                if order == "front":
+                    paste = mask
+                    overlap = (mask & athlete_in_rect).sum()
+                    occluded = overlap > max(20, 0.02 * max(int(athlete_in_rect.sum()), 1))
+                else:
+                    paste = mask & ~athlete_in_rect
+                region[paste] = patch[paste]
+                neighbour_box = _mask_bbox(mask, offset=(rx0, ry0))
 
         return Frame(index, t, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), athlete_box,
                      neighbour_box, neighbour_cell, occluded, phase)
 
 
 def stationary_bystander_frames(scene: Scene, lead_s: float = 5.0, step: int = 2) -> Iterator[Frame]:
-    """The startup composite (Phase 0 task 2): a bystander who holds one position from the
-    lead-in through the athlete's arrival, with no splice jump (plan section 5.6).
+    """A startup composite: a bystander who holds one position for `lead_s` seconds before the
+    athlete's clip starts, then keeps holding it once the athlete's own footage begins, with no
+    jump in the neighbour's position at the join.
 
-    v1's `startup.py` spliced a lead-in built from one `Scene.frames()` generator onto an
-    *athlete* phase built from a second, freshly-opened one -- restarting the neighbour clip's
-    read position at the join. The recovery it measured came from that restart: the neighbour's
-    frame jumped, dropped out of the crop, and tripped the 5-consecutive-miss whole-frame
-    fallback right as the athlete arrived. This rewrite never restarts anything. `scene` must be
-    built with `frozen_at_s` set, so the lead-in and the athlete phase paste the identical
-    neighbour pixels -- there is no video position to jump.
+    `scene` must be built with `frozen_at_s` set, so the lead-in and the athlete phase paste the
+    identical neighbour pixels -- there is no video position to jump, unlike splicing together two
+    independently-opened readers of a moving neighbour clip (see the module docstring for why an
+    earlier version of this experiment's recovery numbers should not be trusted).
 
-    The lead-in is composited from the base clip's own empty background, not a real frame with
-    the athlete masked out of it (v1's other bug: that mask only applied outside the neighbour's
-    rectangle, leaking the athlete into the lead-in wherever a layout's rectangle overlapped
-    them, which is what voided layout E). Background-subtracting a frame against itself leaves
-    nothing, so `athlete_box` is `None` throughout the lead-in with no special-casing needed.
+    The lead-in is composited from the base clip's own empty background, not a real frame with the
+    athlete masked out of it. Background-subtracting a frame against itself leaves nothing, so
+    `athlete_box` is `None` throughout the lead-in with no special-casing needed.
     """
     if scene._frozen is None:
         raise ValueError("stationary_bystander_frames needs a Scene built with frozen_at_s set")
@@ -338,7 +365,7 @@ def walk_through_scene(
 ) -> Scene:
     """A neighbour who crosses the frame twice: once behind the athlete (never drawn over them,
     same as every fixed layout), once in front (occludes them wherever the two silhouettes
-    overlap). v1 never tested an occluding pass at all.
+    overlap).
 
     Each crossing interpolates the placement's left edge linearly across `behind_window` /
     `front_window` (seconds into the base clip), from `x_start` to `x_end` -- off-frame at both
@@ -367,15 +394,15 @@ def synchronised_pullups_scene(
 ) -> Scene:
     """The neighbour at (approximately) layout B's position, but started near the beginning of
     their own clip instead of 20s in -- their own pull-up-like activity at the rig, roughly
-    concurrent with the athlete's pull-ups (the base clip's pull-up phase is its first ~24s,
-    plan section 4.1). This is the group-class start.
+    concurrent with the athlete's pull-ups (the base clip's pull-up phase is its first ~24s). This
+    is the group-class start: a neighbour training the same movement at the same time.
 
-    `offset_s=9.0` is judgement, not measurement (Appendix A): the neighbour clip has no
-    independent phase labels the way the base clip does. A contact sheet shows an instructional
-    title card for the first ~9s of the neighbour clip and sustained activity at the rig from
-    there; a jump-and-hang pull-up style means the hang itself is often above the cropped patch,
-    so this was not verified rep-by-rep the way the base clip's pull-ups were. It is close enough
-    for Phase 0's purpose -- ranking a fix against a same-time distractor -- but should not be
+    `offset_s=9.0` is a judgement call, not a measurement: the neighbour clip has no independent
+    phase labels the way the base clip does. A contact sheet shows an instructional title card for
+    the first ~9s of the neighbour clip and sustained activity at the rig from there; a
+    jump-and-hang pull-up style means the hang itself is often above the cropped patch, so this
+    was not verified rep-by-rep the way the base clip's pull-ups were. It is close enough for
+    ranking a fix against a same-time distractor, but should not be
     read as a claim about exactly what movement the neighbour is performing at every frame.
     """
     return Scene(scale=scale, at=at, offset_s=offset_s, paste_order="behind", **scene_kwargs)
