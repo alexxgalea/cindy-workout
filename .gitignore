@@ -54,6 +54,9 @@ __pycache__/
 # Ad-hoc screen recordings from device testing.
 /*.mp4
 
-# Upload signing. The keystore and its passwords never enter git; see RELEASING.md.
+# Upload signing. The keystore and its passwords never enter git.
 /keystore.properties
 /*.jks
+
+# Design notes, research briefs and release runbook. Kept locally, never committed.
+/docs/

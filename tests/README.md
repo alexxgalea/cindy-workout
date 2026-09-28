@@ -163,7 +163,7 @@ localised to one frame rather than to "the totals disagree".
 Run this after touching either implementation. It currently passes on all 372 frames.
 
 The pull-up gates themselves — occlusion tolerance, the derived dead-hang angle and bar
-re-establishment — are specified in [PULLUP_LOGIC.md](../PULLUP_LOGIC.md). `MAX_DROPOUT_FRAMES`
+re-establishment — are covered by the Kotlin unit tests and the parity trace above. `MAX_DROPOUT_FRAMES`
 was picked by sweeping it against the labelled clips; re-run that sweep after any change to the
 gates, since the useful value is the knee of that curve rather than a round number.
 
