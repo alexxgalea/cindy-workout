@@ -62,7 +62,10 @@ class UrlConnectionTransport(
             connection.requestMethod = request.method
             connection.connectTimeout = connectTimeoutMs
             connection.readTimeout = readTimeoutMs
-            connection.instanceFollowRedirects = true
+            // Never followed. A redirect would re-send the bearer token, or the athlete's upload,
+            // to a host this code did not choose, and a POST is quietly turned into a GET on the
+            // way. A 3xx comes back as an ordinary response for the caller to refuse.
+            connection.instanceFollowRedirects = false
             for ((name, value) in request.headers) connection.setRequestProperty(name, value)
             request.contentType?.let { connection.setRequestProperty("Content-Type", it) }
 
