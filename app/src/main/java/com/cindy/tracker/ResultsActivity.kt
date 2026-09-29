@@ -2,13 +2,21 @@ package com.cindy.tracker
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityResultsBinding
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.WeekFields
 import java.util.Locale
 
 /** What just happened: score, rank, pace, and how the rounds actually went. */
@@ -78,13 +86,15 @@ class ResultsActivity : AppCompatActivity() {
         // The record this score was actually chasing: the best previous attempt at the same
         // movements. Ranking it against a different prescription would flatter or insult it
         // depending only on which way the difficulty happened to fall.
-        val previousBest = Records.personalRecord(RecordStore(this).all(), a)
+        val all = RecordStore(this).all()
+        val previousBest = Records.personalRecord(all, a)
         binding.scoreDetail.text = buildString {
             append("${a.totalReps} reps in ${formatDuration(a.durationMs)} of clock")
             if (a.pausedMs > 0L) append(" · ${formatDuration(a.realTimeMs)} real")
             if (Records.beatsBenchmark(a)) append("  ·  past ${Records.BENCHMARK_NAME}")
         }
 
+        celebrate(a, all)
         renderLevel(a)
 
         binding.stats.removeAllViews()
@@ -103,6 +113,17 @@ class ResultsActivity : AppCompatActivity() {
         a.fastestRoundMs?.let { stat("Fastest round", formatDuration(it)) }
         a.slowestRoundMs?.let { stat("Slowest round", formatDuration(it)) }
         stat("Total reps", "${a.totalReps}")
+        val zone = ZoneId.systemDefault()
+        val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        val today = LocalDate.now()
+        val days = Streak.daysTrained(all, zone)
+        val streakDays = Streak.current(days, today)
+        val streakWeeks = Streak.currentWeeks(Streak.weeksTrained(days, firstDay), today, firstDay)
+        stat(
+            "Streak",
+            "$streakDays day${if (streakDays == 1) "" else "s"} · " +
+                "$streakWeeks week${if (streakWeeks == 1) "" else "s"}"
+        )
         // Said out loud rather than folded into the total: the app saw most of these and was
         // told about the rest, and those are different kinds of claim.
         if (a.manualReps > 0) stat("Added by hand", "${a.manualReps} of ${a.totalReps}")
@@ -138,6 +159,54 @@ class ResultsActivity : AppCompatActivity() {
                 append("Taller is slower. Fastest was round ${fastest + 1} at ${formatDuration(splits[fastest])}.")
                 if (a.pausedMs > 0L) append(" Splits exclude paused time.")
             }
+        }
+    }
+
+    /**
+     * The box under the score that says what this session earned: a first Cindy, a record, a
+     * streak milestone. Hidden when it earned nothing, rather than congratulating an ordinary day.
+     * Cleared first because [render] runs again when the body weight changes.
+     */
+    private fun celebrate(a: Attempt, all: List<Attempt>) {
+        val box = binding.celebration
+        box.removeAllViews()
+        val lines = Cheer.forResult(
+            all, a, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        )
+        if (lines.isEmpty()) {
+            box.visibility = View.GONE
+            return
+        }
+        box.visibility = View.VISIBLE
+        lines.forEachIndexed { i, line ->
+            box.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                if (i > 0) setPadding(0, dp(10), 0, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                val trophy = line.kind == Celebration.Kind.FIRST ||
+                    line.kind == Celebration.Kind.RECORD
+                if (trophy) {
+                    addView(medal(1))
+                } else {
+                    addView(ImageView(context).apply {
+                        setImageResource(R.drawable.ic_flame)
+                        imageTintList =
+                            ColorStateList.valueOf(getColor(R.color.achievement))
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
+                    })
+                }
+                val style = if (i == 0) R.style.Cindy_Title2 else R.style.Cindy_Headline
+                addView(styledText(style, line.text).apply {
+                    if (i == 0) setTextColor(getColor(R.color.achievement))
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    ).apply { marginStart = dp(12) }
+                })
+            })
         }
     }
 

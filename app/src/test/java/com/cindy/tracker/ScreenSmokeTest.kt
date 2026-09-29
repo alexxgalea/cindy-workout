@@ -328,4 +328,67 @@ class ScreenSmokeTest {
             )
         )
     }
+
+    /** The first stored session is always worth a line; the box under the score shows it. */
+    @Test
+    fun `the results screen celebrates a first session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 12,
+            reps = 3,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.VISIBLE,
+            activity.findViewById<android.view.View>(R.id.celebration).visibility
+        )
+        activity.finish()
+        store.clear()
+    }
+
+    /**
+     * A lower score than the best one, three weeks on, is no record and no streak of either kind
+     * (last week would make two weeks in a row, which is a milestone), so nothing is claimed.
+     */
+    @Test
+    fun `the results screen stays quiet for an ordinary session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val now = System.currentTimeMillis()
+        store.add(
+            Attempt(
+                rounds = 20,
+                reps = 0,
+                atMillis = now - 21L * 24 * 60 * 60 * 1000,
+                durationMs = 20 * 60 * 1000L,
+                profile = CindyProfile.STANDARD
+            )
+        )
+        val today = Attempt(
+            rounds = 10,
+            reps = 0,
+            atMillis = now,
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(today)
+        val intent = ResultsActivity.intent(context, today, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.GONE,
+            activity.findViewById<android.view.View>(R.id.celebration).visibility
+        )
+        activity.finish()
+        store.clear()
+    }
 }

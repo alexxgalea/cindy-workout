@@ -62,6 +62,18 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp" />
 
+        <!-- What this session earned, when it earned anything. Built in code. -->
+        <LinearLayout
+            android:id="@+id/celebration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:background="@drawable/glass_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="16dp"
+            android:visibility="gone" />
+
         <!-- ── the rung, and what the next one costs ── -->
         <LinearLayout
             android:layout_width="match_parent"
