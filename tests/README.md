@@ -278,6 +278,14 @@ never clears the movement's threshold, or the count never reaches two), no worko
 scored, every movement reports zero, and the failure says so explicitly rather than reporting a
 misleading exact-zero pass.
 
+Two optional fields reproduce the athlete's own controls, for footage the counter cannot
+calibrate or progress on by itself. `"setup": "skip"` is the SKIP button: no calibration, so the
+label equals the expected count. `"skipTo": [{"atMs": 25000, "movement": "pushup"}]` is the athlete
+tapping skip when the app has not moved on by itself: at that time, if the engine is still on an
+earlier movement, it banks what was done and advances. A movement the engine already reached on its
+own is left alone. `youtube_cindy_garage_one_round` uses both, because production counts only one
+of that clip's five pull-ups, too few to calibrate or to finish the movement.
+
 Per-movement results land in each report's `per_movement` object (`expected`/`observed`/
 `eventsMs`), alongside the usual single `expectedReps`/`observedReps` totals summed across
 movements.

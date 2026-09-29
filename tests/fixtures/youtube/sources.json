@@ -94,9 +94,9 @@
       "group": "cindy",
       "exercise": "mixed",
       "status": "labelled",
-      "confidence": "medium",
-      "label_basis": "Per-movement rep counts and top-of-rep timestamps by eye from contact sheets cropped to each station (the pull-up rig, then the mat, then the squat spot) at 5-6 fps: 3 pull-ups (tops around 3.8s, 12.3s, 20.3s), 5 push-ups (around 31.5s, 35.0s, 37.3s, 40.5s, 43.5s), 5 squats (around 60.6s, 64.6s, 68.6s, 72.6s, 76.6s). See tests/scenarios/youtube.json's youtube_cindy_garage_one_round for the full caveats.",
-      "notes": "The local fixture is a ~79s excerpt (pull-ups ~0-24s, push-ups ~28-52s, squats ~56-80s), not the full 20-minute AMRAP -- about one round, not three. Tempo is slow and deliberate, which makes exact rep-top timestamps harder to pin down than on a faster clip; a fourth pull-up appears to start ascending around 22-24s without a confirmed completion and is not counted. Scored via the Cindy-mode scenario; as of this fixture, setup does not reach READY at all (the pull-up gates accept at most one clean cycle on this footage), so no workout frames are scored -- a pre-existing pull-up-counting limitation on this camera angle, unrelated to identity theft."
+      "confidence": "high",
+      "label_basis": "One full round: 5 pull-ups, 10 push-ups, 15 squats, counted by eye from contact sheets and cross-checked against hysteresis on the raw elbow and knee angles; per-rep times in tests/scenarios/youtube.json (youtube_cindy_garage_one_round).",
+      "notes": "The local fixture is a ~79 s excerpt of a 20-minute AMRAP: one round (pull-ups ~8-23 s, push-ups ~29-52 s, squats ~57-78 s). Production counts only 1 of the 5 pull-ups on this rear three-quarter view, so Cindy mode scores it with setup skipped."
     },
     {
       "id": "EgIMk-PZwo0",

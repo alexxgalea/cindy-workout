@@ -374,8 +374,8 @@ def run_scenario(scenario: dict) -> ScenarioReport:
     )
 
 
-#: COCO... no -- Exercise enum members to the scenario-file movement names `run_cindy_scenario`
-#: reports per-movement counts under. The reverse of `EXERCISES`' pullup/pushup/squat aliases.
+#: Exercise enum members to the scenario-file movement names `run_cindy_scenario` reports
+#: per-movement counts under. The reverse of `EXERCISES`' pullup/pushup/squat aliases.
 MOVEMENT_NAME = {Exercise.PULLUP: "pullup", Exercise.PUSHUP: "pushup", Exercise.SQUAT: "squat"}
 
 
@@ -394,6 +394,16 @@ def run_cindy_scenario(scenario: dict) -> ScenarioReport:
     `expectedRepsByMovement["pullup"]` must be the label's *total* pull-up count including those
     two; `per_movement["pullup"]["observed"]` only ever reflects what happened after calibration,
     same as the app's own scoreboard.
+
+    Two optional scenario fields reproduce the athlete's own controls, for footage the counter
+    cannot calibrate or progress on by itself:
+
+    - ``"setup": "skip"`` -- the SKIP button: no calibration, every frame goes to `on_frame`, and
+      the calibration pull-ups count like any other. The label then equals the expected count.
+    - ``"skipTo": [{"atMs": 25000, "movement": "pushup"}, ...]`` -- the athlete tapping "skip" when
+      the app has not moved on by itself: at `atMs`, if the engine is still on an earlier movement,
+      `skip_exercise()` banks what was done and advances until it reaches `movement`. A movement
+      the engine already reached on its own is left alone, so a correct count is never skipped.
     """
     errors: list[str] = []
     video = Path(scenario["video"])
@@ -412,12 +422,19 @@ def run_cindy_scenario(scenario: dict) -> ScenarioReport:
         return ScenarioReport(scenario["id"], "cindy", 0, 0, None, [], [], errors)
 
     engine = WorkoutEngine()  # fixed_exercise=None: the real pull-up -> push-up -> squat -> ... loop
-    engine.begin_setup()
+    skip_setup = (scenario.get("setup") or "").lower() == "skip"
+    if not skip_setup:
+        engine.begin_setup()
+    order = list(MOVEMENT_NAME)
+    skips = sorted(
+        ((int(s["atMs"]), EXERCISES[s["movement"]]) for s in scenario.get("skipTo", [])),
+        key=lambda s: s[0],
+    )
     configure_manual_bar(engine, scenario, inferred[0])
     health = TrackingHealthMonitor()
     worst = TrackingHealth.GOOD
 
-    running = False
+    running = skip_setup
     setup_result = None
     frames: list[dict] = []
     count_times: list[int] = []
@@ -431,6 +448,11 @@ def run_cindy_scenario(scenario: dict) -> ScenarioReport:
                 engine.finish_setup()
                 running = True
             continue  # this frame was SETUP; the app never also calls onFrame for it
+
+        while skips and frame.timestamp_ms >= skips[0][0]:
+            _, target = skips.pop(0)
+            while order.index(engine.exercise) < order.index(target):
+                engine.skip_exercise()
 
         event = engine.on_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
         d = engine.diagnostics
