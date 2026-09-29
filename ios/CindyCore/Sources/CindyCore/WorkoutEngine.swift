@@ -178,6 +178,14 @@ public final class WorkoutEngine {
     /// second at 24fps — long enough to ride out an occlusion or a motion-blurred frame, far too
     /// short to cover someone actually dropping off the bar.
     private static let maxDropoutFrames = 8
+    /// How long a frame may go without identity confirmation before the rep in flight is
+    /// abandoned.
+    ///
+    /// A theft is not the athlete stepping away — a skeleton lost and found again inside about a
+    /// second should not cost a rep, so a refused frame is tolerated for a while, the same way an
+    /// unreadable one already is. Bounded by wall-clock time rather than a frame count, because
+    /// identity checks do not necessarily arrive at the frame rate a dropped keypoint does.
+    private static let identityDropoutMs: Int64 = 1000
     /// How long the starting posture must hold, without extending further, to be taken up.
     ///
     /// Half a second of *stillness*, not half a second of merely being upright. Upright alone was
@@ -250,6 +258,8 @@ public final class WorkoutEngine {
     private var pullupDownSeen = false
     /// Consecutive unusable frames since the last good one, while a cycle is in flight.
     private var pullupDropoutFrames = 0
+    /// When the current run of non-confirmed frames began, or 0 while none is in progress.
+    private var identityGapSince: Int64 = 0
     /// Straightest elbow angle seen while hanging, which scales the dead-hang test.
     private var pullupExtendedElbow: Float = .nan
     /// Torso length when the current bar estimate was first established.
@@ -325,6 +335,7 @@ public final class WorkoutEngine {
         overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
+        identityGapSince = 0
         awaitingStart = false
         startPositionSince = 0
         startSmoothed = .nan
@@ -399,14 +410,17 @@ public final class WorkoutEngine {
         overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
+        identityGapSince = 0
         diagnostics = FrameDiagnostics()
     }
 
     /// Scores a running-workout frame.
     ///
-    /// `identityStable` comes from the camera layer's tracked ROI. A single-pose model cannot
-    /// name people, but a lost ROI is the one reliable signal that this is no longer the same
-    /// body; treating it as a pause prevents a new person from completing a half-started pull-up.
+    /// `identityStable` means AthleteLock confirmed this skeleton as the athlete. A frame that is
+    /// not confirmed counts and teaches nothing, whatever the movement — a body that is not the
+    /// athlete's must not complete their rep or bend their learned range. The rep in flight
+    /// survives a brief refusal (`identityDropoutMs`), so a skeleton that is lost and found again
+    /// inside about a second does not cost the athlete a rep.
     @discardableResult
     public func onFrame(_ k: [Keypoint], now: Int64, identityStable: Bool = true) -> RepEvent {
         if setupInProgress {
@@ -426,6 +440,23 @@ public final class WorkoutEngine {
         bodyVisible = true
 
         if exercise == .pullup { return onPullupFrame(k, now: now, identityStable: identityStable) }
+
+        if !identityStable {
+            hint = "Tracking…"
+            blocked = true
+            if identityGapSince == 0 { identityGapSince = now }
+            if awaitingStart {
+                startPositionSince = 0
+                startSmoothed = .nan
+                startReference = .nan
+            }
+            if now - identityGapSince > Self.identityDropoutMs {
+                counter.requireFreshDown()
+            }
+            diagnostics = frameDiagnostics(k, identityStable: false, rejection: hint)
+            return .none
+        }
+        identityGapSince = 0
 
         let s = signalFor(k)
         guard !s.isNaN else {
@@ -544,6 +575,7 @@ public final class WorkoutEngine {
         overheadFrames = 0
         barSettleSince = 0
         barSettleHands = nil
+        identityGapSince = 0
         diagnostics = FrameDiagnostics()
     }
 
@@ -568,6 +600,9 @@ public final class WorkoutEngine {
 
         if exercise == .pullup {
             _ = onPullupFrame(k, now: now, identityStable: identityStable, settleWorkout: false)
+        } else if !identityStable {
+            hint = "Tracking…"
+            diagnostics = frameDiagnostics(k, identityStable: false, rejection: hint)
         } else {
             let s = signalFor(k)
             if !s.isNaN { counter.update(s, now: now) }
@@ -658,10 +693,12 @@ public final class WorkoutEngine {
         guard identityStable else {
             hint = "Tracking…"
             blocked = true
-            toleratePullupDropout()
+            if identityGapSince == 0 { identityGapSince = now }
+            if now - identityGapSince > Self.identityDropoutMs { invalidatePullupCycle() }
             diagnostics = frameDiagnostics(k, identityStable: false, rejection: hint)
             return .none
         }
+        identityGapSince = 0
 
         guard let sample = pullupSample(k, now: now) else {
             blocked = true

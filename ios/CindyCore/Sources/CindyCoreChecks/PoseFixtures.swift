@@ -129,6 +129,24 @@ enum PoseFixtures {
 
     /// Nothing confidently detected — the "step into frame" case.
     static func empty() -> [Keypoint] { blank() }
+
+    /// A person standing still: upright, stood up on the legs, arms hanging straight by the sides
+    /// with the wrists below the hips rather than overhead.
+    ///
+    /// Satisfies neither the push-up nor the squat start posture, and is not a hang either — the
+    /// shape of someone in frame who is not doing the movement at all, used to prove that such a
+    /// body cannot be mistaken for the athlete's.
+    static func standing() -> [Keypoint] {
+        var k = blank()
+        putPair(&k, KP.leftShoulder, KP.rightShoulder, 0, 0)
+        putPair(&k, KP.leftElbow, KP.rightElbow, 2, 60)
+        putPair(&k, KP.leftWrist, KP.rightWrist, 4, 120)
+        putPair(&k, KP.leftHip, KP.rightHip, 0, 100)
+        putPair(&k, KP.leftKnee, KP.rightKnee, 0, 190)
+        putPair(&k, KP.leftAnkle, KP.rightAnkle, 0, 280)
+        k[KP.nose] = Keypoint(x: 0, y: -30, score: 0.9)
+        return k
+    }
 }
 
 /// Drives an engine the way a camera would.

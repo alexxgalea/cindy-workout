@@ -616,4 +616,6 @@ Check.suite("Variations") {
                "a profile knows which movements it will ask to be tapped in")
 }
 
+identityRefusalChecks()
+
 Check.finish()
