@@ -18,6 +18,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** What just happened: score, rank, pace, and how the rounds actually went. */
 class ResultsActivity : AppCompatActivity() {
@@ -141,6 +142,8 @@ class ResultsActivity : AppCompatActivity() {
         }
         binding.stats.addView(group)
 
+        movementBreakdown(a)
+
         val splits = a.roundSplitsMs
         if (splits.isEmpty()) {
             binding.splitsTitle.visibility = View.GONE
@@ -160,6 +163,41 @@ class ResultsActivity : AppCompatActivity() {
                 if (a.pausedMs > 0L) append(" Splits exclude paused time.")
             }
         }
+    }
+
+    /**
+     * Where the round's time went, per movement. Hidden unless every movement has a finished set,
+     * because a share of two movements would be a share of nothing. Cleared first because
+     * [render] runs again when the body weight changes.
+     */
+    private fun movementBreakdown(a: Attempt) {
+        binding.movements.removeAllViews()
+        val shares = Progress.movementBreakdown(a)
+        val show = if (shares.isEmpty()) View.GONE else View.VISIBLE
+        binding.movementsTitle.visibility = show
+        binding.movements.visibility = show
+        if (shares.isEmpty()) return
+        val group = InsetGroup(this)
+        shares.forEach { s ->
+            group.row(
+                statRow(
+                    s.label, "${formatDuration(s.avgMs)} · ${(s.share * 100).roundToInt()}%"
+                )
+            )
+        }
+        group.attach(styledText(
+            R.style.Cindy_Footnote,
+            "Average of each finished set. Set times include getting into position."
+        ).apply {
+            textSize = 11f
+            setPadding(dp(18), 0, dp(18), dp(14))
+        })
+        binding.movements.addView(
+            group,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
     }
 
     /**

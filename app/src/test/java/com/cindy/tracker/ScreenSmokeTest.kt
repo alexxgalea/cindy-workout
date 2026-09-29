@@ -433,4 +433,35 @@ class ScreenSmokeTest {
         activity.finish()
         store.clear()
     }
+
+    /** A round timed set by set fills the breakdown; the group is built in code. */
+    @Test
+    fun `the results screen builds with set splits and shows the movement breakdown`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = listOf(52_000L),
+            profile = CindyProfile.STANDARD,
+            setSplits = listOf(
+                SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+                SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+                SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+            )
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.VISIBLE,
+            activity.findViewById<android.view.View>(R.id.movements).visibility
+        )
+        activity.finish()
+        store.clear()
+    }
 }

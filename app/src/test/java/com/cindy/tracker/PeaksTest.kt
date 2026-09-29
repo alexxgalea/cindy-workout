@@ -218,4 +218,77 @@ class PeaksTest {
         assertEquals("Week of 17 Aug 2026", reps.detail)
         assertFalse(list.any { it.rank !in 1..3 })
     }
+
+    private fun withSets(base: Attempt, vararg sets: SetSplit) =
+        base.copy(setSplits = sets.toList())
+
+    private fun pull(ms: Long, reps: Int = 5, manual: Int = 0) =
+        SetSplit(Exercise.PULLUP, ms, reps, manual)
+
+    @Test
+    fun `the fastest measured set of each movement peaks with the right plural`() {
+        val a = withSets(
+            attempt("2026-08-03", 10),
+            pull(15_000), SetSplit(Exercise.PUSHUP, 17_000, 10, 0),
+            SetSplit(Exercise.SQUAT, 21_000, 15, 0), pull(13_500)
+        )
+        val list = peaks(listOf(a))
+        val fastPull = list.titled("Fastest 5 strict pull-ups")!!
+        assertEquals("0:13", fastPull.value)
+        assertEquals("3 Aug 2026", fastPull.detail)
+        assertEquals(1, fastPull.rank)
+        assertEquals("0:17", list.titled("Fastest 10 standard push-ups")!!.value)
+        assertEquals("0:21", list.titled("Fastest 15 air squats")!!.value)
+        assertEquals(
+            "Best average round",
+            list.take(list.indexOfFirst { it.title.startsWith("Fastest 5") }).last().title
+        )
+    }
+
+    @Test
+    fun `the title uses the plural of the category`() {
+        val a = withSets(
+            attempt("2026-08-03", 10, profile = knee), SetSplit(Exercise.PUSHUP, 9_000, 10, 0)
+        )
+        assertTrue(peaks(listOf(a), knee).any { it.title == "Fastest 10 ${knee.push.plural}" })
+    }
+
+    @Test
+    fun `manual and skipped sets never peak`() {
+        val a = withSets(
+            attempt("2026-08-03", 10),
+            pull(9_000, manual = 1), pull(8_000, reps = 3), pull(20_000)
+        )
+        assertEquals("0:20", peaks(listOf(a)).titled("Fastest 5 strict pull-ups")!!.value)
+        val none = withSets(attempt("2026-08-03", 10), pull(9_000, manual = 5))
+        assertNull(peaks(listOf(none)).titled("Fastest 5 strict pull-ups"))
+    }
+
+    @Test
+    fun `a lower-bound attempt never peaks a set`() {
+        val lost = withSets(attempt("2026-08-03", 10, untrackedMs = 30_000L), pull(9_000))
+        val ok = withSets(attempt("2026-08-04", 10), pull(15_000))
+        assertEquals("0:15", peaks(listOf(lost, ok)).titled("Fastest 5 strict pull-ups")!!.value)
+        assertNull(peaks(listOf(lost)).titled("Fastest 5 strict pull-ups"))
+    }
+
+    @Test
+    fun `no category gives no set peaks`() {
+        val a = withSets(attempt("2026-08-03", 10, profile = null), pull(9_000))
+        assertFalse(
+            peaks(listOf(a), null).any {
+                it.title.startsWith("Fastest ") && it.title != "Fastest round"
+            }
+        )
+    }
+
+    @Test
+    fun `a tied set goes to the more recent attempt`() {
+        val older = withSets(attempt("2026-08-03", 10), pull(14_000))
+        val newer = withSets(attempt("2026-08-10", 10), pull(14_000))
+        val set = peaks(listOf(older, newer)).titled("Fastest 5 strict pull-ups")!!
+        assertEquals("10 Aug 2026", set.detail)
+        val reversed = peaks(listOf(newer, older)).titled("Fastest 5 strict pull-ups")!!
+        assertEquals("10 Aug 2026", reversed.detail)
+    }
 }

@@ -61,6 +61,31 @@ object Peaks {
                 )
             }
 
+        // The fastest set of each movement, only where the camera saw every rep: a tapped or
+        // skipped set is not a time the app can stand behind. There is no set peak without a
+        // category, because the title names the movement being timed.
+        if (category != null) {
+            for (movement in Exercise.entries) {
+                val plural = when (movement) {
+                    Exercise.PULLUP -> category.pull.plural
+                    Exercise.PUSHUP -> category.push.plural
+                    Exercise.SQUAT -> category.squat.plural
+                }
+                // Newest first and a strict comparison, so a tie keeps the more recent set.
+                var best: Pair<Attempt, Long>? = null
+                for (a in newestFirst) {
+                    val ms = a.setSplits.filter { it.movement == movement && it.measured }
+                        .minOfOrNull { it.ms } ?: continue
+                    if (best == null || ms < best.second) best = a to ms
+                }
+                best?.let { (a, ms) ->
+                    out += Peak(
+                        "Fastest ${movement.target} $plural", formatDuration(ms), date(a), 1
+                    )
+                }
+            }
+        }
+
         val days = Streak.daysTrained(attempts, zone)
         Streak.longestRun(days)?.let { run ->
             val length = run.endInclusive.toEpochDay() - run.start.toEpochDay() + 1
