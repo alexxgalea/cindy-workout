@@ -30,7 +30,8 @@ object Cheer {
             ?: return "Your first Cindy starts everything."
         val days = Streak.daysTrained(attempts, zone)
         val current = Streak.current(days, today)
-        val longest = Streak.longest(days)
+        // The longest run other than the current one: a tie with it is not a new record.
+        val longestBefore = Streak.longest(days - Streak.currentRun(days, today))
         val weeks = Streak.weeksTrained(days, firstDayOfWeek)
         val w = Streak.currentWeeks(weeks, today, firstDayOfWeek)
         val trainedToday = today in days
@@ -43,7 +44,7 @@ object Cheer {
         if (trainedToday && Streak.isMilestone(current, Streak.DAILY_MILESTONES)) {
             return "$current days in a row."
         }
-        if (trainedToday && current >= 2 && current == longest) {
+        if (trainedToday && current >= 2 && current > longestBefore) {
             return "Longest streak yet: $current days."
         }
         if (Streak.atRisk(days, today) && current >= 1) {

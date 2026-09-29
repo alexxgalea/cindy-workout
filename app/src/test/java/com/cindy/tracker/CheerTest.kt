@@ -65,6 +65,27 @@ class CheerTest {
     }
 
     @Test
+    fun `tying the longest streak is not called the longest yet`() {
+        val earlier = listOf("2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04")
+            .map { attempt(it, 15, 0) }
+        val current = listOf("2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09")
+            .map { attempt(it, 13, 0) }
+        assertTrue(headline(*(earlier + current).toTypedArray()) != "Longest streak yet: 4 days.")
+    }
+
+    @Test
+    fun `beating the longest streak by a day is named`() {
+        val earlier = listOf("2026-08-01", "2026-08-02", "2026-08-03")
+            .map { attempt(it, 15, 0) }
+        val current = listOf("2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09")
+            .map { attempt(it, 13, 0) }
+        assertEquals(
+            "Longest streak yet: 4 days.",
+            headline(*(earlier + current).toTypedArray())
+        )
+    }
+
+    @Test
     fun `a streak that yesterday kept alive invites training today`() {
         assertEquals(
             "Train today to make it 3 days.",
