@@ -38,7 +38,7 @@ class AthleteLockTest {
     }
 
     /** A lock that has already acquired and confirmed [pose]. */
-    private fun lockedOn(pose: Array<Keypoint>, ctx: LockContext = pull, predict: Boolean = true): AthleteLock {
+    private fun lockedOn(pose: Array<Keypoint>, ctx: LockContext = pull, predict: Boolean = false): AthleteLock {
         val lock = AthleteLock(predict)
         lock.beginAcquiring(clock)
         lock.feed(pose, ctx, frames = 3)
@@ -207,6 +207,24 @@ class AthleteLockTest {
         wrongScale.lose(clock, clearStations = false)
         wrongScale.feed(standing().scaled(1.8f).moved(240f, 300f), station, frames = 20)
         assertEquals(LockState.LOST, wrongScale.state)
+    }
+
+    @Test
+    fun `after the phone moves, an athlete at a new distance is found again by a held start`() {
+        val athlete = standing().moved(240f, 300f)
+        val lock = lockedOn(athlete, squat)
+        lock.feed(athlete, squat, frames = 5)
+        lock.lose(clock, clearStations = true)
+        val nearer = standing().scaled(1.8f).moved(240f, 200f)
+        lock.feed(nearer, squat, frames = 10)
+        assertEquals(LockState.LOCKED, lock.state)
+
+        // Pausing does not move the phone: the same nearer body is not taken back then.
+        val paused = lockedOn(athlete, squat)
+        paused.feed(athlete, squat, frames = 5)
+        paused.lose(clock, clearStations = false)
+        paused.feed(nearer, squat, frames = 10)
+        assertEquals(LockState.LOST, paused.state)
     }
 
     @Test

@@ -87,9 +87,14 @@ data class LockContext(
 class AthleteLock(
     /**
      * Predict the torso centre with a constant-velocity filter, rather than holding it still.
-     * Kept switchable so the plain constant-position gate can be measured next to it.
+     *
+     * Off by default, because it did not pay. Replayed over a full Cindy round and seven
+     * two-person composites, the constant-position gate refused no more of the athlete's frames
+     * anywhere, and never confirmed a theft the filter caught. With two people doing pull-ups side
+     * by side, the filter's velocity was thrown by the neighbour's frames and the athlete was
+     * refused for 61% of the clip, against 2.4% without it.
      */
-    private val predict: Boolean = true
+    private val predict: Boolean = false
 ) {
 
     companion object {
@@ -238,6 +243,8 @@ class AthleteLock(
     private val scaleMemory = HashMap<Exercise, Double>()
     private val stations = HashMap<Exercise, DoubleArray>() // minX, minY, maxX, maxY of centres
     private val lockedFrames = ArrayDeque<Long>()
+    /** The phone moved since the last lock, so neither scale nor position is evidence. */
+    private var viewMoved = false
     private val secondLooks = ArrayDeque<Long>()
 
     // ── control ──────────────────────────────────────────────────────────────
@@ -261,11 +268,20 @@ class AthleteLock(
 
     /**
      * The athlete may have gone, or the view changed: pause and resume ([clearStations] false), or
-     * the phone was moved ([clearStations] true, because the stations were in frame pixels).
+     * the phone was moved ([clearStations] true).
+     *
+     * A moved phone invalidates the athlete's scale as surely as their stations: both were
+     * measured in frame pixels from where the phone used to stand. Keeping the old scale would
+     * leave an athlete who is now nearer or further away unable ever to be found again, so after a
+     * move they are re-acquired by a held start position with nobody else qualifying.
      */
     fun lose(now: Long, clearStations: Boolean) {
         if (state == LockState.IDLE) return
-        if (clearStations) stations.clear()
+        if (clearStations) {
+            stations.clear()
+            scaleMemory.clear()
+            viewMoved = true
+        }
         goLost(now)
         lastProbeAt = now - PROBE_INTERVAL_MS
     }
@@ -279,6 +295,7 @@ class AthleteLock(
         lockedFrames.clear()
         secondLooks.clear()
         tracking = false
+        viewMoved = false
         state = LockState.IDLE
         verdict = Verdict.UNCERTAIN
         reason = "idle"
@@ -581,6 +598,7 @@ class AthleteLock(
         storeJoints(c.pose)
         lastConfirmedAt = now
         tracking = true
+        viewMoved = false
         scaleMemory[movement] = scale
         state = LockState.LOCKED
         clearAcquisition()
@@ -611,6 +629,7 @@ class AthleteLock(
     /** Station, scale and a held start position, with no appearance model at all. */
     private fun qualifies(c: Candidate, now: Long, ctx: LockContext): Boolean {
         if (!c.full || !c.complete || !held(c, now)) return false
+        if (viewMoved) return true
         val remembered = scaleMemory[ctx.movement] ?: scale
         if (remembered <= 0.0) return false
         val ratio = c.length / remembered

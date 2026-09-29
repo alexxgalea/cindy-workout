@@ -193,7 +193,7 @@ def _in_start(k: Sequence[Keypoint], movement: Exercise) -> bool:
 
 
 class AthleteLock:
-    def __init__(self, predict: bool = True):
+    def __init__(self, predict: bool = False):
         self._predict = predict
         self.state = LockState.IDLE
         self.verdict = Verdict.UNCERTAIN
@@ -226,6 +226,7 @@ class AthleteLock:
         self._stations: dict[Exercise, list[float]] = {}
         self._locked_frames: list[int] = []
         self._second_looks: list[int] = []
+        self._view_moved = False
 
     # ── control ──────────────────────────────────────────────────────────────
 
@@ -248,6 +249,8 @@ class AthleteLock:
             return
         if clear_stations:
             self._stations.clear()
+            self._scale_memory.clear()
+            self._view_moved = True
         self._go_lost(now)
         self._last_probe_at = now - PROBE_INTERVAL_MS
 
@@ -259,6 +262,7 @@ class AthleteLock:
         self._locked_frames.clear()
         self._second_looks.clear()
         self._tracking = False
+        self._view_moved = False
         self.state = LockState.IDLE
         self.verdict = Verdict.UNCERTAIN
         self.reason = "idle"
@@ -526,6 +530,7 @@ class AthleteLock:
         self._store_joints(c.pose)
         self._last_confirmed_at = now
         self._tracking = True
+        self._view_moved = False
         self._scale_memory[self._movement] = self._scale
         self.state = LockState.LOCKED
         self._clear_acquisition()
@@ -553,6 +558,8 @@ class AthleteLock:
     def _qualifies(self, c, now, ctx) -> bool:
         if not c.full or not c.complete or not self._held(c, now):
             return False
+        if self._view_moved:
+            return True
         remembered = self._scale_memory.get(ctx.movement, self._scale)
         if remembered <= 0.0:
             return False
