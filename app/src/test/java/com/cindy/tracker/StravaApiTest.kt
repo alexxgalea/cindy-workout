@@ -10,6 +10,65 @@ class StravaApiTest {
 
     private fun tokenOf(value: String): StravaAccessToken = StravaAccessToken { value }
 
+    private fun boundaryOf(request: HttpRequest): String =
+        Regex("boundary=(.+)").find(request.contentType!!)!!.groupValues[1]
+
+    // ---- upload: request shape ---------------------------------------------------------------
+
+    @Test
+    fun `upload posts to base uploads with the bearer header`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(201, emptyMap(), """{"id_str":"1","error":null,"activity_id":null}"""))
+
+        StravaApi(transport, tokenOf("tok-123")).upload("{}", "name", "desc", "cindy-1")
+
+        val request = transport.requests.single()
+        assertEquals("POST", request.method)
+        assertEquals("https://www.strava.com/api/v3/uploads", request.url)
+        assertEquals("Bearer tok-123", request.headers["Authorization"])
+    }
+
+    @Test
+    fun `upload sends the exact multipart fields, in the order Strava documents them`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(201, emptyMap(), """{"id_str":"1","error":null,"activity_id":null}"""))
+        val json = """{"version":"1.0","elapsed_time":1200}"""
+
+        StravaApi(transport, tokenOf("t")).upload(json, "Cindy — 17 + 12", "Counted by Cindy Tracker", "cindy-1700000000000")
+
+        val request = transport.requests.single()
+        val boundary = boundaryOf(request)
+        val body = String(request.body!!, Charsets.UTF_8)
+        val expected = listOf(
+            "--$boundary\r\n" +
+                "Content-Disposition: form-data; name=\"file\"; filename=\"cindy-1700000000000.json\"\r\n" +
+                "Content-Type: application/json\r\n" +
+                "\r\n" + json + "\r\n",
+            "--$boundary\r\nContent-Disposition: form-data; name=\"data_type\"\r\n\r\njson\r\n",
+            "--$boundary\r\nContent-Disposition: form-data; name=\"sport_type\"\r\n\r\nCrossfit\r\n",
+            // The em dash proves the field survives as real UTF-8, not just ASCII.
+            "--$boundary\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\nCindy — 17 + 12\r\n",
+            "--$boundary\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\nCounted by Cindy Tracker\r\n",
+            "--$boundary\r\nContent-Disposition: form-data; name=\"external_id\"\r\n\r\ncindy-1700000000000\r\n",
+            "--$boundary--\r\n"
+        ).joinToString("")
+        assertEquals(expected, body)
+    }
+
+    @Test
+    fun `upload carries the payload json through byte for byte`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(201, emptyMap(), """{"id_str":"1","error":null,"activity_id":null}"""))
+        // Bytes a naive text copy could mangle: a CRLF-like sequence and a multibyte character.
+        val json = "{\"note\":\"line1\\r\\nline2 café\"}"
+
+        StravaApi(transport, tokenOf("t")).upload(json, "n", "d", "cindy-2")
+
+        val request = transport.requests.single()
+        val body = String(request.body!!, Charsets.UTF_8)
+        assertTrue(body.contains(json))
+    }
+
     // ---- status: request shape ----------------------------------------------------------------
 
     @Test
@@ -217,7 +276,7 @@ class StravaApiTest {
     // ---- the token seam --------------------------------------------------------------------------
 
     @Test
-    fun `a revoked token propagates, and no request is sent`() {
+    fun `a revoked token propagates from status, and no request is sent`() {
         val transport = FakeTransport()
         val revoked = StravaAccessToken { throw StravaAuthException(revoked = true) }
 
@@ -226,6 +285,20 @@ class StravaApiTest {
             fail("expected StravaAuthException")
         } catch (e: StravaAuthException) {
             assertTrue(e.revoked)
+        }
+        assertTrue(transport.requests.isEmpty())
+    }
+
+    @Test
+    fun `a token that cannot produce one propagates from upload too, with nothing sent`() {
+        val transport = FakeTransport()
+        val notConnected = StravaAccessToken { throw StravaAuthException() }
+
+        try {
+            StravaApi(transport, notConnected).upload("{}", "n", "d", "cindy-1")
+            fail("expected StravaAuthException")
+        } catch (e: StravaAuthException) {
+            // expected
         }
         assertTrue(transport.requests.isEmpty())
     }

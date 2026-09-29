@@ -48,6 +48,32 @@ class StravaApi(
     private val base: String = StravaConfig.API_BASE
 ) {
 
+    /**
+     * `POST $base/uploads`, multipart: `file` (named `"$externalId.json"`, `application/json`),
+     * `data_type=json`, `sport_type=Crossfit` (case-sensitive — Strava's own docs say it
+     * overrides whatever the file itself would suggest), `name`, `description`, `external_id`.
+     */
+    fun upload(json: String, name: String, description: String, externalId: String): UploadOutcome {
+        val bearer = token.get()
+        val body = Multipart().apply {
+            file("file", "$externalId.json", "application/json", json.toByteArray(Charsets.UTF_8))
+            field("data_type", "json")
+            field("sport_type", "Crossfit")
+            field("name", name)
+            field("description", description)
+            field("external_id", externalId)
+        }
+        return send(
+            HttpRequest(
+                method = "POST",
+                url = "$base/uploads",
+                headers = mapOf("Authorization" to "Bearer $bearer"),
+                body = body.build(),
+                contentType = body.contentType
+            )
+        )
+    }
+
     /** `GET $base/uploads/{uploadId}`. See the classification rules on [UploadOutcome]. */
     fun status(uploadId: String): UploadOutcome {
         val bearer = token.get()
