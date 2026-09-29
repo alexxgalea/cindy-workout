@@ -283,7 +283,7 @@ calibrate or progress on by itself. `"setup": "skip"` is the SKIP button: no cal
 label equals the expected count. `"skipTo": [{"atMs": 25000, "movement": "pushup"}]` is the athlete
 tapping skip when the app has not moved on by itself: at that time, if the engine is still on an
 earlier movement, it banks what was done and advances. A movement the engine already reached on its
-own is left alone. `youtube_cindy_garage_one_round` uses both, because production counts only one
+own is left alone. `tests/scenarios/cindy.json` uses both, because production counts only one
 of that clip's five pull-ups, too few to calibrate or to finish the movement.
 
 Per-movement results land in each report's `per_movement` object (`expected`/`observed`/

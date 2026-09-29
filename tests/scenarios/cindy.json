@@ -1,0 +1,72 @@
+{
+ "version": 1,
+ "source": "youtube",
+ "comment": "Full Cindy progressions, scored in Cindy mode (see tests/README.md). Kept apart from youtube.json because the one clip here carries a known, pre-existing pull-up undercount that would otherwise turn the single-movement regression run red. Expectations are ground truth.",
+ "scenarios": [
+  {
+   "id": "youtube_cindy_garage_one_round",
+   "video": "tests/fixtures/youtube/cindy/IGeeTmrkGDM.mp4",
+   "exercise": "cindy",
+   "setup": "skip",
+   "skipTo": [
+    {
+     "atMs": 25000,
+     "movement": "pushup"
+    },
+    {
+     "atMs": 54000,
+     "movement": "squat"
+    }
+   ],
+   "expectedRepsByMovement": {
+    "pullup": 5,
+    "pushup": 10,
+    "squat": 15
+   },
+   "labelledBottomsMs": {
+    "pullup": [
+     9000,
+     11000,
+     14300,
+     18300,
+     21500
+    ],
+    "pushup": [
+     30000,
+     31300,
+     32600,
+     34000,
+     35300,
+     42200,
+     43500,
+     45600,
+     48000,
+     51500
+    ],
+    "squat": [
+     57700,
+     59100,
+     60500,
+     62000,
+     63400,
+     64900,
+     66400,
+     67800,
+     69200,
+     70500,
+     71900,
+     73200,
+     74500,
+     75900,
+     77300
+    ]
+   },
+   "tags": [
+    "youtube",
+    "cindy",
+    "known-gap"
+   ],
+   "notes": "One full round of Cindy in a garage, about 79 s: 5 kipping pull-ups at the back (~8-23 s), a walk to the mat, 10 push-ups with a kneeling rest at ~36-41 s (~29-52 s), then 15 air squats (~57-78 s). Labels were counted by eye from contact sheets (a zoomed 3 fps sheet of the pull-up rig; 2 fps sheets of the mat) and cross-checked against an independent oracle, hysteresis on the raw elbow and knee angles, never the counter; the two agree on every rep. labelledBottomsMs gives the bottom of each push-up and squat and the chin-over-bar moment of each pull-up. Pull-up tops are the least certain (kipping, rear three-quarter view), to about +-0.5 s. Only one round exists locally, so the pull-up to push-up switch is crossed once; a longer excerpt is needed for more. Scored with setup skipped, because production counts 1 of the 5 pull-ups on this camera angle, too few to calibrate, and skipTo stands in for the athlete tapping skip when the app has not moved on by itself. That pull-up undercount is a pre-existing limitation unrelated to identity, hence known-gap."
+  }
+ ]
+}
