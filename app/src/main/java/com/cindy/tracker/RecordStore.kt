@@ -51,7 +51,15 @@ data class Attempt(
      * the saved record said the number had stopped being true, so the attempt was filed as fact.
      * This is what stops that happening twice.
      */
-    val untrackedMs: Long = 0L
+    val untrackedMs: Long = 0L,
+    /**
+     * How long each movement block took, in the order they were finished, pauses excluded.
+     *
+     * Empty for an attempt recorded before sets were timed, which says nothing was known
+     * rather than that nothing happened. Kept beside the round splits because a round is three
+     * very different efforts, and only the sets can say which one the time went on.
+     */
+    val setSplits: List<SetSplit> = emptyList()
 ) {
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
@@ -128,6 +136,7 @@ object Records {
     private const val V4 = "v4"
     private const val V5 = "v5"
     private const val V6 = "v6"
+    private const val V7 = "v7"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -142,7 +151,7 @@ object Records {
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
         listOf(
-            V6,
+            V7,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -156,7 +165,10 @@ object Records {
             // Empty for an attempt recorded before the count existed, so that reading it back
             // leaves it unknown rather than restating it as the round tally times thirty.
             a.countedReps?.toString().orEmpty(),
-            a.untrackedMs.toString()
+            a.untrackedMs.toString(),
+            a.setSplits.joinToString(",") {
+                "${it.movement.name}:${it.ms}:${it.reps}:${it.manualReps}"
+            }
         ).joinToString("|")
     }
 
@@ -164,6 +176,7 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V7|") -> decodeV7(line)
                 line.startsWith("$V6|") -> decodeV6(line)
                 line.startsWith("$V5|") -> decodeV5(line)
                 line.startsWith("$V4|") -> decodeV4(line)
@@ -175,6 +188,29 @@ object Records {
             }
         }.toList()
     }
+
+    /** V6 plus the time each set took. */
+    private fun decodeV7(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 14) return null
+        return decodeCommon(p)?.copy(
+            countedReps = p[11].toIntOrNull(),
+            untrackedMs = p[12].toLongOrNull() ?: 0L,
+            setSplits = decodeSets(p[13])
+        )
+    }
+
+    /** One bad entry costs only itself: the attempt and its other sets are still the athlete's. */
+    private fun decodeSets(raw: String): List<SetSplit> =
+        raw.split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val f = entry.split(":")
+            if (f.size != 4) return@mapNotNull null
+            val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
+            val ms = f[1].toLongOrNull() ?: return@mapNotNull null
+            val reps = f[2].toIntOrNull() ?: return@mapNotNull null
+            val manual = f[3].toIntOrNull() ?: return@mapNotNull null
+            SetSplit(movement, ms, reps, manual)
+        }
 
     /** V5 plus the time the camera spent unable to read the athlete. */
     private fun decodeV6(line: String): Attempt? {
