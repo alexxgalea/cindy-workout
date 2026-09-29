@@ -138,6 +138,35 @@ class ScreenSmokeTest {
         store.clear()
     }
 
+    /**
+     * Every category the report has to keep apart: standard, knee push-ups, unrecognised
+     * movements, and a session with the camera lost for a minute (a lower bound).
+     */
+    @Test
+    fun `the progress report builds across categories`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        fun attempt(daysAgo: Int, rounds: Int, profile: CindyProfile?, untracked: Long = 0L) =
+            Attempt(
+                rounds = rounds,
+                reps = 0,
+                atMillis = now - daysAgo * day,
+                durationMs = 20 * 60 * 1000L,
+                roundSplitsMs = List(rounds) { 60_000L },
+                profile = profile,
+                untrackedMs = untracked
+            )
+        store.add(attempt(16, 12, CindyProfile.STANDARD))
+        store.add(attempt(11, 14, CindyProfile(push = PushVariant.KNEE_PUSH_UP)))
+        store.add(attempt(7, 13, null))
+        store.add(attempt(3, 15, CindyProfile.STANDARD))
+        store.add(attempt(1, 16, CindyProfile.STANDARD, untracked = 60_000L))
+        smoke<RecordsActivity>()
+        store.clear()
+    }
+
     @Test
     fun `the results screen builds`() {
         val attempt = Attempt(

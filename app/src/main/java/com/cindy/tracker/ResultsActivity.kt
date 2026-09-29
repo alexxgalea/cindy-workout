@@ -57,7 +57,7 @@ class ResultsActivity : AppCompatActivity() {
         }
         stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
 
-        binding.actions.addView(glassButton("HISTORY").apply {
+        binding.actions.addView(glassButton("PROGRESS").apply {
             setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
         })
         binding.actions.addView(primaryButton("DONE").apply {

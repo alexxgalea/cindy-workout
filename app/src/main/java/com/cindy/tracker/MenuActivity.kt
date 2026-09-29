@@ -9,6 +9,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityMenuBinding
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 
 /**
@@ -124,7 +126,11 @@ class MenuActivity : AppCompatActivity() {
         binding.rows.removeAllViews()
 
         val movements = profile.movements
-        val sessions = records.all().size
+        val all = records.all()
+        val sessions = all.size
+        val streak = Streak.current(
+            Streak.daysTrained(all, ZoneId.systemDefault()), LocalDate.now()
+        )
 
         binding.rows.addView(insetGroup {
             row(navRow("Movements", movements.label()) {
@@ -139,12 +145,12 @@ class MenuActivity : AppCompatActivity() {
                 }
             })
             row(navRow(
-                "Records",
+                "Progress",
                 when (sessions) {
                     0 -> "No sessions yet"
                     1 -> "1 session"
                     else -> "$sessions sessions"
-                }
+                } + if (streak >= 1) " · $streak-day streak" else ""
             ) { startActivity(Intent(this@MenuActivity, RecordsActivity::class.java)) })
             row(navRow(
                 "Body weight",
