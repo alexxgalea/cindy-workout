@@ -128,6 +128,14 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 
+// The parity trace tests read these CSVs at runtime, not through the compiled classpath, so
+// Gradle's up-to-date check cannot see that a test depending on them went stale from the file
+// alone. Declaring them as inputs makes an edit to either CSV invalidate the cached trace test,
+// instead of leaving a stale trace_jvm.csv / lock_trace_jvm.csv in place after a FROM-CACHE run.
+tasks.withType<Test>().configureEach {
+    inputs.files(rootProject.files("tests/parity/plan.csv", "tests/parity/lock_plan.csv"))
+}
+
 tasks.register("videoRegressionTest") {
     group = "verification"
     description = "Runs offline MoveNet video regression scenarios on a connected emulator/device."
