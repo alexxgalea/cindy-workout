@@ -3,6 +3,7 @@ package com.cindy.tracker
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
@@ -17,7 +18,12 @@ import java.util.Locale
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_FIRE) {
-            deliver(context, intent.getLongExtra(ReminderScheduler.EXTRA_TARGET, 0L))
+            // A failing reminder must neither crash the app nor skip the re-arm below.
+            try {
+                deliver(context, intent.getLongExtra(ReminderScheduler.EXTRA_TARGET, 0L))
+            } catch (t: Throwable) {
+                Log.w("Cindy", "reminder delivery failed", t)
+            }
         }
         // Every path re-arms: after a fire for tomorrow, after boot, an update or a clock change
         // for whatever is next in the athlete's own time zone.

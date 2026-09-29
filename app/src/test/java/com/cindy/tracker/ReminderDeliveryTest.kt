@@ -120,6 +120,15 @@ class ReminderDeliveryTest {
     }
 
     @Test
+    fun `without notification permission it stays quiet but still re-arms`() {
+        shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        turnOn()
+        fire(System.currentTimeMillis())
+        assertEquals(0, posted().size)
+        assertNotNull(shadowOf(alarms).peekNextScheduledAlarm())
+    }
+
+    @Test
     fun `boot re-arms the reminder`() {
         turnOn()
         assertNull(shadowOf(alarms).peekNextScheduledAlarm())
