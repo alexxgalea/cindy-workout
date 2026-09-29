@@ -1020,6 +1020,7 @@ class MainActivity : AppCompatActivity() {
     private fun beginWorkout(calibrated: Boolean) {
         synchronized(engineLock) { engine.finishSetup() }
         state = State.RUNNING
+        LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
         lastTickAt = SystemClock.elapsedRealtime()
         roundStartedAtElapsed = 0L
         roundSplits.clear()
@@ -1193,6 +1194,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetWorkout() {
         state = State.IDLE
+        LiveWorkout.active = false // The clock is off again, so reminders may post.
         remainingMs = WORKOUT_MS
         roundSplits.clear()
         elapsedMs = 0L
@@ -1230,6 +1232,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun finishWorkout(stoppedEarly: Boolean = false) {
         state = State.FINISHED
+        LiveWorkout.active = false // The workout is over, so reminders may post.
         ui.removeCallbacks(ticker)
         buzz(600)
         // A recording that has not begun has nothing left to film.
@@ -1583,6 +1586,8 @@ class MainActivity : AppCompatActivity() {
         syncMovements()
         syncVoice()
         syncMusic()
+        // A force-stop clears alarms; opening the app is the first chance to put it back.
+        ReminderScheduler.sync(this)
     }
 
     override fun onPause() {
@@ -1600,6 +1605,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        LiveWorkout.active = false // No screen, no workout on the clock.
         ui.removeCallbacks(ticker)
         handoff.clear()
         analysisExecutor.shutdown()
