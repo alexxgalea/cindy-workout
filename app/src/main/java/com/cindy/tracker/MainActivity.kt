@@ -203,6 +203,8 @@ class MainActivity : AppCompatActivity() {
     private var lastTickAt = 0L
     /** Wall time of each completed round, and when the current one started. */
     private val roundSplits = mutableListOf<Long>()
+    /** The clock time and score of each finished set, unwound across an undo. */
+    private val sets = SplitBook()
     /** Clock time at which the current round began, so a pause cannot inflate its split. */
     private var roundStartedAtElapsed = 0L
     private var elapsedMs = 0L
@@ -928,12 +930,22 @@ class MainActivity : AppCompatActivity() {
                 speaker.say("${snap.eventReps}")
             }
             RepEvent.EXERCISE_DONE -> {
+                if (inWorkout()) {
+                    sets.movementDone(
+                        snap.exercise.previous(), elapsedMs, snap.eventReps, snap.manualReps
+                    )
+                }
                 buzz(90)
                 // The count the movement reached, which a skip makes different from its target.
                 speaker.say("${snap.eventReps}")
                 speaker.queue(snap.exercise.spoken)
             }
             RepEvent.ROUND_DONE -> {
+                if (inWorkout()) {
+                    sets.movementDone(
+                        snap.exercise.previous(), elapsedMs, snap.eventReps, snap.manualReps
+                    )
+                }
                 buzz(220)
                 val split = elapsedMs - roundStartedAtElapsed
                 roundSplits += split
@@ -1024,6 +1036,7 @@ class MainActivity : AppCompatActivity() {
         lastTickAt = SystemClock.elapsedRealtime()
         roundStartedAtElapsed = 0L
         roundSplits.clear()
+        sets.start()
         elapsedMs = 0L
         pausedMs = 0L
         primary(R.drawable.ic_pause)
@@ -1197,6 +1210,7 @@ class MainActivity : AppCompatActivity() {
         LiveWorkout.active = false // The clock is off again, so reminders may post.
         remainingMs = WORKOUT_MS
         roundSplits.clear()
+        sets.start()
         elapsedMs = 0L
         pausedMs = 0L
         pauseStartedAt = 0L
@@ -1222,11 +1236,14 @@ class MainActivity : AppCompatActivity() {
     private fun onUndoRep() {
         if (state != State.RUNNING) return
         val before = synchronized(engineLock) { engine.rounds }
+        val movementBefore = synchronized(engineLock) { engine.exercise }
         val snap = runEngine { engine.undoRep() }
         // Stepping back over a round boundary un-books that round's split too.
         if (snap.rounds < before && roundSplits.isNotEmpty()) {
             roundStartedAtElapsed = elapsedMs - roundSplits.removeAt(roundSplits.size - 1)
         }
+        // Stepping back into the previous movement reopens the set that had just finished.
+        if (snap.exercise != movementBefore) sets.stepBack()
         apply(snap)
     }
 
@@ -1256,6 +1273,7 @@ class MainActivity : AppCompatActivity() {
             durationMs = elapsedMs,
             pausedMs = pausedMs,
             roundSplitsMs = roundSplits.toList(),
+            setSplits = sets.sets,
             profile = engine.profile,
             manualReps = snap.manualReps,
             // Counted rather than inferred from the round tally: a skipped movement makes those
