@@ -4,7 +4,7 @@ import kotlin.math.acos
 import kotlin.math.hypot
 
 /**
- * Pure pose-geometry reads shared by [WorkoutEngine] and, from Phase 2, `AthleteLock`.
+ * Pure pose-geometry reads shared by [WorkoutEngine] and `AthleteLock`.
  *
  * Everything here is a stateless function of a keypoint array (and, where the answer depends on
  * it, the [Exercise] in question): no learned thresholds, no hold counters, nothing that depends
