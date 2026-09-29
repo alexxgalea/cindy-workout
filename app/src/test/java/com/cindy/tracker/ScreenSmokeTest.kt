@@ -167,6 +167,75 @@ class ScreenSmokeTest {
         store.clear()
     }
 
+    /** Every view under [root] whose contentDescription is exactly [description]. */
+    private fun findByDescription(
+        root: android.view.View, description: String
+    ): android.view.View? {
+        if (root.contentDescription?.toString() == description) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescription(root.getChildAt(i), description)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun click(activity: android.app.Activity, description: String) {
+        val view = findByDescription(
+            activity.findViewById<android.view.View>(android.R.id.content), description
+        )
+        assertTrue("no view described \"$description\"", view != null)
+        view!!.performClick()
+    }
+
+    @Test
+    fun `the chart card switches metric and range`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        repeat(3) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = i,
+                    atMillis = now - (2 - i) * day,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L + it * 500L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        click(activity, "Pace")
+        click(activity, "Volume")
+        click(activity, "1M")
+        store.clear()
+    }
+
+    @Test
+    fun `the chart card handles a range with no sessions`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val old = System.currentTimeMillis() - 730 * day
+        repeat(2) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = 0,
+                    atMillis = old + i * day,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        click(activity, "1M")
+        store.clear()
+    }
+
     @Test
     fun `the results screen builds`() {
         val attempt = Attempt(

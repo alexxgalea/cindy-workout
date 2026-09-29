@@ -181,4 +181,159 @@ class ProgressTest {
         assertEquals("−2", Progress.formatDelta(-2))
         assertNull(Progress.formatDelta(0))
     }
+
+    private fun scorePoints(vararg a: Attempt) =
+        Progress.scoreSeries(a.toList(), CindyProfile.STANDARD, null, zone).points
+
+    private fun describeScore(points: List<ProgressPoint>, i: Int) =
+        Progress.describe(ProgressMetric.SCORE, points, i, zone)
+
+    @Test
+    fun `describe a first score has no comparison`() {
+        val points = scorePoints(scored("2026-09-01", 400))
+        val (head, detail) = describeScore(points, 0)
+        assertEquals("1 Sep · 13 + 10", head)
+        assertEquals("400 reps · personal record · first in this range", detail)
+    }
+
+    @Test
+    fun `describe a score that beat the session before`() {
+        val points = scorePoints(scored("2026-09-01", 400), scored("2026-09-03", 414))
+        assertEquals(
+            "414 reps · personal record · +14 on the session before",
+            describeScore(points, 1).second
+        )
+    }
+
+    @Test
+    fun `describe a score below the session before uses words`() {
+        val points = scorePoints(scored("2026-09-01", 400), scored("2026-09-03", 394))
+        assertEquals("394 reps · 6 below the session before", describeScore(points, 1).second)
+    }
+
+    @Test
+    fun `describe a level score`() {
+        val points = scorePoints(scored("2026-09-01", 400), scored("2026-09-03", 400))
+        assertEquals("400 reps · level with the session before", describeScore(points, 1).second)
+    }
+
+    @Test
+    fun `describe a lower bound says the camera lost you and is no record`() {
+        val points = scorePoints(
+            scored("2026-09-01", 300), scored("2026-09-03", 350, untrackedMs = 60_000L)
+        )
+        assertEquals(
+            "350 reps · at least — camera lost you · +50 on the session before",
+            describeScore(points, 1).second
+        )
+    }
+
+    @Test
+    fun `describe pace says how much faster`() {
+        val points = Progress.paceSeries(
+            listOf(paced("2026-09-01", 70), paced("2026-09-03", 66)),
+            CindyProfile.STANDARD, null, zone
+        ).points
+        val (head, detail) = Progress.describe(ProgressMetric.PACE, points, 1, zone)
+        assertEquals("3 Sep · 1:06 a round", head)
+        assertEquals("fastest yet · 4s faster than the session before", detail)
+    }
+
+    @Test
+    fun `describe pace says how much slower and has no record flag`() {
+        val points = Progress.paceSeries(
+            listOf(paced("2026-09-01", 60), paced("2026-09-03", 63)),
+            CindyProfile.STANDARD, null, zone
+        ).points
+        assertEquals(
+            "3s slower than the session before",
+            Progress.describe(ProgressMetric.PACE, points, 1, zone).second
+        )
+    }
+
+    @Test
+    fun `describe pace can be the same or the first`() {
+        val points = Progress.paceSeries(
+            listOf(paced("2026-09-01", 60), paced("2026-09-03", 60)),
+            CindyProfile.STANDARD, null, zone
+        ).points
+        assertEquals(
+            "fastest yet · first in this range",
+            Progress.describe(ProgressMetric.PACE, points, 0, zone).second
+        )
+        assertEquals(
+            "same pace as the session before",
+            Progress.describe(ProgressMetric.PACE, points, 1, zone).second
+        )
+    }
+
+    @Test
+    fun `describe a volume bar names the week and counts sessions`() {
+        val bars = Progress.weeklyVolume(
+            listOf(scored("2026-09-07", 400), scored("2026-09-08", 300)),
+            LocalDate.of(2026, 9, 7), today, zone, monday
+        )
+        assertEquals(
+            "Week of 7 Sep" to "700 reps · 2 sessions",
+            Progress.describe(ProgressMetric.VOLUME, bars, 0, zone)
+        )
+        val one = Progress.weeklyVolume(
+            listOf(scored("2026-09-07", 1200)), LocalDate.of(2026, 9, 7), today, zone, monday
+        )
+        assertEquals(
+            "1,200 reps · 1 session",
+            Progress.describe(ProgressMetric.VOLUME, one, 0, zone).second
+        )
+    }
+
+    @Test
+    fun `overview of nothing`() {
+        for (m in ProgressMetric.values()) {
+            assertEquals("No sessions in this range" to "", Progress.overview(m, emptyList()))
+        }
+    }
+
+    @Test
+    fun `overview of scores skips a lower bound unless all are`() {
+        val mixed = scorePoints(
+            scored("2026-09-01", 300), scored("2026-09-03", 500, untrackedMs = 60_000L)
+        )
+        assertEquals(
+            "Best 10" to "2 sessions in this range",
+            Progress.overview(ProgressMetric.SCORE, mixed)
+        )
+        val only = scorePoints(scored("2026-09-03", 500, untrackedMs = 60_000L))
+        assertEquals(
+            "Best 16 + 20" to "1 session in this range",
+            Progress.overview(ProgressMetric.SCORE, only)
+        )
+    }
+
+    @Test
+    fun `overview of pace names the fastest round`() {
+        val points = Progress.paceSeries(
+            listOf(paced("2026-09-01", 70), paced("2026-09-03", 66), paced("2026-09-05", 68)),
+            CindyProfile.STANDARD, null, zone
+        ).points
+        assertEquals(
+            "Best 1:06 a round" to "3 full sessions in this range",
+            Progress.overview(ProgressMetric.PACE, points)
+        )
+        assertEquals(
+            "1 full session in this range",
+            Progress.overview(ProgressMetric.PACE, points.take(1)).second
+        )
+    }
+
+    @Test
+    fun `overview of volume totals the bars`() {
+        val bars = Progress.weeklyVolume(
+            listOf(scored("2026-08-31", 400), scored("2026-09-08", 900)),
+            LocalDate.of(2026, 8, 31), today, zone, monday
+        )
+        assertEquals(
+            "1,300 reps" to "2 sessions in this range",
+            Progress.overview(ProgressMetric.VOLUME, bars)
+        )
+    }
 }

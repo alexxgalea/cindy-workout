@@ -5,6 +5,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -12,6 +13,7 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /** What the progress chart can plot. */
 enum class ProgressMetric(val label: String) { SCORE("Score"), PACE("Pace"), VOLUME("Volume") }
@@ -220,6 +222,81 @@ object Progress {
         if (lo == 0) return 0
         if (lo == xs.size) return xs.size - 1
         return if (x - xs[lo - 1] <= xs[lo] - x) lo - 1 else lo
+    }
+
+    private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"
+
+    private fun shortDate(atMillis: Long, zone: ZoneId): String =
+        DateTimeFormatter.ofPattern("d MMM", Locale.US)
+            .format(Instant.ofEpochMilli(atMillis).atZone(zone))
+
+    private fun pace(seconds: Double): String = formatDuration((seconds * 1000).toLong())
+
+    /** What the readout says about point [i]: a headline and a detail line. */
+    fun describe(
+        metric: ProgressMetric, points: List<ProgressPoint>, i: Int, zone: ZoneId
+    ): Pair<String, String> {
+        val p = points[i]
+        val before = points.getOrNull(i - 1)
+        val date = shortDate(p.atMillis, zone)
+        val parts = ArrayList<String>()
+        return when (metric) {
+            ProgressMetric.SCORE -> {
+                val label = p.attempt?.scoreLabel() ?: "${p.value.roundToInt()}"
+                parts += "${p.value.roundToInt()} reps"
+                if (p.record) parts += "personal record"
+                if (p.lowerBound) parts += "at least — camera lost you"
+                parts += if (before == null) "first in this range" else {
+                    val d = p.value.roundToInt() - before.value.roundToInt()
+                    when {
+                        d > 0 -> "+$d on the session before"
+                        d < 0 -> "${-d} below the session before"
+                        else -> "level with the session before"
+                    }
+                }
+                "$date · $label" to parts.joinToString(" · ")
+            }
+            ProgressMetric.PACE -> {
+                if (p.record) parts += "fastest yet"
+                parts += if (before == null) "first in this range" else {
+                    // Seconds per round: a smaller number is faster.
+                    val d = (before.value - p.value).roundToInt()
+                    when {
+                        d > 0 -> "${d}s faster than the session before"
+                        d < 0 -> "${-d}s slower than the session before"
+                        else -> "same pace as the session before"
+                    }
+                }
+                "$date · ${pace(p.value)} a round" to parts.joinToString(" · ")
+            }
+            ProgressMetric.VOLUME ->
+                "Week of $date" to
+                    "${formatReps(p.value.roundToInt())} reps · " +
+                    plural(p.sessions, "session")
+        }
+    }
+
+    /** What the readout says when nothing is selected. */
+    fun overview(metric: ProgressMetric, points: List<ProgressPoint>): Pair<String, String> {
+        if (points.isEmpty()) return "No sessions in this range" to ""
+        return when (metric) {
+            ProgressMetric.SCORE -> {
+                val pool = points.filter { !it.lowerBound }.ifEmpty { points }
+                val top = pool.maxByOrNull { it.value }!!
+                val label = top.attempt?.scoreLabel() ?: "${top.value.roundToInt()}"
+                "Best $label" to "${plural(points.size, "session")} in this range"
+            }
+            ProgressMetric.PACE -> {
+                val top = points.minByOrNull { it.value }!!
+                "Best ${pace(top.value)} a round" to
+                    "${plural(points.size, "full session")} in this range"
+            }
+            ProgressMetric.VOLUME -> {
+                val reps = points.sumOf { it.value }.roundToInt()
+                "${formatReps(reps)} reps" to
+                    "${plural(points.sumOf { it.sessions }, "session")} in this range"
+            }
+        }
     }
 
     fun formatReps(n: Int): String = String.format(Locale.US, "%,d", n)
