@@ -86,6 +86,9 @@ class StravaApi(
         )
     }
 
+    /** Where the athlete can look at the finished activity in a browser. */
+    fun activityUrl(id: Long): String = "https://www.strava.com/activities/$id"
+
     private fun send(request: HttpRequest): UploadOutcome =
         try {
             classify(transport.execute(request))

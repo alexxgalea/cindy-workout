@@ -84,6 +84,28 @@ class StravaApiTest {
         assertEquals("Bearer secret-token", request.headers["Authorization"])
     }
 
+    @Test
+    fun `a custom base is honoured for both endpoints`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(200, emptyMap(), """{"id_str":"1","error":null,"activity_id":null}"""))
+        transport.enqueue(HttpResponse(200, emptyMap(), """{"id_str":"1","error":null,"activity_id":null}"""))
+        val api = StravaApi(transport, tokenOf("t"), base = "https://example.invalid/api/v3")
+
+        api.status("1")
+        api.upload("{}", "n", "d", "cindy-1")
+
+        assertEquals("https://example.invalid/api/v3/uploads/1", transport.requests[0].url)
+        assertEquals("https://example.invalid/api/v3/uploads", transport.requests[1].url)
+    }
+
+    // ---- activityUrl ----------------------------------------------------------------------------
+
+    @Test
+    fun `activityUrl points at strava's own activity page`() {
+        val url = StravaApi(FakeTransport(), tokenOf("t")).activityUrl(21234316L)
+        assertEquals("https://www.strava.com/activities/21234316", url)
+    }
+
     // ---- classification: success ---------------------------------------------------------------
 
     @Test
