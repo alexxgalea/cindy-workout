@@ -43,6 +43,18 @@ object Calories {
      */
     const val MAX_MET = 14.0
 
+    /**
+     * Longest a heart-rate reading is assumed to hold before the time after it counts as
+     * uncovered.
+     *
+     * Declared here rather than beside the heart-rate calorie work that uses it later, because
+     * [HeartRateRecorder] needs the same figure for the same reason: a reading a few seconds old
+     * is still a fair stand-in for "now", and one from a while ago is not. One constant, so the
+     * recorder's seeding and the calorie estimate's coverage cannot quietly disagree about where
+     * that line is.
+     */
+    const val MAX_HOLD_MS = 5_000L
+
     /** The effective MET for work done at this rate. */
     fun met(totalReps: Int, activeMs: Long): Double {
         if (totalReps <= 0 || activeMs <= 0L) return MIN_MET
