@@ -2,21 +2,29 @@ package com.cindy.tracker
 
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityRecordsBinding
 import java.text.SimpleDateFormat
+import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.WeekFields
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** The record board: the benchmark to chase, then every attempt logged on this phone. */
 class RecordsActivity : AppCompatActivity() {
@@ -25,6 +33,13 @@ class RecordsActivity : AppCompatActivity() {
     private lateinit var store: RecordStore
     /** The month the calendar is showing; the athlete can page back through it. */
     private var shownMonth: YearMonth = YearMonth.now()
+    private var metric = ProgressMetric.SCORE
+    private var range = ProgressRange.ALL
+    /** The kind of Cindy the chart and the peaks are about; follows the latest until chosen. */
+    private var category: CindyProfile? = null
+    private var categoryChosen = false
+    private lateinit var progressHolder: LinearLayout
+    private lateinit var calendarHolder: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,13 +95,26 @@ class RecordsActivity : AppCompatActivity() {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     private fun render() {
+        binding.rows.removeAllViews()
+        val attempts = store.all()
+        val today = LocalDate.now()
+        val zone = ZoneId.systemDefault()
+        val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        if (!categoryChosen || category !in Progress.categories(attempts)) {
+            category = Progress.defaultCategory(attempts)
+        }
+
+        hero(attempts, today, zone, firstDay)
+        if (attempts.isNotEmpty()) thisWeek(attempts, today, zone, firstDay)
+        progressCard(attempts, today, zone, firstDay)
+        if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
+        if (attempts.isNotEmpty()) calendar(Streak.daysTrained(attempts, zone), today)
+        leaderboard(attempts)
+    }
+
+    private fun leaderboard(attempts: List<Attempt>) {
         val rows = binding.rows
-        rows.removeAllViews()
-
-        streak()
-        history()
-
-        val mine = Records.ranked(store.all())
+        val mine = Records.ranked(attempts)
         val beaten = mine.firstOrNull()?.let { Records.beatsBenchmark(it) } == true
 
         rows.addView(section("LEADERBOARD"))
@@ -138,79 +166,278 @@ class RecordsActivity : AppCompatActivity() {
         setPadding(dp(4), dp(10), 0, dp(10))
     }
 
+    /** The glass card every block of the report sits on. */
+    private fun card(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.glass_card)
+        setPadding(dp(20), dp(18), dp(20), dp(20))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) }
+    }
+
     /**
-     * The habit, rather than the scores: how many days in a row, and which days they were.
+     * The habit, rather than the scores: a line that is true today, both streaks, and which days
+     * of this week were trained.
      *
-     * A calendar earns its place over a number because the shape carries the information — a
-     * streak is a run of filled cells and a fortnight off is a hole, neither of which "0 days"
-     * tells you.
+     * The week strip earns its place over a number because the shape carries the information.
      */
-    private fun streak() {
-        val attempts = store.all()
-        if (attempts.isEmpty()) return
-
-        val today = LocalDate.now()
-        val days = Streak.daysTrained(attempts, ZoneId.systemDefault())
-        val current = Streak.current(days, today)
-        val longest = Streak.longest(days)
-        val atRisk = Streak.atRisk(days, today)
-
-        binding.rows.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.glass_card)
-            setPadding(dp(20), dp(18), dp(20), dp(20))
+    private fun hero(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        val card = card()
+        card.addView(styledText(
+            R.style.Cindy_Title2, Cheer.headline(attempts, today, zone, firstDay)
+        ).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(12) }
-
-            addView(eyebrow("STREAK"))
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.BOTTOM
-                setPadding(0, dp(8), 0, 0)
-                addView(styledText(R.style.Cindy_MetricL, if (current == 0) "0" else "$current"))
-                addView(styledText(
-                    R.style.Cindy_Title2,
-                    if (current == 1) "day" else "days"
-                ).apply {
-                    setTextColor(getColor(R.color.label_secondary))
-                    setPadding(dp(7), 0, 0, dp(4))
-                })
-            })
-            addView(styledText(R.style.Cindy_Callout, when {
-                // Said plainly, because it is the one fact that changes what they do today.
-                atRisk && current > 0 -> "Train today to keep it going."
-                current > 0 -> "Trained today. Longest: $longest."
-                longest > 0 -> "Longest was $longest day${if (longest == 1) "" else "s"}."
-                else -> "No streak yet."
-            }).apply {
-                if (atRisk && current > 0) setTextColor(getColor(R.color.state_alert))
-                setPadding(0, dp(8), 0, 0)
-            })
-            addView(View(context).apply {
-                setBackgroundColor(getColor(R.color.hairline))
+            )
+        })
+        binding.rows.addView(card)
+        if (attempts.isEmpty()) {
+            card.addView(styledText(
+                R.style.Cindy_Callout,
+                "Finish a session and your streak, progress and peaks start here."
+            ).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, hairlinePx()
-                ).apply { topMargin = dp(14) }
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(0, dp(8), 0, 0)
             })
-            addView(styledText(
-                R.style.Cindy_Footnote,
-                "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
-                    "${attempts.size} attempt${if (attempts.size == 1) "" else "s"}"
-            ).apply { setPadding(0, dp(13), 0, 0) })
+            return
+        }
+
+        val days = Streak.daysTrained(attempts, zone)
+        val daily = Streak.current(days, today)
+        val weeks = Streak.weeksTrained(days, firstDay)
+        val weekly = Streak.currentWeeks(weeks, today, firstDay)
+
+        card.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(16), 0, 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(streakColumn("DAILY STREAK", daily, if (daily == 1) "day" else "days", true))
+            addView(streakColumn(
+                "WEEKLY STREAK", weekly, if (weekly == 1) "week" else "weeks", false
+            ))
         })
 
-        calendar(days, today)
+        card.addView(WeekStripView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+            show(Streak.weekStart(today, firstDay), days, today)
+        })
+
+        Cheer.nextStep(attempts, today, zone, firstDay)?.let { step ->
+            card.addView(styledText(R.style.Cindy_Footnote, step).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(0, dp(12), 0, 0)
+            })
+        }
+
+        card.addView(View(this).apply {
+            setBackgroundColor(getColor(R.color.hairline))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, hairlinePx()
+            ).apply { topMargin = dp(14) }
+        })
+        card.addView(styledText(
+            R.style.Cindy_Footnote,
+            "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
+                "${attempts.size} session${if (attempts.size == 1) "" else "s"}"
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, dp(13), 0, 0)
+        })
+    }
+
+    /**
+     * One streak: its name, then the number. Read out as a single sentence, so TalkBack does not
+     * announce "4", "days" and "daily streak" as three unrelated things.
+     */
+    private fun streakColumn(label: String, value: Int, unit: String, flame: Boolean): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            val name = label.lowercase(Locale.US).replaceFirstChar { it.uppercase() }
+            contentDescription = "$name: $value $unit"
+            isFocusable = true
+
+            addView(eyebrow(label).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(6), 0, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                if (flame) {
+                    addView(ImageView(context).apply {
+                        setImageResource(R.drawable.ic_flame)
+                        imageTintList = ColorStateList.valueOf(getColor(
+                            if (value > 0) R.color.achievement else R.color.label_tertiary
+                        ))
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        layoutParams = LinearLayout.LayoutParams(dp(26), dp(26)).apply {
+                            marginEnd = dp(6)
+                        }
+                    })
+                }
+                addView(styledText(R.style.Cindy_MetricL, "$value").apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                })
+                addView(styledText(R.style.Cindy_Headline, unit).apply {
+                    setTextColor(getColor(R.color.label_secondary))
+                    setPadding(dp(6), 0, 0, 0)
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                })
+            })
+            (0 until childCount).forEach {
+                getChildAt(it).importantForAccessibility =
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+        }
+
+    /** Sessions, reps and time this week against last, then the month so far. */
+    private fun thisWeek(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        val s = Progress.summary(attempts, today, zone, firstDay)
+        val now = s.thisWeek
+        val before = s.lastWeek
+        binding.rows.addView(section("THIS WEEK"))
+        binding.rows.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(6) }
+            addView(tile(
+                "Sessions", "${now.sessions}", now.sessions - before.sessions, ""
+            ))
+            addView(tile(
+                "Reps", Progress.formatReps(now.reps), now.reps - before.reps, ""
+            ))
+            addView(tile(
+                "Time", Progress.formatClock(now.clockMs),
+                ((now.clockMs - before.clockMs) / 60_000L).toInt(), " min"
+            ))
+        })
+        val month = s.thisMonth
+        binding.rows.addView(styledText(
+            R.style.Cindy_Footnote,
+            "This month: ${month.sessions} session${if (month.sessions == 1) "" else "s"} · " +
+                "${Progress.formatReps(month.reps)} reps · ${Progress.formatClock(month.clockMs)}."
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(4), dp(6), 0, dp(6))
+        })
+    }
+
+    /** One figure of the week: label, value and, when it moved, the change since last week. */
+    private fun tile(label: String, value: String, delta: Int, suffix: String): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            addView(styledText(R.style.Cindy_Footnote, label).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            })
+            addView(styledText(R.style.Cindy_MetricS, value).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(4) }
+            })
+            val change = Progress.formatDelta(delta)
+            if (change != null) {
+                addView(styledText(R.style.Cindy_Footnote, change + suffix).apply {
+                    setTextColor(getColor(
+                        if (delta > 0) R.color.state_ok else R.color.label_tertiary
+                    ))
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = dp(2) }
+                })
+            }
+            val versus = when {
+                delta > 0 -> ", ${delta}$suffix more than last week"
+                delta < 0 -> ", ${-delta}$suffix fewer than last week"
+                else -> ""
+            }
+            contentDescription = "$label this week: $value$versus"
+            isFocusable = true
+            (0 until childCount).forEach {
+                getChildAt(it).importantForAccessibility =
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+        }
+
+    /** Personal bests in the chosen category; never across categories. */
+    private fun peaks(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        val list = Peaks.of(attempts, category, today, zone, firstDay)
+        if (list.isEmpty()) return
+        binding.rows.addView(section("PEAKS"))
+        binding.rows.addView(insetGroup {
+            list.forEach { row(peakRow(it.rank, it.title, it.detail, it.value)) }
+        })
+        binding.rows.addView(styledText(
+            R.style.Cindy_Footnote,
+            "Scores and rounds are compared only with sessions at the same movements. " +
+                "Streaks and weeks count everything."
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(4), dp(10), 0, dp(6))
+        })
     }
 
     /** The month grid, with arrows back through the athlete's history. */
     private fun calendar(days: Set<LocalDate>, today: LocalDate) {
+        calendarHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        binding.rows.addView(calendarHolder)
+        renderCalendar(days, today, Streak.currentRun(days, today))
+    }
+
+    /**
+     * Rebuilds only the calendar card, so paging months does not scroll the report back to the
+     * top the way a full [render] would.
+     */
+    private fun renderCalendar(days: Set<LocalDate>, today: LocalDate, currentRun: Set<LocalDate>) {
         val earliest = days.minOrNull()?.let { YearMonth.from(it) } ?: YearMonth.from(today)
         val latest = YearMonth.from(today)
         if (shownMonth > latest) shownMonth = latest
         if (shownMonth < earliest) shownMonth = earliest
+        calendarHolder.removeAllViews()
 
-        binding.rows.addView(LinearLayout(this).apply {
+        calendarHolder.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.glass_card)
             setPadding(dp(16), dp(12), dp(16), dp(16))
@@ -223,7 +450,7 @@ class RecordsActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(monthArrow(R.drawable.ic_chevron_left, shownMonth > earliest) {
                     shownMonth = shownMonth.minusMonths(1)
-                    render()
+                    renderCalendar(days, today, currentRun)
                 })
                 addView(styledText(R.style.Cindy_Headline, "%s %d".format(
                     Locale.getDefault(),
@@ -237,7 +464,7 @@ class RecordsActivity : AppCompatActivity() {
                 })
                 addView(monthArrow(R.drawable.ic_chevron_right, shownMonth < latest) {
                     shownMonth = shownMonth.plusMonths(1)
-                    render()
+                    renderCalendar(days, today, currentRun)
                 })
             })
 
@@ -245,9 +472,41 @@ class RecordsActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = dp(4) }
-                show(shownMonth, days, today)
+                show(shownMonth, days, today, currentRun)
+                onDayTap = { openDay(it) }
             })
         })
+    }
+
+    /** The sessions of one trained day, oldest first, in a sheet. Nothing to show, no sheet. */
+    internal fun openDay(date: LocalDate) {
+        val zone = ZoneId.systemDefault()
+        val sessions = store.all()
+            .filter { Progress.localDate(it, zone) == date }
+            .sortedBy { it.atMillis }
+        if (sessions.isEmpty()) return
+
+        val timeFormat = SimpleDateFormat(
+            if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm a", Locale.US
+        )
+        val title = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.US).format(date)
+        val subtitle = if (sessions.size == 1) "1 session" else "${sessions.size} sessions"
+        val group = insetGroup {
+            sessions.forEach { a ->
+                row(statRow(
+                    timeFormat.format(Date(a.atMillis)),
+                    "${a.scoreLabel()} \u00b7 ${a.caption}"
+                ))
+            }
+        }
+        group.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(16) }
+
+        CindySheet(this, title, subtitle)
+            .add(group)
+            .actions(primary = "DONE", onPrimary = {})
+            .show()
     }
 
     /** A 48dp target, because these are small glyphs on a screen used with wet hands. */
@@ -269,33 +528,186 @@ class RecordsActivity : AppCompatActivity() {
             }
         }
 
-    /** Score over time, oldest to newest, so progress is visible at a glance. */
-    private fun history() {
-        val past = store.chronological()
-        if (past.size < 2) return
-
+    /**
+     * The chart card: what to plot, over how long, and (when more than one kind of Cindy has
+     * been trained) which one. Needs two sessions before a line means anything.
+     */
+    private fun progressCard(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        if (attempts.size < 2) return
         binding.rows.addView(section("PROGRESS"))
-        binding.rows.addView(SplitsChartView(this).apply {
+        progressHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        binding.rows.addView(progressHolder)
+        renderProgress(attempts, today, zone, firstDay)
+    }
+
+    /**
+     * Rebuilds only the chart card, so flipping metric or range does not scroll the report back
+     * to the top the way a full [render] would.
+     */
+    private fun renderProgress(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        progressHolder.removeAllViews()
+        val from = range.start(today)
+        val edge = DateTimeFormatter.ofPattern("d MMM", Locale.US)
+        fun edgeLabel(millis: Long) = edge.format(Instant.ofEpochMilli(millis).atZone(zone))
+
+        val series = when (metric) {
+            ProgressMetric.SCORE -> Progress.scoreSeries(attempts, category, from, zone)
+            ProgressMetric.PACE -> Progress.paceSeries(attempts, category, from, zone)
+            ProgressMetric.VOLUME -> null
+        }
+        val points = series?.points
+            ?: Progress.weeklyVolume(attempts, from, today, zone, firstDay)
+        val overview = Progress.overview(metric, points)
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.glass_card)
             setPadding(dp(16), dp(16), dp(16), dp(16))
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(150)
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            val best = past.indexOf(past.maxByOrNull { it.totalReps })
-            setValues(
-                past.map { it.totalReps.toLong() },
-                highlightIndex = best,
-                meanLabel = "AVG ${past.sumOf { it.totalReps } / past.size}"
+        }
+        card.addView(chipRow(ProgressMetric.values().map { it.label }, metric.ordinal) {
+            metric = ProgressMetric.values()[it]
+            renderProgress(attempts, today, zone, firstDay)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
         })
-        binding.rows.addView(styledText(R.style.Cindy_Footnote, buildString {
-            val delta = past.last().totalReps - past.first().totalReps
-            append("${past.size} attempts · ")
-            append(when {
-                delta > 0 -> "up $delta reps since your first"
-                delta < 0 -> "${-delta} reps below your first"
-                else -> "level with your first"
+
+        val headline = styledText(R.style.Cindy_Headline, overview.first).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) }
+        }
+        val detail = styledText(R.style.Cindy_Footnote, overview.second).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        card.addView(headline)
+        card.addView(detail)
+
+        if (points.isEmpty()) {
+            card.addView(styledText(R.style.Cindy_Footnote, "No sessions in this range").apply {
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
+                ).apply { topMargin = dp(8) }
             })
-        }).apply { setPadding(dp(4), dp(10), 0, dp(6)) })
+        } else {
+            val chart = ProgressChartView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
+                ).apply { topMargin = dp(8) }
+            }
+            val describe = { i: Int ->
+                Progress.describe(metric, points, i, zone).let { "${it.first}. ${it.second}" }
+            }
+            if (series == null) {
+                chart.showBars(
+                    points,
+                    edgeLabel(points.first().atMillis) to edgeLabel(points.last().atMillis),
+                    { v -> Progress.formatReps(v.roundToInt()) },
+                    describe
+                )
+            } else {
+                val xStart = (from ?: Progress.localDate(points.first().attempt!!, zone))
+                    .atStartOfDay(zone).toInstant().toEpochMilli()
+                val xEnd = System.currentTimeMillis()
+                chart.showLine(
+                    points = points,
+                    best = series.best,
+                    xStart = xStart,
+                    xEnd = xEnd,
+                    invertY = metric == ProgressMetric.PACE,
+                    edgeLabels = edgeLabel(xStart) to edgeLabel(xEnd),
+                    axisLabel = { v ->
+                        if (metric == ProgressMetric.PACE) formatDuration((v * 1000).toLong())
+                        else "${v.roundToInt()}"
+                    },
+                    describe = describe
+                )
+            }
+            chart.onSelect = { i ->
+                val text = if (i == null) overview else Progress.describe(metric, points, i, zone)
+                headline.text = text.first
+                detail.text = text.second
+            }
+            chart.contentDescription = "${metric.label} chart, ${overview.first}" +
+                if (overview.second.isEmpty()) "" else ", ${overview.second}"
+            card.addView(chart)
+        }
+
+        card.addView(chipRow(ProgressRange.values().map { it.label }, range.ordinal) {
+            range = ProgressRange.values()[it]
+            renderProgress(attempts, today, zone, firstDay)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        })
+
+        val categories = Progress.categories(attempts)
+        if (categories.size > 1) {
+            card.addView(HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                addView(
+                    chipRow(
+                        categories.map { it?.label() ?: "Movements not recognised" },
+                        categories.indexOf(category)
+                    ) {
+                        category = categories[it]
+                        categoryChosen = true
+                        render()    // the peaks follow the category
+                    }.apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                    }
+                )
+            })
+        }
+        progressHolder.addView(card)
+
+        progressHolder.addView(styledText(R.style.Cindy_Footnote, progressNote(attempts)).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(4), dp(10), 0, dp(6))
+        })
+    }
+
+    /** The line under the chart card: how the athlete has moved, or what the chart counts. */
+    private fun progressNote(attempts: List<Attempt>): String = when (metric) {
+        ProgressMetric.SCORE -> {
+            val past = attempts.filter { it.profile == category }.sortedBy { it.atMillis }
+            if (past.size < 2) {
+                "${past.size} attempt${if (past.size == 1) "" else "s"} at these movements"
+            } else {
+                val delta = past.last().totalReps - past.first().totalReps
+                "${past.size} attempts · " + when {
+                    delta > 0 -> "up $delta reps since your first"
+                    delta < 0 -> "${-delta} reps below your first"
+                    else -> "level with your first"
+                }
+            }
+        }
+        ProgressMetric.PACE -> "Higher is faster. Full 20-minute sessions only."
+        ProgressMetric.VOLUME -> "Every session counts toward volume, whatever the movements."
     }
 }

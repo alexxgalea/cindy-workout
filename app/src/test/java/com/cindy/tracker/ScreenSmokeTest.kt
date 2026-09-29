@@ -9,6 +9,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * Builds every screen that does not need a camera, and lays it out.
@@ -109,6 +110,48 @@ class ScreenSmokeTest {
         profile.musicOn = true
     }
 
+    /** The other branch of the reminder row's subtitle: on, and (in the test) able to post. */
+    @Test
+    fun `the menu builds with the reminder on`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).reminderOn = true
+        try {
+            smoke<MenuActivity>(MenuActivity.intent(context, workoutLive = false))
+        } finally {
+            Profile(context).reminderOn = false
+        }
+    }
+
+    /** The first view under [root] whose contentDescription starts with [prefix]. */
+    private fun findByDescriptionPrefix(
+        root: android.view.View, prefix: String
+    ): android.view.View? {
+        if (root.contentDescription?.toString()?.startsWith(prefix) == true) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescriptionPrefix(root.getChildAt(i), prefix)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    @Test
+    fun `the reminder row opens its sheet`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).reminderOn = false
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        val row = findByDescriptionPrefix(
+            activity.findViewById<android.view.View>(android.R.id.content), "Daily reminder"
+        )
+        assertTrue("no Daily reminder row", row != null)
+        row!!.performClick()
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        Profile(context).reminderOn = false
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 
@@ -135,6 +178,128 @@ class ScreenSmokeTest {
             )
         }
         smoke<RecordsActivity>()
+        store.clear()
+    }
+
+    /**
+     * Every category the report has to keep apart: standard, knee push-ups, unrecognised
+     * movements, and a session with the camera lost for a minute (a lower bound).
+     */
+    @Test
+    fun `the progress report builds across categories`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        fun attempt(daysAgo: Int, rounds: Int, profile: CindyProfile?, untracked: Long = 0L) =
+            Attempt(
+                rounds = rounds,
+                reps = 0,
+                atMillis = now - daysAgo * day,
+                durationMs = 20 * 60 * 1000L,
+                roundSplitsMs = List(rounds) { 60_000L },
+                profile = profile,
+                untrackedMs = untracked
+            )
+        store.add(attempt(16, 12, CindyProfile.STANDARD))
+        store.add(attempt(11, 14, CindyProfile(push = PushVariant.KNEE_PUSH_UP)))
+        store.add(attempt(7, 13, null))
+        store.add(attempt(3, 15, CindyProfile.STANDARD))
+        store.add(attempt(1, 16, CindyProfile.STANDARD, untracked = 60_000L))
+        smoke<RecordsActivity>()
+        store.clear()
+    }
+
+    /** Every view under [root] whose contentDescription is exactly [description]. */
+    private fun findByDescription(
+        root: android.view.View, description: String
+    ): android.view.View? {
+        if (root.contentDescription?.toString() == description) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescription(root.getChildAt(i), description)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun click(activity: android.app.Activity, description: String) {
+        val view = findByDescription(
+            activity.findViewById<android.view.View>(android.R.id.content), description
+        )
+        assertTrue("no view described \"$description\"", view != null)
+        view!!.performClick()
+    }
+
+    @Test
+    fun `the chart card switches metric and range`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        repeat(3) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = i,
+                    atMillis = now - (2 - i) * day,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L + it * 500L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        click(activity, "Pace")
+        click(activity, "Volume")
+        click(activity, "1M")
+        store.clear()
+    }
+
+    @Test
+    fun `the chart card handles a range with no sessions`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val old = System.currentTimeMillis() - 730 * day
+        repeat(2) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = 0,
+                    atMillis = old + i * day,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        click(activity, "1M")
+        store.clear()
+    }
+
+    @Test
+    fun `a trained day opens its sessions`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val now = System.currentTimeMillis()
+        repeat(2) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = 0,
+                    atMillis = now - i * 1000L,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        activity.openDay(java.time.LocalDate.now())
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
         store.clear()
     }
 
@@ -204,5 +369,99 @@ class ScreenSmokeTest {
                 ApplicationProvider.getApplicationContext(), attempt, stoppedEarly = true
             )
         )
+    }
+
+    /** The first stored session is always worth a line; the box under the score shows it. */
+    @Test
+    fun `the results screen celebrates a first session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 12,
+            reps = 3,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.VISIBLE,
+            activity.findViewById<android.view.View>(R.id.celebration).visibility
+        )
+        activity.finish()
+        store.clear()
+    }
+
+    /**
+     * A lower score than the best one, three weeks on, is no record and no streak of either kind
+     * (last week would make two weeks in a row, which is a milestone), so nothing is claimed.
+     */
+    @Test
+    fun `the results screen stays quiet for an ordinary session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val now = System.currentTimeMillis()
+        store.add(
+            Attempt(
+                rounds = 20,
+                reps = 0,
+                atMillis = now - 21L * 24 * 60 * 60 * 1000,
+                durationMs = 20 * 60 * 1000L,
+                profile = CindyProfile.STANDARD
+            )
+        )
+        val today = Attempt(
+            rounds = 10,
+            reps = 0,
+            atMillis = now,
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(today)
+        val intent = ResultsActivity.intent(context, today, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.GONE,
+            activity.findViewById<android.view.View>(R.id.celebration).visibility
+        )
+        activity.finish()
+        store.clear()
+    }
+
+    /** A round timed set by set fills the breakdown; the group is built in code. */
+    @Test
+    fun `the results screen builds with set splits and shows the movement breakdown`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = listOf(52_000L),
+            profile = CindyProfile.STANDARD,
+            setSplits = listOf(
+                SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+                SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+                SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+            )
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.VISIBLE,
+            activity.findViewById<android.view.View>(R.id.movements).visibility
+        )
+        activity.finish()
+        store.clear()
     }
 }

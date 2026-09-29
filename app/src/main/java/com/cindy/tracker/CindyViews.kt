@@ -3,6 +3,7 @@ package com.cindy.tracker
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
 import android.graphics.drawable.ColorDrawable
 import android.content.res.ColorStateList
@@ -296,3 +297,75 @@ fun Context.actionBar(vararg buttons: View): LinearLayout = LinearLayout(this).a
     ).apply { topMargin = dp(22) }
     buttons.forEach { addView(it) }
 }
+
+/**
+ * One option in a segmented choice — metric, range, category.
+ *
+ * The pill is 36dp but the target is 48dp: the inset keeps the row light without shrinking what
+ * a wet thumb has to hit.
+ */
+fun Context.chip(text: String, selected: Boolean, onTap: () -> Unit): TextView =
+    styledText(R.style.Cindy_Button_Small, text).apply {
+        textSize = 13f
+        setTextColor(getColor(if (selected) R.color.on_primary else R.color.label_secondary))
+        val pill = GradientDrawable().apply {
+            cornerRadius = dpf(18f)
+            if (selected) {
+                setColor(getColor(R.color.primary_fill))
+            } else {
+                setColor(getColor(R.color.surface_glass_raised))
+                setStroke(hairlinePx(), getColor(R.color.hairline))
+            }
+        }
+        background = InsetDrawable(pill, 0, dp(6), 0, dp(6))
+        gravity = Gravity.CENTER
+        minWidth = dp(48)
+        setPadding(dp(14), 0, dp(14), 0)
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)
+        ).apply { marginEnd = dp(6) }
+        setOnClickListener { onTap() }
+        describeAsButton(if (selected) "$text, selected" else text)
+    }
+
+/** A row of [chip]s; [onSelect] fires only when the choice actually changes. */
+fun Context.chipRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit): LinearLayout =
+    LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        options.forEachIndexed { i, label ->
+            addView(chip(label, i == selected) { if (i != selected) onSelect(i) })
+        }
+    }
+
+/**
+ * A trophy: a disc with its place in it. First is the earned colour; second and third step down
+ * the label ramp rather than borrowing metal colours the palette does not have.
+ */
+fun Context.medal(rank: Int): TextView = styledText(R.style.Cindy_Eyebrow, "$rank").apply {
+    textSize = 12f
+    letterSpacing = 0f
+    setTextColor(getColor(R.color.on_primary))
+    gravity = Gravity.CENTER
+    background = dotDrawable(
+        when (rank) {
+            1 -> R.color.achievement
+            2 -> R.color.label
+            else -> R.color.label_secondary
+        }
+    )
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
+}
+
+/** A trophy row: medal, what it is and when, and the figure. */
+fun Context.peakRow(rank: Int, title: String, detail: String, value: String): View =
+    rowFrame(tappable = false, minHeight = 60).apply {
+        addView(medal(rank))
+        addView(rowText(title, detail, R.style.Cindy_Headline).apply {
+            // rowText assigns LinearLayout.LayoutParams itself, so this cast is safe.
+            (layoutParams as LinearLayout.LayoutParams).marginStart = dp(14)
+        })
+        addView(styledText(R.style.Cindy_MetricS, value).withStartMargin(dp(10)))
+        contentDescription = "$title, $value, $detail"
+    }

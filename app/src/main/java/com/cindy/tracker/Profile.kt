@@ -108,6 +108,20 @@ class Profile(context: Context) {
             prefs.edit().putFloat(KEY_MUSIC_VOLUME, value.coerceIn(0f, 1f)).apply()
         }
 
+    /** Whether the daily reminder is on. Off until the athlete asks for it. */
+    var reminderOn: Boolean
+        get() = prefs.getBoolean(KEY_REMINDER_ON, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_REMINDER_ON, value).apply()
+        }
+
+    /** Minutes after local midnight the reminder is due, 0..1439. */
+    var reminderMinute: Int
+        get() = prefs.getInt(KEY_REMINDER_MINUTE, Reminder.DEFAULT_MINUTE_OF_DAY).coerceIn(0, 1439)
+        set(value) {
+            prefs.edit().putInt(KEY_REMINDER_MINUTE, value.coerceIn(0, 1439)).apply()
+        }
+
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
         private const val KEY_MOVEMENTS = "movement_profile"
@@ -118,6 +132,8 @@ class Profile(context: Context) {
         private const val KEY_VOICE_ON = "voice_on"
         private const val KEY_VOICE_VOLUME = "voice_volume"
         private const val KEY_MUSIC_VOLUME = "music_volume"
+        private const val KEY_REMINDER_ON = "reminder_on"
+        private const val KEY_REMINDER_MINUTE = "reminder_minute"
 
         /**
          * The voice starts at full and the music below it.

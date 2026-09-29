@@ -1,14 +1,27 @@
 package com.cindy.tracker
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.text.format.DateFormat
 import android.util.Log
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityMenuBinding
+import com.google.android.material.timepicker.MaterialTimePicker
+import com.google.android.material.timepicker.TimeFormat
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.WeekFields
 import java.util.Locale
 
 /**
@@ -124,7 +137,11 @@ class MenuActivity : AppCompatActivity() {
         binding.rows.removeAllViews()
 
         val movements = profile.movements
-        val sessions = records.all().size
+        val all = records.all()
+        val sessions = all.size
+        val streak = Streak.current(
+            Streak.daysTrained(all, ZoneId.systemDefault()), LocalDate.now()
+        )
 
         binding.rows.addView(insetGroup {
             row(navRow("Movements", movements.label()) {
@@ -139,13 +156,14 @@ class MenuActivity : AppCompatActivity() {
                 }
             })
             row(navRow(
-                "Records",
+                "Progress",
                 when (sessions) {
                     0 -> "No sessions yet"
                     1 -> "1 session"
                     else -> "$sessions sessions"
-                }
+                } + if (streak >= 1) " · $streak-day streak" else ""
             ) { startActivity(Intent(this@MenuActivity, RecordsActivity::class.java)) })
+            row(navRow("Daily reminder", reminderSubtitle()) { chooseReminder() })
             row(navRow(
                 "Body weight",
                 if (profile.hasBodyWeight) {
@@ -345,8 +363,29 @@ class MenuActivity : AppCompatActivity() {
         audition = null
     }
 
+    /** Whether the screen has been stopped since it last drew; see [onResume]. */
+    private var wasStopped = false
+
+    /**
+     * Draws the rows again on the way back to the screen, but not the first time it appears.
+     *
+     * The first resume follows [onCreate], which has just rendered and started [settleRowsIn];
+     * rendering again would rebuild the rows and cancel that entrance. On a return from being
+     * stopped it is worth it: the athlete may have changed something elsewhere in the meantime,
+     * notably the notification permission in system settings, and the daily reminder row has to
+     * say what is true now.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (wasStopped) {
+            wasStopped = false
+            render()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        wasStopped = true
         // Nothing this screen plays should outlive it — least of all over the workout that comes
         // after, which has a player of its own.
         stopAudition()
@@ -377,6 +416,185 @@ class MenuActivity : AppCompatActivity() {
         profile.musicOn = true
         render()
         toast("Music: ${MusicPlayer.displayName(this, uri) ?: "track chosen"}")
+    }
+
+    // ── reminder ──────────────────────────────────────────────────────────────
+
+    /** Who to tell once the system's notification prompt has been answered. */
+    private var afterPermission: ((Boolean) -> Unit)? = null
+
+    /** A field for the same reason as [pickTrack]: registered before the activity starts. */
+    private val requestNotifications = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        afterPermission?.invoke(granted)
+        afterPermission = null
+    }
+
+    /** Runs [then] with whether a notification can be posted, asking on Android 13+ if it can. */
+    private fun withNotificationPermission(then: (Boolean) -> Unit) {
+        if (ReminderNotifier.canPost(this)) return then(true)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            afterPermission = then
+            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            then(false)
+        }
+    }
+
+    private fun reminderTime(minute: Int): String =
+        Reminder.formatTime(minute, DateFormat.is24HourFormat(this))
+
+    /**
+     * What the row says underneath "Daily reminder".
+     *
+     * A reminder that is switched on but cannot be delivered says so, rather than promising a
+     * nudge that will never come.
+     */
+    private fun reminderSubtitle(): String = when {
+        !profile.reminderOn -> "Off"
+        !ReminderNotifier.canPost(this) -> "Blocked \u2014 notifications are off for Cindy"
+        else -> "Daily at ${reminderTime(profile.reminderMinute)} \u00b7 not on days you train"
+    }
+
+    /** Whether the reminder is on, and when. TRY IT sends one now, so the athlete can see it. */
+    private fun chooseReminder() {
+        var on = profile.reminderOn
+        var minute = profile.reminderMinute
+        val is24 = DateFormat.is24HourFormat(this)
+
+        val value = styledText(R.style.Cindy_Headline, Reminder.formatTime(minute, is24)).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val timeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(R.drawable.glass_card_small)
+            minimumHeight = dp(52)
+            setPadding(dp(16), dp(8), dp(12), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(12) }
+            addView(styledText(R.style.Cindy_Callout, "Time").apply {
+                setTextColor(getColor(R.color.label))
+                layoutParams = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                )
+                importantForAccessibility =
+                    android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            })
+            addView(value)
+            describeAsButton("Time, ${value.text}, tap to change")
+            setOnClickListener {
+                pickTime(minute, is24) {
+                    minute = it
+                    value.text = Reminder.formatTime(it, is24)
+                    describeAsButton("Time, ${value.text}, tap to change")
+                }
+            }
+        }
+
+        CindySheet(
+            this,
+            title = "Daily reminder",
+            subtitle = "One nudge at the time you choose, and none on days you've already trained."
+        )
+            .toggle("Remind me", on) { on = it }
+            .add(timeRow)
+            .add(
+                sheetNote(
+                    "Nothing leaves the phone. The reminder is worked out and sent on this device."
+                )
+            )
+            .actions(
+                primary = "SAVE",
+                onPrimary = { save(on, minute) },
+                secondary = "TRY IT",
+                onSecondary = { tryIt() },
+                secondaryDismisses = false
+            )
+            .show()
+    }
+
+    /** The system's clock dial, in the phone's own 12- or 24-hour style. */
+    private fun pickTime(current: Int, is24: Boolean, onPicked: (Int) -> Unit) {
+        val picker = MaterialTimePicker.Builder()
+            .setTimeFormat(if (is24) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H)
+            .setHour(current / 60)
+            .setMinute(current % 60)
+            .setTitleText("Reminder time")
+            .build()
+        picker.addOnPositiveButtonClickListener { onPicked(picker.hour * 60 + picker.minute) }
+        picker.show(supportFragmentManager, "reminder-time")
+    }
+
+    /**
+     * Stores the choice. Turning it on without permission leaves it off and says why, so the
+     * switch never claims a reminder that cannot arrive.
+     */
+    private fun save(on: Boolean, minute: Int) {
+        profile.reminderMinute = minute
+        if (!on) {
+            profile.reminderOn = false
+            ReminderScheduler.sync(this)
+            render()
+            return
+        }
+        withNotificationPermission { granted ->
+            if (granted) {
+                profile.reminderOn = true
+                ReminderScheduler.sync(this)
+                toast("Reminder set for ${reminderTime(minute)}")
+            } else {
+                profile.reminderOn = false
+                ReminderScheduler.sync(this)
+                notificationsOff()
+            }
+            render()
+        }
+    }
+
+    /** Sends today's reminder now, as if today had not been trained. */
+    private fun tryIt() {
+        withNotificationPermission { granted ->
+            if (granted) {
+                ReminderNotifier.post(
+                    this,
+                    Reminder.preview(
+                        records.all(),
+                        LocalDate.now(),
+                        ZoneId.systemDefault(),
+                        WeekFields.of(Locale.getDefault()).firstDayOfWeek
+                    )
+                )
+            } else {
+                notificationsOff()
+            }
+        }
+    }
+
+    private fun notificationsOff() {
+        CindySheet(
+            this,
+            title = "Notifications are off",
+            subtitle = "Cindy can't remind you until notifications are allowed for it."
+        ).actions(
+            primary = "OPEN SETTINGS",
+            onPrimary = {
+                startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                )
+            },
+            secondary = "NOT NOW",
+            onSecondary = {}
+        ).show()
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

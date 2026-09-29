@@ -1,10 +1,12 @@
 <!--
-  The palette is white at four opacities on black, plus three iOS system colours that mean
-  something. Nothing is coloured for decoration.
+  The palette is white at four opacities on black, three iOS system colours that mean something,
+  and one colour for what the athlete has earned. Nothing is coloured for decoration.
 
   Green is the affirmative: this rep would count, a tier reached, a score up on your best. Red is
-  blocked, unreadable, or stopping. Orange cautions. The mint accent this replaced was used for
-  titles AND chips AND streaks AND scores AND the skeleton, so it told the athlete nothing.
+  blocked, unreadable, or stopping. Orange cautions. Achievement orange is redder than that amber
+  and means one thing only — you earned this: a personal record, a streak, the best-so-far line.
+  The mint accent this replaced was used for titles AND chips AND streaks AND scores AND the
+  skeleton, so it told the athlete nothing.
 -->
 <resources>
 
@@ -24,6 +26,10 @@
     <color name="state_ok">#FF30D158</color>
     <color name="state_alert">#FFFF453A</color>
     <color name="state_caution">#FFFF9F0A</color>
+
+    <!-- ── earned ── -->
+    <!-- Personal records, streaks, the best-so-far line, the best week. Nothing else. -->
+    <color name="achievement">#FFFC4C02</color>
 
     <!-- ── material ── -->
     <!-- Glass over a page: a light film lifting off black. -->
