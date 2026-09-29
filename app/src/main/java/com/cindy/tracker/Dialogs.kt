@@ -13,16 +13,21 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.util.Calendar
 import java.util.Locale
 
 /**
- * The two sheets that outlived the one screen they were written on.
+ * The sheets that outlived the one screen they were written on, plus one written straight here.
  *
- * Both used to be private methods: the movement picker on [MainActivity] behind a HUD chip, and
- * the body-weight prompt on [ResultsActivity] behind the calorie line. Moving the picker to
- * [MenuActivity] would have meant a second copy of eighty lines, and body weight was only ever
- * reachable *after* a workout, which is the one moment nobody wants to fill in a form. Hoisting
- * them here lets the menu offer both without either screen owning them.
+ * The first two used to be private methods: the movement picker on [MainActivity] behind a HUD
+ * chip, and the body-weight prompt on [ResultsActivity] behind the calorie line. Moving the
+ * picker to [MenuActivity] would have meant a second copy of eighty lines, and body weight was
+ * only ever reachable *after* a workout, which is the one moment nobody wants to fill in a form.
+ * Hoisting them here lets the menu offer both without either screen owning them.
+ *
+ * [askHeartRateDetails] has no such history — the heart-rate settings the menu and the results
+ * screen both need to reach are new — but it belongs beside the other two for the same reason:
+ * one place owns a sheet that more than one screen opens.
  *
  * They were `AlertDialog`s until the redesign. See [CindySheet] for why they no longer are.
  */
@@ -46,13 +51,19 @@ fun Activity.chooseMovements(current: CindyProfile, onSave: (CindyProfile) -> Un
             "ranked against your own sessions at the same movements."
     )
 
-    val pull = sheet.variantGroup("PULL", PullVariant.entries, current.pull, { it.label }, { it.tracking })
-    val push = sheet.variantGroup("PUSH", PushVariant.entries, current.push, { it.label }, { it.tracking })
-    val squat = sheet.variantGroup("SQUAT", SquatVariant.entries, current.squat, { it.label }, { it.tracking })
+    val pull = sheet.choiceGroup("PULL", PullVariant.entries, current.pull, { it.label }) {
+        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
+    }
+    val push = sheet.choiceGroup("PUSH", PushVariant.entries, current.push, { it.label }) {
+        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
+    }
+    val squat = sheet.choiceGroup("SQUAT", SquatVariant.entries, current.squat, { it.label }) {
+        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
+    }
 
     sheet.actions(
         primary = "SAVE",
-        onPrimary = { onSave(CindyProfile(pull = pull(), push = push(), squat = squat())) },
+        onPrimary = { onSave(CindyProfile(pull = pull()!!, push = push()!!, squat = squat()!!)) },
         secondary = "CANCEL",
         onSecondary = {}
     ).show()
@@ -118,23 +129,103 @@ fun Activity.askBodyWeight(profile: Profile, onSaved: () -> Unit) {
     ).show()
 }
 
+/**
+ * Asks for the two things [Calories] needs beyond body weight to use heart rate: a birth year and
+ * a sex. [onSaved] runs only once both are valid and stored.
+ */
+fun Activity.askHeartRateDetails(profile: Profile, onSaved: () -> Unit) {
+    val input = EditText(this, null, 0, R.style.Cindy_MetricM).apply {
+        inputType = InputType.TYPE_CLASS_NUMBER
+        hint = "Year of birth"
+        setHintTextColor(getColor(R.color.label_quaternary))
+        gravity = Gravity.CENTER
+        background = null
+        setBackgroundResource(R.drawable.glass_card_small)
+        setPadding(dp(20), dp(16), dp(20), dp(16))
+        if (profile.birthYear != 0) setText("%d".format(Locale.US, profile.birthYear))
+        // A birth year already entered is there to be replaced, not appended to.
+        setSelectAllOnFocus(true)
+        isFocusableInTouchMode = true
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    val sheet = CindySheet(
+        this,
+        title = "For heart-rate calories",
+        subtitle = "Heart-rate calorie formulas are fitted separately for women and men, and " +
+            "shift with age. Used only for calories, and it stays on this phone."
+    )
+    sheet.add(input)
+    // Same reasoning as askBodyWeight: the athlete opened this sheet to type, so the keyboard
+    // comes up with it rather than waiting for a tap on a field they have already aimed at.
+    input.post {
+        if (input.requestFocus()) {
+            (input.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    val sex = sheet.choiceGroup("SEX", Sex.entries, profile.sex, { it.label }) {
+        if (it == Sex.UNSTATED) "uses the average of both formulas" else null
+    }
+
+    sheet.actions(
+        primary = "SAVE",
+        onPrimary = {
+            val year = input.text.toString().trim().toIntOrNull()
+            val age = year?.let { Calendar.getInstance().get(Calendar.YEAR) - it }
+            val chosenSex = sex()
+            when {
+                age == null || age < Profile.MIN_AGE || age > Profile.MAX_AGE -> {
+                    Toast.makeText(
+                        this,
+                        "Enter a birth year that makes you ${Profile.MIN_AGE} to " +
+                            "${Profile.MAX_AGE}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                chosenSex == null -> {
+                    Toast.makeText(this, "Choose one — the formula needs it", Toast.LENGTH_LONG).show()
+                }
+                else -> {
+                    // age non-null implies year non-null, since age is only ever derived from it.
+                    profile.birthYear = year!!
+                    profile.sex = chosenSex
+                    onSaved()
+                }
+            }
+        },
+        secondary = "CANCEL",
+        onSecondary = {}
+    ).show()
+}
+
 /** Small print inside a sheet. */
 fun Activity.sheetNote(text: String): TextView =
     styledText(R.style.Cindy_Footnote, text).apply { setPadding(0, dp(8), 0, dp(4)) }
 
 /**
- * One movement's options, as a grouped list rather than a column of radio buttons.
+ * One field's options, as a grouped list rather than a column of radio buttons.
  *
  * Returns a getter for the current choice: the sheet is built once and read when SAVE is tapped,
- * so the selection lives in the rows themselves rather than in a field on the caller.
+ * so the selection lives in the rows themselves rather than in a field on the caller. [selected]
+ * may be null — [askHeartRateDetails] opens with a sex that has never been chosen, which
+ * [chooseMovements] never does, since every movement already has one.
+ *
+ * [note] is the one thing that varies between the two callers: a movement says when it is tapped
+ * in rather than seen, a sex says which one is the average of the other two. Whatever it returns
+ * is shown under the option's label, and read out after it, so the choice and its consequence
+ * arrive together whichever field this is building.
  */
-private fun <T> CindySheet.variantGroup(
+private fun <T> CindySheet.choiceGroup(
     title: String,
     options: List<T>,
-    selected: T,
+    selected: T?,
     label: (T) -> String,
-    tracking: (T) -> Tracking
-): () -> T {
+    note: (T) -> String?
+): () -> T? {
     val ctx = content.context
     var chosen = selected
     val ticks = mutableListOf<ImageView>()
@@ -169,8 +260,8 @@ private fun <T> CindySheet.variantGroup(
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 addView(ctx.styledText(R.style.Cindy_Headline, label(option)))
                 // Said on the option itself, so the choice and its consequence arrive together.
-                if (tracking(option) == Tracking.MANUAL) {
-                    addView(ctx.styledText(R.style.Cindy_Footnote, "you tap +1").apply {
+                note(option)?.let {
+                    addView(ctx.styledText(R.style.Cindy_Footnote, it).apply {
                         setPadding(0, ctx.dp(2), 0, 0)
                     })
                 }
@@ -183,10 +274,7 @@ private fun <T> CindySheet.variantGroup(
                     t.visibility = if (i == index) View.VISIBLE else View.INVISIBLE
                 }
             }
-            describeAsButton(
-                label(option) +
-                    if (tracking(option) == Tracking.MANUAL) ", you tap plus one" else ""
-            )
+            describeAsButton(label(option) + (note(option)?.let { ", $it" } ?: ""))
         }
         group.row(row)
     }

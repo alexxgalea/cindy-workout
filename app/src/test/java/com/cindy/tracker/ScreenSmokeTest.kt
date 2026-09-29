@@ -152,6 +152,19 @@ class ScreenSmokeTest {
         Profile(context).reminderOn = false
     }
 
+    /**
+     * The sheet that asks for a birth year and a sex, opened the way the menu's heart-rate row
+     * will open it once phase 2 adds that row. Nothing here needs the row to exist yet.
+     */
+    @Test
+    fun `the heart-rate details sheet builds`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        activity.askHeartRateDetails(Profile(activity)) {}
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 
