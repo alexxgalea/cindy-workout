@@ -15,8 +15,19 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
 
+from . import pose_geometry
 from .bar_zone import BarZone
 from .keypoints import KP, Keypoint
+from .pose_geometry import (
+    bilateral_angle,
+    hands_overhead,
+    hanging_from_bar,
+    missing_joints,
+    ok,
+    standing,
+    torso_length,
+    upright,
+)
 from .rep_counter import NAN, Phase, RepCounter, f32
 
 
@@ -157,7 +168,9 @@ class WorkoutEngine:
     and scoring all of them at once lets a push-up lockout leak into the squat counter.
     """
 
-    MIN_SCORE = 0.30
+    #: Kept for callers outside the engine (diagnose_pullups.py reads `engine.MIN_SCORE`); the
+    #: value itself now lives in pose_geometry, which is what `ok()` actually uses.
+    MIN_SCORE = pose_geometry.MIN_SCORE
     CALIBRATION_REPS = 2
     POOR_AFTER_MS = 20_000
     DEAD_HANG_DEGREES = 150.0
@@ -186,27 +199,17 @@ class WorkoutEngine:
     #: How far below the bar the head must return before another pull-up can arm.
     HEAD_RESET_TORSOS = 0.25
     #: Consecutive overhead frames before a bar may be learned on the strength of a nose that
-    #: could not be seen. `_hands_overhead` answers true when the nose is unseen, deliberately, so
-    #: rear views are not locked out -- but that turns a missing keypoint into permission, and one
-    #: dropped nose frame was enough to teach a false bar at chest height that can never recover.
-    #: A visible nose below the hands is real evidence and still learns on the first frame.
+    #: could not be seen. `pose_geometry.hands_overhead` answers true when the nose is unseen,
+    #: deliberately, so rear views are not locked out -- but that turns a missing keypoint into
+    #: permission, and one dropped nose frame was enough to teach a false bar at chest height
+    #: that can never recover. A visible nose below the hands is real evidence and still learns
+    #: on the first frame.
     OVERHEAD_HOLD_FRAMES = 5
     #: Unusable frames tolerated mid-rep before the cycle is abandoned. A pull-up occludes its
     #: own keypoints exactly where it matters -- at the top, where the head tilts back and the
     #: wrists disappear behind it -- so treating the first sub-threshold frame as "left the bar"
     #: threw the rep away at the moment it was earned.
     MAX_DROPOUT_FRAMES = 8
-    #: How far the shoulders must sit above the hips, in torso lengths, to call the athlete
-    #: upright. A plank and a standing body both have straight legs, so the knee angle cannot
-    #: tell them apart -- only the direction the torso is pointing can.
-    UPRIGHT_TORSOS = 0.7
-    #: How far the knees must sit below the hips, in torso lengths, to call the athlete stood up
-    #: rather than gathered in a crouch. A vertical torso is not standing: people get up off the
-    #: floor by bringing the torso upright first and collecting themselves on their haunches,
-    #: which reads as upright for most of a second. An offset rather than a knee angle, on
-    #: purpose -- an angle threshold is what locked out the athlete whose foreshortened full
-    #: extension only read 145 degrees.
-    STANDING_TORSOS = 0.5
     #: How long the starting posture must hold, without extending further, to be taken up.
     START_POSITION_MS = 500
     #: Further extension than this, within the dwell, means they are still getting up.
@@ -429,7 +432,7 @@ class WorkoutEngine:
             self.diagnostics = self._frame_diagnostics(k, identity_stable, rejection=self.hint)
             return RepEvent.NONE
 
-        torso = self._torso_length(k)
+        torso = torso_length(k)
         if torso is None or torso < 1.0:
             self.body_visible = False
             self.hint = "Step into frame"
@@ -521,36 +524,8 @@ class WorkoutEngine:
             # The bar, head and dead-hang gates already refuse anything that is not a pull-up.
             return True
         if self.exercise is Exercise.PUSHUP:
-            return not self._upright(k)
-        return self._standing(k)
-
-    def _upright(self, k: Sequence[Keypoint]) -> bool:
-        """True when the shoulders sit well above the hips: torso vertical, not lying down."""
-        sh = self._midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
-        if sh is None:
-            return False
-        hp = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
-        if hp is None:
-            return False
-        torso = f32(math.hypot(f32(sh.x - hp.x), f32(sh.y - hp.y)))
-        if torso < 1.0:
-            return False
-        return f32(hp.y - sh.y) >= f32(self.UPRIGHT_TORSOS * torso)
-
-    def _standing(self, k: Sequence[Keypoint]) -> bool:
-        """Upright *and* stood up on the legs, rather than folded over them in a crouch."""
-        if not self._upright(k):
-            return False
-        hp = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
-        if hp is None:
-            return False
-        kn = self._midpoint(k, KP.LEFT_KNEE, KP.RIGHT_KNEE)
-        if kn is None:
-            return False
-        torso = self._torso_length(k)
-        if torso is None:
-            return False
-        return f32(kn.y - hp.y) >= f32(self.STANDING_TORSOS * torso)
+            return not upright(k)
+        return standing(k)
 
     def _settle(self) -> RepEvent:
         if self._fixed_exercise is None and self.reps >= self.exercise.target:
@@ -597,7 +572,7 @@ class WorkoutEngine:
 
     def on_setup_frame(self, k: Sequence[Keypoint], now: int, identity_stable: bool = True) -> Setup:
         counter = self._counters[self.exercise]
-        missing = self._missing_joints(k)
+        missing = missing_joints(k, self.exercise)
         if missing:
             self._moving_since = 0
             if self.exercise is Exercise.PULLUP:
@@ -639,23 +614,6 @@ class WorkoutEngine:
         self._pullup_down_seen = False
         if self.exercise is Exercise.PULLUP:
             self._counters[self.exercise].require_fresh_down()
-
-    def _missing_joints(self, k: Sequence[Keypoint]) -> list[str]:
-        if self.exercise in (Exercise.PULLUP, Exercise.PUSHUP):
-            needed = [
-                ("shoulders", (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)),
-                ("elbows", (KP.LEFT_ELBOW, KP.RIGHT_ELBOW)),
-                ("hands", (KP.LEFT_WRIST, KP.RIGHT_WRIST)),
-                ("hips", (KP.LEFT_HIP, KP.RIGHT_HIP)),
-            ]
-        else:
-            needed = [
-                ("shoulders", (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)),
-                ("hips", (KP.LEFT_HIP, KP.RIGHT_HIP)),
-                ("knees", (KP.LEFT_KNEE, KP.RIGHT_KNEE)),
-                ("ankles", (KP.LEFT_ANKLE, KP.RIGHT_ANKLE)),
-            ]
-        return [name for name, (a, b) in needed if self._midpoint(k, a, b) is None]
 
     def _signal_for(self, k: Sequence[Keypoint]) -> float:
         if self.exercise is Exercise.PULLUP:
@@ -745,10 +703,10 @@ class WorkoutEngine:
         """Validates a pull-up pose without mutating the counter."""
         left_wrist = k[KP.LEFT_WRIST]
         right_wrist = k[KP.RIGHT_WRIST]
-        if not self._ok(left_wrist) or not self._ok(right_wrist):
+        if not ok(left_wrist) or not ok(right_wrist):
             self.hint = "Show both hands"
             return None
-        if not self._hanging_from_bar(k):
+        if not hanging_from_bar(k):
             self.hint = "Hang from the bar"
             return None
         # Hands overhead is not enough to call this a hang: an inverted row also puts the wrists
@@ -760,7 +718,7 @@ class WorkoutEngine:
         #
         # Returning None routes the frame through _tolerate_pullup_dropout(), so a brief wobble
         # mid-rep is absorbed by the existing dropout window while a sustained row never arms.
-        if not self._upright(k):
+        if not upright(k):
             self.hint = "Hang vertically from the bar"
             return None
         hands = Keypoint(
@@ -768,11 +726,11 @@ class WorkoutEngine:
             f32((left_wrist.y + right_wrist.y) / 2.0),
             min(left_wrist.score, right_wrist.score),
         )
-        torso = self._torso_length(k)
+        torso = torso_length(k)
         if torso is None:
             self.hint = "Step into frame"
             return None
-        elbow = self._bilateral_angle(
+        elbow = bilateral_angle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
             KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST,
@@ -818,12 +776,12 @@ class WorkoutEngine:
         # was then refused with "Get on the bar" with no way back, since refinement requires
         # already passing the gate. Strict pull-ups have no such phase, so only band footage
         # found it.
-        overhead = self._hands_overhead(k, hands)
+        overhead = hands_overhead(k, hands)
         self._overhead_frames = self._overhead_frames + 1 if overhead else 0
         # Seeing the nose below the hands is evidence and is acted on at once; permission inferred
         # from a nose that could *not* be seen is not, and has to persist.
         may_learn = overhead and (
-            self._ok(k[KP.NOSE]) or self._overhead_frames >= self.OVERHEAD_HOLD_FRAMES
+            ok(k[KP.NOSE]) or self._overhead_frames >= self.OVERHEAD_HOLD_FRAMES
         )
         gate_ok = (
             self._bar.holds(left_wrist, right_wrist, torso)
@@ -851,8 +809,8 @@ class WorkoutEngine:
 
         nose = k[KP.NOSE]
         bar_y = self._bar.line_y
-        if not self._ok(nose) or bar_y is None:
-            self.hint = "Show your head" if not self._ok(nose) else "Hang from the bar"
+        if not ok(nose) or bar_y is None:
+            self.hint = "Show your head" if not ok(nose) else "Hang from the bar"
             return None
         return PullupSample(
             signal=-elbow,
@@ -943,50 +901,27 @@ class WorkoutEngine:
         self._bar_settle_since = 0
         self._bar_settle_hands = None
 
-    def _hands_overhead(self, k: Sequence[Keypoint], hands: Keypoint) -> bool:
-        """Whether the hands are above the head, separating a hang from a chest-height grip.
-
-        At a dead hang the arms are overhead by definition, so the hands sit clearly above the
-        nose; holding a band in front of the chest puts them clearly below it. Only gates whether
-        an *unknown* bar may be learned -- once one exists, ``BarZone.holds`` constrains refining.
-
-        A head that cannot be seen blocks nothing, so rear-view and occluded footage that already
-        counts keeps working; this rejects one specific wrong posture, not an unclear view.
-        """
-        nose = k[KP.NOSE]
-        return not self._ok(nose) or hands.y < nose.y
-
     def _grip_half_width(self, k: Sequence[Keypoint]) -> float | None:
         l = k[KP.LEFT_WRIST]
         r = k[KP.RIGHT_WRIST]
-        if not self._ok(l) or not self._ok(r):
+        if not ok(l) or not ok(r):
             return None
         return f32(abs(f32(l.x - r.x)) / 2.0)
-
-    def _hanging_from_bar(self, k: Sequence[Keypoint]) -> bool:
-        """Hands overhead, tested against the hips rather than the shoulders."""
-        hip = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
-        if hip is None:
-            return False
-        wr = self._midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST)
-        if wr is None:
-            return False
-        return wr.y < hip.y
 
     # -- signals ----------------------------------------------------------
 
     def _pushup_signal(self, k: Sequence[Keypoint]) -> float:
-        if self._hanging_from_bar(k):
+        if hanging_from_bar(k):
             self.hint = "Get on the floor"
             return NAN
-        return self._bilateral_angle(
+        return bilateral_angle(
             k,
             KP.LEFT_SHOULDER, KP.LEFT_ELBOW, KP.LEFT_WRIST,
             KP.RIGHT_SHOULDER, KP.RIGHT_ELBOW, KP.RIGHT_WRIST,
         )
 
     def _squat_signal(self, k: Sequence[Keypoint]) -> float:
-        value = self._bilateral_angle(
+        value = bilateral_angle(
             k,
             KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE,
             KP.RIGHT_HIP, KP.RIGHT_KNEE, KP.RIGHT_ANKLE,
@@ -1034,55 +969,4 @@ class WorkoutEngine:
         else:
             joints = (KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, KP.LEFT_ELBOW, KP.RIGHT_ELBOW,
                       KP.LEFT_WRIST, KP.RIGHT_WRIST, KP.LEFT_HIP, KP.RIGHT_HIP)
-        return all(self._ok(k[i]) for i in joints)
-
-    # -- geometry helpers -------------------------------------------------
-
-    def _ok(self, p: Keypoint) -> bool:
-        return p.score >= self.MIN_SCORE
-
-    def _midpoint(self, k: Sequence[Keypoint], a: int, b: int) -> Keypoint | None:
-        pa, pb = k[a], k[b]
-        if self._ok(pa) and self._ok(pb):
-            return Keypoint(f32((pa.x + pb.x) / 2.0), f32((pa.y + pb.y) / 2.0),
-                            min(pa.score, pb.score))
-        if self._ok(pa):
-            return pa
-        if self._ok(pb):
-            return pb
-        return None
-
-    def _torso_length(self, k: Sequence[Keypoint]) -> float | None:
-        sh = self._midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
-        if sh is None:
-            return None
-        hp = self._midpoint(k, KP.LEFT_HIP, KP.RIGHT_HIP)
-        if hp is None:
-            return None
-        return f32(math.hypot(f32(sh.x - hp.x), f32(sh.y - hp.y)))
-
-    def _bilateral_angle(
-        self, k: Sequence[Keypoint], la: int, lb: int, lc: int, ra: int, rb: int, rc: int
-    ) -> float:
-        l = self._angle(k[la], k[lb], k[lc])
-        r = self._angle(k[ra], k[rb], k[rc])
-        if not math.isnan(l) and not math.isnan(r):
-            return f32((l + r) / 2.0)
-        if not math.isnan(l):
-            return l
-        if not math.isnan(r):
-            return r
-        return NAN
-
-    def _angle(self, a: Keypoint, b: Keypoint, c: Keypoint) -> float:
-        """Interior angle at `b`, in degrees, or NaN if any vertex is not confidently seen."""
-        if not self._ok(a) or not self._ok(b) or not self._ok(c):
-            return NAN
-        abx, aby = f32(a.x - b.x), f32(a.y - b.y)
-        cbx, cby = f32(c.x - b.x), f32(c.y - b.y)
-        mag = f32(f32(math.hypot(abx, aby)) * f32(math.hypot(cbx, cby)))
-        if mag < f32(1e-4):
-            return NAN
-        dot = f32(f32(abx * cbx) + f32(aby * cby))
-        cos = max(-1.0, min(1.0, f32(dot / mag)))
-        return f32(math.degrees(math.acos(cos)))
+        return all(ok(k[i]) for i in joints)

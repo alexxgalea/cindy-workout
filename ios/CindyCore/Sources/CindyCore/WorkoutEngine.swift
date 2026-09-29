@@ -125,14 +125,12 @@ public struct BarGuide: Equatable, Sendable {
 /// squat counter.
 public final class WorkoutEngine {
 
-    /// MoveNet/Vision confidence below which a keypoint is treated as unseen.
-    private static let minScore: Float = 0.30
     /// Consecutive overhead frames before an unknown bar may be learned from a dead hang.
     ///
-    /// `handsOverhead` answers true when the nose is not confidently seen — on purpose, so
-    /// rear-view footage is not locked out — so a *single* dropped nose keypoint was enough to let
-    /// a band held at chest height be taught as the bar, which can never recover. Measured: one
-    /// frame in sixty did exactly that and cost a whole clip its score.
+    /// `PoseGeometry.handsOverhead` answers true when the nose is not confidently seen — on
+    /// purpose, so rear-view footage is not locked out — so a *single* dropped nose keypoint was
+    /// enough to let a band held at chest height be taught as the bar, which can never recover.
+    /// Measured: one frame in sixty did exactly that and cost a whole clip its score.
     private static let overheadHoldFrames = 5
     /// Reps to watch before trusting the learned band.
     private static let calibrationReps = 2
@@ -180,26 +178,6 @@ public final class WorkoutEngine {
     /// second at 24fps — long enough to ride out an occlusion or a motion-blurred frame, far too
     /// short to cover someone actually dropping off the bar.
     private static let maxDropoutFrames = 8
-    /// How far the shoulders must sit above the hips, in torso lengths, to call the athlete
-    /// upright.
-    ///
-    /// A plank and a standing body both have straight legs, so the knee angle cannot tell them
-    /// apart — only the direction the torso is pointing can. A vertical torso scores 1.0 and a
-    /// horizontal one 0.0; the threshold leaves room for the forward lean of a real squat and for
-    /// a phone standing on the floor looking up.
-    private static let uprightTorsos: Float = 0.7
-    /// How far the knees must sit below the hips, in torso lengths, to call the athlete stood up
-    /// rather than gathered in a crouch.
-    ///
-    /// A vertical torso is not standing. People get up off the floor by bringing the torso
-    /// upright first and collecting themselves on their haunches, which reads as upright for most
-    /// of a second — long enough to open a gate waiting only for that, after which the drive out
-    /// of the crouch scored as a rep. Standing carries the hips a whole thigh above the knees; a
-    /// crouch puts them level with, or below, them.
-    ///
-    /// An offset rather than a knee angle, on purpose: an angle threshold is what locked out the
-    /// athlete whose foreshortened full extension only read 145 degrees.
-    private static let standingTorsos: Float = 0.5
     /// How long the starting posture must hold, without extending further, to be taken up.
     ///
     /// Half a second of *stillness*, not half a second of merely being upright. Upright alone was
@@ -437,7 +415,7 @@ public final class WorkoutEngine {
             diagnostics = frameDiagnostics(k, identityStable: identityStable, rejection: hint)
             return .none
         }
-        guard let torso = torsoLength(k), torso >= 1 else {
+        guard let torso = PoseGeometry.torsoLength(k), torso >= 1 else {
             bodyVisible = false
             hint = "Step into frame"
             blocked = true
@@ -523,27 +501,9 @@ public final class WorkoutEngine {
         switch exercise {
         // The bar, head and dead-hang gates already refuse anything that is not a pull-up.
         case .pullup: return true
-        case .pushup: return !upright(k)
-        case .squat: return standing(k)
+        case .pushup: return !PoseGeometry.upright(k)
+        case .squat: return PoseGeometry.standing(k)
         }
-    }
-
-    /// True when the shoulders sit well above the hips: torso vertical, not lying down.
-    private func upright(_ k: [Keypoint]) -> Bool {
-        guard let sh = midpoint(k, KP.leftShoulder, KP.rightShoulder),
-              let hp = midpoint(k, KP.leftHip, KP.rightHip) else { return false }
-        let torso = hypotf(sh.x - hp.x, sh.y - hp.y)
-        guard torso >= 1 else { return false }
-        return (hp.y - sh.y) >= Self.uprightTorsos * torso
-    }
-
-    /// Upright *and* stood up on the legs, rather than folded over them in a crouch.
-    private func standing(_ k: [Keypoint]) -> Bool {
-        guard upright(k),
-              let hp = midpoint(k, KP.leftHip, KP.rightHip),
-              let kn = midpoint(k, KP.leftKnee, KP.rightKnee),
-              let torso = torsoLength(k) else { return false }
-        return (kn.y - hp.y) >= Self.standingTorsos * torso
     }
 
     /// Advances to the next movement if the current one just hit its target.
@@ -595,7 +555,7 @@ public final class WorkoutEngine {
     /// believable range is caught here, instead of quietly undercounting for twenty minutes.
     @discardableResult
     public func onSetupFrame(_ k: [Keypoint], now: Int64, identityStable: Bool = true) -> Setup {
-        let missing = missingJoints(k)
+        let missing = PoseGeometry.missingJoints(k, exercise)
         if !missing.isEmpty {
             movingSince = 0
             if exercise == .pullup { toleratePullupDropout() }
@@ -656,29 +616,6 @@ public final class WorkoutEngine {
         barSettleSince = 0
         barSettleHands = nil
         counters[.pullup]!.requireFreshDown()
-    }
-
-    /// Joints the current movement cannot be judged without, named for a human.
-    private func missingJoints(_ k: [Keypoint]) -> [String] {
-        let needed: [(String, (Int, Int))]
-        switch exercise {
-        case .pullup, .pushup:
-            needed = [
-                ("shoulders", (KP.leftShoulder, KP.rightShoulder)),
-                ("elbows", (KP.leftElbow, KP.rightElbow)),
-                ("hands", (KP.leftWrist, KP.rightWrist)),
-                ("hips", (KP.leftHip, KP.rightHip))
-            ]
-        case .squat:
-            needed = [
-                ("shoulders", (KP.leftShoulder, KP.rightShoulder)),
-                ("hips", (KP.leftHip, KP.rightHip)),
-                ("knees", (KP.leftKnee, KP.rightKnee)),
-                ("ankles", (KP.leftAnkle, KP.rightAnkle))
-            ]
-        }
-        // midpoint accepts either side, so a joint counts as seen if one of the pair is.
-        return needed.filter { midpoint(k, $0.1.0, $0.1.1) == nil }.map { $0.0 }
     }
 
     private func signalFor(_ k: [Keypoint]) -> Float {
@@ -793,11 +730,11 @@ public final class WorkoutEngine {
     private func pullupSample(_ k: [Keypoint], now: Int64) -> PullupSample? {
         let leftWrist = k[KP.leftWrist]
         let rightWrist = k[KP.rightWrist]
-        guard ok(leftWrist), ok(rightWrist) else {
+        guard PoseGeometry.ok(leftWrist), PoseGeometry.ok(rightWrist) else {
             hint = "Show both hands"
             return nil
         }
-        guard hangingFromBar(k) else {
+        guard PoseGeometry.hangingFromBar(k) else {
             hint = "Hang from the bar"
             return nil
         }
@@ -810,18 +747,18 @@ public final class WorkoutEngine {
         //
         // Returning nil routes the frame through toleratePullupDropout(), so a brief wobble
         // mid-rep is absorbed by the existing dropout window while a sustained row never arms.
-        guard upright(k) else {
+        guard PoseGeometry.upright(k) else {
             hint = "Hang vertically from the bar"
             return nil
         }
         let hands = Keypoint(x: (leftWrist.x + rightWrist.x) / 2, y: (leftWrist.y + rightWrist.y) / 2,
                              score: min(leftWrist.score, rightWrist.score))
-        guard let torso = torsoLength(k) else {
+        guard let torso = PoseGeometry.torsoLength(k) else {
             hint = "Step into frame"
             return nil
         }
-        let elbow = bilateralAngle(k, KP.leftShoulder, KP.leftElbow, KP.leftWrist,
-                                   KP.rightShoulder, KP.rightElbow, KP.rightWrist)
+        let elbow = PoseGeometry.bilateralAngle(k, KP.leftShoulder, KP.leftElbow, KP.leftWrist,
+                                                KP.rightShoulder, KP.rightElbow, KP.rightWrist)
         guard !elbow.isNaN else {
             hint = "Arms out of frame"
             return nil
@@ -863,11 +800,11 @@ public final class WorkoutEngine {
         // later rep was then refused with "Get on the bar" with no way back, because refinement
         // requires already passing the gate. Strict pull-ups have no such phase, which is why
         // only band footage found it.
-        let overhead = handsOverhead(k, hands: hands)
+        let overhead = PoseGeometry.handsOverhead(k, hands: hands)
         overheadFrames = overhead ? overheadFrames + 1 : 0
         // Seeing the nose below the hands is evidence and is acted on at once; permission inferred
         // from a nose that could *not* be seen is not, and has to persist.
-        let learnable = overhead && (ok(k[KP.nose]) || overheadFrames >= Self.overheadHoldFrames)
+        let learnable = overhead && (PoseGeometry.ok(k[KP.nose]) || overheadFrames >= Self.overheadHoldFrames)
         let mayLearn = bar.established
             ? bar.holds(left: leftWrist, right: rightWrist, torso: torso)
             : learnable
@@ -897,8 +834,8 @@ public final class WorkoutEngine {
         }
 
         let nose = k[KP.nose]
-        guard let barY = bar.lineY, ok(nose) else {
-            hint = ok(nose) ? "Hang from the bar" : "Show your head"
+        guard let barY = bar.lineY, PoseGeometry.ok(nose) else {
+            hint = PoseGeometry.ok(nose) ? "Hang from the bar" : "Show your head"
             return nil
         }
         return PullupSample(
@@ -989,55 +926,28 @@ public final class WorkoutEngine {
         barSettleHands = nil
     }
 
-    /// Whether the hands are above the head, which is what separates hanging from a grip that
-    /// merely happens to sit above the hips.
-    ///
-    /// At a dead hang the arms are overhead by definition, so the hands are clearly above the
-    /// nose; holding a band in front of the chest puts them clearly below it. Only used to decide
-    /// whether an *unknown* bar may be learned — once a bar exists, `BarZone.holds` already
-    /// constrains what may refine it.
-    ///
-    /// A head that cannot be seen does not block anything, so the rear-view and occluded footage
-    /// that already counts keeps working: this rejects one specific wrong posture, not an
-    /// unclear view of the face.
-    private func handsOverhead(_ k: [Keypoint], hands: Keypoint) -> Bool {
-        let nose = k[KP.nose]
-        return !ok(nose) || hands.y < nose.y
-    }
-
     /// Half the distance between the hands, for the bar's horizontal span.
     private func gripHalfWidth(_ k: [Keypoint]) -> Float? {
         let l = k[KP.leftWrist], r = k[KP.rightWrist]
-        guard ok(l), ok(r) else { return nil }
+        guard PoseGeometry.ok(l), PoseGeometry.ok(r) else { return nil }
         return abs(l.x - r.x) / 2
-    }
-
-    /// Hands overhead, tested against the hips rather than the shoulders.
-    ///
-    /// The shoulders climb past the hands at the top of a good rep, so gating on them rejects the
-    /// peak of the movement. The hips stay well below the hands throughout, which separates
-    /// hanging from a push-up without discarding the reps worth counting.
-    private func hangingFromBar(_ k: [Keypoint]) -> Bool {
-        guard let hip = midpoint(k, KP.leftHip, KP.rightHip),
-              let wrist = midpoint(k, KP.leftWrist, KP.rightWrist) else { return false }
-        return wrist.y < hip.y
     }
 
     /// Mean elbow angle in degrees; small at the bottom of a push-up, ~180 at lockout.
     private func pushupSignal(_ k: [Keypoint]) -> Float {
         // Guard against a pull-up being scored as a push-up, using the same overhead test.
-        if hangingFromBar(k) {
+        if PoseGeometry.hangingFromBar(k) {
             hint = "Get on the floor"
             return .nan
         }
-        return bilateralAngle(k,
+        return PoseGeometry.bilateralAngle(k,
                               KP.leftShoulder, KP.leftElbow, KP.leftWrist,
                               KP.rightShoulder, KP.rightElbow, KP.rightWrist)
     }
 
     /// Mean knee angle in degrees; small in the hole, ~180 standing.
     private func squatSignal(_ k: [Keypoint]) -> Float {
-        let a = bilateralAngle(k,
+        let a = PoseGeometry.bilateralAngle(k,
                                KP.leftHip, KP.leftKnee, KP.leftAnkle,
                                KP.rightHip, KP.rightKnee, KP.rightAnkle)
         if a.isNaN { hint = "Show your legs to the camera" }
@@ -1081,49 +991,6 @@ public final class WorkoutEngine {
             joints = [KP.leftShoulder, KP.rightShoulder, KP.leftElbow, KP.rightElbow,
                       KP.leftWrist, KP.rightWrist, KP.leftHip, KP.rightHip]
         }
-        return joints.allSatisfy { ok(k[$0]) }
-    }
-
-    // MARK: - geometry
-
-    private func ok(_ p: Keypoint) -> Bool { p.score >= Self.minScore }
-
-    private func midpoint(_ k: [Keypoint], _ a: Int, _ b: Int) -> Keypoint? {
-        let pa = k[a], pb = k[b]
-        if ok(pa) && ok(pb) {
-            return Keypoint(x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2, score: min(pa.score, pb.score))
-        }
-        if ok(pa) { return pa }
-        if ok(pb) { return pb }
-        return nil
-    }
-
-    private func torsoLength(_ k: [Keypoint]) -> Float? {
-        guard let sh = midpoint(k, KP.leftShoulder, KP.rightShoulder),
-              let hip = midpoint(k, KP.leftHip, KP.rightHip) else { return nil }
-        return hypotf(sh.x - hip.x, sh.y - hip.y)
-    }
-
-    /// Averages the same joint angle on both sides, using whichever sides are confidently seen.
-    private func bilateralAngle(_ k: [Keypoint],
-                                _ la: Int, _ lb: Int, _ lc: Int,
-                                _ ra: Int, _ rb: Int, _ rc: Int) -> Float {
-        let l = angle(k[la], k[lb], k[lc])
-        let r = angle(k[ra], k[rb], k[rc])
-        if !l.isNaN && !r.isNaN { return (l + r) / 2 }
-        if !l.isNaN { return l }
-        if !r.isNaN { return r }
-        return .nan
-    }
-
-    /// Interior angle at `b`, in degrees, or NaN if any vertex is not confidently seen.
-    private func angle(_ a: Keypoint, _ b: Keypoint, _ c: Keypoint) -> Float {
-        guard ok(a), ok(b), ok(c) else { return .nan }
-        let abx = a.x - b.x, aby = a.y - b.y
-        let cbx = c.x - b.x, cby = c.y - b.y
-        let mag = hypotf(abx, aby) * hypotf(cbx, cby)
-        guard mag >= 1e-4 else { return .nan }
-        let cosine = max(-1, min(1, (abx * cbx + aby * cby) / mag))
-        return acosf(cosine) * 180 / .pi
+        return joints.allSatisfy { PoseGeometry.ok(k[$0]) }
     }
 }
