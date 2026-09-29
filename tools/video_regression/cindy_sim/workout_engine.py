@@ -210,6 +210,13 @@ class WorkoutEngine:
     #: wrists disappear behind it -- so treating the first sub-threshold frame as "left the bar"
     #: threw the rep away at the moment it was earned.
     MAX_DROPOUT_FRAMES = 8
+    #: How long a frame may go without identity confirmation before the rep in flight is
+    #: abandoned. A theft is not the athlete stepping away -- a skeleton lost and found again
+    #: inside about a second should not cost a rep, so a refused frame is tolerated for a while,
+    #: the same way an unreadable one already is. Bounded by wall-clock time rather than a frame
+    #: count, because identity checks do not necessarily arrive at the frame rate a dropped
+    #: keypoint does.
+    IDENTITY_DROPOUT_MS = 1000
     #: How long the starting posture must hold, without extending further, to be taken up.
     START_POSITION_MS = 500
     #: Further extension than this, within the dwell, means they are still getting up.
@@ -253,6 +260,8 @@ class WorkoutEngine:
         self._pullup_down_seen = False
         #: Consecutive unusable frames since the last good one, while a cycle is in flight.
         self._pullup_dropout_frames = 0
+        #: When the current run of non-confirmed frames began, or 0 while none is in progress.
+        self._identity_gap_since = 0
         #: Straightest elbow angle seen while hanging, which scales the dead-hang test.
         self._pullup_extended_elbow = NAN
         #: Torso length when the current bar estimate was first established.
@@ -355,6 +364,7 @@ class WorkoutEngine:
         self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
+        self._identity_gap_since = 0
         self.awaiting_start = False
         self._start_position_since = 0
         self._start_smoothed = NAN
@@ -416,6 +426,7 @@ class WorkoutEngine:
         self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
+        self._identity_gap_since = 0
         self.diagnostics = FrameDiagnostics()
 
     # -- scoring ----------------------------------------------------------
@@ -423,8 +434,11 @@ class WorkoutEngine:
     def on_frame(self, k: Sequence[Keypoint], now: int, identity_stable: bool = True) -> RepEvent:
         """Scores a running-workout frame.
 
-        `identity_stable` comes from PoseDetector's tracked ROI. A lost ROI is the one reliable
-        signal that this is no longer the same body.
+        `identity_stable` means AthleteLock confirmed this skeleton as the athlete. A frame that
+        is not confirmed counts and teaches nothing, whatever the movement -- a body that is not
+        the athlete's must not complete their rep or bend their learned range. The rep in flight
+        survives a brief refusal (`IDENTITY_DROPOUT_MS`), so a skeleton that is lost and found
+        again inside about a second does not cost the athlete a rep.
         """
         if self._setup_in_progress:
             self.hint = "Finish setup first"
@@ -445,6 +459,21 @@ class WorkoutEngine:
 
         if self.exercise is Exercise.PULLUP:
             return self._on_pullup_frame(k, now, identity_stable)
+
+        if not identity_stable:
+            self.hint = "Tracking…"
+            self.blocked = True
+            if self._identity_gap_since == 0:
+                self._identity_gap_since = now
+            if self.awaiting_start:
+                self._start_position_since = 0
+                self._start_smoothed = NAN
+                self._start_reference = NAN
+            if now - self._identity_gap_since > self.IDENTITY_DROPOUT_MS:
+                self._counters[self.exercise].require_fresh_down()
+            self.diagnostics = self._frame_diagnostics(k, False, rejection=self.hint)
+            return RepEvent.NONE
+        self._identity_gap_since = 0
 
         s = self._signal_for(k)
         if math.isnan(s):
@@ -568,6 +597,7 @@ class WorkoutEngine:
         self._overhead_frames = 0
         self._bar_settle_since = 0
         self._bar_settle_hands = None
+        self._identity_gap_since = 0
         self.diagnostics = FrameDiagnostics()
 
     def on_setup_frame(self, k: Sequence[Keypoint], now: int, identity_stable: bool = True) -> Setup:
@@ -587,6 +617,9 @@ class WorkoutEngine:
 
         if self.exercise is Exercise.PULLUP:
             self._on_pullup_frame(k, now, identity_stable, settle_workout=False)
+        elif not identity_stable:
+            self.hint = "Tracking…"
+            self.diagnostics = self._frame_diagnostics(k, False, rejection=self.hint)
         else:
             s = self._signal_for(k)
             if not math.isnan(s):
@@ -632,9 +665,13 @@ class WorkoutEngine:
         if not identity_stable:
             self.hint = "Tracking…"
             self.blocked = True
-            self._tolerate_pullup_dropout()
+            if self._identity_gap_since == 0:
+                self._identity_gap_since = now
+            if now - self._identity_gap_since > self.IDENTITY_DROPOUT_MS:
+                self._invalidate_pullup_cycle()
             self.diagnostics = self._frame_diagnostics(k, False, rejection=self.hint)
             return RepEvent.NONE
+        self._identity_gap_since = 0
 
         sample = self._pullup_sample(k, now)
         if sample is None:

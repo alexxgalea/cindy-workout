@@ -98,6 +98,26 @@ def empty() -> list[Keypoint]:
     return _blank()
 
 
+def standing(_unused: float = 0.0) -> list[Keypoint]:
+    """A person standing still: upright, stood up on the legs, arms hanging by the sides with the
+    wrists below the hips rather than overhead.
+
+    Satisfies neither the push-up nor the squat start posture, and is not a hang either -- the
+    shape of someone in frame who is not doing the movement at all, used to prove that such a
+    body cannot be mistaken for the athlete's. Takes an ignored angle so it can be driven from
+    the parity plan like the other builders.
+    """
+    k = _blank()
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 2.0, 60.0)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 4.0, 120.0)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, 0.0, 100.0)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, 0.0, 190.0)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0.0, 280.0)
+    _put(k, KP.NOSE, 0.0, -30.0)
+    return k
+
+
 def band_setup(_unused: float = 0.0) -> list[Keypoint]:
     """Standing holding a resistance band at chest height, arms straight.
 
@@ -140,5 +160,5 @@ def inverted_row(elbow_deg: float) -> list[Keypoint]:
 
 BUILDERS = {
     "squat": squat, "pushup": pushup, "pullup": pullup,
-    "bandsetup": band_setup, "invertedrow": inverted_row,
+    "bandsetup": band_setup, "invertedrow": inverted_row, "standing": standing,
 }
