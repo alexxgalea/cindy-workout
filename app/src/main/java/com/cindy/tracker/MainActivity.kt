@@ -1604,8 +1604,8 @@ class MainActivity : AppCompatActivity() {
         syncMovements()
         syncVoice()
         syncMusic()
-        // A force-stop clears alarms; opening the app is the first chance to put it back.
-        ReminderScheduler.sync(this)
+        // A force-stop or reboot clears alarms; put it back, but never postpone one that is due.
+        ReminderScheduler.ensureArmed(this)
     }
 
     override fun onPause() {

@@ -78,6 +78,26 @@ class ReminderDeliveryTest {
     }
 
     @Test
+    fun `opening the app does not postpone a reminder that is due`() {
+        turnOn()
+        Profile(context).reminderMinute = 18 * 60
+        val zone = ZoneId.systemDefault()
+        val day = ZonedDateTime.now(zone).toLocalDate()
+        ReminderScheduler.sync(context, ZonedDateTime.of(day, LocalTime.of(9, 0), zone))
+        ReminderScheduler.ensureArmed(context, ZonedDateTime.of(day, LocalTime.of(18, 5), zone))
+        val expected = day.atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        assertEquals(expected, shadowOf(alarms).peekNextScheduledAlarm()!!.triggerAtTime)
+    }
+
+    @Test
+    fun `opening the app arms a reminder when none is armed`() {
+        turnOn()
+        assertNull(shadowOf(alarms).peekNextScheduledAlarm())
+        ReminderScheduler.ensureArmed(context)
+        assertNotNull(shadowOf(alarms).peekNextScheduledAlarm())
+    }
+
+    @Test
     fun `turning it off cancels the alarm`() {
         turnOn()
         ReminderScheduler.sync(context)
