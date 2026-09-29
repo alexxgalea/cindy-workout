@@ -482,7 +482,7 @@ class RecordsActivity : AppCompatActivity() {
     internal fun openDay(date: LocalDate) {
         val zone = ZoneId.systemDefault()
         val sessions = store.all()
-            .filter { Instant.ofEpochMilli(it.atMillis).atZone(zone).toLocalDate() == date }
+            .filter { Progress.localDate(it, zone) == date }
             .sortedBy { it.atMillis }
         if (sessions.isEmpty()) return
 
