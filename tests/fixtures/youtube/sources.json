@@ -93,8 +93,10 @@
       "id": "IGeeTmrkGDM",
       "group": "cindy",
       "exercise": "mixed",
-      "status": "candidate",
-      "notes": "Full Cindy AMRAP, 20 minutes. Same labelling caveat."
+      "status": "labelled",
+      "confidence": "high",
+      "label_basis": "One full round: 5 pull-ups, 10 push-ups, 15 squats, counted by eye from contact sheets and cross-checked against hysteresis on the raw elbow and knee angles; per-rep times in tests/scenarios/cindy.json.",
+      "notes": "The local fixture is a ~79 s excerpt of a 20-minute AMRAP: one round (pull-ups ~8-23 s, push-ups ~29-52 s, squats ~57-78 s). Production counts only 1 of the 5 pull-ups on this rear three-quarter view, so Cindy mode scores it with setup skipped."
     },
     {
       "id": "EgIMk-PZwo0",
