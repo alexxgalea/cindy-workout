@@ -30,11 +30,14 @@ class EngineParityTraceTest {
         val output = StringBuilder(HEADER).append('\n')
 
         rows.groupBy { it[TRACE_ID] }.forEach { (traceId, steps) ->
-            val exercise = when (steps.first()[EXERCISE]) {
+            // "cindy" runs the default progression across all three movements, rather than
+            // pinning the engine to one, so a trace can cross a movement transition.
+            val exercise = when (val name = steps.first()[EXERCISE]) {
                 "pullup" -> Exercise.PULLUP
                 "pushup" -> Exercise.PUSHUP
                 "squat" -> Exercise.SQUAT
-                else -> error("Unknown exercise in $traceId")
+                "cindy" -> null
+                else -> error("Unknown exercise $name in $traceId")
             }
             val pull = PullVariant.entries.first { it.name == steps.first()[PULL] }
             val engine = WorkoutEngine(
@@ -44,15 +47,17 @@ class EngineParityTraceTest {
             steps.forEach { step ->
                 val angle = step[ANGLE].toFloat()
                 val now = step[STEP_MS].toLong() * step[STEP].toLong()
+                val identity = step[IDENTITY] == "1"
                 val keypoints = when (step[BUILDER]) {
                     "pullup" -> PoseFixtures.pullup(angle)
                     "pushup" -> PoseFixtures.pushup(angle)
                     "squat" -> PoseFixtures.squat(angle)
                     "bandsetup" -> PoseFixtures.bandSetup()
                     "invertedrow" -> PoseFixtures.invertedRow(angle)
+                    "standing" -> PoseFixtures.standing()
                     else -> error("Unknown builder in $traceId")
                 }
-                val event = engine.onFrame(keypoints, now)
+                val event = engine.onFrame(keypoints, now, identity)
                 val d = engine.diagnostics
                 output.append(
                     listOf(
@@ -76,7 +81,10 @@ class EngineParityTraceTest {
                         d.barGateOpen.toString(),
                         d.headAboveBar.toString(),
                         d.resetBelowBarSeen.toString(),
-                        d.rejectionReason.orEmpty()
+                        d.rejectionReason.orEmpty(),
+                        // Names the movement actually being scored, so a divergence on a "cindy"
+                        // trace that crosses a transition points at the right one.
+                        engine.exercise.name.lowercase()
                     ).joinToString(",") { field -> "\"" + field.replace("\"", "\"\"") + "\"" }
                 ).append('\n')
             }
@@ -108,8 +116,9 @@ class EngineParityTraceTest {
         const val STEP = 4
         const val ANGLE = 5
         const val PULL = 6
+        const val IDENTITY = 7
         const val HEADER = "traceId,step,tMs,angle,kpSum,event,count,state,signal,learnedRange," +
             "calibrated,hint,minConfidence,confidenceAdequate,poseLegible,barGateOpen,headAboveBar," +
-            "resetSeen,rejection"
+            "resetSeen,rejection,exercise"
     }
 }

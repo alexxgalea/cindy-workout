@@ -28,7 +28,7 @@ from cindy_sim.workout_engine import CindyProfile, Exercise, PullVariant, Workou
 HEADER = [
     "traceId", "step", "tMs", "angle", "kpSum", "event", "count", "state", "signal",
     "learnedRange", "calibrated", "hint", "minConfidence", "confidenceAdequate", "poseLegible",
-    "barGateOpen", "headAboveBar", "resetSeen", "rejection",
+    "barGateOpen", "headAboveBar", "resetSeen", "rejection", "exercise",
 ]
 EXERCISES = {"pullup": Exercise.PULLUP, "pushup": Exercise.PUSHUP, "squat": Exercise.SQUAT}
 
@@ -45,15 +45,20 @@ def run_plan(plan_path: Path) -> list[list[str]]:
     out: list[list[str]] = []
     for trace_id in dict.fromkeys(row["traceId"] for row in rows):
         steps = [row for row in rows if row["traceId"] == trace_id]
+        # "cindy" runs the default progression across all three movements, rather than pinning
+        # the engine to one, so a trace can cross a movement transition.
+        exercise_name = steps[0]["exercise"]
+        fixed_exercise = None if exercise_name == "cindy" else EXERCISES[exercise_name]
         engine = WorkoutEngine(
-            fixed_exercise=EXERCISES[steps[0]["exercise"]],
+            fixed_exercise=fixed_exercise,
             profile=CindyProfile(pull=PullVariant[steps[0]["pull"]]),
         )
         for step in steps:
             angle = float(step["angle"])
             now = int(step["stepMs"]) * int(step["step"])
+            identity = step["identity"] == "1"
             keypoints = pose_fixtures.BUILDERS[step["builder"]](angle)
-            event = engine.on_frame(keypoints, now)
+            event = engine.on_frame(keypoints, now, identity)
             d = engine.diagnostics
             out.append([
                 trace_id,
@@ -77,6 +82,9 @@ def run_plan(plan_path: Path) -> list[list[str]]:
                 str(d.head_above_bar).lower(),
                 str(d.reset_below_bar_seen).lower(),
                 d.rejection_reason or "",
+                # Names the movement actually being scored, so a divergence on a "cindy" trace
+                # that crosses a transition points at the right one.
+                engine.exercise.name.lower(),
             ])
     return out
 
