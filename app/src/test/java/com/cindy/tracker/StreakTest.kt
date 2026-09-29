@@ -2,8 +2,10 @@ package com.cindy.tracker
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -100,5 +102,107 @@ class StreakTest {
         // 00:30 local on the 9th in Bucharest is still the 8th in UTC.
         val trained = Streak.daysTrained(listOf(attempt("2026-09-09", hour = 0, minute = 30)), zone)
         assertEquals(setOf(LocalDate.of(2026, 9, 9)), trained)
+    }
+
+    private val monday = DayOfWeek.MONDAY
+
+    private fun weeks(vararg iso: String) = days(*iso)
+
+    @Test
+    fun `weeks start where the locale says`() {
+        assertEquals(LocalDate.of(2026, 9, 7), Streak.weekStart(today, DayOfWeek.MONDAY))
+        assertEquals(LocalDate.of(2026, 9, 6), Streak.weekStart(today, DayOfWeek.SUNDAY))
+    }
+
+    @Test
+    fun `a session a week is a weekly streak`() {
+        val w = Streak.weeksTrained(days("2026-08-26", "2026-09-01", "2026-09-09"), monday)
+        assertEquals(3, Streak.currentWeeks(w, today, monday))
+    }
+
+    @Test
+    fun `last week keeps the weekly streak alive`() {
+        val w = Streak.weeksTrained(days("2026-08-26", "2026-09-01"), monday)
+        assertEquals(2, Streak.currentWeeks(w, today, monday))
+        assertTrue(Streak.weekAtRisk(w, today, monday))
+    }
+
+    @Test
+    fun `a week off breaks the weekly streak`() {
+        val w = Streak.weeksTrained(days("2026-08-19", "2026-08-26"), monday)
+        assertEquals(0, Streak.currentWeeks(w, today, monday))
+    }
+
+    @Test
+    fun `training this week is not a week at risk`() {
+        val w = Streak.weeksTrained(days("2026-09-01", "2026-09-08"), monday)
+        assertFalse(Streak.weekAtRisk(w, today, monday))
+    }
+
+    @Test
+    fun `the locale decides which week a Sunday is in`() {
+        val trained = days("2026-09-06", "2026-09-07")
+        val mon = Streak.weeksTrained(trained, DayOfWeek.MONDAY)
+        assertEquals(2, mon.size)
+        assertEquals(2, Streak.longestWeeks(mon))
+        assertEquals(1, Streak.weeksTrained(trained, DayOfWeek.SUNDAY).size)
+    }
+
+    @Test
+    fun `a weekly streak crosses the new year`() {
+        val w = Streak.weeksTrained(days("2025-12-30", "2026-01-06"), monday)
+        assertEquals(2, Streak.longestWeeks(w))
+    }
+
+    @Test
+    fun `the longest weekly run is found wherever it sits`() {
+        val w = weeks("2026-07-06", "2026-07-13", "2026-07-20", "2026-08-31")
+        assertEquals(3, Streak.longestWeeks(w))
+    }
+
+    @Test
+    fun `the current run lists its days`() {
+        val trained = days("2026-09-05", "2026-09-07", "2026-09-08", "2026-09-09")
+        val run = days("2026-09-07", "2026-09-08", "2026-09-09")
+        assertEquals(run, Streak.currentRun(trained, today))
+        assertEquals(run, Streak.currentRun(trained, LocalDate.of(2026, 9, 10)))
+    }
+
+    @Test
+    fun `no current run is empty`() {
+        assertTrue(Streak.currentRun(days("2026-09-01"), today).isEmpty())
+    }
+
+    @Test
+    fun `the longest run knows where it was`() {
+        val trained = days(
+            "2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04",
+            "2026-08-20", "2026-08-21",
+            "2026-09-09"
+        )
+        assertEquals(LocalDate.of(2026, 8, 1)..LocalDate.of(2026, 8, 4), Streak.longestRun(trained))
+        assertNull(Streak.longestRun(emptySet()))
+    }
+
+    @Test
+    fun `a tie goes to the most recent run`() {
+        val trained = days("2026-08-01", "2026-08-02", "2026-08-10", "2026-08-11")
+        assertEquals(LocalDate.of(2026, 8, 10)..LocalDate.of(2026, 8, 11), Streak.longestRun(trained))
+    }
+
+    @Test
+    fun `the longest weekly run knows where it was`() {
+        val w = weeks("2026-07-06", "2026-07-13", "2026-08-31")
+        assertEquals(LocalDate.of(2026, 7, 6)..LocalDate.of(2026, 7, 13), Streak.longestWeeksRun(w))
+    }
+
+    @Test
+    fun `milestones`() {
+        assertEquals(3, Streak.nextMilestone(0, Streak.DAILY_MILESTONES))
+        assertEquals(7, Streak.nextMilestone(3, Streak.DAILY_MILESTONES))
+        assertNull(Streak.nextMilestone(365, Streak.DAILY_MILESTONES))
+        assertTrue(Streak.isMilestone(7, Streak.DAILY_MILESTONES))
+        assertFalse(Streak.isMilestone(8, Streak.DAILY_MILESTONES))
+        assertEquals(2, Streak.nextMilestone(1, Streak.WEEKLY_MILESTONES))
     }
 }
