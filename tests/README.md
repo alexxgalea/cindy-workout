@@ -172,6 +172,19 @@ thresholds are exact comparisons (`elbow >= DEAD_HANG_DEGREES`). A 64-bit port d
 frames that land exactly on a threshold, so `f32()` rounds at every point the Kotlin stores a
 `Float`. That is not pedantry — it was a real, reproducible one-frame divergence before the fix.
 
+**A known discrepancy, left alone on purpose.** The harness reads the detector's tracking flag
+one frame earlier than the app does. `run_batch.py`'s `infer_video` captures
+`detector.tracking` *before* calling `detector.detect()` for that frame, so the flag it hands the
+engine describes the *previous* frame's crop state; `MainActivity.analyse` calls `det.detect(...)`
+first and only reads `det.tracking` afterwards, in the same call that feeds the engine, so it
+always describes the *current* frame. The two therefore disagree for exactly one frame around
+every crop-tracking transition. This is not fixed here, because doing so would shift every
+existing baseline by up to a frame's worth of tracking state on the clips that exercise it, and
+nothing currently depends on the flag meaning anything more than "was a crop being followed" —
+only pull-up counting reads it at all today, gated by `MAX_DROPOUT_FRAMES`, which absorbs a
+one-frame flicker regardless of which side of the transition it lands on. A rewrite that reads the
+flag consistently everywhere is a bigger, separate change.
+
 ## Scoring clips
 
 ```sh
@@ -243,3 +256,85 @@ so a clip can be counted by eye:
 `tests/fixtures/youtube/sources.json` records, per clip, how its label was established and how
 much it is trusted. Clips whose count is not yet verified stay `status: "candidate"` and assert
 nothing.
+
+## Cindy mode
+
+A scenario with `"exercise": "cindy"` (or `--exercise cindy` ad hoc) scores the real progression
+instead of one fixed movement: no exercise is pinned, setup runs until it reports READY, and only
+then does the clip get scored frame by frame through the whole pull-up → push-up → squat → …
+cycle — the same order the app itself uses: `on_setup_frame` every frame while in setup,
+`finish_setup()` the moment it reports READY, and `on_frame` for every frame after that, never
+both for the same frame. This is the only path that crosses a movement transition, which matters
+for anything that has to survive one.
+
+Because setup is not skipped, calibration behaves exactly as it does on the phone: the athlete's
+first two pull-ups are consumed to learn the rep-detection band, then zeroed out the moment the
+clock starts, so they never count toward the pull-up total. A `cindy` scenario's
+`expectedRepsByMovement` (an object such as `{"pullup": 3, "pushup": 5, "squat": 5}`) must
+therefore be the *labelled* total for each movement — every rep visible in the clip, calibration
+included — and the reported `observed` count for pull-ups will legitimately run two lower than
+that label once calibration completes. If setup never reaches READY at all (the learned range
+never clears the movement's threshold, or the count never reaches two), no workout frames are
+scored, every movement reports zero, and the failure says so explicitly rather than reporting a
+misleading exact-zero pass.
+
+Per-movement results land in each report's `per_movement` object (`expected`/`observed`/
+`eventsMs`), alongside the usual single `expectedReps`/`observedReps` totals summed across
+movements.
+
+## Real two-person clips
+
+A local catalogue of real footage with a bystander in shot (never committed — real people are not
+test fixtures) can be scored the same way the synthetic composites are, via
+`tools/video_regression/identity/run_identity.py --catalogue <path to catalogue.json>`. The
+catalogue is a JSON object:
+
+```json
+{
+  "version": 1,
+  "clips": [
+    {
+      "id": "scenario_a_bystander_still",
+      "scenario": "a",
+      "video": "scenario_a.mp4",
+      "groundTruth": "scenario_a.truth.json",
+      "repsMs": { "pullup": [1234, 2456], "pushup": [], "squat": [] }
+    }
+  ]
+}
+```
+
+`video` and `groundTruth` are resolved relative to the catalogue file itself unless they are
+absolute paths. `scenario` is a single letter naming which of the recorded situations the clip
+covers (a bystander standing still from before the athlete arrives; a partner near the athlete
+during a movement transition; a partner walking behind then in front; a partner training the same
+movement out of phase nearby; a partner starting the same movement at an adjacent station at the
+same moment; the athlete leaving and returning to frame while the partner stays; the partner
+stepping into the athlete's own spot while the athlete is briefly away; and, optionally, a mirror
+or screen showing people behind the athlete). `repsMs` gives eye-labelled rep timestamps per
+movement, established the same way any other clip's labels are (by eye, from a contact sheet,
+never from the counter under test).
+
+`groundTruth` points to a second JSON file with the per-frame athlete position, established from
+an independent multi-person pose source and simple tracking, with the athlete's own track picked
+by hand and spot-checked:
+
+```json
+{
+  "frames": [
+    { "index": 1, "athleteBox": [30, 40, 130, 480], "occluded": false,
+      "torso": [[0,0,0], [0,0,0], [0,0,0], [0,0,0], [0,0,0],
+                [62, 120, 0.9], [98, 122, 0.9], [0,0,0], [0,0,0], [0,0,0], [0,0,0],
+                [66, 260, 0.9], [94, 262, 0.9], [0,0,0], [0,0,0], [0,0,0], [0,0,0]] }
+  ]
+}
+```
+
+`index` matches the frame indices the harness itself produces when it decodes the same video at
+its own analysed rate (every second frame of a 30 fps source, 15 fps). `torso` is a full 17-entry
+keypoint list in the same `(x, y, score)` order the pose detector emits, so the identity metrics'
+existing torso helper works on it unchanged; entries outside the four shoulder/hip joints may be
+left zeroed if only the torso was hand-tracked. `athleteBox` and `occluded` are optional extra
+ground truth for frames where the athlete's whole body position or visibility is also worth
+recording (a walk-through-style pass, or a departure and return), beyond what the torso alone
+says.
