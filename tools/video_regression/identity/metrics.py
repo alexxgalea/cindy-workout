@@ -62,8 +62,8 @@ MIN_SCORE = 0.30
 LEFT_SHOULDER, RIGHT_SHOULDER = 5, 6
 LEFT_HIP, RIGHT_HIP = 11, 12
 
-#: Section 5.1: "the torso centre is more than 0.5 torso lengths from the athlete's, and inside
-#: the neighbour's rectangle."
+#: A whole skeleton is stolen when its torso centre is more than this many torso lengths from the
+#: athlete's, and inside the neighbour's rectangle.
 STEAL_TORSOS = 0.5
 #: The classification's looser threshold uses the same distance -- only the rectangle gate differs.
 CLASSIFY_TORSOS = 0.5
@@ -77,12 +77,11 @@ def _xy_score(point) -> tuple[float, float, float]:
 
 
 def torso_centre(keypoints: Sequence[KeypointLike], strict: bool = False) -> tuple[float, float, float] | None:
-    """The torso centre and length section 5.1 and 5.5 are built on: the midpoint of the seen
+    """The torso centre and length every theft measure is built on: the midpoint of the seen
     shoulders averaged with the midpoint of the seen hips, and the distance between the two.
 
-    ``strict=False`` (the default; section 5.1's and 5.3's definition, and 5.5's "any shoulder +
-    any hip" row) accepts a single shoulder or hip. ``strict=True`` (5.5's "both sides required"
-    row) demands both, which is noisier to lose but far steadier once seen -- a one-sided midpoint
+    ``strict=False`` (the default, and the theft definition) accepts a single shoulder or hip.
+    ``strict=True`` demands both, which is noisier to lose but far steadier once seen -- a one-sided midpoint
     can jump by half the body's width when the other side drops below the confidence floor.
     Returns ``None`` if the torso cannot be built at all (no shoulder, or no hip, confidently seen).
     """
@@ -133,7 +132,7 @@ def classify_frame(
     clip's clean (no-neighbour, or real-clip-labelled) torso at the same instant.
 
     When `truth` itself has no torso this frame, the rate metrics exclude the frame anyway (via
-    `ScoredFrame.truth_has_torso`, matching section 5.1's "scored frames" convention) -- but this
+    `ScoredFrame.truth_has_torso`, the "scored frames" convention) -- but this
     function still needs to answer sensibly for the metrics that do not filter on it, chiefly the
     startup ones: before the athlete arrives, truth has no torso by construction, and if the
     detector confidently reports *somebody* right then, that is definitely not the athlete, not
@@ -155,10 +154,10 @@ def classify_frame(
 def whole_skeleton_stolen(
     detected: Sequence[KeypointLike] | None, truth: Sequence[KeypointLike], neighbour_cell,
 ) -> bool | None:
-    """Section 5.1's exact theft definition, for reproducing section 5.3: the detected torso centre
-    is more than 0.5 torso lengths from the athlete's truth centre, *and* inside the neighbour's
-    placement rectangle. Returns `None` (not scored) when `truth` has no torso, matching the
-    prototype's 1,155-of-1,189 scored-frame count.
+    """A stricter theft definition than `classify_frame`, for reproducing a known rectangle-gated
+    theft-rate table: the detected torso centre is more than 0.5 torso lengths from the athlete's
+    truth centre, *and* inside the neighbour's placement rectangle. Returns `None` (not scored)
+    when `truth` has no torso.
     """
     a = torso_centre(truth)
     if a is None:
@@ -173,10 +172,10 @@ def whole_skeleton_stolen(
 def stolen_joint_count(
     detected: Sequence[KeypointLike] | None, truth: Sequence[KeypointLike], neighbour_cell,
 ) -> int:
-    """Section 5.1's per-joint theft count: a joint landing more than 0.5 truth-torso-lengths from
-    its own truth position, confidently seen, and inside the neighbour's rectangle. 0 when the
-    truth torso itself is unavailable (nothing to measure joint distance against) or no neighbour
-    is placed this frame.
+    """A per-joint theft count: a joint landing more than 0.5 truth-torso-lengths from its own
+    truth position, confidently seen, and inside the neighbour's rectangle. 0 when the truth torso
+    itself is unavailable (nothing to measure joint distance against) or no neighbour is placed
+    this frame.
     """
     a = torso_centre(truth)
     if a is None or detected is None or neighbour_cell is None:
@@ -201,11 +200,10 @@ class ScoredFrame:
     verdict: Verdict
     stolen_joints: int = 0
     whole_stolen: bool = False
-    #: Ground truth: could the athlete's own *clean* torso be built at all this frame? Section
-    #: 5.1's "scored frames" gate (1,155 of 1,189 for the base clip alone) -- independent of
-    #: whether the detector under test found anything, which is what `classification`/`verdict`
+    #: Ground truth: could the athlete's own *clean* torso be built at all this frame? Independent
+    #: of whether the detector under test found anything, which is what `classification`/`verdict`
     #: describe. A frame where this is False carries no identity information either way and is
-    #: excluded from every rate below, matching the prototype.
+    #: excluded from every rate below.
     truth_has_torso: bool = True
     #: Ground truth from the scene, not from the detector: is the athlete geometrically present
     #: and not hidden behind the neighbour this frame? (``composite.Frame.athlete_box``,
@@ -214,10 +212,10 @@ class ScoredFrame:
     athlete_occluded: bool = False
     #: Ground truth for "time to get back after a real loss": the athlete's own pose (not the
     #: detector's) is back in the current movement's start position at their station. `None` when
-    #: a set has no such ground truth yet (every Phase 0 composite: none of them model a
-    #: departure-and-return), which excludes it from that metric rather than reporting a false 0.
+    #: a set has no such ground truth yet (every composite here: none of them model a departure
+    #: and return), which excludes it from that metric rather than reporting a false 0.
     athlete_at_start_position: bool | None = None
-    #: For the cost metric (Phase 2+ variants only; always 0/None for production).
+    #: For the cost metric (a lock-based variant only; always 0/None for production).
     lock_state: str | None = None
     extra_inferences: int = 0
     #: For counting metrics; `None` when a set carries no movement/rep information at all.
@@ -229,10 +227,10 @@ class RecoveryEvent:
     """One episode of the athlete becoming present again (visible and unoccluded, or back at the
     start position) after not being, paired with the next CONFIRMED-on-athlete frame.
 
-    The duration is measured from *becoming present again*, matching the plan's own wording
-    exactly ("from the first frame the athlete is visible and unoccluded again, to their first
-    CONFIRMED frame") -- not from whenever they were lost, which would also count the time nobody
-    could have done anything about.
+    The duration is measured from the athlete *becoming present again* -- the first frame they are
+    visible and unoccluded again, or back at the start position -- to their first CONFIRMED frame
+    from that point on, not from whenever they were lost, which would also count time nobody could
+    have done anything about.
     """
 
     present_again_at_ms: int
@@ -245,7 +243,7 @@ class RecoveryEvent:
 
 @dataclass
 class Report:
-    """Every number Phase 0 task 3 asks for, for one (layout, variant) run."""
+    """Every identity metric, for one (layout, variant) run."""
 
     n_frames: int
     #: Percentages of *scored* frames (truth has a torso) in each classification.
@@ -317,10 +315,9 @@ def score_run(
     the "counts" metric. Neither is available for the plain composite layouts (they carry no rep
     labels); both are for the Cindy-mode clip and a real labelled two-person clip (task 7).
     """
-    # Every rate below is of "scored" frames -- section 5.1's convention (1,155 of 1,189 for the
-    # base clip alone): truth had a torso at all, regardless of what the detector under test found.
+    # Every rate below is of "scored" frames (1,155 of 1,189 for the garage clip alone): truth had a torso at all, regardless of what the detector under test found.
     # A frame classified NOTHING because the *detector* found nobody still counts here; only
-    # `truth_has_torso=False` (section 5.5's 34-of-1,189 gap in the athlete-alone case) is excluded.
+    # `truth_has_torso=False` (34 of 1,189 frames for the garage clip alone) is excluded.
     truth_had_torso = [f for f in frames if f.truth_has_torso]
     n = len(truth_had_torso) or 1
 
