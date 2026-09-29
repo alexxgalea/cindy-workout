@@ -113,7 +113,12 @@ object Progress {
         return cut(points, bests, dates, from, lowerIsBetter = false)
     }
 
-    /** Seconds per round, full sessions only, where faster is better. */
+    /**
+     * Seconds per round, full sessions only, where faster is better. A lower-bound pace never
+     * sets the bar, because unlike a score it says nothing about how fast the athlete really
+     * was. It is still plotted, and before any exact attempt its own value stands in for the
+     * displayed best so the line stays finite.
+     */
     fun paceSeries(
         attempts: List<Attempt>, category: CindyProfile?, from: LocalDate?, zone: ZoneId
     ): Series {
@@ -127,9 +132,9 @@ object Progress {
         for (a in own) {
             val seconds = (a.avgRoundMs ?: continue) / 1000.0
             val record = !a.scoreIsLowerBound && seconds < best
-            best = minOf(best, seconds)
+            if (!a.scoreIsLowerBound) best = minOf(best, seconds)
             points += ProgressPoint(a.atMillis, seconds, record, a.scoreIsLowerBound, a)
-            bests += best
+            bests += if (best == Double.MAX_VALUE) seconds else best
             dates += localDate(a, zone)
         }
         return cut(points, bests, dates, from, lowerIsBetter = true)

@@ -41,8 +41,12 @@ class ProgressTest {
     )
 
     /** A full session whose rounds each took [seconds]. */
-    private fun paced(iso: String, seconds: Int, durationMs: Long = 20 * 60_000L) =
-        attempt(iso, 10, durationMs = durationMs, splits = List(10) { seconds * 1000L })
+    private fun paced(
+        iso: String, seconds: Int, durationMs: Long = 20 * 60_000L, untrackedMs: Long = 0L
+    ) = attempt(
+        iso, 10, durationMs = durationMs, splits = List(10) { seconds * 1000L },
+        untrackedMs = untrackedMs
+    )
 
     @Test
     fun `categories list the most recent first`() {
@@ -105,6 +109,30 @@ class ProgressTest {
         assertEquals(listOf(true, true, false), s.points.map { it.record })
         assertEquals(listOf(70.0, 65.0, 65.0), s.best)
         assertTrue(s.lowerIsBetter)
+    }
+
+    @Test
+    fun `a lower-bound pace does not lower the best line`() {
+        val list = listOf(
+            paced("2026-08-01", 70), paced("2026-08-02", 60, untrackedMs = 60_000L),
+            paced("2026-08-03", 65)
+        )
+        val s = Progress.paceSeries(list, CindyProfile.STANDARD, null, zone)
+        assertEquals(listOf(true, false, true), s.points.map { it.record })
+        assertEquals(listOf(70.0, 70.0, 65.0), s.best)
+        assertTrue(s.points[1].lowerBound)
+    }
+
+    @Test
+    fun `a lower-bound first pace is shown but is not a record`() {
+        val list = listOf(
+            paced("2026-08-01", 60, untrackedMs = 60_000L), paced("2026-08-02", 70)
+        )
+        val s = Progress.paceSeries(list, CindyProfile.STANDARD, null, zone)
+        assertEquals(listOf(false, true), s.points.map { it.record })
+        assertEquals(60.0, s.best[0], 0.0)
+        assertEquals(70.0, s.best[1], 0.0)
+        assertTrue(s.best.all { it < 1e9 })
     }
 
     @Test
