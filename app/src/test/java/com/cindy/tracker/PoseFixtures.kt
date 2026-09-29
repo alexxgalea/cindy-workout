@@ -173,6 +173,26 @@ object PoseFixtures {
         return k
     }
 
+    /**
+     * A person standing still: upright, stood up on the legs, arms hanging straight by the sides
+     * with the wrists below the hips rather than overhead.
+     *
+     * Satisfies neither the push-up nor the squat start posture, and is not a hang either — the
+     * shape of someone in frame who is not doing the movement at all, used to prove that such a
+     * body cannot be mistaken for the athlete's.
+     */
+    fun standing(): Array<Keypoint> {
+        val k = blank()
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, 0f)
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 2f, 60f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 4f, 120f)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, 0f, 100f)
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, 0f, 190f)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0f, 280f)
+        k.put(KP.NOSE, 0f, -30f)
+        return k
+    }
+
     /** Nothing confidently detected — the "step into frame" case. */
     fun empty(): Array<Keypoint> = blank()
 }

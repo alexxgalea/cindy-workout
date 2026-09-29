@@ -76,6 +76,7 @@ data class FrameDiagnostics(
      * and an early warning is worthless if it arrives with the miscount.
      */
     val poseLegible: Boolean = false,
+    /** True when AthleteLock confirmed this frame's skeleton as the athlete. */
     val identityStable: Boolean = false,
     val barGateOpen: Boolean = false,
     val headAboveBar: Boolean = false,
@@ -186,6 +187,17 @@ class WorkoutEngine(
          */
         const val MAX_DROPOUT_FRAMES = 8
         /**
+         * How long a frame may go without identity confirmation before the rep in flight is
+         * abandoned.
+         *
+         * A theft is not the athlete stepping away — a skeleton that is lost and found again
+         * inside about a second should not cost a rep, so a refused frame is tolerated for a
+         * while, the same way an unreadable one already is. Bounded by wall-clock time rather
+         * than a frame count, because identity checks do not necessarily arrive at the frame
+         * rate a dropped keypoint does.
+         */
+        const val IDENTITY_DROPOUT_MS = 1000L
+        /**
          * How long the starting posture must hold, without extending further, to be taken up.
          *
          * Half a second of *stillness*, not half a second of merely being upright. Upright alone
@@ -287,6 +299,8 @@ class WorkoutEngine(
     private var pullupDownSeen = false
     /** Consecutive unusable frames since the last good one, while a cycle is in flight. */
     private var pullupDropoutFrames = 0
+    /** When the current run of non-confirmed frames began, or 0 while none is in progress. */
+    private var identityGapSince = 0L
     /** Straightest elbow angle seen while hanging, which scales the dead-hang test. */
     private var pullupExtendedElbow = Float.NaN
     /** Torso length when the current bar estimate was first established. */
@@ -392,6 +406,7 @@ class WorkoutEngine(
         overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
+        identityGapSince = 0L
         awaitingStart = false
         startPositionSince = 0L
         startSmoothed = Float.NaN
@@ -487,15 +502,18 @@ class WorkoutEngine(
         overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
+        identityGapSince = 0L
         diagnostics = FrameDiagnostics()
     }
 
     /**
      * Scores a running-workout frame.
      *
-     * [identityStable] comes from PoseDetector's tracked ROI. A single-pose model cannot name
-     * people, but a lost ROI is the one reliable signal that this is no longer the same body;
-     * treating it as a pause prevents a new person from completing a half-started pull-up.
+     * [identityStable] means AthleteLock confirmed this skeleton as the athlete. A frame that is
+     * not confirmed counts and teaches nothing, whatever the movement — a body that is not the
+     * athlete's must not complete their rep or bend their learned range. The rep in flight
+     * survives a brief refusal ([IDENTITY_DROPOUT_MS]), so a skeleton that is lost and found
+     * again inside about a second does not cost the athlete a rep.
      */
     fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): RepEvent {
         if (setupInProgress) {
@@ -516,6 +534,23 @@ class WorkoutEngine(
         bodyVisible = true
 
         if (exercise == Exercise.PULLUP) return onPullupFrame(k, now, identityStable)
+
+        if (!identityStable) {
+            hint = "Tracking…"
+            blocked = true
+            if (identityGapSince == 0L) identityGapSince = now
+            if (awaitingStart) {
+                startPositionSince = 0L
+                startSmoothed = Float.NaN
+                startReference = Float.NaN
+            }
+            if (now - identityGapSince > IDENTITY_DROPOUT_MS) {
+                counters.getValue(exercise).requireFreshDown()
+            }
+            diagnostics = frameDiagnostics(k, false, rejection = hint)
+            return RepEvent.NONE
+        }
+        identityGapSince = 0L
 
         val s = signalFor(k)
         if (s.isNaN()) {
@@ -648,6 +683,7 @@ class WorkoutEngine(
         overheadFrames = 0
         barSettleSince = 0L
         barSettleHands = null
+        identityGapSince = 0L
         diagnostics = FrameDiagnostics()
     }
 
@@ -672,6 +708,9 @@ class WorkoutEngine(
 
         if (exercise == Exercise.PULLUP) {
             onPullupFrame(k, now, identityStable, settleWorkout = false)
+        } else if (!identityStable) {
+            hint = "Tracking…"
+            diagnostics = frameDiagnostics(k, false, rejection = hint)
         } else {
             val s = signalFor(k)
             if (!s.isNaN()) counter.update(s, now)
@@ -755,10 +794,12 @@ class WorkoutEngine(
         if (!identityStable) {
             hint = "Tracking…"
             blocked = true
-            toleratePullupDropout()
+            if (identityGapSince == 0L) identityGapSince = now
+            if (now - identityGapSince > IDENTITY_DROPOUT_MS) invalidatePullupCycle()
             diagnostics = frameDiagnostics(k, false, rejection = hint)
             return RepEvent.NONE
         }
+        identityGapSince = 0L
 
         val sample = pullupSample(k, now)
         if (sample == null) {
