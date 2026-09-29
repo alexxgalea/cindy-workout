@@ -204,6 +204,22 @@
     "regression"
    ],
    "notes": "The light level that exposed a latent false-bar bug. Here the nose falls below confidence on exactly one frame in the first sixty, and because the hands-overhead guard reads an unseen nose as permission, that single frame taught a bar at the athlete's chest (y=458 rather than y=235) during the band setup. A wrong bar can never recover, so the clip scored 0 with 401 of 532 frames refused for 'Get on the bar'. Learning now requires the overhead posture to be HELD when the evidence is absent, and this must keep scoring 5."
+  },
+  {
+   "id": "youtube_cindy_garage_one_round",
+   "video": "tests/fixtures/youtube/cindy/IGeeTmrkGDM.mp4",
+   "exercise": "cindy",
+   "expectedRepsByMovement": {
+    "pullup": 3,
+    "pushup": 5,
+    "squat": 5
+   },
+   "tags": [
+    "youtube",
+    "cindy",
+    "known-gap"
+   ],
+   "notes": "A single ~79s excerpt of a full Cindy attempt, not three rounds: the plan called for the first three rounds, but the local fixture only covers pull-ups (~0-24s), a walk to the mat (~24-28s), push-ups (~28-52s) and squats (~56-80s) -- about one round. A longer excerpt is needed to exercise the pull-up-to-push-up switch more than once, which is where identity theft clusters in the synthetic composites. Counts were established by eye from contact sheets cropped to each station, at 5-6 fps, and are medium confidence at best: the athlete's tempo is slow and deliberate (each pull-up spans several seconds, including a visible hold near the top), which makes the exact top-of-rep frame hard to pin down at this sampling rate, and a low-confidence fourth pull-up begins ascending around 22-24s without a confirmed completion before the clip ends, so it is not counted. expectedRepsByMovement is the full labelled total including the two calibration pull-ups the app always consumes before the clock starts (see tests/README.md's Cindy mode section) -- the scored pull-up count should therefore run two below this label once setup completes. As of this fixture, setup does not complete at all: the strict pull-up gates (bar establishment, dead hang, head-over-bar) accept at most one clean cycle on this camera angle across the whole clip, so the learned band never reaches two counted reps and READY is never reached -- a pre-existing pull-up-counting limitation on this specific real footage, unrelated to identity theft, surfaced while building this scenario rather than something this phase fixes."
   }
  ]
 }

@@ -93,8 +93,10 @@
       "id": "IGeeTmrkGDM",
       "group": "cindy",
       "exercise": "mixed",
-      "status": "candidate",
-      "notes": "Full Cindy AMRAP, 20 minutes. Same labelling caveat."
+      "status": "labelled",
+      "confidence": "medium",
+      "label_basis": "Per-movement rep counts and top-of-rep timestamps by eye from contact sheets cropped to each station (the pull-up rig, then the mat, then the squat spot) at 5-6 fps: 3 pull-ups (tops around 3.8s, 12.3s, 20.3s), 5 push-ups (around 31.5s, 35.0s, 37.3s, 40.5s, 43.5s), 5 squats (around 60.6s, 64.6s, 68.6s, 72.6s, 76.6s). See tests/scenarios/youtube.json's youtube_cindy_garage_one_round for the full caveats.",
+      "notes": "The local fixture is a ~79s excerpt (pull-ups ~0-24s, push-ups ~28-52s, squats ~56-80s), not the full 20-minute AMRAP -- about one round, not three. Tempo is slow and deliberate, which makes exact rep-top timestamps harder to pin down than on a faster clip; a fourth pull-up appears to start ascending around 22-24s without a confirmed completion and is not counted. Scored via the Cindy-mode scenario; as of this fixture, setup does not reach READY at all (the pull-up gates accept at most one clean cycle on this footage), so no workout frames are scored -- a pre-existing pull-up-counting limitation on this camera angle, unrelated to identity theft."
     },
     {
       "id": "EgIMk-PZwo0",

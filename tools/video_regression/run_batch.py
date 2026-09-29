@@ -88,6 +88,10 @@ class ScenarioReport:
     #: Worst tracking health the monitor reported over the clip, and the time it spent lost.
     worst_health: str = "GOOD"
     lost_ms: int = 0
+    #: Cindy mode only (`run_cindy_scenario`): {"pullup"/"pushup"/"squat": {"expected", "observed",
+    #: "eventsMs"}}. Empty for every fixed-exercise scenario -- `expected_reps`/`observed_reps`
+    #: above stay the single number those scenarios have always reported.
+    per_movement: dict = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -370,6 +374,130 @@ def run_scenario(scenario: dict) -> ScenarioReport:
     )
 
 
+#: COCO... no -- Exercise enum members to the scenario-file movement names `run_cindy_scenario`
+#: reports per-movement counts under. The reverse of `EXERCISES`' pullup/pushup/squat aliases.
+MOVEMENT_NAME = {Exercise.PULLUP: "pullup", Exercise.PUSHUP: "pushup", Exercise.SQUAT: "squat"}
+
+
+def run_cindy_scenario(scenario: dict) -> ScenarioReport:
+    """Scores a full, no-fixed-exercise Cindy attempt: setup until READY, then the real
+    progression through pull-ups, push-ups and squats, in `MainActivity.analyse`'s order --
+    `on_setup_frame` every frame while SETUP, `finish_setup()` the moment it reports READY, and
+    `on_frame` for every frame after that (never both for the same frame, matching the app: a
+    frame is SETUP xor RUNNING, and the switch happens between frames, on `applySetup`'s callback).
+
+    Unlike the fixed-exercise path above, there is no second "scoring" engine that skips setup
+    entirely: Cindy mode *is* the setup behaviour under test, calibration reps and all. The first
+    two pull-ups the athlete performs are consumed by calibration exactly as they are on the phone
+    -- counted toward `RepCounter`'s learned band, then zeroed by `finish_setup()`'s
+    `reset_count()` before the clock starts, per `WorkoutEngine.on_setup_frame`/`finish_setup`. So
+    `expectedRepsByMovement["pullup"]` must be the label's *total* pull-up count including those
+    two; `per_movement["pullup"]["observed"]` only ever reflects what happened after calibration,
+    same as the app's own scoreboard.
+    """
+    errors: list[str] = []
+    video = Path(scenario["video"])
+    if not video.is_absolute():
+        video = ROOT / video
+    if not video.is_file():
+        return ScenarioReport(scenario["id"], "cindy", 0, 0, None, [], [], [f"missing fixture: {video}"])
+
+    model = MODELS.get((scenario.get("model") or "").lower() or None)
+    if model is None:
+        return ScenarioReport(scenario["id"], "cindy", 0, 0, None, [], [],
+                              [f"unsupported model '{scenario.get('model')}'"])
+
+    inferred = infer_video(video, model, errors, scenario.get("light"))
+    if not inferred:
+        return ScenarioReport(scenario["id"], "cindy", 0, 0, None, [], [], errors)
+
+    engine = WorkoutEngine()  # fixed_exercise=None: the real pull-up -> push-up -> squat -> ... loop
+    engine.begin_setup()
+    configure_manual_bar(engine, scenario, inferred[0])
+    health = TrackingHealthMonitor()
+    worst = TrackingHealth.GOOD
+
+    running = False
+    setup_result = None
+    frames: list[dict] = []
+    count_times: list[int] = []
+    per_movement_counts = {name: 0 for name in MOVEMENT_NAME.values()}
+    per_movement_events: dict[str, list[int]] = {name: [] for name in MOVEMENT_NAME.values()}
+
+    for frame in inferred:
+        if not running:
+            setup_result = engine.on_setup_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
+            if setup_result.stage is SetupStage.READY:
+                engine.finish_setup()
+                running = True
+            continue  # this frame was SETUP; the app never also calls onFrame for it
+
+        event = engine.on_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
+        d = engine.diagnostics
+        health.update(engine.exercise, d.pose_legible, frame.soft_gain, frame.timestamp_ms)
+        if health.health is TrackingHealth.LOST or (
+            health.health is TrackingHealth.WEAK and worst is TrackingHealth.GOOD
+        ):
+            worst = health.health
+
+        if event in (RepEvent.REP, RepEvent.EXERCISE_DONE, RepEvent.ROUND_DONE):
+            # A plain REP leaves `engine.exercise` on the movement that just scored. An
+            # EXERCISE_DONE/ROUND_DONE has already advanced it (WorkoutEngine._advance banks the
+            # rep under the old exercise before reassigning), so the movement that just finished
+            # is the *previous* one.
+            finished = engine.exercise if event is RepEvent.REP else engine.exercise.previous()
+            name = MOVEMENT_NAME[finished]
+            per_movement_counts[name] += 1
+            per_movement_events[name].append(frame.timestamp_ms)
+            count_times.append(frame.timestamp_ms)
+
+        frames.append({
+            "timestampMs": frame.timestamp_ms, "event": event.name, "exercise": engine.exercise.label,
+            "count": engine.reps, "state": engine.counting_state,
+            "signal": round(engine.signal, 3) if engine.signal == engine.signal else None,
+            "rejection": d.rejection_reason, "poseLegible": d.pose_legible,
+            "identityStable": d.identity_stable, "softGain": round(frame.soft_gain, 3),
+            "health": health.health.name,
+        })
+
+    labelled = {k: int(v) for k, v in scenario.get("expectedRepsByMovement", {}).items()}
+    for name, expected in labelled.items():
+        observed = per_movement_counts.get(name, 0)
+        tolerance = int(scenario.get("countTolerance", 0))
+        if abs(observed - expected) > tolerance:
+            errors.append(f"{name}: expected {expected} reps, observed {observed}"
+                          + (f" (tolerance {tolerance})" if tolerance else ""))
+    if not running:
+        errors.append("setup never reached READY -- no workout frames were scored")
+
+    check_events(scenario, count_times, errors)
+    wanted_health = scenario.get("expectedTracking")
+    if wanted_health and worst.name != wanted_health.upper():
+        errors.append(f"expected tracking to reach {wanted_health.upper()}, observed {worst.name}")
+
+    return ScenarioReport(
+        id=scenario["id"], exercise="cindy",
+        expected_reps=sum(labelled.values()), observed_reps=sum(per_movement_counts.values()),
+        setup=setup_result.stage.name.lower() if setup_result else None, count_times=count_times,
+        frames=frames, failures=errors, tags=scenario.get("tags", []),
+        tolerance=int(scenario.get("countTolerance", 0)), worst_health=worst.name, lost_ms=health.lost_ms,
+        per_movement={
+            name: {"expected": labelled.get(name, 0), "observed": per_movement_counts[name],
+                   "eventsMs": per_movement_events[name]}
+            for name in MOVEMENT_NAME.values()
+        },
+    )
+
+
+def score_scenario(scenario: dict) -> ScenarioReport:
+    """Dispatches to the real Cindy progression (no fixed exercise) or the ordinary
+    single-movement path, so every existing catalogue keeps running exactly as it did.
+    """
+    if (scenario.get("exercise") or "").lower() == "cindy":
+        return run_cindy_scenario(scenario)
+    return run_scenario(scenario)
+
+
 def load_catalogues(paths: list[Path]) -> list[dict]:
     scenarios: list[dict] = []
     for path in paths:
@@ -385,7 +513,7 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--scenarios", type=Path, nargs="*", default=[])
     parser.add_argument("--video", type=Path, help="score a single clip without a catalogue")
-    parser.add_argument("--exercise", choices=sorted(set(EXERCISES)), help="with --video")
+    parser.add_argument("--exercise", choices=sorted(set(EXERCISES) | {"cindy"}), help="with --video")
     parser.add_argument("--expect", type=int, default=0, help="expected reps for --video")
     parser.add_argument("--pull", choices=sorted(PULL_VARIANTS), help="pull-up variant for --video")
     parser.add_argument("--report", type=Path, default=ROOT / "tests/reports/python-regression.json")
@@ -407,7 +535,7 @@ def main() -> int:
         print("No scenarios to run. Add fixtures and labels first.", file=sys.stderr)
         return 2
 
-    reports = [run_scenario(s) for s in scenarios]
+    reports = [score_scenario(s) for s in scenarios]
 
     for report in reports:
         status = "OK" if report.ok else "FAIL"
