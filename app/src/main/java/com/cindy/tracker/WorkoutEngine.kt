@@ -377,6 +377,25 @@ class WorkoutEngine(
 
     val totalReps: Int get() = bankedRounds.sumOf { it.values.sum() } + repsThisRound
 
+    /**
+     * Every movement left, in order, with what it banked, then the one in progress.
+     *
+     * Read-only, and built from exactly the banks [totalReps] already sums — never from rounds
+     * or a movement's target. That is what a Strava set list is required to be honest about
+     * (see `WorkoutSets`): a movement SKIPped at three reps is a set of three, not a set of its
+     * target, the same rule [totalReps] already holds for the session total.
+     */
+    val sets: List<WorkoutSet>
+        get() {
+            val list = mutableListOf<WorkoutSet>()
+            bankedRounds.forEachIndexed { index, round ->
+                round.forEach { (movement, banked) -> list += WorkoutSet(index + 1, movement, banked) }
+            }
+            bankedThisRound.forEach { (movement, banked) -> list += WorkoutSet(rounds + 1, movement, banked) }
+            list += WorkoutSet(rounds + 1, exercise, reps)
+            return list
+        }
+
     fun reset() {
         counters.values.forEach { it.reset() }
         exercise = fixedExercise ?: Exercise.PULLUP
