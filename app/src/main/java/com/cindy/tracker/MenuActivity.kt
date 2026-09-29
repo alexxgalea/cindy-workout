@@ -363,8 +363,29 @@ class MenuActivity : AppCompatActivity() {
         audition = null
     }
 
+    /** Whether the screen has been stopped since it last drew; see [onResume]. */
+    private var wasStopped = false
+
+    /**
+     * Draws the rows again on the way back to the screen, but not the first time it appears.
+     *
+     * The first resume follows [onCreate], which has just rendered and started [settleRowsIn];
+     * rendering again would rebuild the rows and cancel that entrance. On a return from being
+     * stopped it is worth it: the athlete may have changed something elsewhere in the meantime,
+     * notably the notification permission in system settings, and the daily reminder row has to
+     * say what is true now.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (wasStopped) {
+            wasStopped = false
+            render()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        wasStopped = true
         // Nothing this screen plays should outlive it — least of all over the workout that comes
         // after, which has a player of its own.
         stopAudition()
