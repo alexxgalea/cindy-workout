@@ -2,6 +2,7 @@ package com.cindy.tracker
 
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -38,6 +39,7 @@ class RecordsActivity : AppCompatActivity() {
     private var category: CindyProfile? = null
     private var categoryChosen = false
     private lateinit var progressHolder: LinearLayout
+    private lateinit var calendarHolder: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -414,12 +416,28 @@ class RecordsActivity : AppCompatActivity() {
 
     /** The month grid, with arrows back through the athlete's history. */
     private fun calendar(days: Set<LocalDate>, today: LocalDate) {
+        calendarHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        binding.rows.addView(calendarHolder)
+        renderCalendar(days, today, Streak.currentRun(days, today))
+    }
+
+    /**
+     * Rebuilds only the calendar card, so paging months does not scroll the report back to the
+     * top the way a full [render] would.
+     */
+    private fun renderCalendar(days: Set<LocalDate>, today: LocalDate, currentRun: Set<LocalDate>) {
         val earliest = days.minOrNull()?.let { YearMonth.from(it) } ?: YearMonth.from(today)
         val latest = YearMonth.from(today)
         if (shownMonth > latest) shownMonth = latest
         if (shownMonth < earliest) shownMonth = earliest
+        calendarHolder.removeAllViews()
 
-        binding.rows.addView(LinearLayout(this).apply {
+        calendarHolder.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.glass_card)
             setPadding(dp(16), dp(12), dp(16), dp(16))
@@ -432,7 +450,7 @@ class RecordsActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(monthArrow(R.drawable.ic_chevron_left, shownMonth > earliest) {
                     shownMonth = shownMonth.minusMonths(1)
-                    render()
+                    renderCalendar(days, today, currentRun)
                 })
                 addView(styledText(R.style.Cindy_Headline, "%s %d".format(
                     Locale.getDefault(),
@@ -446,7 +464,7 @@ class RecordsActivity : AppCompatActivity() {
                 })
                 addView(monthArrow(R.drawable.ic_chevron_right, shownMonth < latest) {
                     shownMonth = shownMonth.plusMonths(1)
-                    render()
+                    renderCalendar(days, today, currentRun)
                 })
             })
 
@@ -454,9 +472,41 @@ class RecordsActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = dp(4) }
-                show(shownMonth, days, today)
+                show(shownMonth, days, today, currentRun)
+                onDayTap = { openDay(it) }
             })
         })
+    }
+
+    /** The sessions of one trained day, oldest first, in a sheet. Nothing to show, no sheet. */
+    internal fun openDay(date: LocalDate) {
+        val zone = ZoneId.systemDefault()
+        val sessions = store.all()
+            .filter { Instant.ofEpochMilli(it.atMillis).atZone(zone).toLocalDate() == date }
+            .sortedBy { it.atMillis }
+        if (sessions.isEmpty()) return
+
+        val timeFormat = SimpleDateFormat(
+            if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm a", Locale.US
+        )
+        val title = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.US).format(date)
+        val subtitle = if (sessions.size == 1) "1 session" else "${sessions.size} sessions"
+        val group = insetGroup {
+            sessions.forEach { a ->
+                row(statRow(
+                    timeFormat.format(Date(a.atMillis)),
+                    "${a.scoreLabel()} \u00b7 ${a.caption}"
+                ))
+            }
+        }
+        group.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(16) }
+
+        CindySheet(this, title, subtitle)
+            .add(group)
+            .actions(primary = "DONE", onPrimary = {})
+            .show()
     }
 
     /** A 48dp target, because these are small glyphs on a screen used with wet hands. */

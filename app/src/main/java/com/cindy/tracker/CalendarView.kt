@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -37,6 +38,10 @@ class CalendarView @JvmOverloads constructor(
     private var month: YearMonth = YearMonth.now()
     private var trained: Set<LocalDate> = emptySet()
     private var today: LocalDate = LocalDate.now()
+    private var streak: Set<LocalDate> = emptySet()
+
+    /** Called with the date of a trained day the athlete taps; other cells do nothing. */
+    var onDayTap: ((LocalDate) -> Unit)? = null
 
     /** Monday in most of the world, Sunday in some of it. Ask the locale rather than assume. */
     private val firstDayOfWeek: DayOfWeek =
@@ -57,10 +62,20 @@ class CalendarView @JvmOverloads constructor(
         textSize = 11f * resources.displayMetrics.scaledDensity
     }
 
-    fun show(month: YearMonth, trained: Set<LocalDate>, today: LocalDate = LocalDate.now()) {
+    /**
+     * [streak] is the run of days to paint in the achievement colour; a trained day outside it
+     * stays white, so the current run reads apart from the history behind it.
+     */
+    fun show(
+        month: YearMonth,
+        trained: Set<LocalDate>,
+        today: LocalDate = LocalDate.now(),
+        streak: Set<LocalDate> = emptySet()
+    ) {
         this.month = month
         this.trained = trained
         this.today = today
+        this.streak = streak
         contentDescription = describe()
         invalidate()
     }
@@ -96,9 +111,8 @@ class CalendarView @JvmOverloads constructor(
             )
         }
 
-        val first = month.atDay(1)
         // How far into the week the 1st falls, given where this locale starts its weeks.
-        val lead = ((first.dayOfWeek.value - firstDayOfWeek.value) + 7) % 7
+        val lead = CalendarGrid.lead(month, firstDayOfWeek)
 
         for (dayOfMonth in 1..month.lengthOfMonth()) {
             val date = month.atDay(dayOfMonth)
@@ -110,7 +124,8 @@ class CalendarView @JvmOverloads constructor(
             val isToday = date == today
 
             if (didTrain) {
-                fill.color = ACCENT
+                fill.color =
+                    if (streak.contains(date)) context.getColor(R.color.achievement) else ACCENT
                 canvas.drawCircle(cx, cy, radius, fill)
             } else if (isToday) {
                 ring.color = ACCENT
@@ -129,4 +144,26 @@ class CalendarView @JvmOverloads constructor(
             canvas.drawText("$dayOfMonth", cx, cy - offset, dayText)
         }
     }
+
+    /** A tap on a trained day opens it; without a listener the view stays inert. */
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        val listener = onDayTap ?: return super.onTouchEvent(e)
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> return true
+            MotionEvent.ACTION_UP -> {
+                val cell = width / 7f
+                val date = CalendarGrid.dateAt(
+                    month, firstDayOfWeek, (e.x / cell).toInt(), (e.y / cell).toInt()
+                )
+                if (date != null && trained.contains(date)) {
+                    listener(date)
+                    performClick()
+                }
+                return true
+            }
+        }
+        return super.onTouchEvent(e)
+    }
+
+    override fun performClick(): Boolean = super.performClick()
 }

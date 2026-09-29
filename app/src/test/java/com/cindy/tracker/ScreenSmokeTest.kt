@@ -9,6 +9,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * Builds every screen that does not need a camera, and lays it out.
@@ -233,6 +234,30 @@ class ScreenSmokeTest {
         }
         val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
         click(activity, "1M")
+        store.clear()
+    }
+
+    @Test
+    fun `a trained day opens its sessions`() {
+        val store = RecordStore(ApplicationProvider.getApplicationContext())
+        store.clear()
+        val now = System.currentTimeMillis()
+        repeat(2) { i ->
+            store.add(
+                Attempt(
+                    rounds = 12 + i,
+                    reps = 0,
+                    atMillis = now - i * 1000L,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(12 + i) { 60_000L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        activity.openDay(java.time.LocalDate.now())
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
         store.clear()
     }
 
