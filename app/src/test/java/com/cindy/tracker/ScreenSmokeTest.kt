@@ -110,6 +110,48 @@ class ScreenSmokeTest {
         profile.musicOn = true
     }
 
+    /** The other branch of the reminder row's subtitle: on, and (in the test) able to post. */
+    @Test
+    fun `the menu builds with the reminder on`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).reminderOn = true
+        try {
+            smoke<MenuActivity>(MenuActivity.intent(context, workoutLive = false))
+        } finally {
+            Profile(context).reminderOn = false
+        }
+    }
+
+    /** The first view under [root] whose contentDescription starts with [prefix]. */
+    private fun findByDescriptionPrefix(
+        root: android.view.View, prefix: String
+    ): android.view.View? {
+        if (root.contentDescription?.toString()?.startsWith(prefix) == true) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescriptionPrefix(root.getChildAt(i), prefix)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    @Test
+    fun `the reminder row opens its sheet`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).reminderOn = false
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        val row = findByDescriptionPrefix(
+            activity.findViewById<android.view.View>(android.R.id.content), "Daily reminder"
+        )
+        assertTrue("no Daily reminder row", row != null)
+        row!!.performClick()
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        Profile(context).reminderOn = false
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 
