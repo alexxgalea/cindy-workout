@@ -1,7 +1,6 @@
 package com.cindy.tracker
 
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -38,14 +37,14 @@ object Reminder {
         return if (today.isAfter(now)) today else on(now.toLocalDate().plusDays(1))
     }
 
-    /** Whether an alarm meant for [targetMillis] is still worth posting at [nowMillis]. */
-    fun shouldPost(targetMillis: Long, nowMillis: Long, zone: ZoneId): Boolean {
-        if (targetMillis <= 0L) return false
-        if (nowMillis - targetMillis !in -EARLY_LIMIT_MS..LATE_LIMIT_MS) return false
-        val target = Instant.ofEpochMilli(targetMillis).atZone(zone).toLocalDate()
-        val now = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
-        return target == now
-    }
+    /**
+     * Whether an alarm meant for [targetMillis] is still worth posting at [nowMillis].
+     *
+     * Only the gap matters, not the date: a 23:50 reminder that Doze delivers at 00:05 is still
+     * fifteen minutes late, well inside [LATE_LIMIT_MS].
+     */
+    fun shouldPost(targetMillis: Long, nowMillis: Long): Boolean =
+        targetMillis > 0L && nowMillis - targetMillis in -EARLY_LIMIT_MS..LATE_LIMIT_MS
 
     /** What to say today, or null when today is already trained. */
     fun message(

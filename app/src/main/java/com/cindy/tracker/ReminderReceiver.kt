@@ -27,7 +27,7 @@ class ReminderReceiver : BroadcastReceiver() {
     private fun deliver(context: Context, target: Long) {
         val zone = ZoneId.systemDefault()
         if (!Profile(context).reminderOn || LiveWorkout.active) return
-        if (!Reminder.shouldPost(target, System.currentTimeMillis(), zone)) return
+        if (!Reminder.shouldPost(target, System.currentTimeMillis())) return
         val message = Reminder.message(
             RecordStore(context).all(), LocalDate.now(zone), zone,
             WeekFields.of(Locale.getDefault()).firstDayOfWeek

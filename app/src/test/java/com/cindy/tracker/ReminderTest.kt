@@ -72,31 +72,36 @@ class ReminderTest {
     @Test
     fun `posts on time`() {
         val t = millis("2026-09-09T18:00:00+03:00[Europe/Bucharest]")
-        assertTrue(Reminder.shouldPost(t, t, zone))
+        assertTrue(Reminder.shouldPost(t, t))
     }
 
     @Test
     fun `does not post three hours late`() {
         val t = millis("2026-09-09T18:00:00+03:00[Europe/Bucharest]")
-        assertFalse(Reminder.shouldPost(t, t + 3 * 60 * 60 * 1000L, zone))
+        assertFalse(Reminder.shouldPost(t, t + 3 * 60 * 60 * 1000L))
     }
 
     @Test
-    fun `does not post on the next day`() {
-        val t = millis("2026-09-09T23:00:00+03:00[Europe/Bucharest]")
-        // One hour and ten minutes late, but past midnight.
-        assertFalse(Reminder.shouldPost(t, t + 70 * 60 * 1000L, zone))
+    fun `posts just after midnight when still inside the late limit`() {
+        val t = millis("2026-09-09T23:50:00+03:00[Europe/Bucharest]")
+        assertTrue(Reminder.shouldPost(t, t + 15 * 60 * 1000L))
+    }
+
+    @Test
+    fun `does not post a day late`() {
+        val t = millis("2026-09-09T18:00:00+03:00[Europe/Bucharest]")
+        assertFalse(Reminder.shouldPost(t, t + 25 * 60 * 60 * 1000L))
     }
 
     @Test
     fun `posts when thirty seconds early`() {
         val t = millis("2026-09-09T18:00:00+03:00[Europe/Bucharest]")
-        assertTrue(Reminder.shouldPost(t, t - 30_000L, zone))
+        assertTrue(Reminder.shouldPost(t, t - 30_000L))
     }
 
     @Test
     fun `does not post without a target`() {
-        assertFalse(Reminder.shouldPost(0L, 1_000L, zone))
+        assertFalse(Reminder.shouldPost(0L, 1_000L))
     }
 
     // message
