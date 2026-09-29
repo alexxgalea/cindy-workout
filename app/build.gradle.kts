@@ -106,6 +106,9 @@ dependencies {
     // The launch window. Backports the API 31 SplashScreen to minSdk 26, so the arcs cover
     // process start on every device rather than a white flash on most of them.
     implementation("androidx.core:core-splashscreen:1.0.1")
+    // ExploreByTouchHelper, so each point of a drawn chart is its own TalkBack stop. Already in
+    // the graph through Material; declared so the chart does not lean on a transitive.
+    implementation("androidx.customview:customview:1.1.0")
 
     val cameraX = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraX")

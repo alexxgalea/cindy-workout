@@ -197,9 +197,62 @@ fastest round, and a bar chart of the round splits.
 day does not. Round splits are clock time, so a pause cannot inflate the round it happened in, and
 the paused total is shown alongside the real elapsed time whenever it is non-zero.
 
-`RECORDS` shows the benchmark to chase, a progress chart across every attempt, and each attempt
-with its level and pace. The benchmark is **Tom Holland — 27 rounds** (810 reps), the score that
-prompted this app.
+**Progress** is the screen behind the menu row and the results button of the same name. It opens
+with one line that is always true and never scolds. Below it, top to bottom:
+
+- **Streaks.** The daily and weekly streak, with a strip of this week showing which days you
+  trained.
+- **This week against last.** Sessions, reps and time.
+- **Chart.** Score, Pace or Volume over 1M, 3M, 1Y or All. Drag to scrub along it, or tap a
+  point. A running-best line follows the best so far, and record points are drawn in the
+  achievement colour. A score the camera could not fully see is a hollow ring and is never a
+  record, because a lower-bound number should not set a bar.
+- **Peaks.** The personal-best board.
+- **Calendar.** Days in the current streak are tinted; tap a trained day to see its sessions.
+- **Leaderboard.** Your attempts ranked against the benchmark, **Tom Holland — 27 rounds**
+  (810 reps), the score that prompted this app.
+
+Scores, rounds and paces are only compared between sessions at the same movements; a chip picks
+the category. Volume, streaks and weeks count everything, since a session of any kind is still a
+session.
+
+The maths lives in [Progress.kt](app/src/main/java/com/cindy/tracker/Progress.kt) and
+[Peaks.kt](app/src/main/java/com/cindy/tracker/Peaks.kt), the wording of the opening line and the
+celebrations in [Cheer.kt](app/src/main/java/com/cindy/tracker/Cheer.kt), and the chart is drawn
+by [ProgressChartView.kt](app/src/main/java/com/cindy/tracker/ProgressChartView.kt).
+
+#### Streaks
+
+A **daily** streak is consecutive local days with a session. It ends today or yesterday, so a day
+that has not finished yet does not count as a break. A **weekly** streak is consecutive weeks
+with at least one session, where a week starts on the day the locale says, and it ends this week
+or last week for the same reason. A lower-bound attempt still counts towards a streak: it was
+still a session. Milestones are celebrated on the results screen: 3, 7, 14, 21, 30, 50, 75, 100,
+150, 200 and 365 days, and 2, 4, 8, 12, 26 and 52 weeks. The rules are in
+[Streak.kt](app/src/main/java/com/cindy/tracker/Streak.kt).
+
+#### Reminders
+
+Off by default. Menu -> Daily reminder sets the time, and `TRY IT` sends one now. There is at most
+one a day, and none on a day you have already trained. The text names the streak at stake, or the
+best score to chase when there is no streak.
+
+The alarm uses `AlarmManager.setWindow` with a fifteen-minute window rather than an exact alarm.
+Exact alarms need a permission that Android 14 denies by default, and an inexact alarm armed a day
+ahead can drift by hours, which makes a "daily" reminder useless. A reminder delivered more than
+two hours late is dropped, and one never posts during a live workout. The alarm is re-armed on
+every fire, on boot, on app update, on a clock or time-zone change, and whenever the app is
+opened. Android 13+ asks for notification permission when the reminder is switched on; if it is
+denied the row says "Blocked". Nothing leaves the phone. See
+[Reminder.kt](app/src/main/java/com/cindy/tracker/Reminder.kt) and
+[ReminderScheduler.kt](app/src/main/java/com/cindy/tracker/ReminderScheduler.kt).
+
+#### Set times
+
+The workout clock also times each set. Pauses are excluded and getting into position is
+included, as they are for round splits. The results screen shows where a round's time went, per movement. Peaks
+include the fastest 5 pull-ups, 10 push-ups and 15 squats, taken only from sets where the camera
+saw every rep and the set reached its target.
 
 Levels are ranked by rounds, since in a fixed 20-minute AMRAP that is the same measurement as
 average round time:
@@ -216,7 +269,8 @@ average round time:
 The ladder is provisional and lives in one table in [Levels.kt](app/src/main/java/com/cindy/tracker/Levels.kt),
 so retuning it is a matter of editing numbers.
 
-Attempts persist in `SharedPreferences`, one line each, versioned so older records keep loading. A
+Attempts persist in `SharedPreferences`, one line each, versioned so older records keep loading.
+The current format (v7) also records each set's time; v1-v6 lines still load, without sets. A
 zero-rep attempt — the app left running with nobody in front of it — is not logged.
 
 ## Build
@@ -233,7 +287,7 @@ Requires JDK 17 and the Android SDK (platform 35, build-tools 35.0.0).
 
 ## Tests
 
-100 JVM tests. **JDK 17 is required** for Android Gradle test runs. The rep logic runs against synthetic skeletons
+The JVM suite covers the logic below. **JDK 17 is required** for Android Gradle test runs. The rep logic runs against synthetic skeletons
 ([PoseFixtures](app/src/test/java/com/cindy/tracker/PoseFixtures.kt)) — full rounds, partial
 reps that must not count, and cross-talk between movements — and the record board is covered
 for ranking, round-tripping and corrupt-data tolerance.

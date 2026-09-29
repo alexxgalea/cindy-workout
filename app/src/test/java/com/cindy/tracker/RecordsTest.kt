@@ -217,4 +217,48 @@ class RecordsTest {
         assertEquals(20, Records.best(all)?.rounds)
         assertEquals(2, Records.ranked(all).size)
     }
+
+    // ── set splits (record format v7) ─────────────────────────────────────────
+
+    @Test
+    fun `set splits survive the round-trip`() {
+        val a = attempt(12, 7).copy(
+            countedReps = 367,
+            setSplits = listOf(
+                SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+                SetSplit(Exercise.PUSHUP, 17_000L, 8, 3),
+                SetSplit(Exercise.SQUAT, 20_000L, 15, 0)
+            )
+        )
+        assertEquals(listOf(a), Records.decode(Records.encode(listOf(a))))
+    }
+
+    @Test
+    fun `encode writes the v7 format`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v7|"))
+    }
+
+    @Test
+    fun `a v6 line still loads, with no sets`() {
+        val v6 = "v6|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0"
+        val back = Records.decode(v6).single()
+        assertEquals(12, back.rounds)
+        assertEquals(367, back.countedReps)
+        assertEquals(emptyList<SetSplit>(), back.setSplits)
+    }
+
+    @Test
+    fun `an unknown movement in a v7 line drops only that set`() {
+        val sets = "PULLUP:14000:5:0,HANDSTAND:1:1:0,SQUAT:20000:15:0"
+        val v7 = "v7|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|$sets"
+        val back = Records.decode(v7).single()
+        assertEquals(12, back.rounds)
+        assertEquals(
+            listOf(
+                SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+                SetSplit(Exercise.SQUAT, 20_000L, 15, 0)
+            ),
+            back.setSplits
+        )
+    }
 }
