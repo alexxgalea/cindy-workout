@@ -1,9 +1,11 @@
 package com.cindy.tracker
 
+import java.io.IOException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class StravaHttpTest {
@@ -120,5 +122,67 @@ class StravaHttpTest {
     @Test
     fun `a boundary is generated when none is given, and two instances do not collide`() {
         assertNotEquals(Multipart().contentType, Multipart().contentType)
+    }
+
+    // ---- FakeTransport ----------------------------------------------------------------------
+
+    @Test
+    fun `FakeTransport records the exact request it received`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(200, emptyMap(), "{}"))
+        val request = HttpRequest(
+            method = "POST",
+            url = "https://www.strava.com/api/v3/oauth/token",
+            headers = mapOf("Authorization" to "Bearer xyz"),
+            body = "grant_type=refresh_token".toByteArray(Charsets.UTF_8),
+            contentType = FormBody.CONTENT_TYPE
+        )
+
+        transport.execute(request)
+
+        assertEquals(1, transport.requests.size)
+        val recorded = transport.requests.single()
+        assertEquals("POST", recorded.method)
+        assertEquals("https://www.strava.com/api/v3/oauth/token", recorded.url)
+        assertEquals("Bearer xyz", recorded.headers["Authorization"])
+        assertEquals(FormBody.CONTENT_TYPE, recorded.contentType)
+        assertEquals("grant_type=refresh_token", String(recorded.body!!, Charsets.UTF_8))
+    }
+
+    @Test
+    fun `FakeTransport replays scripted responses in the order they were queued`() {
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(202, emptyMap(), "first"))
+        transport.enqueue(HttpResponse(200, emptyMap(), "second"))
+        val get = HttpRequest("GET", "https://example.invalid")
+
+        assertEquals("first", transport.execute(get).body)
+        assertEquals("second", transport.execute(get).body)
+        assertEquals(2, transport.requests.size)
+    }
+
+    @Test
+    fun `FakeTransport replays a scripted IOException instead of a response`() {
+        val transport = FakeTransport()
+        transport.enqueueFailure(IOException("no network"))
+
+        try {
+            transport.execute(HttpRequest("GET", "https://example.invalid"))
+            fail("expected an IOException")
+        } catch (e: IOException) {
+            assertEquals("no network", e.message)
+        }
+    }
+
+    @Test
+    fun `FakeTransport fails loudly on a call with nothing scripted, instead of guessing a response`() {
+        val transport = FakeTransport()
+
+        try {
+            transport.execute(HttpRequest("GET", "https://example.invalid/unscripted"))
+            fail("expected an exception naming the unscripted request")
+        } catch (e: IllegalStateException) {
+            assertTrue(e.message!!.contains("https://example.invalid/unscripted"))
+        }
     }
 }
