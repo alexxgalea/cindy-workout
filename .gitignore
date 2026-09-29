@@ -58,5 +58,8 @@ __pycache__/
 /keystore.properties
 /*.jks
 
+# Strava API credentials. Never committed.
+/strava.properties
+
 # Design notes, research briefs and release runbook. Kept locally, never committed.
 /docs/

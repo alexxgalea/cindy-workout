@@ -16,6 +16,18 @@ val keystoreProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// Strava API credentials, read the same way as keystoreProperties above. Absent on CI and a
+// fresh clone — the build then bakes in empty strings, and StravaConfig.available goes false,
+// which hides the whole feature rather than failing the build.
+val stravaProperties = Properties().apply {
+    val f = rootProject.file("strava.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+// A raw property value can carry a quote or a backslash; without escaping, that would either
+// break out of the generated string literal or fail to compile.
+fun String.asBuildConfigLiteral() = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.cindy.tracker"
     compileSdk = 35
@@ -34,6 +46,16 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
+
+        // Empty strings when strava.properties is absent — see StravaConfig.available.
+        buildConfigField(
+            "String", "STRAVA_CLIENT_ID",
+            (stravaProperties.getProperty("clientId") ?: "").asBuildConfigLiteral()
+        )
+        buildConfigField(
+            "String", "STRAVA_CLIENT_SECRET",
+            (stravaProperties.getProperty("clientSecret") ?: "").asBuildConfigLiteral()
+        )
     }
 
     signingConfigs {
@@ -123,6 +145,9 @@ dependencies {
     // a single view, which is how a null layoutParams reached a device.
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
+    // Android ships org.json at runtime, but plain JVM tests need the real artifact, so that
+    // Strava payload and response parsing are testable without Robolectric.
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
