@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -648,7 +649,13 @@ class MenuActivity : AppCompatActivity() {
     private fun connectStrava(tokens: StravaTokenStore) {
         val state = StravaAuth.newState()
         tokens.pendingState = state
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaAuth.authorizeUri(state))))
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaAuth.authorizeUri(state))))
+        } catch (e: ActivityNotFoundException) {
+            // Neither the Strava app nor a browser is installed to show the consent page.
+            tokens.pendingState = null
+            toast("Connecting needs the Strava app or a web browser")
+        }
     }
 
     /**
@@ -662,7 +669,8 @@ class MenuActivity : AppCompatActivity() {
         CindySheet(
             this,
             title = "Strava",
-            subtitle = "Each finished workout is uploaded to your Strava."
+            // Says only what this build does. S4 changes it once finished workouts upload.
+            subtitle = "Connected${grant.athleteName?.let { " as $it" } ?: ""}."
         ).actions(
             primary = "DONE",
             onPrimary = {},
