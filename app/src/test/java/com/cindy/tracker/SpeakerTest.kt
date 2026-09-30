@@ -190,6 +190,24 @@ class SpeakerTest {
     }
 
     @Test
+    fun `nothing is reported before the engine has answered`() {
+        // An engine that has not connected lists no voices. Reporting that would say the phone
+        // speaks nothing but English, for as long as the engine took to start.
+        engine.likeGoogle()
+        val speaker = speaker()
+
+        var states: Map<String, PackState>? = null
+        speaker.packStates { states = it }
+        idle()
+        assertNull(states)
+
+        engine.becomeReady()
+        speaker.packStates { states = it }
+        idle()
+        assertNotNull(states)
+    }
+
+    @Test
     fun `nothing is delivered to a screen that has gone`() {
         engine.likeGoogle()
         val speaker = speaker()

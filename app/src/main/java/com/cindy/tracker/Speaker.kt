@@ -113,9 +113,14 @@ class Speaker(
      * Asked of the engine on a background thread, because listing its voices is a call into
      * another process that can take a noticeable time, and nothing is delivered once the speaker
      * has been shut down.
+     *
+     * Nothing is delivered before the engine has connected, either. An engine that has not
+     * answered yet lists no voices, and reporting that would tell the athlete their phone speaks
+     * nothing but English for as long as it took to start. The caller keeps whatever it was
+     * showing and asks again.
      */
     fun packStates(onResult: (Map<String, PackState>) -> Unit) {
-        if (closed) return
+        if (closed || !director.ready) return
         background.execute {
             val states = runCatching { director.states() }.getOrNull() ?: return@execute
             main.post { if (!closed) onResult(states) }
