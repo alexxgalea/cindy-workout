@@ -40,8 +40,10 @@ object Avatar {
      * [MAX_NAME], or null when nothing is left.
      *
      * Tidied once on the way in, so that the menu, the profile screen and the leaderboard all
-     * show the same thing and none of them has to remember to tidy it. The cut never leaves half
-     * of an emoji behind.
+     * show the same thing and none of them has to remember to tidy it. The cut never splits a
+     * surrogate pair, so a name does not end in half a character. It can still fall inside a
+     * longer sequence, an emoji with a skin tone or a letter with its accent, but the field stops
+     * typing at [MAX_NAME] itself, so only a name that arrived some other way gets that far.
      */
     fun cleanName(raw: String?): String? {
         if (raw == null) return null

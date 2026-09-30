@@ -31,6 +31,7 @@ object AvatarStore {
     private const val JPEG_QUALITY = 90
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
+    private fun partialFile(context: Context) = File(context.filesDir, "$FILE_NAME.partial")
 
     fun exists(context: Context): Boolean = file(context).isFile
 
@@ -38,8 +39,14 @@ object AvatarStore {
     fun load(context: Context): Bitmap? =
         file(context).takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path) }
 
-    /** Removes the photo. True when there is none afterwards. */
+    /**
+     * Removes the photo. True when there is none afterwards.
+     *
+     * A half-written copy goes with it: the files directory is what the backup carries, and a
+     * stray partial would be carried too.
+     */
     fun clear(context: Context): Boolean {
+        partialFile(context).delete()
         val stored = file(context)
         return !stored.exists() || stored.delete()
     }
@@ -127,14 +134,16 @@ object AvatarStore {
     /** Writes [photo] beside the stored one and moves it into place only once it is whole. */
     private fun store(context: Context, photo: Bitmap): Boolean {
         val target = file(context)
-        val partial = File(target.parentFile, "$FILE_NAME.partial")
-        val written = partial.outputStream().use {
-            photo.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)
-        }
-        if (!written || !partial.renameTo(target)) {
+        val partial = partialFile(context)
+        try {
+            val written = partial.outputStream().use {
+                photo.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)
+            }
+            return written && partial.renameTo(target)
+        } finally {
+            // Already gone after a rename. After a failure, or a disk that filled half way, what
+            // is left is not a photo and is not worth a place in the backup.
             partial.delete()
-            return false
         }
-        return true
     }
 }

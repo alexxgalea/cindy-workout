@@ -151,7 +151,7 @@ class AccountActivity : AppCompatActivity() {
                 onPrimary = choose,
                 secondary = "REMOVE",
                 onSecondary = {
-                    AvatarStore.clear(this)
+                    if (!AvatarStore.clear(this)) toast("The photo could not be removed")
                     render()
                 },
                 secondaryTint = R.color.state_alert
@@ -194,7 +194,6 @@ class AccountActivity : AppCompatActivity() {
             hint = "Your name"
             setHintTextColor(getColor(R.color.label_quaternary))
             gravity = Gravity.CENTER
-            background = null
             setBackgroundResource(R.drawable.glass_card_small)
             setPadding(dp(20), dp(16), dp(20), dp(16))
             filters = arrayOf(InputFilter.LengthFilter(Avatar.MAX_NAME))

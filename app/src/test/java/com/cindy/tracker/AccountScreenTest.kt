@@ -348,6 +348,17 @@ class AccountScreenTest {
     }
 
     @Test
+    fun `removing the photo takes a half-written copy with it`() {
+        storeAPhoto()
+        val stray = File(context.filesDir, "avatar.jpg.partial").apply { writeBytes(ByteArray(4)) }
+
+        assertTrue(AvatarStore.clear(context))
+
+        assertFalse(AvatarStore.exists(context))
+        assertFalse("a stray partial would ride along in the backup", stray.exists())
+    }
+
+    @Test
     fun `choosing a photo opens the system picker`() {
         val activity = openAccount()
 

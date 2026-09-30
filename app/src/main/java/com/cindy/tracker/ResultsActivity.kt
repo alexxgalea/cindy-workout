@@ -218,8 +218,10 @@ class ResultsActivity : AppCompatActivity() {
      * congratulating an ordinary day. Cleared first because [render] runs again when the body
      * weight changes.
      *
-     * The first row is the headline, whichever kind it is. A first session is also the First
-     * Cindy badge, and says so twice; that overlap is accepted rather than worked around.
+     * The first row is the headline, whichever kind it is. The two lists can say the same thing
+     * in different voices: a first session is also the First Cindy badge, and a streak milestone
+     * is also a streak badge. That overlap is accepted rather than worked around, because every
+     * row is true and keeping them apart would tie this box to the badge catalogue.
      */
     private fun celebrate(a: Attempt, all: List<Attempt>) {
         val box = binding.celebration

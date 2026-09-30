@@ -47,7 +47,7 @@ class AvatarTest {
     }
 
     @Test
-    fun `a cut never leaves half of an emoji`() {
+    fun `a cut never splits a surrogate pair`() {
         val face = "😀" // one character, two UTF-16 units
         val name = "A".repeat(29) + face
         val cleaned = Avatar.cleanName(name)!!
