@@ -56,8 +56,14 @@ class VoicePacksTest {
         assertSame(VoicePacks.english, VoicePacks.of(null))
         assertSame(VoicePacks.english, VoicePacks.of(""))
         assertSame(VoicePacks.english, VoicePacks.of("xx"))
-        // A region on the end is not a tag this app stores.
-        assertSame(VoicePacks.english, VoicePacks.of("es-ES"))
+    }
+
+    @Test
+    fun `a region or a different case still names the language`() {
+        assertSame(PhrasebookEs, VoicePacks.of("es-ES").phrasebook)
+        assertSame(PhrasebookEs, VoicePacks.of("ES").phrasebook)
+        assertSame(PhrasebookPt, VoicePacks.of("pt-BR").phrasebook)
+        assertSame(PhrasebookPt, VoicePacks.of("pt-PT").phrasebook)
     }
 
     @Test

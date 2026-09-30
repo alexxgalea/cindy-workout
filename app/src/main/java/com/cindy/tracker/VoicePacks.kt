@@ -59,6 +59,15 @@ object VoicePacks {
      * The pack for a stored [tag], or English for one nobody has, such as a language removed in a
      * later version. A preference makes no claim the app has to honour; an unknown one is
      * English, not a crash.
+     *
+     * Matched on the language alone, so `es`, `ES` and `es-ES` are all Spanish. The app stores
+     * the bare tag, but a value that came from a `Locale` or another version of the app carries
+     * a region or a different case, and the athlete who picked Spanish should not be answered in
+     * English because of how somebody spelled it.
      */
-    fun of(tag: String?): VoicePack = all.firstOrNull { it.tag == tag } ?: english
+    fun of(tag: String?): VoicePack {
+        if (tag.isNullOrBlank()) return english
+        val language = Locale.forLanguageTag(tag).language
+        return all.firstOrNull { it.tag == language } ?: english
+    }
 }
