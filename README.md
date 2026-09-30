@@ -6,8 +6,10 @@ around it has never been compiled — see [ios/README.md](ios/README.md).
 
 > AMRAP 20 minutes — 5 pull-ups, 10 push-ups, 15 air squats.
 
-Everything runs on-device. No network, no accounts, no cloud inference; the camera stream
-never leaves the phone.
+Everything runs on-device: no cloud inference, and the camera stream never leaves the phone.
+The only network use is opt-in: Menu → Strava connects your own Strava account, so a later
+release can upload finished workouts there. Nothing is sent before you connect, and no video or
+pose data is ever sent.
 
 ## How it works
 
@@ -356,6 +358,35 @@ so retuning it is a matter of editing numbers.
 Attempts persist in `SharedPreferences`, one line each, versioned so older records keep loading.
 The current format (v7) also records each set's time; v1-v6 lines still load, without sets. A
 zero-rep attempt — the app left running with nobody in front of it — is not logged.
+
+### Strava
+
+Menu → Strava connects a Strava account, opening Strava's own consent page (in the Strava app
+when it is installed, otherwise your browser). It asks for `read`, so the app can greet you by
+name, and `activity:write`, the one permission an upload would need. Nothing reaches Strava
+before you connect.
+
+**This build only connects and disconnects — uploads arrive in the next release.** DISCONNECT
+clears the tokens from the phone immediately, and also asks Strava to revoke them on its side;
+that part is best-effort, so it still clears locally even if you are offline. If Strava still
+lists Cindy Tracker at [strava.com/settings/apps](https://strava.com/settings/apps) afterwards,
+remove it there too. The tokens live in their own preferences file, which is excluded from
+Android's own backup and device-transfer — they do not travel to a new phone the way your
+records do.
+
+Building this yourself needs a Strava API application — create one at
+[strava.com/settings/api](https://www.strava.com/settings/api), with its "Authorization
+Callback Domain" set to `localhost` — and its client ID and secret in a gitignored
+`strava.properties` at the repo root, next to `keystore.properties`:
+
+```
+clientId=...
+clientSecret=...
+```
+
+Without that file — true for CI and a fresh clone — the feature quietly turns itself off rather
+than failing the build: `BuildConfig` bakes in empty strings, and the menu row reads "Not
+available in this build".
 
 ## Build
 

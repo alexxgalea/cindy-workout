@@ -2,17 +2,23 @@
 <!--
   Android 11 and below. What Auto Backup may carry to the athlete's own Drive.
 
-  Backup is allowed, and the distinction matters: this goes to the *user's* Google account,
-  not to us. "Nothing leaves the phone" in this project means no server, no account, no upload
-  to anyone operating the app — it was never a claim that the athlete may not keep their own
-  records when they change handset, and a streak that resets on a new phone is a bad reason to
-  lose one.
+  Backup is allowed, and the distinction matters: this goes to the *user's* Google account, not
+  to us. Records and settings travel that way so a streak does not reset on a new phone — this
+  project's "nothing leaves the phone" was never a claim that the athlete may not keep their own
+  data when they change handset.
+
+  Strava is the one real exception, and it is opt-in even then: connecting it is the first thing
+  in this app that reaches a server at all. Its tokens are excluded below rather than swept into
+  a Drive backup that could restore them onto a device the athlete never connected from — a
+  reconnect from the menu is one tap, and costs nothing a stale credential would not have cost
+  anyway.
 
   Included by naming, not by default, so a file added later is not swept up unnoticed.
 -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <include domain="file" path="." />
+    <exclude domain="sharedpref" path="strava.xml" />
     <!--
       No <exclude> for external storage: only the domains named above are ever backed up, so
       recordings in shared Movies/ are already out. They are the athlete's to manage and would

@@ -610,4 +610,142 @@ class ScreenSmokeTest {
         activity.finish()
         store.clear()
     }
+
+    /**
+     * The calorie footnote has no id of its own — it is one more TextView the session stats
+     * group grows in code — so it is found the same way [findByDescription] finds a row: by
+     * walking the group Results actually built.
+     */
+    private fun statsFootnotes(activity: android.app.Activity): List<String> {
+        val texts = mutableListOf<String>()
+        fun walk(v: android.view.View) {
+            if (v is android.widget.TextView) texts += v.text.toString()
+            if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+        }
+        walk(activity.findViewById(R.id.stats))
+        return texts
+    }
+
+    /** A trace whose one sample covers the whole of a short attempt's clock, seeded with age and
+     *  sex so [Calories.estimate] is free to use it rather than falling back to the MET model. */
+    private fun heartRateAttempt(context: android.content.Context): Attempt {
+        val store = RecordStore(context)
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 4_000L,
+            countedReps = 10
+        )
+        store.add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(
+                startedAtMillis = attempt.atMillis,
+                samples = listOf(HeartRateSample(clockMs = 0L, bpm = 150)),
+                pauses = emptyList()
+            )
+        )
+        return attempt
+    }
+
+    /**
+     * A trace that covers the whole of the (short) workout clock: no minute is left for the MET
+     * model to estimate, so the footnote is the "whole workout" wording rather than the blended
+     * one — and it says nothing about METs, which only the blended and MET-only wordings mention.
+     */
+    @Test
+    fun `the results screen credits heart rate for the whole workout`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 70.0
+        profile.birthYear = 1990
+        profile.sex = Sex.MALE
+        val attempt = heartRateAttempt(context)
+
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val footnotes = statsFootnotes(activity)
+
+        assertTrue("no heart-rate footnote: $footnotes", footnotes.any { it.contains("heart rate") })
+        assertTrue("should not mention METs: $footnotes", footnotes.none { it.contains("METs") })
+
+        activity.finish()
+        HeartRateStore(context).clear()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+        profile.birthYear = 0
+        profile.sex = null
+    }
+
+    /**
+     * A trace was recorded, but there is no age or sex yet to read it with — the footnote invites
+     * adding them rather than silently falling back to the MET model without saying why.
+     */
+    @Test
+    fun `the results screen invites adding age and sex once a trace exists`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 70.0
+        profile.birthYear = 0
+        profile.sex = null
+        val attempt = heartRateAttempt(context)
+
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val footnotes = statsFootnotes(activity)
+
+        assertTrue(
+            "no invitation to add age: $footnotes",
+            footnotes.any { it.contains("tap to add your age") }
+        )
+
+        activity.finish()
+        HeartRateStore(context).clear()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /**
+     * With no trace at all — the ordinary case until a watch is paired — the calorie footnote is
+     * exactly what it always was. Heart rate must never change a number it never touched.
+     */
+    @Test
+    fun `the results screen footnote is unchanged without a heart-rate trace`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 70.0
+        profile.birthYear = 1990
+        profile.sex = Sex.MALE
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 4_000L,
+            countedReps = 10
+        )
+        store.add(attempt)
+
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val footnotes = statsFootnotes(activity)
+
+        val expected = "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
+            .format(java.util.Locale.US, 70.0, Calories.met(attempt.totalReps, attempt.durationMs))
+        assertTrue("footnote changed: $footnotes", footnotes.any { it == expected })
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+        profile.birthYear = 0
+        profile.sex = null
+    }
 }

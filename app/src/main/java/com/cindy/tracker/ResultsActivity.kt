@@ -298,23 +298,52 @@ class ResultsActivity : AppCompatActivity() {
     /**
      * The energy estimate, or an invitation to make one possible.
      *
-     * Shown as an estimate, because that is what it is: without a heart rate the arithmetic is a
-     * MET table and the athlete's weight, and the answer carries real uncertainty. Saying so is
-     * cheaper than being quietly wrong.
+     * Shown as an estimate either way, because that is what it is. Without a heart rate the
+     * arithmetic is a MET table and the athlete's weight; where a watch was heard from during
+     * this workout, the minutes it covered switch to the Keytel heart-rate equation instead, and
+     * the footnote says exactly how much of the number came from which — a dropped connection
+     * costs precision, never the figure itself. The row stays labelled "Calories (est.)" whatever
+     * produced it: heart rate makes this a better estimate, not a measurement.
      */
     private fun energy(a: Attempt, group: InsetGroup) {
-        val kcal = Calories.burned(a.totalReps, a.durationMs, profile.bodyWeightKg)
-        if (kcal == null) {
+        val body = profile.body()
+        val trace = HeartRateStore(this).load(a.atMillis)
+        val est = Calories.estimate(a.totalReps, a.durationMs, body, trace)
+        if (est == null) {
             group.row(statRow("Calories", "Set your weight") { askBodyWeight() })
             return
         }
-        val kg = profile.bodyWeightKg
-        group.row(statRow("Calories (est.)", "$kcal kcal") { askBodyWeight() })
-        group.attach(styledText(
-            R.style.Cindy_Footnote,
-            "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
-                .format(Locale.US, kg, Calories.met(a.totalReps, a.durationMs))
-        ).apply {
+        group.row(
+            statRow("Calories (est.)", "${est.kcal} kcal") {
+                // A trace was recorded but there is nothing yet to read it with — offer the
+                // details that would unlock it rather than the weight prompt that already ran.
+                if (trace != null && !body.canUseHeartRate) askHeartRateDetails() else askBodyWeight()
+            }
+        )
+        val formula = when (body.sex) {
+            Sex.FEMALE -> "female"
+            Sex.MALE -> "male"
+            Sex.UNSTATED, null -> "averaged"
+        }
+        val footnote = when {
+            est.usedHeartRate && est.estimatedMs == 0L ->
+                "From your heart rate across the whole workout · %.0f kg, %d, %s formula.".format(
+                    Locale.US, body.weightKg, body.age!!, formula
+                )
+            est.usedHeartRate ->
+                ("From your heart rate for ${formatDuration(est.heartRateMs)} of " +
+                    "${formatDuration(a.durationMs)}; the other ${formatDuration(est.estimatedMs)} " +
+                    "estimated from your reps at about %.1f METs · %.0f kg, %d, %s formula.").format(
+                    Locale.US, est.met, body.weightKg, body.age!!, formula
+                )
+            trace != null && !body.canUseHeartRate ->
+                ("Estimated from %.0f kg at about %.1f METs. Your heart rate was recorded — tap " +
+                    "to add your age and sex and use it.").format(Locale.US, body.weightKg, est.met)
+            else ->
+                "Estimated from %.0f kg at about %.1f METs. Tap to change your weight."
+                    .format(Locale.US, body.weightKg, est.met)
+        }
+        group.attach(styledText(R.style.Cindy_Footnote, footnote).apply {
             textSize = 11f
             setPadding(dp(18), 0, dp(18), dp(14))
         })
@@ -322,4 +351,7 @@ class ResultsActivity : AppCompatActivity() {
 
     /** Asks for body weight, and redraws whatever depended on it. Shared with [MenuActivity]. */
     private fun askBodyWeight() = askBodyWeight(profile) { render(attempt, stoppedEarly) }
+
+    /** Asks for age and sex, and redraws whatever depended on them. Shared with [MenuActivity]. */
+    private fun askHeartRateDetails() = askHeartRateDetails(profile) { render(attempt, stoppedEarly) }
 }
