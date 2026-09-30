@@ -7,9 +7,9 @@ around it has never been compiled — see [ios/README.md](ios/README.md).
 > AMRAP 20 minutes — 5 pull-ups, 10 push-ups, 15 air squats.
 
 Everything runs on-device: no cloud inference, and the camera stream never leaves the phone.
-The only network use is opt-in: Menu → Strava connects your own Strava account, so a later
-release can upload finished workouts there. Nothing is sent before you connect, and no video or
-pose data is ever sent.
+The only network use is opt-in: Menu → Strava connects your own Strava account, and from then on
+each finished workout — score, sets and times — uploads there on its own. Heart rate is not part
+of the upload yet. Nothing is sent before you connect, and no video or pose data is ever sent.
 
 ## How it works
 
@@ -279,16 +279,26 @@ zero-rep attempt — the app left running with nobody in front of it — is not 
 
 Menu → Strava connects a Strava account, opening Strava's own consent page (in the Strava app
 when it is installed, otherwise your browser). It asks for `read`, so the app can greet you by
-name, and `activity:write`, the one permission an upload would need. Nothing reaches Strava
-before you connect.
+name, and `activity:write`, the one permission an upload needs. Nothing reaches Strava before
+you connect.
 
-**This build only connects and disconnects — uploads arrive in the next release.** DISCONNECT
-clears the tokens from the phone immediately, and also asks Strava to revoke them on its side;
-that part is best-effort, so it still clears locally even if you are offline. If Strava still
-lists Cindy Tracker at [strava.com/settings/apps](https://strava.com/settings/apps) afterwards,
-remove it there too. The tokens live in their own preferences file, which is excluded from
-Android's own backup and device-transfer — they do not travel to a new phone the way your
-records do.
+**Once connected, every finished workout uploads on its own** — a Crossfit activity carrying the
+score, every movement as a set with the reps actually banked, clock time, paused time and real
+time, and calories estimated from your body weight. Heart rate is not part of the upload yet.
+Automatic upload is a toggle in the Strava sheet, on by default; with it off, or for an attempt
+from before you connected, the results screen offers UPLOAD instead. The results screen always
+shows where an upload has got to — uploading, done (with a link to the activity), failed with a
+retry, or asking you to reconnect — and keeps trying in the background: it survives the app
+closing, waits for a network connection, and backs off between retries rather than hammering
+Strava's API. Nothing from before this feature existed is uploaded; those attempts have no
+per-movement sets to send.
+
+DISCONNECT clears the tokens from the phone immediately, and also asks Strava to revoke them on
+its side; that part is best-effort, so it still clears locally even if you are offline. If Strava
+still lists Cindy Tracker at [strava.com/settings/apps](https://strava.com/settings/apps)
+afterwards, remove it there too. The tokens, and the record of what has been uploaded, live in
+their own preferences file, which is excluded from Android's own backup and device-transfer —
+neither travels to a new phone the way your records do.
 
 Building this yourself needs a Strava API application — create one at
 [strava.com/settings/api](https://www.strava.com/settings/api), with its "Authorization
