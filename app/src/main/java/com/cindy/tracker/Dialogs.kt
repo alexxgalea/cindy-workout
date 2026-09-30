@@ -51,15 +51,19 @@ fun Activity.chooseMovements(current: CindyProfile, onSave: (CindyProfile) -> Un
             "ranked against your own sessions at the same movements."
     )
 
-    val pull = sheet.choiceGroup("PULL", PullVariant.entries, current.pull, { it.label }) {
-        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
-    }
-    val push = sheet.choiceGroup("PUSH", PushVariant.entries, current.push, { it.label }) {
-        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
-    }
-    val squat = sheet.choiceGroup("SQUAT", SquatVariant.entries, current.squat, { it.label }) {
-        if (it.tracking == Tracking.MANUAL) "you tap +1" else null
-    }
+    // Printed as "+1" to match the button it points at, but said in words: a screen reader's
+    // reading of a bare glyph is not something to leave to chance.
+    val shown = { t: Tracking -> if (t == Tracking.MANUAL) "you tap +1" else null }
+    val said = { t: Tracking -> if (t == Tracking.MANUAL) "you tap plus one" else null }
+    val pull = sheet.choiceGroup(
+        "PULL", PullVariant.entries, current.pull, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
+    )
+    val push = sheet.choiceGroup(
+        "PUSH", PushVariant.entries, current.push, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
+    )
+    val squat = sheet.choiceGroup(
+        "SQUAT", SquatVariant.entries, current.squat, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
+    )
 
     sheet.actions(
         primary = "SAVE",
@@ -167,9 +171,10 @@ fun Activity.askHeartRateDetails(profile: Profile, onSaved: () -> Unit) {
         }
     }
 
-    val sex = sheet.choiceGroup("SEX", Sex.entries, profile.sex, { it.label }) {
-        if (it == Sex.UNSTATED) "uses the average of both formulas" else null
-    }
+    val sex = sheet.choiceGroup(
+        "SEX", Sex.entries, profile.sex, { it.label },
+        { if (it == Sex.UNSTATED) "uses the average of both formulas" else null }
+    )
 
     sheet.actions(
         primary = "SAVE",
@@ -217,14 +222,16 @@ fun Activity.sheetNote(text: String): TextView =
  * [note] is the one thing that varies between the two callers: a movement says when it is tapped
  * in rather than seen, a sex says which one is the average of the other two. Whatever it returns
  * is shown under the option's label, and read out after it, so the choice and its consequence
- * arrive together whichever field this is building.
+ * arrive together whichever field this is building. [spoken] is the same note in the words a
+ * screen reader should say, when the printed one leans on a symbol.
  */
 private fun <T> CindySheet.choiceGroup(
     title: String,
     options: List<T>,
     selected: T?,
     label: (T) -> String,
-    note: (T) -> String?
+    note: (T) -> String?,
+    spoken: (T) -> String? = note
 ): () -> T? {
     val ctx = content.context
     var chosen = selected
@@ -274,7 +281,7 @@ private fun <T> CindySheet.choiceGroup(
                     t.visibility = if (i == index) View.VISIBLE else View.INVISIBLE
                 }
             }
-            describeAsButton(label(option) + (note(option)?.let { ", $it" } ?: ""))
+            describeAsButton(label(option) + (spoken(option)?.let { ", $it" } ?: ""))
         }
         group.row(row)
     }

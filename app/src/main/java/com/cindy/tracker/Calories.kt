@@ -16,8 +16,13 @@ import kotlin.math.roundToInt
  * both ends, because neither an idle twenty minutes nor a superhuman one is what the reference
  * value describes.
  *
- * Treat the output as an estimate with real uncertainty in it. With heart rate, this is what it
- * does; without, the above.
+ * Where a watch sent a heart rate, [estimate] replaces the MET for the minutes it covered with the
+ * Keytel heart-rate equation, which follows the effort the athlete actually made rather than a
+ * table's idea of it. Minutes the watch did not cover stay on the MET model, so a dropped
+ * connection costs precision, not the number.
+ *
+ * Treat the output as an estimate with real uncertainty in it either way. Heart rate makes it a
+ * better estimate, not a measurement — only gas exchange would be that — and the UI says so.
  */
 object Calories {
 
@@ -47,9 +52,8 @@ object Calories {
      * Longest a heart-rate reading is assumed to hold before the time after it counts as
      * uncovered.
      *
-     * Declared here rather than beside the heart-rate calorie work that uses it later, because
-     * [HeartRateRecorder] needs the same figure for the same reason: a reading a few seconds old
-     * is still a fair stand-in for "now", and one from a while ago is not. One constant, so the
+     * Shared with [HeartRateRecorder], which needs the same figure for the same reason: a reading
+     * a few seconds old is still a fair stand-in for "now", and one from a while ago is not. One constant, so the
      * recorder's seeding and the calorie estimate's coverage cannot quietly disagree about where
      * that line is.
      */

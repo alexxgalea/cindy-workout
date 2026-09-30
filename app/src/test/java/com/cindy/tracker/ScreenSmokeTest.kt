@@ -153,8 +153,8 @@ class ScreenSmokeTest {
     }
 
     /**
-     * The sheet that asks for a birth year and a sex, opened the way the menu's heart-rate row
-     * will open it once phase 2 adds that row. Nothing here needs the row to exist yet.
+     * The sheet that asks for a birth year and a sex. Opened directly rather than through a row,
+     * so it is covered whichever screen ends up reaching it.
      */
     @Test
     fun `the heart-rate details sheet builds`() {
@@ -163,6 +163,9 @@ class ScreenSmokeTest {
             MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
         ).setup().get()
         activity.askHeartRateDetails(Profile(activity)) {}
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        dialog.dismiss()
     }
 
     @Test

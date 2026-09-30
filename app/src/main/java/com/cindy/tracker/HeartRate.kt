@@ -36,7 +36,7 @@ data class HeartRateTrace(
  *
  * [name] is what the scan showed. It is kept for more than display: a watch's Bluetooth address
  * can change between sessions, and [name] is the fallback a reconnect matches against when the
- * saved [address] no longer answers — see phase 2's address-change handling.
+ * saved [address] no longer answers.
  */
 data class HeartRateDevice(val address: String, val name: String)
 
@@ -116,8 +116,8 @@ interface HeartRateListener {
 /**
  * A live connection to one heart-rate device.
  *
- * This phase only defines the shape. The one implementation that talks to actual Bluetooth
- * hardware, [BleHeartRateSource], is phase 2's file to write.
+ * An interface so that the workout can be wired to a heart rate without a Bluetooth stack behind
+ * it, which is what lets everything downstream of a reading be tested on the JVM.
  */
 interface HeartRateSource {
     /** Connect, and keep reconnecting until [stop]. Idempotent. Main thread. */
@@ -132,11 +132,8 @@ object HeartRateSources {
      * The source for whichever device [profile] has saved, or null when there is none to build
      * one for.
      *
-     * Always null in this phase: pairing does not exist yet, so there is nothing a source could
-     * connect to. Phase 2 replaces this body only, with
-     * `profile.heartRateDevice?.let { BleHeartRateSource(context.applicationContext, it) { moved -> profile.heartRateDevice = moved } }`,
-     * which is why both parameters are already here even though neither is used yet.
+     * Null until a watch has been paired: with no device saved there is nothing to connect to.
      */
-    @Suppress("UNUSED_PARAMETER")
+    @Suppress("UNUSED_PARAMETER") // Both are needed once there is a source to build.
     fun forProfile(context: Context, profile: Profile): HeartRateSource? = null
 }
