@@ -184,6 +184,26 @@ class VoiceDirectorTest {
     }
 
     @Test
+    fun `asking again for the language already spoken costs the engine nothing`() {
+        googlePhone()
+        engine.becomeReady()
+        director.choose(es)
+        val before = engine.calls.toList()
+        director.choose(es)
+        assertEquals(before, engine.calls)
+    }
+
+    @Test
+    fun `asking again for a language that fell back is a retry`() {
+        googlePhone()
+        engine.becomeReady()
+        director.choose(ru)
+        val before = engine.calls.size
+        director.choose(ru)
+        assertTrue("no retry was made", engine.calls.size > before)
+    }
+
+    @Test
     fun `refreshing changes nothing when there is nothing to fix`() {
         googlePhone()
         engine.becomeReady()

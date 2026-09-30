@@ -66,10 +66,17 @@ class VoiceDirector(
 
     // ── which language ────────────────────────────────────────────────────────
 
-    /** Asks for [pack]. Takes effect now if the engine is ready, and as soon as it is if not. */
+    /**
+     * Asks for [pack]. Takes effect now if the engine is ready, and as soon as it is if not.
+     *
+     * Asking for what is already being spoken costs the engine nothing, so this can be called
+     * every time the screen comes back. Asking again for a language that had to fall back to
+     * English is a retry, which is how a voice that has just been fetched gets picked up.
+     */
     fun choose(pack: VoicePack) {
+        val unchanged = pack === wanted
         wanted = pack
-        if (ready) apply()
+        if (ready && (!unchanged || fallingBack)) apply()
     }
 
     /**
