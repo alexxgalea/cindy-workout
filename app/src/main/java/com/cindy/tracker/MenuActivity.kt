@@ -139,10 +139,6 @@ class MenuActivity : AppCompatActivity() {
      * just have changed, and there are six rows.
      */
     private fun render() {
-        // A rebuild means something changed underneath whatever sheet was open, heart rate
-        // included — nothing a sheet started should keep running once the row behind it has
-        // moved on.
-        stopHeartRateSheetResources()
         binding.rows.removeAllViews()
 
         val movements = profile.movements
@@ -434,7 +430,11 @@ class MenuActivity : AppCompatActivity() {
     /**
      * The live connection behind whichever heart-rate sheet is open, and the scan behind
      * "FIND MY WATCH". Both are sheet-scoped exactly like [audition]: started when their sheet
-     * opens, stopped the moment it closes by any path, including [render] rebuilding around them.
+     * opens, and stopped by that same sheet when it closes, or by [onStop].
+     *
+     * Deliberately not stopped by [render]. The menu re-renders on the way back from being
+     * stopped, and a permission or Bluetooth prompt can be what stopped it — in which case the
+     * scan its answer just started would be killed by the resume that follows the answer.
      */
     private var heartSource: HeartRateSource? = null
     private var scanner: HeartRateScanner? = null
@@ -558,7 +558,8 @@ class MenuActivity : AppCompatActivity() {
                     HeartRateStatus.NO_PERMISSION -> "Bluetooth permission is off"
                     HeartRateStatus.BLUETOOTH_OFF -> "Bluetooth is off"
                     HeartRateStatus.NOT_A_HEART_RATE_DEVICE -> "That device does not send heart rate"
-                    HeartRateStatus.CONNECTED, HeartRateStatus.OFF, HeartRateStatus.UNSUPPORTED -> null
+                    HeartRateStatus.UNSUPPORTED -> "This phone has no Bluetooth LE"
+                    HeartRateStatus.CONNECTED, HeartRateStatus.OFF -> null
                 }
                 message?.let {
                     statusLine.text = it
@@ -567,8 +568,12 @@ class MenuActivity : AppCompatActivity() {
             }
         }
 
-        heartSource = HeartRateSources.forProfile(this, profile)
-        heartSource?.start(listener)
+        // Kept in a local as well as the field: this sheet's dismissal must stop the source this
+        // sheet started, and not whichever one a sheet opened after it has put in the field. A
+        // dialog's dismiss listener runs after the next sheet may already have been shown.
+        val source = HeartRateSources.forProfile(this, profile)
+        heartSource = source
+        source?.start(listener)
 
         sheet.actions(
             primary = "DONE",
@@ -581,8 +586,8 @@ class MenuActivity : AppCompatActivity() {
             secondaryTint = R.color.state_alert
         ).onDismiss {
             heartHandler.removeCallbacks(timeout)
-            heartSource?.stop()
-            heartSource = null
+            source?.stop()
+            if (heartSource === source) heartSource = null
         }.show()
     }
 
@@ -706,6 +711,12 @@ class MenuActivity : AppCompatActivity() {
      */
     @SuppressLint("MissingPermission") // HeartRatePermissions.granted() is checked just above.
     private fun findMyWatch() {
+        // Before anything else: with no BLE radio there is no permission worth asking for, and
+        // the request-enable intent has nothing to answer it.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            toast("This phone has no Bluetooth LE, so it cannot hear a watch")
+            return
+        }
         if (!HeartRatePermissions.granted(this)) {
             requestBluetoothPermissions.launch(HeartRatePermissions.required())
             return

@@ -70,6 +70,10 @@ class BleHeartRateSource(
 
     override fun start(listener: HeartRateListener) {
         this.listener = listener
+        // Already connected, connecting, waiting to retry or chasing a moved address: a second
+        // start only changes who hears about it. Connecting again here would open a second client
+        // to the same device and orphan the first.
+        if (wanted && (gatt != null || scanCallback != null || reconnectRunnable != null)) return
         wanted = true
         attempt = 0
         consecutiveFailures = 0
@@ -97,6 +101,9 @@ class BleHeartRateSource(
         }
         report(HeartRateStatus.CONNECTING)
         reportedConnected = false
+        // One client at a time. Whatever came before is finished with by now, and a client left
+        // open is a slot in the phone's small connection pool that nothing will ever give back.
+        gatt?.let { closeGatt(it) }
         try {
             val remote = bluetoothManager()?.adapter?.getRemoteDevice(device.address)
             gatt = remote?.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
@@ -106,6 +113,11 @@ class BleHeartRateSource(
             }
         } catch (e: SecurityException) {
             report(HeartRateStatus.NO_PERMISSION)
+            wanted = false
+        } catch (e: IllegalArgumentException) {
+            // A saved address the adapter will not parse. Nothing to retry with; pairing again is
+            // the way out, and the menu offers it.
+            report(HeartRateStatus.NOT_A_HEART_RATE_DEVICE)
             wanted = false
         }
     }
@@ -124,9 +136,19 @@ class BleHeartRateSource(
         }
     }
 
+    /**
+     * One callback object serves every client this source ever opens, and each event is posted
+     * before it is acted on — so an event can arrive from a client that has since been closed and
+     * replaced, most often across a stop and start on the way through a pause. Acting on one would
+     * reconnect a second time or adopt a dead client over the live one. [current] is the guard:
+     * only the client [gatt] points at now is listened to.
+     */
+    private fun current(g: BluetoothGatt): Boolean = wanted && g === gatt
+
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             handler.post {
+                if (!current(g)) return@post
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                     consecutiveFailures = 0
                     attempt = 0
@@ -142,6 +164,7 @@ class BleHeartRateSource(
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             handler.post {
+                if (!current(g)) return@post
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     handleLost(g)
                     return@post
@@ -163,7 +186,10 @@ class BleHeartRateSource(
         // complete path to the same place.
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            handler.post { deliver(characteristic.value) }
+            // Copied before posting: the characteristic's value is overwritten by the next
+            // notification, which can arrive before this one is handled.
+            val value = characteristic.value?.copyOf() ?: return
+            handler.post { if (current(g)) deliver(value) }
         }
 
         override fun onCharacteristicChanged(
@@ -171,13 +197,12 @@ class BleHeartRateSource(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            handler.post { deliver(value) }
+            handler.post { if (current(g)) deliver(value) }
         }
     }
 
     @SuppressLint("MissingPermission") // preflight() gated the connect this callback follows from.
     private fun discoverServices(g: BluetoothGatt) {
-        gatt = g
         try {
             g.discoverServices()
         } catch (e: SecurityException) {
@@ -236,7 +261,11 @@ class BleHeartRateSource(
     }
 
     private fun scheduleReconnect() {
-        val r = Runnable { connect() }
+        reconnectRunnable?.let { handler.removeCallbacks(it) }
+        val r = Runnable {
+            reconnectRunnable = null
+            connect()
+        }
         reconnectRunnable = r
         handler.postDelayed(r, reconnectDelayMs(attempt))
     }
