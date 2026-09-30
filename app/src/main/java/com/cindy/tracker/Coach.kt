@@ -111,18 +111,26 @@ class Coach {
     // ── the clock ─────────────────────────────────────────────────────────────
 
     /**
-     * The marks the voice speaks at, as milliseconds *remaining*.
+     * The marks the voice speaks at, each with the milliseconds *remaining* it falls on.
      *
      * Counted down rather than up because Cindy is a twenty-minute AMRAP and what an athlete
      * mid-round wants is how much is left, not how much is gone. Chosen so no two land close
      * enough to run together, and so the last one is early enough to still be worth acting on.
+     *
+     * Paired rather than kept as bare times beside a `when`, so a mark cannot be given a time
+     * without a name, or a name without a time, and be announced as the wrong one.
      */
     private val marks = listOf(
-        15 * 60_000L, 10 * 60_000L, 5 * 60_000L, 2 * 60_000L, 60_000L, 10_000L
+        15 * 60_000L to ClockMark.FIVE_MINUTES_IN,
+        10 * 60_000L to ClockMark.HALFWAY,
+        5 * 60_000L to ClockMark.FIVE_MINUTES_LEFT,
+        2 * 60_000L to ClockMark.TWO_MINUTES_LEFT,
+        60_000L to ClockMark.ONE_MINUTE_LEFT,
+        10_000L to ClockMark.TEN_SECONDS_LEFT
     )
 
     /** Marks already spoken, so a 200ms ticker cannot say one five times. */
-    private val spokenMarks = mutableSetOf<Long>()
+    private val spokenMarks = mutableSetOf<ClockMark>()
 
     /**
      * What to say about the clock, or null between marks.
@@ -137,17 +145,12 @@ class Coach {
      * minute ten is noise; "Halfway. Six rounds — on for twelve" is the same reassurance, earned.
      */
     fun onClock(elapsedMs: Long, remainingMs: Long, rounds: Int, totalReps: Int): VoiceLine? {
-        val mark = marks.firstOrNull { remainingMs <= it && it !in spokenMarks } ?: return null
+        val (_, mark) = marks.firstOrNull { (at, candidate) ->
+            remainingMs <= at && candidate !in spokenMarks
+        } ?: return null
         spokenMarks += mark
         return VoiceLine.Clock(
-            mark = when (mark) {
-                10_000L -> ClockMark.TEN_SECONDS_LEFT
-                60_000L -> ClockMark.ONE_MINUTE_LEFT
-                2 * 60_000L -> ClockMark.TWO_MINUTES_LEFT
-                5 * 60_000L -> ClockMark.FIVE_MINUTES_LEFT
-                10 * 60_000L -> ClockMark.HALFWAY
-                else -> ClockMark.FIVE_MINUTES_IN
-            },
+            mark = mark,
             rounds = rounds,
             totalReps = totalReps,
             projectedRounds = projectedRounds(elapsedMs, rounds)
