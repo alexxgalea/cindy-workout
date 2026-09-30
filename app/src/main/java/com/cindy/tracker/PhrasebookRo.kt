@@ -62,8 +62,8 @@ object PhrasebookRo : Phrasebook {
         Hint.DRIVE_UP -> "Împinge în sus"
         Hint.GO_DOWN -> "Coboară"
         Hint.LOSING_YOU -> "Te pierd din vedere. Mai multă lumină ajută."
-        Hint.TOO_DARK -> "Prea întuneric ca să număr. Atinge plus unu."
-        Hint.CANT_SEE_YOU -> "Nu te văd. Atinge plus unu."
+        Hint.TOO_DARK -> "Prea întuneric ca să număr. Atinge butonul plus unu."
+        Hint.CANT_SEE_YOU -> "Nu te văd. Atinge butonul plus unu."
     }
 
     private fun clock(line: VoiceLine.Clock): String = when (line.mark) {

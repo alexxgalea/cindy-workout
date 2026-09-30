@@ -60,8 +60,8 @@ object PhrasebookEs : Phrasebook {
         Hint.DRIVE_UP -> "Empuja hacia arriba"
         Hint.GO_DOWN -> "Baja"
         Hint.LOSING_YOU -> "Te pierdo de vista. Ayuda más luz."
-        Hint.TOO_DARK -> "Demasiado oscuro para contar. Toca más uno."
-        Hint.CANT_SEE_YOU -> "No te veo. Toca más uno."
+        Hint.TOO_DARK -> "Demasiado oscuro para contar. Pulsa el botón más uno."
+        Hint.CANT_SEE_YOU -> "No te veo. Pulsa el botón más uno."
     }
 
     private fun clock(line: VoiceLine.Clock): String = when (line.mark) {

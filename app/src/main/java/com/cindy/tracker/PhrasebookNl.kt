@@ -60,8 +60,8 @@ object PhrasebookNl : Phrasebook {
         Hint.DRIVE_UP -> "Duw omhoog"
         Hint.GO_DOWN -> "Ga omlaag"
         Hint.LOSING_YOU -> "Ik verlies je uit beeld. Meer licht helpt."
-        Hint.TOO_DARK -> "Te donker om te tellen. Tik op plus één."
-        Hint.CANT_SEE_YOU -> "Ik zie je niet. Tik op plus één."
+        Hint.TOO_DARK -> "Te donker om te tellen. Tik op de knop plus één."
+        Hint.CANT_SEE_YOU -> "Ik zie je niet. Tik op de knop plus één."
     }
 
     private fun clock(line: VoiceLine.Clock): String = when (line.mark) {

@@ -61,8 +61,8 @@ object PhrasebookTr : Phrasebook {
         Hint.DRIVE_UP -> "Yukarı it"
         Hint.GO_DOWN -> "Aşağı in"
         Hint.LOSING_YOU -> "Seni gözden kaybediyorum. Daha fazla ışık yardımcı olur."
-        Hint.TOO_DARK -> "Saymak için çok karanlık. Artı bire dokun."
-        Hint.CANT_SEE_YOU -> "Seni göremiyorum. Artı bire dokun."
+        Hint.TOO_DARK -> "Saymak için çok karanlık. Artı bir düğmesine dokun."
+        Hint.CANT_SEE_YOU -> "Seni göremiyorum. Artı bir düğmesine dokun."
     }
 
     private fun clock(line: VoiceLine.Clock): String = when (line.mark) {

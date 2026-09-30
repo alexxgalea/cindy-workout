@@ -63,8 +63,8 @@ object PhrasebookRu : Phrasebook {
         Hint.DRIVE_UP -> "Вытолкни себя вверх"
         Hint.GO_DOWN -> "Опустись"
         Hint.LOSING_YOU -> "Теряю тебя из виду. Больше света поможет."
-        Hint.TOO_DARK -> "Слишком темно для счёта. Нажми плюс один."
-        Hint.CANT_SEE_YOU -> "Не вижу тебя. Нажми плюс один."
+        Hint.TOO_DARK -> "Слишком темно для счёта. Нажми кнопку плюс один."
+        Hint.CANT_SEE_YOU -> "Не вижу тебя. Нажми кнопку плюс один."
     }
 
     private fun clock(line: VoiceLine.Clock): String = when (line.mark) {
