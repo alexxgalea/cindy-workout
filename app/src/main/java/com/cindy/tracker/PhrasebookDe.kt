@@ -9,6 +9,8 @@ package com.cindy.tracker
  * the dative ("in einer Minute") where the average wants the nominative ("eine Minute"). Sentences
  * end on a word, never on a number: German engines read "12." as "zwölfte".
  *
+ * Counts other than 1 are left as digits for the engine to agree with the noun that follows.
+ *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */
 object PhrasebookDe : Phrasebook {

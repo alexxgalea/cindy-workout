@@ -8,6 +8,8 @@ package com.cindy.tracker
  * own. The movements use the Dutch names ("optrekken", "opdrukken") because a Dutch voice reads
  * the English "pull-ups" as if it were Dutch. Sentences end on a word, never on a number.
  *
+ * Counts other than 1 are left as digits for the engine to agree with the noun that follows.
+ *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */
 object PhrasebookNl : Phrasebook {

@@ -5,7 +5,7 @@ package com.cindy.tracker
  *
  * Register: the informal imperative. Plurals: one, few and many (1 runda, 2–4 rundy, 5 rund, but
  * 12 rund and 22 rundy). 1 and 2 are written out for the feminine nouns ("jedna runda", "dwie
- * rundy"), because a voice reads a bare "2 rundy" as "dwa rundy"; the neuter "powtórzenie" takes
+ * rundy"), because a voice can read a bare "2 rundy" as "dwa rundy"; the neuter "powtórzenie" takes
  * "jedno" and needs nothing for 2.
  *
  * A count inside a sentence would need the case of the verb before it, and the feminine singular
@@ -13,6 +13,9 @@ package com.cindy.tracker
  * the nominative: a standalone score, a duration after "czas", and a label such as "Ukończone
  * rundy: 6". The one accusative that cannot be avoided ("za jedną sekundę", "na jedną rundę") is
  * written out. Sentences end on a word, never on a number: Polish engines read "12." as an ordinal.
+ *
+ * Counts that end in 1 or 2 beyond those written out (21, 22, 102 and so on) are left as digits
+ * for the engine to agree. That is the known gap, and the one to listen for on a real voice.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */

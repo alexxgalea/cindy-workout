@@ -6,9 +6,12 @@ package com.cindy.tracker
  * Register: the informal "tu", in short imperatives. Plurals: one, few and other. "Few" covers 0
  * and 2–19 (and 101–119), and from 20 the noun takes "de": "2 runde" but "20 de runde" and
  * "120 de runde". 1 and 2 are written out ("o rundă", "două runde") because a voice does not
- * agree the numeral's gender with the noun after a digit. The duration follows "timp de" rather
+ * always agree the numeral's gender with the noun after a digit. The duration follows "timp de" rather
  * than "în", since "în un minut" contracts to "într-un minut". Sentences end on a word, never on
  * a number: Romanian engines read "12." as an ordinal.
+ *
+ * Counts that end in 1 or 2 beyond those written out (21, 22, 102 and so on) are left as digits
+ * for the engine to agree. That is the known gap, and the one to listen for on a real voice.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */

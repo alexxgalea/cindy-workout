@@ -10,6 +10,9 @@ package com.cindy.tracker
  * avoid the past tense of the athlete ("побил" or "побила"): the benchmark line says the result is
  * better, which is true whoever is listening. Sentences end on a word, never on a number.
  *
+ * Counts that end in 1 or 2 beyond those written out (21, 22, 102 and so on) are left as digits
+ * for the engine to agree. That is the known gap, and the one to listen for on a real voice.
+ *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */
 object PhrasebookRu : Phrasebook {

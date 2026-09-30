@@ -5,9 +5,12 @@ package com.cindy.tracker
  *
  * Register: "você", in short imperatives. Plurals: nought and one are both singular, as they are
  * in Brazilian Portuguese ("0 repetição"). 1 and 2 are written out for the feminine nouns ("uma
- * rodada", "duas rodadas"), because a voice reads a bare "2 rodadas" as "dois rodadas". The
+ * rodada", "duas rodadas"), because a voice can read a bare "2 rodadas" as "dois rodadas". The
  * minutes and seconds are masculine and need no help. Confirmations avoid words that change with
  * the athlete's gender ("pronto", "pronta"). Sentences end on a word, never on a number.
+ *
+ * Counts that end in 1 or 2 beyond those written out (21, 22, 102 and so on) are left as digits
+ * for the engine to agree. That is the known gap, and the one to listen for on a real voice.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */

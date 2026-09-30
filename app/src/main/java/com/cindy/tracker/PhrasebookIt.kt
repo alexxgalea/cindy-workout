@@ -4,10 +4,12 @@ package com.cindy.tracker
  * The voice in Italian.
  *
  * Register: the informal "tu", in short imperatives. Plurals: one and other. 1 is written out
- * ("un giro", "una ripetizione") because a voice does not agree the article with the noun after a
+ * ("un giro", "una ripetizione") because a voice does not always agree the article with the noun after a
  * digit. A round is a "giro", the word a circuit uses, rather than the English "round", which an
  * Italian voice pronounces in its own way. Confirmations avoid words that change with the
  * athlete's gender ("pronto", "pronta"). Sentences end on a word, never on a number.
+ *
+ * Counts other than 1 are left as digits for the engine to agree with the noun that follows.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */

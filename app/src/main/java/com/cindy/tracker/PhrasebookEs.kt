@@ -4,9 +4,11 @@ package com.cindy.tracker
  * The voice in Spanish.
  *
  * Register: the informal "tú", in short imperatives, as a coach says them. Plurals: one and other.
- * A voice reads a bare "1 ronda" as "uno ronda", so 1 is written out ("una ronda", "un minuto")
+ * A voice can read a bare "1 ronda" as "uno ronda", so 1 is written out ("una ronda", "un minuto")
  * and everything else is left as a digit. Sentences end on a word, never on a number, because a
  * digit before a full stop is read by some engines as an ordinal.
+ *
+ * Counts other than 1 are left as digits for the engine to agree with the noun that follows.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */

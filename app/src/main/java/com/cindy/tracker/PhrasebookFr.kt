@@ -5,9 +5,11 @@ package com.cindy.tracker
  *
  * Register: the informal "tu", in short imperatives. Plurals: nought and one are both singular
  * ("0 tour", "1 tour"), which is French and not a slip. 1 is written out ("un tour", "une
- * répétition") because a voice does not agree the article with the noun that follows a digit.
+ * répétition") because a voice does not always agree the article with the noun that follows a digit.
  * Sentences end on a word, never on a number, because a digit before a full stop is read by some
  * engines as an ordinal.
+ *
+ * Counts other than 1 are left as digits for the engine to agree with the noun that follows.
  *
  * Written without a native speaker's review; the lines are short so that they can be read that way.
  */
