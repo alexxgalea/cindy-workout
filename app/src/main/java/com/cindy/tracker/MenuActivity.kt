@@ -78,22 +78,7 @@ class MenuActivity : AppCompatActivity() {
 
         /** How long each row waits behind the one above it as the list settles in. */
         private const val ROW_STAGGER_MS = 34L
-
-        /**
-         * Lets [StravaScreenTest] build the menu as if this were a build with Strava
-         * credentials, or force it back to one that has none.
-         *
-         * [StravaConfig.available] is a `val` read once from [BuildConfig] at class-init, and
-         * is always false in a unit test — there is no `strava.properties` in CI, and nothing
-         * shadows `BuildConfig` the way Robolectric shadows the platform. Production code never
-         * touches this; it stays null and [stravaAvailable] reads [StravaConfig.available] as
-         * normal. Tests must reset it in a `finally`, since it is a static and outlives the
-         * activity under test.
-         */
-        internal var stravaAvailableForTest: Boolean? = null
     }
-
-    private val stravaAvailable: Boolean get() = stravaAvailableForTest ?: StravaConfig.available
 
     private lateinit var binding: ActivityMenuBinding
     private lateinit var profile: Profile
@@ -201,7 +186,7 @@ class MenuActivity : AppCompatActivity() {
                 }
             ) { askBodyWeight(profile) { render() } })
             row(navRow("Heart rate", heartRateSubtitle()) { chooseHeartRate() })
-            row(navRow("Strava", stravaSubtitle(stravaAvailable, stravaGrant)) {
+            row(navRow("Strava", stravaSubtitle(StravaConfig.available, stravaGrant)) {
                 tapStrava(stravaTokens, stravaGrant)
             })
             row(navRow("Voice", voiceSubtitle()) { chooseVoice() })
@@ -1008,8 +993,8 @@ class MenuActivity : AppCompatActivity() {
     /**
      * Pure, so [StravaScreenTest] can check every subtitle without building the activity.
      *
-     * `available` is [stravaAvailable] rather than [StravaConfig.available] directly — see that
-     * property for why the two are not always the same thing in a test.
+     * `available` is passed in rather than read here, so a test can drive every state through
+     * [StravaConfig.availableForTest].
      */
     private fun stravaSubtitle(available: Boolean, grant: StravaGrant?): String = when {
         !available -> "Not available in this build"
@@ -1018,15 +1003,24 @@ class MenuActivity : AppCompatActivity() {
     }
 
     private fun tapStrava(tokens: StravaTokenStore, grant: StravaGrant?) {
-        if (!stravaAvailable) {
+        if (!StravaConfig.available) {
             toast("This build has no Strava credentials, so the feature is switched off")
             return
         }
         if (grant == null) connectStrava(tokens) else openStravaSheet(tokens, grant)
     }
 
-    /** Mints a fresh state, remembers it, and opens Strava's own consent page for it. */
+    /**
+     * Mints a fresh state, remembers it, and opens Strava's own consent page for it.
+     *
+     * Clears [StravaTokenStore.afterConnectUploadAtMillis] first: that field means "upload this
+     * one attempt once connected", set by the results screen's own CONNECT tap, and a connect
+     * started from here is not about any particular attempt. Without clearing it, connecting
+     * from the menu long after leaving a results screen would silently re-fire whatever request
+     * that screen had left pending.
+     */
     private fun connectStrava(tokens: StravaTokenStore) {
+        tokens.afterConnectUploadAtMillis = null
         val state = StravaAuth.newState()
         tokens.pendingState = state
         try {
@@ -1039,17 +1033,33 @@ class MenuActivity : AppCompatActivity() {
     }
 
     /**
-     * DONE just closes; DISCONNECT is the only action that does anything.
+     * The toggle here is what makes the subtitle's claim true or not, so the two must agree:
+     * saying "uploads on its own" while the switch underneath it is off would be exactly the
+     * kind of confident wrong statement this app's screens otherwise refuse to make.
+     */
+    private fun stravaSheetSubtitle(grant: StravaGrant, autoUpload: Boolean): String {
+        val connectedAs = "Connected${grant.athleteName?.let { " as $it" } ?: ""}."
+        return if (autoUpload) {
+            "$connectedAs Each finished workout uploads to Strava on its own."
+        } else {
+            "$connectedAs Automatic upload is off — upload from a workout's results screen instead."
+        }
+    }
+
+    /**
+     * DONE saves the toggle and closes; DISCONNECT is the only other action that does anything.
      */
     private fun openStravaSheet(tokens: StravaTokenStore, grant: StravaGrant) {
-        CindySheet(
+        var autoUpload = tokens.autoUpload
+        val sheet = CindySheet(
             this,
             title = "Strava",
-            // Says only what is true: connecting does not upload anything on its own.
-            subtitle = "Connected${grant.athleteName?.let { " as $it" } ?: ""}."
-        ).actions(
+            subtitle = stravaSheetSubtitle(grant, autoUpload)
+        )
+        sheet.toggle("Upload automatically", autoUpload) { autoUpload = it }
+        sheet.actions(
             primary = "DONE",
-            onPrimary = {},
+            onPrimary = { tokens.autoUpload = autoUpload },
             secondary = "DISCONNECT",
             onSecondary = { disconnectStrava(tokens, grant) },
             secondaryTint = R.color.state_alert

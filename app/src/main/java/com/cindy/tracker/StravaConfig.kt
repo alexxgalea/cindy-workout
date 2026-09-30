@@ -16,8 +16,24 @@ object StravaConfig {
     val clientId: String = BuildConfig.STRAVA_CLIENT_ID
     val clientSecret: String = BuildConfig.STRAVA_CLIENT_SECRET
 
+    /**
+     * Lets a test build a screen as if this were a build with Strava credentials, or force one
+     * back to a build with none.
+     *
+     * [available] is otherwise derived once from [BuildConfig] at class-init and is always false
+     * under a unit test — there is no `strava.properties` in CI, and nothing shadows
+     * `BuildConfig` the way Robolectric shadows the platform. Production code never touches
+     * this; it stays null and [available] reads the real credentials as normal. [MenuActivity]
+     * and [ResultsActivity] share this one seam rather than each keeping a static of their own
+     * to reset, so a test cannot fix one screen's answer while leaving the other's stale. Tests
+     * must reset it in a `finally` or `@After`, since it is a static and outlives the activity
+     * under test.
+     */
+    internal var availableForTest: Boolean? = null
+
     /** False for CI and a fresh clone with no `strava.properties`. The whole feature hides. */
-    val available: Boolean = clientId.isNotBlank() && clientSecret.isNotBlank()
+    val available: Boolean
+        get() = availableForTest ?: (clientId.isNotBlank() && clientSecret.isNotBlank())
 
     /**
      * The v3 API host. Strava opens `https://api-v3.strava.com` as an alternative on

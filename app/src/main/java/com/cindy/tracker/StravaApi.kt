@@ -88,7 +88,7 @@ class StravaApi(
     }
 
     /** Where the athlete can look at the finished activity in a browser. */
-    fun activityUrl(id: Long): String = "https://www.strava.com/activities/$id"
+    fun activityUrl(id: Long): String = Companion.activityUrl(id)
 
     private fun send(request: HttpRequest): UploadOutcome =
         try {
@@ -97,6 +97,15 @@ class StravaApi(
             // A network failure carries no Strava semantics at all — always worth retrying.
             UploadOutcome.Transient(e.message ?: e.javaClass.simpleName)
         }
+
+    companion object {
+        /**
+         * Same URL as the instance method above, for a caller — the results screen's Strava
+         * row — that wants to format one without needing a [HttpTransport] or
+         * [StravaAccessToken] just to get an instance to call it on.
+         */
+        fun activityUrl(id: Long): String = "https://www.strava.com/activities/$id"
+    }
 }
 
 // ---- classification --------------------------------------------------------------------------

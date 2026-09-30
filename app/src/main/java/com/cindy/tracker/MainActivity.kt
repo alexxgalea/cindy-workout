@@ -1360,6 +1360,7 @@ class MainActivity : AppCompatActivity() {
         // onCreate, a few lines below, and there is no attempt to have it race against.
         val saved = records.add(attempt)
         if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
+        if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
         primary(R.drawable.ic_again)
         renderControls()

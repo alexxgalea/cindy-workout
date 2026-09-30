@@ -98,6 +98,14 @@ class StravaAuthActivity : AppCompatActivity() {
                 return@launch
             }
             tokens.grant = grant
+            // Whatever was waiting on a connection gets its turn now: attempts stuck asking to
+            // reconnect, and the one particular attempt (if any) that sent the athlete here from
+            // its own results screen rather than the menu.
+            StravaUploads.requeueNeedingReconnect(this@StravaAuthActivity)
+            tokens.afterConnectUploadAtMillis?.let { atMillis ->
+                tokens.afterConnectUploadAtMillis = null
+                StravaUploads.enqueue(this@StravaAuthActivity, atMillis)
+            }
             finishWith("Connected to Strava" + (grant.athleteName?.let { " as $it" } ?: ""))
         }
     }
