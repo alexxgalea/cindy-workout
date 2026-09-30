@@ -50,6 +50,13 @@ class StravaActivityTextTest {
     }
 
     @Test
+    fun `one round and one rep are singular`() {
+        val one = fullCindy.copy(rounds = 1, reps = 1, countedReps = 31)
+        val lines = StravaActivityText.description(one, CalorieBasis.NONE).lines()
+        assertEquals("1 round + 1 rep · 31 reps in 20:00", lines[0])
+    }
+
+    @Test
     fun `stopping before the clock runs out says so on the first line`() {
         val stopped = fullCindy.copy(durationMs = 12 * 60 * 1000L + 34_000L, countedReps = 300)
         val lines = StravaActivityText.description(stopped, CalorieBasis.NONE).lines()

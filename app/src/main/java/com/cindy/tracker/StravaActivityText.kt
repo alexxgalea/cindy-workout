@@ -41,9 +41,10 @@ object StravaActivityText {
     fun description(a: Attempt, calorieBasis: CalorieBasis): String {
         val lines = mutableListOf<String>()
 
-        val roundsPart = if (a.reps == 0) "${a.rounds} rounds" else "${a.rounds} rounds + ${a.reps} reps"
+        val roundsPart =
+            if (a.reps == 0) count(a.rounds, "round") else "${count(a.rounds, "round")} + ${count(a.reps, "rep")}"
         val stoppedSuffix = if (a.durationMs < WORKOUT_MS) " — stopped early" else ""
-        lines += "$roundsPart · ${a.totalReps} reps in ${formatDuration(a.durationMs)}$stoppedSuffix"
+        lines += "$roundsPart · ${count(a.totalReps, "rep")} in ${formatDuration(a.durationMs)}$stoppedSuffix"
 
         val profile = a.profile
         lines += if (profile != null && !profile.isStandard) profile.changedMovements() else a.caption
@@ -79,4 +80,7 @@ object StravaActivityText {
 
         return lines.joinToString("\n")
     }
+
+    /** "1 round", "6 rounds": the same care [Coach] takes, since this is read as often as heard. */
+    private fun count(n: Int, noun: String): String = "$n $noun${if (n == 1) "" else "s"}"
 }
