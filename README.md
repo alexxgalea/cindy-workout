@@ -216,6 +216,16 @@ most Wear OS watches do not broadcast it without a third-party app. Pairing is a
 the menu; the watch then reconnects on its own whenever the camera screen is open, and a dropped
 connection is retried with backoff rather than left for the athlete to notice and refix.
 
+A Garmin paired to the same phone through Garmin Connect needs two allowances a chest strap does
+not. It already holds a connection to the phone, and a device in that state may not advertise to
+it at all, so the scan also lists every device already connected over Bluetooth LE, marked
+"Connected to this phone". And Android keeps the service list it read from a bonded watch across
+connections: read while broadcast was off, it says the watch has no heart rate. When a connection
+finds no Heart Rate service, the source drops that cached list once and looks again. The scan
+itself is unfiltered and matches the full advertisement in software (the Heart Rate service, or
+Garmin's manufacturer ID), since some phones' hardware filters miss a service UUID that is only in
+the scan response.
+
 Where there is a heart rate, calories come from the Keytel et al. (2005) heart-rate equation
 instead of the MET model above — fitted separately for women and men from measured energy
 expenditure, so it follows the effort actually made rather than a table's idea of it. Below the

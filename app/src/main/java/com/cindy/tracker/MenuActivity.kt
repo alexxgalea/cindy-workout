@@ -616,7 +616,8 @@ class MenuActivity : AppCompatActivity() {
                     }
                     HeartRateStatus.NO_PERMISSION -> "Bluetooth permission is off"
                     HeartRateStatus.BLUETOOTH_OFF -> "Bluetooth is off"
-                    HeartRateStatus.NOT_A_HEART_RATE_DEVICE -> "That device does not send heart rate"
+                    HeartRateStatus.NOT_A_HEART_RATE_DEVICE ->
+                        "No heart rate from it — is heart-rate broadcast on?"
                     HeartRateStatus.UNSUPPORTED -> "This phone has no Bluetooth LE"
                     HeartRateStatus.CONNECTED, HeartRateStatus.OFF -> null
                 }
@@ -648,6 +649,20 @@ class MenuActivity : AppCompatActivity() {
             source?.stop()
             if (heartSource === source) heartSource = null
         }.show()
+    }
+
+    /**
+     * What a scan row says under the device's name. A device already linked to the phone says so
+     * — that is how a Garmin paired through Garmin Connect is told apart — and shows its signal
+     * too when it was also heard advertising.
+     */
+    private fun foundDeviceLabel(found: FoundDevice): String {
+        val signal = found.rssi?.let { signalLabel(it) }
+        return when {
+            found.connected && signal != null -> "Connected to this phone · $signal"
+            found.connected -> "Connected to this phone"
+            else -> signal ?: ""
+        }
     }
 
     /** "Strong" / "Good" / "Weak" — the bands the scan sheet shows instead of a raw dBm figure. */
@@ -690,7 +705,10 @@ class MenuActivity : AppCompatActivity() {
             group.removeAllViews()
             if (devices.isEmpty()) {
                 group.row(
-                    styledText(R.style.Cindy_Callout, "Nothing yet — make sure broadcast is on")
+                    styledText(
+                        R.style.Cindy_Callout,
+                        "Nothing yet — keep your watch on its broadcast screen"
+                    )
                         .apply {
                             setTextColor(getColor(R.color.label_secondary))
                             setPadding(dp(18), dp(16), dp(16), dp(16))
@@ -698,7 +716,7 @@ class MenuActivity : AppCompatActivity() {
                 )
             } else {
                 devices.forEach { found ->
-                    group.row(navRow(found.name, signalLabel(found.rssi)) {
+                    group.row(navRow(found.name, foundDeviceLabel(found)) {
                         rebuilding = true
                         scanner?.stop()
                         scanner = null
