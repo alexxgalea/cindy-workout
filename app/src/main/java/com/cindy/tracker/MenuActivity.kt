@@ -234,7 +234,7 @@ class MenuActivity : AppCompatActivity() {
             onChange = { volume = it; speaker.volume = it },
             // Spoken only once the grip is let go: restarting the utterance on every pixel of
             // the drag would stutter rather than demonstrate.
-            onSettled = { speaker.preview("Three") }
+            onSettled = { speaker.preview(VoiceLine.VolumeCheck) }
         )
         sheet.add(
             sheetNote(
@@ -250,7 +250,7 @@ class MenuActivity : AppCompatActivity() {
                 render()
             },
             secondary = "HEAR IT",
-            onSecondary = { speaker.preview("Three. Four. Five. Push ups.") },
+            onSecondary = { speaker.preview(VoiceLine.Sample) },
             secondaryDismisses = false
         )
         sheet.onDismiss { speaker.stop() }.show()

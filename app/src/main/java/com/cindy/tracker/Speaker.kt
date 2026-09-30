@@ -57,19 +57,30 @@ class Speaker(context: Context) {
         }
     }
 
+    /**
+     * The words each [VoiceLine] is said in. Callers hand over the fact and this decides the
+     * sentence, so the words always belong to the voice that is actually speaking them.
+     */
+    private val phrasebook: Phrasebook = PhrasebookEn
+
     /** Interrupts anything in progress — used for rep numbers. */
-    fun say(text: String) = speak(text, TextToSpeech.QUEUE_FLUSH)
+    fun say(line: VoiceLine) = speak(phrasebook.say(line), TextToSpeech.QUEUE_FLUSH)
 
     /** Queues behind whatever is speaking — used for cues that must be heard. */
-    fun queue(text: String) = speak(text, TextToSpeech.QUEUE_ADD)
+    fun queue(line: VoiceLine) = speak(phrasebook.say(line), TextToSpeech.QUEUE_ADD)
 
     /**
-     * Says [text] regardless of [enabled], for previewing the voice from the menu.
+     * Says [line] regardless of [enabled], for previewing the voice from the menu.
      *
-     * The one caller is the volume slider, where refusing to speak because the voice is switched
-     * off would leave the athlete adjusting a number against silence.
+     * The callers are the volume slider and HEAR IT, where refusing to speak because the voice
+     * is switched off would leave the athlete adjusting a number against silence.
      */
-    fun preview(text: String) = speak(text, TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
+    fun preview(line: VoiceLine) =
+        speak(phrasebook.say(line), TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
+
+    // Raw text, for the coach's strings until it speaks in lines too.
+    fun say(text: String) = speak(text, TextToSpeech.QUEUE_FLUSH)
+    fun queue(text: String) = speak(text, TextToSpeech.QUEUE_ADD)
 
     private fun speak(text: String, mode: Int, ignoreEnabled: Boolean = false) {
         if ((!enabled && !ignoreEnabled) || !ready) return
