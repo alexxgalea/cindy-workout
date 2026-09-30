@@ -11,6 +11,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * One device the search turned up: its address, its best guess at a name, and how strong it came
@@ -121,6 +122,10 @@ class HeartRateScanner(private val context: Context) {
     private val seen = linkedMapOf<String, FoundDevice>()
     private var connected = listOf<FoundDevice>()
 
+    /** What was last logged for each address, so a debug build logs an advertiser once per change
+     *  rather than on every packet. Written from the scan's binder thread, cleared from main. */
+    private val logged = ConcurrentHashMap<String, String>()
+
     /**
      * Scans for [SCAN_WINDOW_MS], calling [onFound] with the growing list of matches as they come
      * in, and [onDone] once the window closes on its own. Replaces a scan already running rather
@@ -130,11 +135,13 @@ class HeartRateScanner(private val context: Context) {
     fun start(onFound: (List<FoundDevice>) -> Unit, onDone: () -> Unit) {
         stop()
         connected = connectedDevices()
+        if (BuildConfig.DEBUG) logLinks()
         if (connected.isNotEmpty()) onFound(HeartRateAdvert.merge(connected, emptyList()))
         val scanner = adapter()?.bluetoothLeScanner ?: return onDone()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (BuildConfig.DEBUG) logAdvert(result)
                 if (!result.advertisesHeartRate()) return
                 val address = result.device.address
                 val name = result.advertisedName()
@@ -177,6 +184,7 @@ class HeartRateScanner(private val context: Context) {
         callback = null
         seen.clear()
         connected = emptyList()
+        logged.clear()
         handler.removeCallbacksAndMessages(null)
         try {
             adapter()?.bluetoothLeScanner?.stopScan(cb)
@@ -203,6 +211,34 @@ class HeartRateScanner(private val context: Context) {
         } catch (e: SecurityException) {
             emptyList()
         }
+
+    /**
+     * Debug builds only: what the phone is already linked to and bonded with, logged as the search
+     * starts. A watch missing from the sheet is either absent here and silent on the air, or
+     * present here and never heard advertising, and the two need different fixes.
+     */
+    @SuppressLint("MissingPermission")
+    private fun logLinks() {
+        try {
+            HeartRateLog.d { "scan: connected over LE ${connected.map { "${it.address} ${it.name}" }}" }
+            val bonded = adapter()?.bondedDevices.orEmpty().map { "${it.address} ${it.name} type=${it.type}" }
+            HeartRateLog.d { "scan: bonded $bonded" }
+        } catch (e: SecurityException) {
+            HeartRateLog.d { "scan: no permission to list links" }
+        }
+    }
+
+    /** Debug builds only: every advertiser heard, matched or not, once per change in what it says. */
+    private fun logAdvert(result: ScanResult) {
+        val record = result.scanRecord
+        val makers = record?.manufacturerSpecificData
+        val makerIds = (0 until (makers?.size() ?: 0)).map { "0x%04X".format(makers!!.keyAt(it)) }
+        val summary = "name=${record?.deviceName} uuids=${record?.serviceUuids?.map { it.uuid }} " +
+            "makers=$makerIds connectable=${result.isConnectable} match=${result.advertisesHeartRate()}"
+        if (logged.put(result.device.address, summary) != summary) {
+            HeartRateLog.d { "advert ${result.device.address} rssi=${result.rssi} $summary" }
+        }
+    }
 
     private fun ScanResult.advertisesHeartRate(): Boolean {
         val record = scanRecord ?: return false
