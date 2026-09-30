@@ -94,6 +94,16 @@ class SetStoreTest {
     }
 
     @Test
+    fun `saving again replaces the list whole and leaves no temporary file behind`() {
+        store.save(111L, listOf(WorkoutSet(1, Exercise.PULLUP, 5), WorkoutSet(1, Exercise.PUSHUP, 10)))
+        store.save(111L, listOf(WorkoutSet(1, Exercise.PULLUP, 3)))
+
+        assertEquals(listOf(WorkoutSet(1, Exercise.PULLUP, 3)), store.load(111L))
+        val dir = java.io.File(context.filesDir, "sets")
+        assertEquals(listOf("111.sets"), dir.list()!!.toList())
+    }
+
+    @Test
     fun `two attempts keep their own sets`() {
         store.save(111L, listOf(WorkoutSet(1, Exercise.PULLUP, 5)))
         store.save(222L, listOf(WorkoutSet(1, Exercise.SQUAT, 15)))

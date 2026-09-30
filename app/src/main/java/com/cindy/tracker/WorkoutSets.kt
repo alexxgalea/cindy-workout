@@ -59,10 +59,22 @@ object WorkoutSets {
  */
 class SetStore(private val context: Context) {
 
+    /**
+     * Written beside the real file and renamed over it, so a reader only ever sees a whole list.
+     *
+     * A file cut off by a process death mid-write could otherwise end on a line boundary and
+     * decode as a *shorter* list that looks perfectly valid — sets that no longer add up to the
+     * attempt's total, which is the one thing this store exists to prevent.
+     */
     fun save(atMillis: Long, sets: List<WorkoutSet>) {
         val f = file(atMillis)
         f.parentFile?.mkdirs()
-        f.writeText(WorkoutSets.encode(sets))
+        val tmp = File(f.parentFile, "${f.name}.tmp")
+        tmp.writeText(WorkoutSets.encode(sets))
+        if (!tmp.renameTo(f)) {
+            tmp.delete()
+            throw java.io.IOException("Could not save the sets for $atMillis")
+        }
     }
 
     /** Null when nothing was saved for this attempt, or the file no longer decodes. */
