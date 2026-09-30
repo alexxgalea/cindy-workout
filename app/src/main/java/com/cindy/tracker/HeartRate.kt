@@ -100,9 +100,17 @@ object HeartRateMeasurement {
         r.contact != SensorContact.NOT_DETECTED && r.bpm in MIN_BPM..MAX_BPM
 }
 
-/** What a [HeartRateSource] is doing right now. */
+/**
+ * What a [HeartRateSource] is doing right now.
+ *
+ * [WAITING] is connected and subscribed with no reading yet. It is its own state because a watch
+ * with its broadcast off behaves exactly so: it accepts the connection and the subscription, then
+ * says nothing until the broadcast is started, which on a fenix took 35 seconds in one test. Calling
+ * that "connecting" sent the athlete looking for a fault in the connection rather than on the watch.
+ */
 enum class HeartRateStatus {
-    OFF, CONNECTING, CONNECTED, NO_PERMISSION, BLUETOOTH_OFF, UNSUPPORTED, NOT_A_HEART_RATE_DEVICE
+    OFF, CONNECTING, WAITING, CONNECTED, NO_PERMISSION, BLUETOOTH_OFF, UNSUPPORTED,
+    NOT_A_HEART_RATE_DEVICE
 }
 
 /** Callbacks from a [HeartRateSource]. Always delivered on the main thread. */

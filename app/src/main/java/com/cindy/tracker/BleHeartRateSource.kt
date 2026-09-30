@@ -19,6 +19,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import android.os.SystemClock
+import android.util.Log
 
 /**
  * A live connection to one saved heart-rate [device], over the standard Bluetooth LE Heart Rate
@@ -104,6 +105,7 @@ class BleHeartRateSource(
             return
         }
         report(HeartRateStatus.CONNECTING)
+        HeartRateLog.d { "source: connect ${device.address} ${device.name}" }
         reportedConnected = false
         cacheRefreshed = false
         // One client at a time. Whatever came before is finished with by now, and a client left
@@ -153,6 +155,7 @@ class BleHeartRateSource(
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             handler.post {
+                HeartRateLog.d { "source: link status=$status state=$newState current=${current(g)}" }
                 if (!current(g)) return@post
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                     consecutiveFailures = 0
@@ -169,6 +172,9 @@ class BleHeartRateSource(
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             handler.post {
+                HeartRateLog.d {
+                    "source: services status=$status refreshed=$cacheRefreshed ${g.services.map { it.uuid }}"
+                }
                 if (!current(g)) return@post
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     handleLost(g)
@@ -208,6 +214,17 @@ class BleHeartRateSource(
         ) {
             handler.post { if (current(g)) deliver(value) }
         }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            HeartRateLog.d { "source: subscribe status=$status" }
+            handler.post {
+                // Subscribed, and nothing heard yet: see HeartRateStatus.WAITING. A reading that
+                // raced ahead of this callback has already said CONNECTED, which stands.
+                if (current(g) && status == BluetoothGatt.GATT_SUCCESS && !reportedConnected) {
+                    report(HeartRateStatus.WAITING)
+                }
+            }
+        }
     }
 
     @SuppressLint("MissingPermission") // preflight() gated the connect this callback follows from.
@@ -237,7 +254,8 @@ class BleHeartRateSource(
     private fun rediscoverFresh(g: BluetoothGatt) {
         cacheRefreshed = true
         try {
-            g.javaClass.getMethod("refresh").invoke(g)
+            val refreshed = g.javaClass.getMethod("refresh").invoke(g)
+            HeartRateLog.d { "source: no heart-rate service, cache refresh=$refreshed" }
         } catch (e: ReflectiveOperationException) {
             // Hidden API refused; the retry below is still harmless.
         } catch (e: SecurityException) {
@@ -250,7 +268,9 @@ class BleHeartRateSource(
     private fun enableNotifications(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
         try {
             g.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(HeartRateGatt.CLIENT_CONFIG) ?: return
+            val descriptor = characteristic.getDescriptor(HeartRateGatt.CLIENT_CONFIG)
+            HeartRateLog.d { "source: heart-rate service found, subscribing=${descriptor != null}" }
+            if (descriptor == null) return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 g.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
             } else {
@@ -270,6 +290,7 @@ class BleHeartRateSource(
         val reading = HeartRateMeasurement.parse(value) ?: return
         if (!HeartRateMeasurement.plausible(reading)) return
         if (!reportedConnected) {
+            HeartRateLog.d { "source: first reading ${reading.bpm} bpm" }
             reportedConnected = true
             report(HeartRateStatus.CONNECTED)
         }
@@ -290,6 +311,7 @@ class BleHeartRateSource(
         if (!wanted) return
         consecutiveFailures++
         attempt++
+        HeartRateLog.d { "source: lost, failures=$consecutiveFailures" }
         report(HeartRateStatus.CONNECTING)
         if (consecutiveFailures >= 2) scanForMovedDevice() else scheduleReconnect()
     }
@@ -306,6 +328,7 @@ class BleHeartRateSource(
 
     @SuppressLint("MissingPermission") // Same gate connect() already passed before this runs.
     private fun scanForMovedDevice() {
+        HeartRateLog.d { "source: looking for ${device.name} at a new address" }
         val scanner = bluetoothManager()?.adapter?.bluetoothLeScanner
         if (scanner == null) {
             scheduleReconnect()
@@ -327,6 +350,7 @@ class BleHeartRateSource(
                         null
                     }
                     if (name != null && name == device.name) {
+                        HeartRateLog.d { "source: ${device.name} moved to ${result.device.address}" }
                         stopScan(cb!!)
                         device = HeartRateDevice(result.device.address, device.name)
                         onDeviceMoved(device)
@@ -393,5 +417,18 @@ class BleHeartRateSource(
 
         private const val RECONNECT_SCAN_WINDOW_MS = 10_000L
         private const val CACHE_REFRESH_DELAY_MS = 600L
+    }
+}
+
+/**
+ * Debug-build logging for the heart-rate path, under one tag, so that `adb logcat -s CindyHR`
+ * follows a pairing from the scan to the first reading. Silent in a release build: the address of
+ * every device near the athlete is nobody's business in a shipped log.
+ */
+object HeartRateLog {
+    private const val TAG = "CindyHR"
+
+    fun d(message: () -> String) {
+        if (BuildConfig.DEBUG) Log.d(TAG, message())
     }
 }

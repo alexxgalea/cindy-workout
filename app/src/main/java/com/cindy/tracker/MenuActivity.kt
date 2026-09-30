@@ -18,6 +18,7 @@ import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -639,24 +640,33 @@ class MenuActivity : AppCompatActivity() {
             })
         })
 
+        // This sheet's own handler, so clearing it clears only the hints this sheet has pending.
         val heartHandler = Handler(Looper.getMainLooper())
-        val timeout = Runnable {
-            statusLine.text = "Can't find it — is heart-rate broadcast on?"
-            statusLine.setTextColor(getColor(R.color.label_secondary))
+        fun hintLater(text: String, delayMs: Long) {
+            heartHandler.postDelayed({
+                statusLine.text = text
+                statusLine.setTextColor(getColor(R.color.label_secondary))
+            }, delayMs)
         }
         val listener = object : HeartRateListener {
             override fun onHeartRate(bpm: Int, atElapsedMs: Long) {
-                heartHandler.removeCallbacks(timeout)
+                heartHandler.removeCallbacksAndMessages(null)
                 statusLine.text = "$bpm bpm"
                 statusLine.setTextColor(getColor(R.color.state_ok))
             }
 
             override fun onStatus(status: HeartRateStatus) {
-                heartHandler.removeCallbacks(timeout)
+                heartHandler.removeCallbacksAndMessages(null)
                 val message = when (status) {
                     HeartRateStatus.CONNECTING -> {
-                        heartHandler.postDelayed(timeout, 15_000L)
+                        hintLater("Can't find it — is heart-rate broadcast on?", 15_000L)
                         "Connecting…"
+                    }
+                    // Found and listening: if nothing comes, the watch is not broadcasting, and
+                    // that is the one thing worth saying.
+                    HeartRateStatus.WAITING -> {
+                        hintLater("Connected, but no heart rate — is heart-rate broadcast on?", 8_000L)
+                        "Connected — waiting for heart rate…"
                     }
                     HeartRateStatus.NO_PERMISSION -> "Bluetooth permission is off"
                     HeartRateStatus.BLUETOOTH_OFF -> "Bluetooth is off"
@@ -689,7 +699,7 @@ class MenuActivity : AppCompatActivity() {
             },
             secondaryTint = R.color.state_alert
         ).onDismiss {
-            heartHandler.removeCallbacks(timeout)
+            heartHandler.removeCallbacksAndMessages(null)
             source?.stop()
             if (heartSource === source) heartSource = null
         }.show()
@@ -732,12 +742,19 @@ class MenuActivity : AppCompatActivity() {
 
     /**
      * A 12-second scan for nearby heart-rate broadcasters. The device list is an [InsetGroup]
-     * rebuilt in place as matches arrive, so the sheet itself never flickers mid-scan; only the
+     * updated in place as matches arrive, so the sheet itself never flickers mid-scan; only the
      * one-off transition to "SCAN AGAIN" once the window ends rebuilds the sheet, for the primary
-     * button's label.
+     * button's label. Within the group, a row is relabelled where it stands when only its signal
+     * changes, and the rows are rebuilt only when a device joins the list, so a row can be tapped
+     * while the devices around it keep advertising.
      */
     private fun openScanSheet() {
         var devices = listOf<FoundDevice>()
+        // What the rows on screen were built from, and the rows themselves. An update that only
+        // changes a signal relabels them where they stand (see HeartRateAdvert.sameRows); only a
+        // new device, or a name heard for the first time, rebuilds the list.
+        var shown = listOf<FoundDevice>()
+        var rows = listOf<View>()
         // True only while a dismiss is this function's own doing (a rebuild, or a device just
         // picked) — the scanner has already been dealt with by then, so the dismiss listener
         // below must not also stop it, or (worse) stop the *next* scan it just started.
@@ -746,7 +763,16 @@ class MenuActivity : AppCompatActivity() {
         lateinit var group: InsetGroup
 
         fun renderDevices() {
+            if (rows.isNotEmpty() && HeartRateAdvert.sameRows(shown, devices)) {
+                devices.forEachIndexed { i, found ->
+                    rows[i].relabelNavRow(found.name, foundDeviceLabel(found))
+                }
+                shown = devices
+                return
+            }
             group.removeAllViews()
+            shown = devices
+            rows = emptyList()
             if (devices.isEmpty()) {
                 group.row(
                     styledText(
@@ -759,14 +785,14 @@ class MenuActivity : AppCompatActivity() {
                         }
                 )
             } else {
-                devices.forEach { found ->
-                    group.row(navRow(found.name, foundDeviceLabel(found)) {
+                rows = devices.map { found ->
+                    navRow(found.name, foundDeviceLabel(found)) {
                         rebuilding = true
                         scanner?.stop()
                         scanner = null
                         dialog.dismiss()
                         adoptHeartRateDevice(found)
-                    })
+                    }.also { group.row(it) }
                 }
             }
         }
@@ -775,6 +801,7 @@ class MenuActivity : AppCompatActivity() {
             val sheet = CindySheet(this, title = "Looking for heart-rate devices")
             group = insetGroup { }
             sheet.add(group)
+            rows = emptyList() // A new group has none of the old rows in it.
             renderDevices()
             val withActions = if (windowOpen) {
                 sheet.actions(primary = "CANCEL", onPrimary = {})
