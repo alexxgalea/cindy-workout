@@ -67,6 +67,11 @@ class VoiceLanguageTextTest {
     }
 
     @Test
+    fun `a language the engine does not speak has no preview to label`() {
+        assertNull(VoiceLanguageText.previewNote(PackState.UNSUPPORTED))
+    }
+
+    @Test
     fun `every way a preview can fail is said in words the athlete can act on`() {
         assertEquals(
             "The Spanish preview needs an internet connection",
@@ -87,13 +92,39 @@ class VoiceLanguageTextTest {
     }
 
     @Test
+    fun `an engine that has not answered is starting, and then is not answering`() {
+        assertEquals(
+            "The voice engine is still starting. Try again in a moment.",
+            VoiceLanguageText.engineSilent(0L)
+        )
+        assertEquals(
+            "The voice engine is still starting. Try again in a moment.",
+            VoiceLanguageText.engineSilent(VoiceLanguageText.NO_ANSWER_AFTER_MS - 1)
+        )
+        // The same words the rows use, so the sheet does not say two things about one engine.
+        assertEquals(
+            VoiceLanguageText.caption(null, null, VoiceLanguageText.NO_ANSWER_AFTER_MS),
+            VoiceLanguageText.engineSilent(VoiceLanguageText.NO_ANSWER_AFTER_MS)
+        )
+    }
+
+    @Test
     fun `a screen reader hears the language, how it stands, and whether it is chosen`() {
         assertEquals("Español, Spanish, Ready", VoiceLanguageText.description(es, "Ready", chosen = false))
         assertEquals(
             "Español, Spanish, Ready, selected",
             VoiceLanguageText.description(es, "Ready", chosen = true)
         )
-        assertEquals("Hear Spanish", VoiceLanguageText.previewDescription(es))
+        assertEquals("Hear Spanish", VoiceLanguageText.previewDescription(es, PackState.READY))
+        assertEquals("Hear Spanish", VoiceLanguageText.previewDescription(es, null))
+    }
+
+    @Test
+    fun `the preview button of a language that is not offered does not sound like one that works`() {
+        assertEquals(
+            "Hear Spanish, not offered by this phone's voice engine",
+            VoiceLanguageText.previewDescription(es, PackState.UNSUPPORTED)
+        )
     }
 
     @Test

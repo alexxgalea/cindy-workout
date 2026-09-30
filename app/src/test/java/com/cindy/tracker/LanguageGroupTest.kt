@@ -189,7 +189,7 @@ class LanguageGroupTest {
         row(group, "Hear Spanish").performClick()
 
         assertEquals("Tres. Cuatro. Cinco. Flexiones.", engine.said.last().text)
-        assertEquals("nothing needs saying about a voice that is on the phone", emptyList<String>(), toasts)
+        assertEquals("nothing needed saying", emptyList<String>(), toasts)
     }
 
     @Test
@@ -214,6 +214,46 @@ class LanguageGroupTest {
         idle()
 
         assertEquals(listOf("The Russian preview needs an internet connection"), toasts)
+    }
+
+    @Test
+    fun `the play button of a language the engine does not speak says so, and plays nothing`() {
+        engine.likeGoogle()
+        val group = group().opened()
+        assertEquals(
+            "Hear Portuguese, not offered by this phone's voice engine",
+            said(group, "Hear Portuguese")
+        )
+
+        row(group, "Hear Portuguese").performClick()
+
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+        assertTrue(toasts.toString(), toasts.single().contains("doesn't speak Portuguese"))
+    }
+
+    @Test
+    fun `the play button before the engine has answered says it is starting`() {
+        engine.likeGoogle()
+        val group = group()
+        group.start()
+
+        row(group, "Hear Spanish").performClick()
+
+        assertEquals(listOf("The voice engine is still starting. Try again in a moment."), toasts)
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+        group.stop()
+    }
+
+    @Test
+    fun `a preview that does not start is not announced as playing`() {
+        engine.listed = emptyList()
+        engine.answers["ru-RU"] = LanguageAvailability.MISSING_DATA
+        val group = group().opened()
+
+        row(group, "Hear Russian").performClick()
+
+        assertEquals(listOf("This phone's voice engine can't play Russian"), toasts)
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
     }
 
     @Test

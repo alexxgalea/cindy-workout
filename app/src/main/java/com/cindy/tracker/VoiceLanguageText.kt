@@ -20,6 +20,9 @@ object VoiceLanguageText {
     /** How long to wait for the engine to answer at all before saying it isn't. */
     const val NO_ANSWER_AFTER_MS = 6_000L
 
+    private const val NOT_ANSWERING = "This phone's voice engine isn't answering"
+    private const val NOT_OFFERED = "Not offered by this phone's voice engine"
+
     /**
      * The second line of a language's row: where it stands on this phone.
      *
@@ -27,8 +30,7 @@ object VoiceLanguageText {
      * was asked for, if one was, and [waitedMs] how long the list has been open.
      */
     fun caption(state: PackState?, downloadingMs: Long?, waitedMs: Long): String = when (state) {
-        null ->
-            if (waitedMs >= NO_ANSWER_AFTER_MS) "This phone's voice engine isn't answering" else "Checking…"
+        null -> if (waitedMs >= NO_ANSWER_AFTER_MS) NOT_ANSWERING else "Checking…"
         PackState.READY -> "Ready"
         PackState.DOWNLOADING ->
             if ((downloadingMs ?: 0L) >= STUCK_AFTER_MS) {
@@ -38,7 +40,7 @@ object VoiceLanguageText {
             }
         PackState.DOWNLOADABLE -> "Tap to download"
         PackState.ONLINE_ONLY -> "Online voice only. Counting stays in English."
-        PackState.UNSUPPORTED -> "Not offered by this phone's voice engine"
+        PackState.UNSUPPORTED -> NOT_OFFERED
     }
 
     /**
@@ -55,10 +57,13 @@ object VoiceLanguageText {
      *
      * A language that is not on the phone can only be previewed over the network, and the
      * athlete should know that is what they are hearing: it is a sample of the language, in a
-     * voice they will not get until it has been downloaded.
+     * voice they will not get until it has been downloaded. Nothing for a language the engine
+     * does not speak, since nothing plays.
      */
-    fun previewNote(state: PackState?): String? =
-        if (state == null || state == PackState.READY) null else "Playing an online preview"
+    fun previewNote(state: PackState?): String? = when (state) {
+        null, PackState.READY, PackState.UNSUPPORTED -> null
+        else -> "Playing an online preview"
+    }
 
     /** What to say when a preview does not play. */
     fun previewFailure(failure: SpeechFailure, pack: VoicePack): String = when (failure) {
@@ -68,12 +73,25 @@ object VoiceLanguageText {
         SpeechFailure.OTHER -> "The preview didn't play"
     }
 
+    /**
+     * What to say when the athlete asks the engine for something before it has answered at all:
+     * that it is on its way, or, once it has had long enough, that it may not be.
+     */
+    fun engineSilent(waitedMs: Long): String =
+        if (waitedMs >= NO_ANSWER_AFTER_MS) NOT_ANSWERING else "The voice engine is still starting. Try again in a moment."
+
     /** What a screen reader reads for a row: the language, how it stands, and whether it is the one. */
     fun description(pack: VoicePack, caption: String, chosen: Boolean): String =
         "${pack.nativeName}, ${pack.englishName}, $caption" + if (chosen) ", selected" else ""
 
-    /** What a screen reader reads for a row's preview button. */
-    fun previewDescription(pack: VoicePack): String = "Hear ${pack.englishName}"
+    /**
+     * What a screen reader reads for a row's preview button.
+     *
+     * The row's other half says when a language is not offered, and this half should not sound
+     * like a button that works.
+     */
+    fun previewDescription(pack: VoicePack, state: PackState?): String =
+        "Hear ${pack.englishName}" + if (state == PackState.UNSUPPORTED) ", ${NOT_OFFERED.lowercase()}" else ""
 
     /** Why a row that cannot be chosen says so when it is tapped. */
     fun unsupportedNotice(pack: VoicePack): String =

@@ -85,7 +85,7 @@ class LanguageGroup(
             setImageResource(R.drawable.ic_play)
             imageTintList = ColorStateList.valueOf(activity.getColor(R.color.label_secondary))
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
-            describeAsButton(VoiceLanguageText.previewDescription(pack))
+            describeAsButton(VoiceLanguageText.previewDescription(pack, null))
             setOnClickListener { preview(pack) }
         }
 
@@ -169,8 +169,21 @@ class LanguageGroup(
     // ── hearing ───────────────────────────────────────────────────────────────
 
     private fun preview(pack: VoicePack) {
-        VoiceLanguageText.previewNote(states?.get(pack.tag))?.let(toast)
-        speaker.previewPack(pack) { failure -> toast(VoiceLanguageText.previewFailure(failure, pack)) }
+        val known = states
+        if (known == null) {
+            toast(VoiceLanguageText.engineSilent(waited()))
+            return
+        }
+        val state = known[pack.tag]
+        if (!VoiceLanguageText.selectable(state)) {
+            toast(VoiceLanguageText.unsupportedNotice(pack))
+            return
+        }
+        val started = speaker.previewPack(pack) { failure ->
+            toast(VoiceLanguageText.previewFailure(failure, pack))
+        }
+        // Said once it is playing, not before: a preview that never starts has nothing to label.
+        if (started) VoiceLanguageText.previewNote(state)?.let(toast)
     }
 
     /** Plays the sample of the ticked language: what the sheet's HEAR IT does. */
@@ -220,6 +233,7 @@ class LanguageGroup(
             row.caption.text = caption
             row.tick.visibility = if (isChosen) View.VISIBLE else View.INVISIBLE
             row.select.contentDescription = VoiceLanguageText.description(row.pack, caption, isChosen)
+            row.hear.contentDescription = VoiceLanguageText.previewDescription(row.pack, state)
             row.container.alpha = if (VoiceLanguageText.selectable(state)) 1f else DIMMED
         }
     }
