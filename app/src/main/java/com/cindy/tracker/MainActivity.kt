@@ -19,11 +19,13 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.hardware.Sensor
@@ -47,6 +49,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
 import androidx.camera.view.PreviewView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -397,8 +400,10 @@ class MainActivity : AppCompatActivity() {
     private val requestCamera = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        cameraAnswered = true
         if (granted) startCamera()
         else status.text = "Camera permission is required to count reps"
+        maybeStartTour()
     }
 
     /**
@@ -409,6 +414,22 @@ class MainActivity : AppCompatActivity() {
     private val tutorial = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { ensureCamera() }
+
+    /**
+     * Whether the camera's permission has been answered, either way. The tour of the controls
+     * waits behind it, so the athlete is not shown a dimmed screen with a system dialog on top.
+     */
+    private var cameraAnswered = false
+
+    /** Whether the tour is on screen, so that the several things that can start it start it once. */
+    private var tourShowing = false
+
+    /** Back skips the tour, and only while there is one to skip. */
+    private val tourBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            binding.spotlight.skip()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, so the launch window is in place for the whole of the cold start rather
@@ -453,9 +474,13 @@ class MainActivity : AppCompatActivity() {
         // is actually ready. The timeout covers the cases where that never happens — a refused
         // camera permission, or a device that fails to open one at all.
         binding.preview.previewStreamState.observe(this) { streaming ->
-            if (streaming == PreviewView.StreamState.STREAMING) binding.launch.dismiss {}
+            if (streaming == PreviewView.StreamState.STREAMING) {
+                binding.launch.dismiss {}
+                maybeStartTour()
+            }
         }
         binding.root.postDelayed({ binding.launch.dismiss {} }, 2_500L)
+        onBackPressedDispatcher.addCallback(this, tourBack)
 
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
@@ -551,7 +576,38 @@ class MainActivity : AppCompatActivity() {
     private fun ensureCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
-        ) startCamera() else requestCamera.launch(Manifest.permission.CAMERA)
+        ) {
+            cameraAnswered = true
+            startCamera()
+        } else {
+            requestCamera.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    /**
+     * Starts the tour of the controls if one is waiting and nothing is in its way.
+     *
+     * Called from every place it could become possible: the camera's answer, the first frame, and
+     * coming back to this screen, which is how a replay from Help arrives. It is guarded rather
+     * than scheduled, so that however many of them fire, it starts once, and never mid-workout:
+     * it stays pending until the clock is idle. It waits for a layout before lighting anything,
+     * because the hole is cut from where the controls actually are.
+     */
+    private fun maybeStartTour() {
+        if (tourShowing || !cameraAnswered || state != State.IDLE) return
+        if (!FirstRun(this).hudTourPending) return
+        tourShowing = true
+        tourBack.isEnabled = true
+        binding.root.doOnLayout {
+            binding.spotlight.start(HudTour.steps(binding)) { endTour() }
+        }
+    }
+
+    /** Done or skipped: it is taken, and does not come back until Help asks for it. */
+    private fun endTour() {
+        tourShowing = false
+        tourBack.isEnabled = false
+        FirstRun(this).hudTourPending = false
     }
 
     private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -1726,6 +1782,17 @@ class MainActivity : AppCompatActivity() {
         syncHeartRate()
         // A force-stop or reboot clears alarms; put it back, but never postpone one that is due.
         ReminderScheduler.ensureArmed(this)
+        maybeStartTour()
+    }
+
+    /**
+     * A replay of the pages from Help brings this screen back to the front with a new intent, and
+     * leaves the tour waiting. [onResume] follows and would start it on its own; this is for the
+     * case where it does not, and costs nothing when it does.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        maybeStartTour()
     }
 
     override fun onPause() {
