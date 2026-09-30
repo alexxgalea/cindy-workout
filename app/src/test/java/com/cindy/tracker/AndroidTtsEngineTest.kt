@@ -33,6 +33,7 @@ class AndroidTtsEngineTest {
         override fun onReady(success: Boolean) { events += "ready:$success" }
         override fun onStart(utteranceId: String) { events += "start:$utteranceId" }
         override fun onDone(utteranceId: String) { events += "done:$utteranceId" }
+        override fun onStop(utteranceId: String) { events += "stop:$utteranceId" }
         override fun onError(utteranceId: String, failure: SpeechFailure) {
             events += "error:$utteranceId:$failure"
         }
@@ -58,6 +59,15 @@ class AndroidTtsEngineTest {
         shadow().onInitListener.onInit(TextToSpeech.SUCCESS)
         shadow().onInitListener.onInit(TextToSpeech.ERROR)
         assertEquals(listOf("ready:true", "ready:false"), heard.events)
+    }
+
+    @Test
+    fun `a connection that failed is let go of`() {
+        newEngine()
+        val tts = shadow()
+        assertFalse(tts.isShutdown)
+        tts.onInitListener.onInit(TextToSpeech.ERROR)
+        assertTrue("the failed connection is still bound", tts.isShutdown)
     }
 
     @Test
@@ -140,6 +150,13 @@ class AndroidTtsEngineTest {
         engine.speak("uno", SpeakQueue.REPLACE, 1f, "a")
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(listOf("start:a", "done:a"), heard.events)
+    }
+
+    @Test
+    fun `an utterance cut off is reported as stopped, not as done`() {
+        newEngine()
+        shadow().utteranceProgressListener.onStop("a", true)
+        assertEquals(listOf("stop:a"), heard.events)
     }
 
     @Test

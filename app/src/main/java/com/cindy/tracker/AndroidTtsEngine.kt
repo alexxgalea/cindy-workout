@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import android.util.Log
 import java.util.Locale
 
 /**
@@ -29,7 +30,13 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
 
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
-            listener?.onReady(status == TextToSpeech.SUCCESS)
+            val connected = status == TextToSpeech.SUCCESS
+            // A connection that failed is still bound to the engine's service. Let go of it.
+            if (!connected) {
+                tts?.shutdown()
+                tts = null
+            }
+            listener?.onReady(connected)
         }.apply {
             setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
@@ -38,6 +45,10 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
 
                 override fun onDone(utteranceId: String?) {
                     listener?.onDone(utteranceId.orEmpty())
+                }
+
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    listener?.onStop(utteranceId.orEmpty())
                 }
 
                 @Deprecated("required by the base class")
@@ -52,31 +63,36 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
         }
     }
 
-    override fun voices(): List<EngineVoice> {
+    override fun voices(): List<EngineVoice> = guarded(emptyList(), "listing voices") {
         // The engine may answer null, or nothing, before it has connected or if it is failing.
         val listed = tts?.voices?.toList().orEmpty()
         byName = listed.associateBy { it.name }
-        return listed.map { it.toEngineVoice() }
+        listed.map { it.toEngineVoice() }
     }
 
     override fun availability(locale: Locale): LanguageAvailability =
-        when (tts?.isLanguageAvailable(locale)) {
-            TextToSpeech.LANG_AVAILABLE,
-            TextToSpeech.LANG_COUNTRY_AVAILABLE,
-            TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> LanguageAvailability.AVAILABLE
-            TextToSpeech.LANG_MISSING_DATA -> LanguageAvailability.MISSING_DATA
-            else -> LanguageAvailability.NOT_SUPPORTED
+        guarded(LanguageAvailability.NOT_SUPPORTED, "checking $locale") {
+            when (tts?.isLanguageAvailable(locale)) {
+                TextToSpeech.LANG_AVAILABLE,
+                TextToSpeech.LANG_COUNTRY_AVAILABLE,
+                TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> LanguageAvailability.AVAILABLE
+                TextToSpeech.LANG_MISSING_DATA -> LanguageAvailability.MISSING_DATA
+                else -> LanguageAvailability.NOT_SUPPORTED
+            }
         }
 
-    override fun setLanguage(locale: Locale): Boolean =
+    override fun setLanguage(locale: Locale): Boolean = guarded(false, "setting $locale") {
         (tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED) >= TextToSpeech.LANG_AVAILABLE
-
-    override fun setVoice(name: String): Boolean {
-        val voice = byName[name] ?: run { voices(); byName[name] } ?: return false
-        return tts?.setVoice(voice) == TextToSpeech.SUCCESS
     }
 
-    override fun currentVoice(): EngineVoice? = tts?.voice?.toEngineVoice()
+    override fun setVoice(name: String): Boolean = guarded(false, "setting voice $name") {
+        val voice = byName[name] ?: run { voices(); byName[name] }
+        voice != null && tts?.setVoice(voice) == TextToSpeech.SUCCESS
+    }
+
+    override fun currentVoice(): EngineVoice? = guarded(null, "reading the voice") {
+        tts?.voice?.toEngineVoice()
+    }
 
     override fun speak(text: String, queue: SpeakQueue, volume: Float, utteranceId: String) {
         val params = Bundle().apply {
@@ -99,6 +115,20 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
         tts = null
     }
 
+    /**
+     * Runs a call into the engine, which is another process and is not always well behaved: some
+     * throw from `getVoices`, some from `setLanguage` for a locale they half-know. None of that
+     * should take the app down at the moment it starts, or cost a rep count. A call that throws
+     * answers as if the engine had nothing to say.
+     */
+    private inline fun <T> guarded(fallback: T, what: String, call: () -> T): T =
+        try {
+            call()
+        } catch (e: Exception) {
+            Log.w(TAG, "text-to-speech engine failed $what", e)
+            fallback
+        }
+
     private fun Voice.toEngineVoice() = EngineVoice(
         name = name,
         language = locale.language,
@@ -114,5 +144,9 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
         TextToSpeech.ERROR_NETWORK, TextToSpeech.ERROR_NETWORK_TIMEOUT -> SpeechFailure.NETWORK
         TextToSpeech.ERROR_NOT_INSTALLED_YET -> SpeechFailure.NOT_INSTALLED
         else -> SpeechFailure.OTHER
+    }
+
+    private companion object {
+        const val TAG = "Cindy"
     }
 }
