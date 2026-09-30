@@ -41,7 +41,10 @@ internal enum class BadgeRule {
     /** A round in a standard Cindy faster than a number of seconds. */
     ROUND_SECONDS,
 
-    /** A whole twenty minutes the camera read, with nothing tapped in. */
+    /**
+     * A whole twenty minutes the camera read, with nothing tapped in, in a session recorded by a
+     * build that counted reps, since an older one cannot say whether anything was.
+     */
     EVERY_REP_SEEN,
 
     /** A session at movements other than the standard three. */
@@ -385,8 +388,11 @@ object Badges {
         BadgeRule.REPS -> reps >= badge.target
         BadgeRule.ROUND_SECONDS ->
             standardAndExact(a) && (a.fastestRoundMs ?: Long.MAX_VALUE) < badge.target * 1_000L
+        // Only a session from a build that counted reps can say none were tapped in. An older one
+        // decodes with no taps and no blind time because they were not recorded, not because
+        // there were none, and "the camera saw every rep" is not a claim to make from that.
         BadgeRule.EVERY_REP_SEEN ->
-            Progress.isFullSession(a) && a.manualReps == 0 &&
+            a.countedReps != null && Progress.isFullSession(a) && a.manualReps == 0 &&
                 !a.scoreIsLowerBound && a.totalReps > 0
         // A profile this build cannot read is not claimed as an adaptation: what it was is unknown.
         BadgeRule.ADAPTIVE -> a.profile?.isStandard == false

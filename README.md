@@ -412,7 +412,9 @@ earned by a standard Cindy the camera could stand behind. An adaptive session is
 prescription rather than a lower score, and a session the camera could not see for half a minute
 or more is a lower bound, which never claims a record. A session whose movements this version
 cannot read earns none of those, and is not counted as an adaptation either, because what it was
-is unknown. The badges for **showing up**, the sessions, streaks and volume, count every session,
+is unknown. **Every rep seen** likewise needs a session recorded by a version that counted reps:
+an older record shows no taps and no blind time because they were never written down, not
+because there were none. The badges for **showing up**, the sessions, streaks and volume, count every session,
 since a session of any kind is still a session.
 
 A locked badge says how far along it is, and a tile opens a sheet with what it asks for and when

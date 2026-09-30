@@ -134,6 +134,16 @@ class BadgesTest {
         }
     }
 
+    @Test
+    fun `no rung of the ladder can be mistaken for First round`() {
+        // First round asks for one round, and the menu finds the highest rung held by its round
+        // count. A ladder retuned to put a rung at one round or fewer would collide with it, and
+        // lose its progress line, which is not shown for a target of one.
+        for (level in Level.entries.filter { it != Level.FIRST_STEPS }) {
+            assertTrue("${level.title} at ${level.minRounds} rounds", level.minRounds > 1)
+        }
+    }
+
     // ── nothing yet ───────────────────────────────────────────────────────────
 
     @Test
@@ -456,45 +466,58 @@ class BadgesTest {
 
     // ── craft ─────────────────────────────────────────────────────────────────
 
+    /** A whole clock from a build that counted reps: the only kind of session that can be Every rep seen. */
+    private fun whole(
+        durationMs: Long = Progress.FULL_SESSION_MS,
+        manualReps: Int = 0,
+        untrackedMs: Long = 0L,
+        profile: CindyProfile? = CindyProfile.STANDARD,
+        countedReps: Int? = 300
+    ) = attempt(
+        durationMs = durationMs,
+        manualReps = manualReps,
+        untrackedMs = untrackedMs,
+        profile = profile,
+        countedReps = countedReps
+    )
+
     @Test
     fun `a whole clock with nothing tapped in earns Every rep seen`() {
-        val a = attempt(durationMs = Progress.FULL_SESSION_MS)
-        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(a)))
+        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(whole())))
     }
 
     @Test
     fun `a second short of the clock is not a whole session`() {
-        val a = attempt(durationMs = Progress.FULL_SESSION_MS - 1)
-        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(a)))
+        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(whole(durationMs = Progress.FULL_SESSION_MS - 1))))
     }
 
     @Test
     fun `one rep tapped in spoils it`() {
-        val a = attempt(durationMs = Progress.FULL_SESSION_MS, manualReps = 1)
-        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(a)))
+        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(whole(manualReps = 1))))
     }
 
     @Test
     fun `a score the camera could not stand behind does not earn it`() {
-        val whole = Progress.FULL_SESSION_MS
-        assertFalse(
-            Badge.EVERY_REP_SEEN in earned(listOf(attempt(durationMs = whole, untrackedMs = tolerance)))
-        )
-        assertTrue(
-            Badge.EVERY_REP_SEEN in earned(listOf(attempt(durationMs = whole, untrackedMs = tolerance - 1)))
-        )
+        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(whole(untrackedMs = tolerance))))
+        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(whole(untrackedMs = tolerance - 1))))
     }
 
     @Test
     fun `a whole clock with nothing counted earns nothing`() {
-        val a = attempt(rounds = 0, reps = 0, durationMs = Progress.FULL_SESSION_MS)
-        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(a)))
+        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(whole(countedReps = 0))))
+    }
+
+    @Test
+    fun `a session from before reps were counted cannot show that none were tapped in`() {
+        // Such a session decodes with no taps and no blind time because they were not recorded,
+        // not because there were none.
+        assertFalse(Badge.EVERY_REP_SEEN in earned(listOf(whole(countedReps = null))))
+        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(whole())))
     }
 
     @Test
     fun `it does not have to be a standard Cindy`() {
-        val a = attempt(durationMs = Progress.FULL_SESSION_MS, profile = adaptive)
-        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(a)))
+        assertTrue(Badge.EVERY_REP_SEEN in earned(listOf(whole(profile = adaptive))))
     }
 
     @Test
