@@ -206,6 +206,39 @@ class WorkoutEngine(
         const val START_SETTLE_DEGREES = 3f
         /** Smoothing on the settling signal, so raw jitter does not read as still rising. */
         const val START_SETTLE_SMOOTHING = 0.4f
+
+        /**
+         * The least a heels-flat squat has to close the knee, in degrees, to be a rep.
+         *
+         * Heels flat on the floor stop the knees travelling forward, so the hips stop higher and
+         * the knee closes less than it does up on the toes: seen from a phone on the floor a good
+         * one travels 35 to 40 degrees where the air squat asks for about 58. Both are correct
+         * squats. A quarter squat seen from chest height travels 30 to 35, so this is the line
+         * between them, and the one number to retune after trying it on a phone: lowered to 33 it
+         * lets a good squat from the floor count at 110 degrees, and a quarter squat from chest
+         * height count at 140.
+         */
+        const val HEELS_FLAT_MIN_TRAVEL = 35f
+
+        /**
+         * How much of the learned travel, from the bottom, counts as having gone down.
+         *
+         * Sixty percent where every other movement uses thirty, because the band of someone who
+         * mixes both styles is as deep as their deepest squat, and a heels-flat rep after a deep
+         * one would otherwise never reach its bottom zone. Measured: three deep squats and then ten
+         * heels-flat ones to 125 degrees count 13 of 13 with this, and 8 of 13 at a margin of 50%.
+         */
+        const val HEELS_FLAT_BOTTOM_MARGIN = 0.6f
+
+        /**
+         * Where an uncalibrated heels-flat squat has to have got to, in knee degrees.
+         *
+         * The climb from here to the lockout is 38 degrees, just over [HEELS_FLAT_MIN_TRAVEL], the
+         * same relation the air squat has between its own two numbers (58 against 55). So a
+         * counter that has not calibrated yet can never book a climb the calibrated one would
+         * refuse.
+         */
+        const val HEELS_FLAT_DOWN_BELOW = 120f
     }
 
     private val counters = mapOf(
@@ -215,8 +248,25 @@ class WorkoutEngine(
         // all; above it the counter calibrates to the athlete and the fixed numbers stop mattering.
         Exercise.PULLUP to RepCounter(-140f, -100f, minRepMs = 400L, minRange = 40f),
         Exercise.PUSHUP to RepCounter(100f, 150f, minRepMs = 350L, minRange = 45f),
-        Exercise.SQUAT to RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
+        Exercise.SQUAT to squatCounter()
     )
+
+    /**
+     * The counter for the chosen squat.
+     *
+     * Exhaustive over [SquatVariant] with no `else`, like the Strava mapping, so a new squat has
+     * to be given a counter on purpose. Box and supported squats keep the air squat's.
+     */
+    private fun squatCounter(): RepCounter = when (profile.squat) {
+        SquatVariant.HEELS_FLAT -> RepCounter(
+            HEELS_FLAT_DOWN_BELOW, 158f, minRepMs = 350L,
+            minRange = HEELS_FLAT_MIN_TRAVEL,
+            bottomMargin = HEELS_FLAT_BOTTOM_MARGIN,
+            minTravel = HEELS_FLAT_MIN_TRAVEL
+        )
+        SquatVariant.AIR_SQUAT, SquatVariant.BOX_SQUAT, SquatVariant.SUPPORTED_SQUAT ->
+            RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
+    }
 
     var exercise = fixedExercise ?: Exercise.PULLUP
         private set

@@ -36,7 +36,26 @@ class RepCounter(
     private val upAbove: Float,
     private val minRepMs: Long = 350L,
     private val smoothing: Float = 0.4f,
-    private val minRange: Float = 0f
+    private val minRange: Float = 0f,
+    /**
+     * The share of the learned travel, measured up from the lowest value seen, that counts as the
+     * bottom of the movement: the zone a rep has to have visited to arm.
+     *
+     * Thirty percent for every movement but one. A squat done with the heels flat on the floor
+     * stops higher than one up on the toes, and both are correct, so a counter that learned its
+     * band from deep reps must still arm for the shallower kind. A wider zone is what lets it;
+     * [minTravel] is what stops it arming for a wobble.
+     */
+    private val bottomMargin: Float = MARGIN,
+    /**
+     * The least a rep must climb off its trough, in signal units, however wide the learned band.
+     *
+     * Zero for every movement but one, where the band's own share of travel is the whole rule. It
+     * is a floor under that share, and it exists because widening [bottomMargin] shrinks the
+     * share: at 60% the band asks for only a tenth of its travel, which on a wide band is a few
+     * degrees of jitter.
+     */
+    private val minTravel: Float = 0f
 ) {
     enum class Phase { UNKNOWN, DOWN, UP }
 
@@ -111,9 +130,11 @@ class RepCounter(
         val useBand = calibrated
 
         // How far the signal must climb off its trough, and how close to the top it must finish.
-        val needed = if (useBand) (1f - 2f * MARGIN) * range else upAbove - downBelow
+        val needed =
+            if (useBand) max((1f - bottomMargin - MARGIN) * range, minTravel)
+            else upAbove - downBelow
         val topOfBand = if (useBand) seenHigh - MARGIN * range else upAbove
-        val bottomOfBand = if (useBand) seenLow + MARGIN * range else downBelow
+        val bottomOfBand = if (useBand) seenLow + bottomMargin * range else downBelow
 
         if (s <= bottomOfBand) {
             phase = Phase.DOWN
