@@ -159,9 +159,10 @@ Romanian, Turkish or Russian. The screens stay in English; only what is said alo
 
 The voices belong to the phone's speech engine (Google's, Samsung's…), not to Cindy. The app ships
 no audio and asks for no internet permission. Choosing a language that is not on the phone asks
-the engine to fetch it, and **Manage voices** opens the engine's own screen for one that will not.
+the engine to fetch it, at once and whether or not you then press SAVE, so it can be arriving
+while the sheet is open; **Manage voices** opens the engine's own screen for one that will not.
 An engine reports no progress, so a download that has not turned up after two minutes says the
-engine may be waiting for Wi-Fi.
+engine may be waiting for Wi-Fi, and tapping the row asks again.
 
 - **Workouts only use voices stored on the phone**, so counting works offline and is never held up
   by the network.

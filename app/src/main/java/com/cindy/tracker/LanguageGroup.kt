@@ -25,9 +25,18 @@ import android.widget.TextView
  * What the athlete sees is only ever what the phone can do. A language the phone can speak says
  * "Ready". One that needs its voice fetched says so and fetches it on the tap that chooses it,
  * and then says "Downloading…", and says something different if that goes on for two minutes,
- * because an engine reports no progress and a download waiting on Wi-Fi looks like a slow one.
- * One the engine does not speak cannot be chosen, and says why. Choosing a language that is not
- * ready yet is allowed, and the workout says it is counting in English until it is.
+ * because an engine reports no progress and a download waiting on Wi-Fi looks like a slow one;
+ * tapping the row then asks again. One the engine does not speak cannot be chosen, and says why.
+ * Choosing a language that is not ready yet is allowed, and the workout says it is counting in
+ * English until it is.
+ *
+ * The fetch belongs to the phone and the choice to the profile: a voice is asked for by the tap,
+ * whether or not SAVE follows, so that it can be arriving while the sheet is still open.
+ *
+ * A tap is answered from what the phone last said. One made before the engine has said anything
+ * cannot be, so it is settled when the engine does: the voice is asked for if it turns out to
+ * need one, and the tap is undone, with the reason, if the phone turns out not to speak the
+ * language at all.
  *
  * While the sheet is open the states are read again every couple of seconds. That is the only way
  * a download finishing while the athlete watches, or in the engine's own screen, shows up.
