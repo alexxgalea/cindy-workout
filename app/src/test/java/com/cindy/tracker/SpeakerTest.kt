@@ -289,8 +289,21 @@ class SpeakerTest {
         engine.becomeReady()
 
         var failure: SpeechFailure? = null
-        speaker.previewPack(VoicePacks.of("pt")) { failure = it }
+        val started = speaker.previewPack(VoicePacks.of("pt")) { failure = it }
         assertEquals(SpeechFailure.UNAVAILABLE, failure)
+        assertFalse("said to have started, with the failure already reported", started)
+    }
+
+    @Test
+    fun `a preview before the engine is ready is refused, and that is said at once`() {
+        engine.likeGoogle()
+        val speaker = speaker()
+
+        var failure: SpeechFailure? = null
+        val started = speaker.previewPack(VoicePacks.of("es")) { failure = it }
+        assertEquals(SpeechFailure.UNAVAILABLE, failure)
+        assertFalse(started)
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
     }
 
     @Test
@@ -300,8 +313,9 @@ class SpeakerTest {
         engine.becomeReady()
 
         var failure: SpeechFailure? = null
-        speaker.previewPack(VoicePacks.of("ru")) { failure = it }
+        val started = speaker.previewPack(VoicePacks.of("ru")) { failure = it }
         assertNull(failure)
+        assertTrue("reported as not started, though it was", started)
 
         engine.listener!!.onError(engine.said.last().id, SpeechFailure.NETWORK)
         assertNull("reported off the main thread", failure)

@@ -154,12 +154,16 @@ class Speaker(
      * Plays [pack]'s sample, in an online voice if that is the only one, without changing the
      * language chosen. A failure — no connection, data still arriving, no voice at all — arrives
      * on the main thread through [onFailure].
+     *
+     * Returns whether the engine took it. When it did not, [onFailure] has already been called,
+     * so a caller that has something to say about a preview that is playing can wait for this.
      */
-    fun previewPack(pack: VoicePack, onFailure: (SpeechFailure) -> Unit) {
+    fun previewPack(pack: VoicePack, onFailure: (SpeechFailure) -> Unit): Boolean {
         val started = director.preview(pack, volume) { failure ->
             main.post { if (!closed) onFailure(failure) }
         }
         if (!started) onFailure(SpeechFailure.UNAVAILABLE)
+        return started
     }
 
     fun stop() = engine.stop()
