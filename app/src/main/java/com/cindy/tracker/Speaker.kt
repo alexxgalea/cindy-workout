@@ -6,6 +6,7 @@ import android.os.Looper
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Speaks rep counts and cues.
@@ -29,6 +30,9 @@ class Speaker(
 
     /** Set on [shutdown], so nothing the background thread finishes late reaches a dead screen. */
     @Volatile private var closed = false
+
+    /** True from the moment a question is handed to the background thread until it has been answered. */
+    private val asking = AtomicBoolean(false)
 
     var enabled = true
 
@@ -118,12 +122,22 @@ class Speaker(
      * answered yet lists no voices, and reporting that would tell the athlete their phone speaks
      * nothing but English for as long as it took to start. The caller keeps whatever it was
      * showing and asks again.
+     *
+     * Asked again while the last question is still out, nothing is queued and [onResult] is not
+     * called: an engine that is slow to answer is not helped by a line of identical questions
+     * behind the first, whose answers would only arrive stale, one after another. The caller
+     * that asks on a timer simply gets its answer on a later turn.
      */
     fun packStates(onResult: (Map<String, PackState>) -> Unit) {
         if (closed || !director.ready) return
+        if (!asking.compareAndSet(false, true)) return
         background.execute {
-            val states = runCatching { director.states() }.getOrNull() ?: return@execute
-            main.post { if (!closed) onResult(states) }
+            try {
+                val states = runCatching { director.states() }.getOrNull() ?: return@execute
+                main.post { if (!closed) onResult(states) }
+            } finally {
+                asking.set(false)
+            }
         }
     }
 

@@ -226,6 +226,51 @@ class SpeakerTest {
     }
 
     @Test
+    fun `a question is not asked again while the last is still out`() {
+        engine.likeGoogle()
+        val queued = mutableListOf<Runnable>()
+        val speaker = Speaker(
+            RuntimeEnvironment.getApplication(), engine, background = Executor { queued += it }
+        )
+        engine.becomeReady()
+
+        var delivered = 0
+        repeat(3) { speaker.packStates { delivered++ } }
+        assertEquals("three questions asked, one waiting its turn", 1, queued.size)
+
+        queued.removeAt(0).run()
+        idle()
+        assertEquals("only the one that was asked is answered", 1, delivered)
+
+        speaker.packStates { delivered++ }
+        assertEquals("free to ask again once answered", 1, queued.size)
+    }
+
+    @Test
+    fun `an engine that fails to answer does not stop the questions after it`() {
+        engine.likeGoogle()
+        var broken = true
+        val flaky = object : TtsEngine by engine {
+            override fun voices(): List<EngineVoice> =
+                if (broken) error("the engine went away") else engine.voices()
+        }
+        val speaker = Speaker(
+            RuntimeEnvironment.getApplication(), flaky, background = Executor { it.run() }
+        )
+        engine.becomeReady()
+
+        var states: Map<String, PackState>? = null
+        speaker.packStates { states = it }
+        idle()
+        assertNull(states)
+
+        broken = false
+        speaker.packStates { states = it }
+        idle()
+        assertNotNull("the question that failed left the way blocked", states)
+    }
+
+    @Test
     fun `a download is asked for and timed`() {
         engine.likeGoogle()
         val speaker = speaker()
