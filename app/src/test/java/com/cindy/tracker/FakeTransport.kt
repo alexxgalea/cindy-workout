@@ -6,8 +6,8 @@ import java.io.IOException
  * A scripted [HttpTransport] for tests: queue up what [execute] should return (or throw) next,
  * then assert on what was actually sent.
  *
- * This is the one test double for every phase after S0 — S2's OAuth exchange/refresh/revoke,
- * S3's upload/poll classification, and S4's worker all script a sequence of responses here and
+ * This is the one test double for all of Strava — the OAuth exchange, refresh and revoke, the
+ * upload and poll classification, and the upload worker all script a sequence of responses here and
  * read [requests] back to check the exact method, url, headers and body that went out, rather
  * than any of them wrapping `HttpsURLConnection` a second time just to fake it.
  *
