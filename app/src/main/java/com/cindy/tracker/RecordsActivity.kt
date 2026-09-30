@@ -84,6 +84,8 @@ class RecordsActivity : AppCompatActivity() {
             secondary = "DELETE",
             onSecondary = {
                 store.clear()
+                // A trace with nothing left to sit beside is not a record of anything.
+                HeartRateStore(this).clear()
                 toast("Records cleared")
                 render()
             },

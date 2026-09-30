@@ -1311,14 +1311,18 @@ class MainActivity : AppCompatActivity() {
         renderClock()
         renderControls()
 
-        // A stop pressed from the pause dialog still owes its hidden time to the tally.
+        // A stop pressed from the pause dialog still owes its hidden time to the tally. The
+        // heart-rate trace is closed on this exact same instant, so its own pause list and
+        // Attempt.pausedMs agree about when the workout actually stopped running.
+        val now = SystemClock.elapsedRealtime()
         if (pauseStartedAt != 0L) {
-            pausedMs += SystemClock.elapsedRealtime() - pauseStartedAt
+            pausedMs += now - pauseStartedAt
             pauseStartedAt = 0L
         }
         video.stop()
 
         val snap = runEngine { RepEvent.NONE }
+        val trace = heartRate.finish(now)
         val attempt = Attempt(
             rounds = snap.rounds,
             reps = snap.repsThisRound,
@@ -1335,7 +1339,11 @@ class MainActivity : AppCompatActivity() {
             // What the camera could not see is part of the result, not a detail about it.
             untrackedMs = tracking.lostMs
         )
-        records.add(attempt)
+        // The trace is only worth keeping beside a record that was actually stored, and the
+        // write happens synchronously and right here: ResultsActivity reads it back in its own
+        // onCreate, a few lines below, and there is no attempt to have it race against.
+        val saved = records.add(attempt)
+        if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
 
         primary(R.drawable.ic_again)
         renderControls()
