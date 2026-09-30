@@ -12,6 +12,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -30,6 +31,12 @@ class ResultsActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_ATTEMPT = "attempt"
         private const val EXTRA_STOPPED = "stopped"
+
+        /** The width of the icon at the start of a celebration row, so the text lines up. */
+        private const val ICON_SLOT_DP = 36
+
+        /** How many new badges are named; the rest are counted. */
+        private const val MAX_BADGE_ROWS = 3
 
         /**
          * Carries the attempt in the record format, rather than a field per extra.
@@ -207,50 +214,85 @@ class ResultsActivity : AppCompatActivity() {
 
     /**
      * The box under the score that says what this session earned: a first Cindy, a record, a
-     * streak milestone. Hidden when it earned nothing, rather than congratulating an ordinary day.
-     * Cleared first because [render] runs again when the body weight changes.
+     * streak milestone, and the badges it won. Hidden when it earned nothing, rather than
+     * congratulating an ordinary day. Cleared first because [render] runs again when the body
+     * weight changes.
+     *
+     * The first row is the headline, whichever kind it is. A first session is also the First
+     * Cindy badge, and says so twice; that overlap is accepted rather than worked around.
      */
     private fun celebrate(a: Attempt, all: List<Attempt>) {
         val box = binding.celebration
         box.removeAllViews()
-        val lines = Cheer.forResult(
-            all, a, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        )
-        if (lines.isEmpty()) {
+        val zone = ZoneId.systemDefault()
+        val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        val lines = Cheer.forResult(all, a, zone, firstDay)
+        // Latest in the catalogue first. Within a family that is the hardest one earned, and the
+        // badges of a first session sink to the bottom, where the line above already says so.
+        val badges = Badges.earnedBy(all, a, zone, firstDay).sortedByDescending { it.ordinal }
+        if (lines.isEmpty() && badges.isEmpty()) {
             box.visibility = View.GONE
             return
         }
         box.visibility = View.VISIBLE
-        lines.forEachIndexed { i, line ->
+
+        var rows = 0
+        fun row(icon: View, text: String) {
+            val headline = rows == 0
             box.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                if (i > 0) setPadding(0, dp(10), 0, 0)
+                if (!headline) setPadding(0, dp(10), 0, 0)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 )
-                val trophy = line.kind == Celebration.Kind.FIRST ||
-                    line.kind == Celebration.Kind.RECORD
-                if (trophy) {
-                    addView(medal(1))
-                } else {
-                    addView(ImageView(context).apply {
-                        setImageResource(R.drawable.ic_flame)
-                        imageTintList =
-                            ColorStateList.valueOf(getColor(R.color.achievement))
-                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                        layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
-                    })
-                }
-                val style = if (i == 0) R.style.Cindy_Title2 else R.style.Cindy_Headline
-                addView(styledText(style, line.text).apply {
-                    if (i == 0) setTextColor(getColor(R.color.achievement))
+                addView(icon)
+                val style = if (headline) R.style.Cindy_Title2 else R.style.Cindy_Headline
+                addView(styledText(style, text).apply {
+                    if (headline) setTextColor(getColor(R.color.achievement))
                     layoutParams = LinearLayout.LayoutParams(
                         0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
                     ).apply { marginStart = dp(12) }
                 })
             })
+            rows++
         }
+
+        for (line in lines) {
+            val trophy = line.kind == Celebration.Kind.FIRST || line.kind == Celebration.Kind.RECORD
+            val icon = if (trophy) {
+                medal(1)
+            } else {
+                ImageView(this).apply {
+                    setImageResource(R.drawable.ic_flame)
+                    imageTintList = ColorStateList.valueOf(getColor(R.color.achievement))
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
+            }
+            row(slot(icon, 28), line.text)
+        }
+        for (badge in badges.take(MAX_BADGE_ROWS)) {
+            row(slot(badgeDisc(badge, earned = true, sizeDp = 36), 36), "New badge: ${badge.title}")
+        }
+        if (badges.size > MAX_BADGE_ROWS) {
+            box.addView(styledText(
+                R.style.Cindy_Callout, "+${badges.size - MAX_BADGE_ROWS} more in your profile"
+            ).apply {
+                setTextColor(getColor(R.color.label_secondary))
+                setPadding(dp(ICON_SLOT_DP + 12), dp(10), 0, 0)
+            })
+        }
+    }
+
+    /**
+     * A fixed-width place for the icon at the start of a row, so that the text beside it lines up
+     * whether the icon is a trophy, a flame or a badge.
+     */
+    private fun slot(icon: View, sizeDp: Int): View = FrameLayout(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            dp(ICON_SLOT_DP), ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        addView(icon, FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER))
     }
 
     /** "17  +22", with the delta green when it is one. Green is the affirmative everywhere. */

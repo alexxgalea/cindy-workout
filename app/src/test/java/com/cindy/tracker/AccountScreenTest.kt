@@ -25,6 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowLooper
 import java.io.File
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
@@ -98,6 +99,21 @@ class AccountScreenTest {
     private fun openMenu(): Activity = Robolectric.buildActivity(
         MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
     ).setup().get()
+
+    private fun openResults(a: Attempt): Activity = Robolectric.buildActivity(
+        ResultsActivity::class.java, ResultsActivity.intent(context, a, stoppedEarly = false)
+    ).setup().get()
+
+    private fun openRecords(): Activity =
+        Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+
+    private fun textsIn(root: View): List<String> = buildList {
+        if (root is TextView) add(root.text.toString())
+        if (root is ViewGroup) for (i in 0 until root.childCount) addAll(textsIn(root.getChildAt(i)))
+    }
+
+    private fun textContaining(root: View, part: String): String? =
+        textsIn(root).firstOrNull { it.contains(part) }
 
     // ── what is recorded ──────────────────────────────────────────────────────
 
@@ -415,6 +431,96 @@ class AccountScreenTest {
             assertEquals("a row never arrived", 1f, row.alpha, 0f)
         }
         activity.finish()
+    }
+
+    // ── the results screen ────────────────────────────────────────────────────
+
+    @Test
+    fun `a first session names its three best new badges and counts the rest`() {
+        val first = session(rounds = 10)
+        record(first)
+        val root = content(openResults(first))
+
+        // Four badges, hardest first. First Cindy is the easiest, so it is the one that is counted,
+        // and it is the one the line above already said.
+        assertNotNull(findByText(root, "New badge: Intermediate"))
+        assertNotNull(findByText(root, "New badge: Novice"))
+        assertNotNull(findByText(root, "New badge: First round"))
+        assertNull(findByText(root, "New badge: First Cindy"))
+        assertNotNull(findByText(root, "+1 more in your profile"))
+    }
+
+    @Test
+    fun `nothing is counted when every new badge is named`() {
+        val first = session(rounds = 4)
+        record(first)
+        val root = content(openResults(first))
+
+        assertNotNull(findByText(root, "New badge: First round"))
+        assertNotNull(findByText(root, "New badge: First Cindy"))
+        assertNull(textContaining(root, "more in your profile"))
+    }
+
+    @Test
+    fun `a session that earns no badge says nothing about badges`() {
+        record(session(rounds = 10))
+        val weaker = session(rounds = 8).let { it.copy(atMillis = it.atMillis + 60 * 60_000L) }
+        record(weaker)
+        val activity = openResults(weaker)
+
+        assertNull(textContaining(content(activity), "New badge"))
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.celebration).visibility)
+    }
+
+    @Test
+    fun `a badge earned with a record or a streak line shares the box with it`() {
+        // Second day, a personal record: a line for the record, and the badge for the rung it reached.
+        record(session(day, rounds = 5))
+        val better = session(day.plusDays(1), rounds = 10)
+        record(better)
+        val root = content(openResults(better))
+
+        assertNotNull(findByText(root, "New personal record."))
+        assertNotNull(findByText(root, "New badge: Intermediate"))
+    }
+
+    // ── the record board ──────────────────────────────────────────────────────
+
+    @Test
+    fun `the leaderboard says You until there is a name, and the name after`() {
+        record(session(rounds = 10))
+        assertNotNull(findByDescriptionPrefix(content(openRecords()), "2, You, "))
+
+        Profile(context).displayName = "Alex"
+        assertNotNull(findByDescriptionPrefix(content(openRecords()), "2, Alex, "))
+    }
+
+    @Test
+    fun `the clear sheet says the badges go and the name and photo stay`() {
+        record(session(rounds = 10))
+        val activity = openRecords()
+
+        findByText(content(activity), "CLEAR")!!.performClick()
+        val sheet = sheetRoot()
+        assertNotNull(textContaining(sheet, "the badges they earned"))
+        assertNotNull(textContaining(sheet, "Your name and photo stay"))
+    }
+
+    @Test
+    fun `clearing the records takes the badges with them and leaves the name and photo`() {
+        Profile(context).displayName = "Alex"
+        storeAPhoto()
+        record(session(rounds = 10))
+        val activity = openRecords()
+
+        findByText(content(activity), "CLEAR")!!.performClick()
+        findByText(sheetRoot(), "DELETE")!!.performClick()
+
+        val left = RecordStore(context).all()
+        assertTrue(left.isEmpty())
+        assertTrue(Badges.earned(left, zone, DayOfWeek.MONDAY).isEmpty())
+        assertEquals("Alex", Profile(context).displayName)
+        assertTrue(AvatarStore.exists(context))
     }
 
     // ── the avatar view ───────────────────────────────────────────────────────
