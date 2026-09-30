@@ -125,7 +125,7 @@ the current movement, and reps against the target.
 | `+1` (long press) | skip to the next movement |
 | `−1` | take back a rep that should not have counted; steps across movement and round boundaries |
 | `STOP` | end early and save the score (replaces `FLIP` during a workout) |
-| `REC` | film the workout, overlays burned in, to `Movies/Cindy` |
+| `REC` | film the workout, overlays burned in, to `Movies/Cindy`; the voice says when it starts |
 | `FLIP` | switch between the rear and selfie camera |
 | `VOICE` | toggle spoken counting |
 | `MUSIC` | tap to pick a track (or mute); long press to change it |
@@ -144,6 +144,58 @@ minutes, one minute and ten seconds.
 
 Rep numbers are spoken with `QUEUE_FLUSH` so the voice tracks the athlete instead of falling a
 queue behind during a fast set — cues that must not be dropped are queued after.
+
+Recording announces itself: "Recording in 3" as the countdown starts, so an athlete walking to
+the bar knows filming is about to begin, "Recording" once it has, and "Recording didn't start" if
+it could not. They are queued so they never cut a count off, and stay quiet while TalkBack runs,
+since TalkBack already reads the countdown and the toasts.
+
+#### Languages
+
+The voice speaks English, Spanish, French, German, Italian, Portuguese (Brazil), Dutch, Polish,
+Romanian, Turkish or Russian. The screens stay in English; only what is said aloud changes.
+`MENU → Voice` lists the languages, each with its own name, where it stands on this phone, and a
+▶ button to hear a sample. HEAR IT and the volume check speak in the language that is ticked.
+
+The voices belong to the phone's speech engine (Google's, Samsung's…), not to Cindy. The app ships
+no audio and asks for no internet permission. Choosing a language that is not on the phone asks
+the engine to fetch it, at once and whether or not you then press SAVE, so it can be arriving
+while the sheet is open; **Manage voices** opens the engine's own screen for one that will not.
+An engine reports no progress, so a download that has not turned up after two minutes says the
+engine may be waiting for Wi-Fi, and tapping the row asks again.
+
+- **Workouts only use voices stored on the phone**, so counting works offline and is never held up
+  by the network.
+- **If the chosen language is not there yet** the workout counts in English, and a toast says so
+  as it starts. The words always follow the voice actually in use, never Spanish words in an
+  English voice or the reverse. A voice fetched in the meantime is picked up the next time the
+  workout starts or the screen comes back.
+- **A preview of a language that is not downloaded** goes through the engine's online voice, is
+  labelled as an online preview, and plays a fixed sample line. If it cannot reach the network it
+  says the preview needs a connection.
+- **A language the engine does not speak at all** is dimmed and cannot be chosen.
+
+How the words are made: the coach decides *what* is said and *when*, as a
+[VoiceLine](app/src/main/java/com/cindy/tracker/VoiceLine.kt) — a fact, such as "round 3 took 80
+seconds" — and never words it. Each language has a `Phrasebook` that does, written as an
+exhaustive `when` so that a language missing a line does not compile. English is byte-identical to
+what the app said before phrasebooks existed, which a golden test pins down.
+
+- Plurals follow each language's own CLDR rule: Polish, Romanian and Russian have few/many forms,
+  French and Portuguese count 0 as singular, Turkish keeps the noun singular after a number.
+- One — and two, for feminine nouns in Portuguese, Polish, Romanian and Russian — is written as a
+  word, so an engine cannot read it with the wrong gender.
+- Outside English no digit is placed before a full stop, which engines read as an ordinal ("12."
+  becomes "twelfth").
+- The engine's position hints ("Get on the bar") stay English inside `WorkoutEngine`, because the
+  Python parity trace compares their text. They are translated where they are spoken, through the
+  [VoiceHints](app/src/main/java/com/cindy/tracker/VoiceHints.kt) catalogue, and a test reads the
+  engine's source and fails on any hint the catalogue does not know.
+
+**The translations have not been read by native speakers.** Each language is one file
+([PhrasebookEs.kt](app/src/main/java/com/cindy/tracker/PhrasebookEs.kt) and so on) with its
+conventions noted at the top, ready for someone to check. Adding a language is a phrasebook, an
+entry in [VoicePacks](app/src/main/java/com/cindy/tracker/VoicePacks.kt) and that language's test.
 
 ### Music
 
@@ -292,6 +344,11 @@ The JVM suite covers the logic below. **JDK 17 is required** for Android Gradle 
 reps that must not count, and cross-talk between movements — and the record board is covered
 for ranking, round-tripping and corrupt-data tolerance.
 
+The voice is tested up to the speech engine: every line in every language (plural forms at the
+awkward numbers, written-out ones and twos, each clock mark), the choice of voice against lists
+shaped like Google's, Samsung's, an empty engine's and a network-only one's, the fall-back to
+English, and the language list driven on a fake engine.
+
 Real-video regression is a separate, opt-in Android instrumentation job. It decodes every native
 video frame, runs the production MoveNet preprocessing/model and production counter, then emits
 JSON/CSV evidence for every rejection and counted rep. Fixture data is deliberately not bundled
@@ -299,8 +356,8 @@ with the app or repository; see [tests/README.md](tests/README.md) for provision
 scenario labels, golden keypoints, and the `videoRegressionTest` command. A missing fixture is
 reported as an explicit skipped test, never as a video-test pass.
 
-They do **not** cover the camera path, the model, the voice or the music; those need a real
-device.
+They do **not** cover the camera path, the model, how the voice sounds, whether a voice download
+completes, or the music; those need a real device.
 
 ## Camera placement
 
