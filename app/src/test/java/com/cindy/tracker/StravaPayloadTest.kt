@@ -46,6 +46,7 @@ class StravaPayloadTest {
     fun `every squat variant maps to the table's exercise type`() {
         val expected = mapOf(
             SquatVariant.AIR_SQUAT to "AIR_SQUAT",
+            SquatVariant.HEELS_FLAT to "SQUAT_GENERIC",
             SquatVariant.BOX_SQUAT to "SQUAT_GENERIC",
             SquatVariant.SUPPORTED_SQUAT to "SQUAT_GENERIC"
         )

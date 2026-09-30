@@ -159,6 +159,14 @@ class PhrasebookEnTest {
     }
 
     @Test
+    fun `switching to heels flat squats says so in words`() {
+        assertEquals(
+            "Adaptive Cindy activated for heels-flat squats.",
+            say(VoiceLine.AdaptiveHeelsFlat)
+        )
+    }
+
+    @Test
     fun `every line is said in words`() {
         VoiceLineSamples.all.forEach { line ->
             assertTrue("$line was blank", say(line).isNotBlank())

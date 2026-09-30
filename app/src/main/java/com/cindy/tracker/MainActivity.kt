@@ -143,6 +143,8 @@ class MainActivity : AppCompatActivity() {
         val blocked: Boolean,
         val awaitingStart: Boolean,
         val manualReps: Int,
+        /** Whether smart squat counting has gone over to heels-flat squats; see [WorkoutEngine]. */
+        val heelsFlatSpotted: Boolean,
         /** Whether every joint this movement scores from was confidently seen this frame. */
         val poseLegible: Boolean = false,
         /** Filled in after the monitor has seen this frame; see [analyse]. */
@@ -237,6 +239,16 @@ class MainActivity : AppCompatActivity() {
      */
     @Volatile private var engine = WorkoutEngine()
     private val engineLock = Any()
+
+    /**
+     * Whether this workout has already been told that smart squat counting switched it over to
+     * heels-flat squats.
+     *
+     * Said once, at the moment it happens. The engine goes on saying it is so for the rest of the
+     * session and every snapshot carries that, so the screen has to remember it has spoken.
+     * Cleared with the workout, and with the engine. Main thread only, like [apply].
+     */
+    private var heelsFlatAnnounced = false
 
     @Volatile private var state = State.IDLE
     private var remainingMs = WORKOUT_MS
@@ -520,7 +532,9 @@ class MainActivity : AppCompatActivity() {
         keepHudClearOfSystemBars()
         describeControls()
         renderClock()
-        synchronized(engineLock) { engine = WorkoutEngine(profile = profile.movements) }
+        synchronized(engineLock) {
+            engine = WorkoutEngine(profile = profile.movements, smartSquats = profile.smartSquats)
+        }
         apply(runEngine { RepEvent.NONE })
         renderChips()
         renderControls()
@@ -892,6 +906,7 @@ class MainActivity : AppCompatActivity() {
             blocked = engine.blocked,
             awaitingStart = engine.awaitingStart,
             manualReps = engine.manualReps,
+            heelsFlatSpotted = engine.heelsFlatSpotted,
             poseLegible = engine.diagnostics.poseLegible
         )
     }
@@ -994,6 +1009,14 @@ class MainActivity : AppCompatActivity() {
                 speaker.queue(VoiceLine.RoundDone(snap.rounds, split))
                 toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
+        }
+
+        // After the count, not before: a rep is said with a flush, which would cut a line queued
+        // ahead of it short, and the rep that caused the switch has just been said above.
+        if (snap.heelsFlatSpotted && inWorkout() && !heelsFlatAnnounced) {
+            heelsFlatAnnounced = true
+            speaker.queue(VoiceLine.AdaptiveHeelsFlat)
+            toast("Adaptive Cindy activated for heels-flat squats")
         }
     }
 
@@ -1283,6 +1306,7 @@ class MainActivity : AppCompatActivity() {
         pausedMs = 0L
         pauseStartedAt = 0L
         synchronized(engineLock) { engine.reset() }
+        heelsFlatAnnounced = false
         heartRate.reset()
         tracking.reset()
         coach.reset()
@@ -1338,6 +1362,9 @@ class MainActivity : AppCompatActivity() {
         video.stop()
 
         val snap = runEngine { RepEvent.NONE }
+        // What the session was counted as, which is not always what was chosen: smart squat
+        // counting may have gone over to heels-flat squats part of the way through.
+        val countedProfile = synchronized(engineLock) { engine.countedProfile }
         val trace = heartRate.finish(now)
         val attempt = Attempt(
             rounds = snap.rounds,
@@ -1347,7 +1374,7 @@ class MainActivity : AppCompatActivity() {
             pausedMs = pausedMs,
             roundSplitsMs = roundSplits.toList(),
             setSplits = sets.sets,
-            profile = engine.profile,
+            profile = countedProfile,
             manualReps = snap.manualReps,
             // Counted rather than inferred from the round tally: a skipped movement makes those
             // two different numbers, and only this one is the work that was done.
@@ -1380,7 +1407,7 @@ class MainActivity : AppCompatActivity() {
         attempt.avgRoundMs?.let { speaker.queue(VoiceLine.Averaging(it)) }
         if (beat) speaker.queue(VoiceLine.BeatBenchmark(Records.BENCHMARK_NAME))
 
-        startActivity(ResultsActivity.intent(this, attempt, stoppedEarly))
+        startActivity(ResultsActivity.intent(this, attempt, stoppedEarly, snap.heelsFlatSpotted))
     }
 
     /**
@@ -1686,13 +1713,19 @@ class MainActivity : AppCompatActivity() {
      * Refused outright while a workout is live. The menu already declines to open the picker in
      * that state; this is the same rule enforced where the score actually lives, because the
      * clock could have been started from a notification or a second window between the two.
+     *
+     * The smart-squats setting is read the same way and for the same reason: it is fixed for the
+     * life of an engine too, since whether a squat may be counted by a second counter cannot
+     * change halfway through the score it contributes to.
      */
     private fun syncMovements() {
         if (inWorkout()) return
         val chosen = profile.movements
-        val current = synchronized(engineLock) { engine.profile }
-        if (chosen == current) return
-        synchronized(engineLock) { engine = WorkoutEngine(profile = chosen) }
+        val smart = profile.smartSquats
+        val (current, currentSmart) = synchronized(engineLock) { engine.profile to engine.smartSquats }
+        if (chosen == current && smart == currentSmart) return
+        synchronized(engineLock) { engine = WorkoutEngine(profile = chosen, smartSquats = smart) }
+        heelsFlatAnnounced = false
         apply(runEngine { RepEvent.NONE })
     }
 

@@ -50,12 +50,20 @@ class RepCounter:
         min_rep_ms: int = 350,
         smoothing: float = 0.4,
         min_range: float = 0.0,
+        bottom_margin: float = MARGIN,
+        min_travel: float = 0.0,
     ) -> None:
         self.down_below = f32(down_below)
         self.up_above = f32(up_above)
         self.min_rep_ms = min_rep_ms
         self.smoothing = f32(smoothing)
         self.min_range = f32(min_range)
+        #: Share of the learned travel, up from the lowest value seen, that counts as the bottom
+        #: of the movement: the zone a rep has to have visited to arm. Thirty percent for every
+        #: movement but the heels-flat squat.
+        self.bottom_margin = f32(bottom_margin)
+        #: The least a rep must climb off its trough, in signal units, however wide the band.
+        self.min_travel = f32(min_travel)
 
         self.phase = Phase.UNKNOWN
         self.count = 0
@@ -123,9 +131,17 @@ class RepCounter:
         use_band = self.calibrated
 
         # How far the signal must climb off its trough, and how close to the top it must finish.
-        needed = f32((1.0 - 2.0 * self.MARGIN) * span) if use_band else f32(self.up_above - self.down_below)
-        top_of_band = f32(self._seen_high - self.MARGIN * span) if use_band else self.up_above
-        bottom_of_band = f32(self._seen_low + self.MARGIN * span) if use_band else self.down_below
+        # The Kotlin does each of these in `Float`, rounding after every operation, so the port
+        # rounds after every operation too.
+        margin = f32(self.MARGIN)
+        needed = (
+            max(f32(f32(f32(1.0 - self.bottom_margin) - margin) * span), self.min_travel)
+            if use_band else f32(self.up_above - self.down_below)
+        )
+        top_of_band = f32(self._seen_high - f32(margin * span)) if use_band else self.up_above
+        bottom_of_band = (
+            f32(self._seen_low + f32(self.bottom_margin * span)) if use_band else self.down_below
+        )
 
         if s <= bottom_of_band:
             self.phase = Phase.DOWN
@@ -222,3 +238,137 @@ class RepCounter:
         self.smoothed = NAN
         self._trough = NAN
         self._armed = True
+
+
+class SmartSquatCounter:
+    """Counts squats two ways at once, and goes over to the looser way once it is shown to be needed.
+
+    Port of SmartSquatCounter.kt; see the Kotlin for the reasoning. In short: an air-squat counter
+    and a heels-flat counter are fed the same samples, and once the heels-flat one has accepted
+    `spot_after` reps in a block that the air-squat one refused, it takes over for the rest of the
+    session and is handed the count the athlete has really reached.
+
+    Bookings are matched by ascent, not by time. A rep is one ascent; a new one begins when the
+    heels-flat counter's bottom zone is entered. An air-squat booking marks the ascent as counted
+    both ways, a heels-flat booking on an ascent the air-squat counter has not counted is pending,
+    and if the air-squat counter then books that same ascent the pending rep is taken back.
+    """
+
+    def __init__(
+        self, air: RepCounter, heels_flat: RepCounter, spot_after: int, credit_cap: int
+    ) -> None:
+        self._air = air
+        self._heels_flat = heels_flat
+        self._spot_after = spot_after
+        #: The most the credit may put on the count: the squat target in a Cindy, unbounded for a clip.
+        self._credit_cap = credit_cap
+        #: True once the heels-flat counter has taken over. It stays true until `reset`.
+        self.switched = False
+        self._pending = 0
+        self._air_this_ascent = False
+        self._flat_only_this_ascent = False
+
+    @property
+    def _active(self) -> RepCounter:
+        return self._heels_flat if self.switched else self._air
+
+    @property
+    def phase(self) -> Phase:
+        return self._active.phase
+
+    @property
+    def count(self) -> int:
+        return self._active.count
+
+    @property
+    def smoothed(self) -> float:
+        return self._active.smoothed
+
+    @property
+    def learned_range(self) -> float:
+        return self._active.learned_range
+
+    @property
+    def required_range(self) -> float:
+        return self._active.required_range
+
+    @property
+    def calibrated(self) -> bool:
+        return self._active.calibrated
+
+    def update(self, raw: float, now: int, may_count: bool = True) -> bool:
+        if self.switched:
+            return self._heels_flat.update(raw, now, may_count)
+
+        was_down = self._heels_flat.phase is Phase.DOWN
+        air_booked = self._air.update(raw, now, may_count)
+        flat_booked = self._heels_flat.update(raw, now, may_count)
+
+        if self._heels_flat.phase is Phase.DOWN and not was_down:
+            self._air_this_ascent = False
+            self._flat_only_this_ascent = False
+        if air_booked:
+            # The air-squat counter has come round to an ascent the heels-flat one booked first.
+            if self._flat_only_this_ascent:
+                self._pending -= 1
+                self._flat_only_this_ascent = False
+            self._air_this_ascent = True
+        if flat_booked and not self._air_this_ascent:
+            self._pending += 1
+            self._flat_only_this_ascent = True
+
+        if self._pending >= self._spot_after:
+            self.switched = True
+            # set_count drops the phase and the trough. Harmless: this is the frame the rep was
+            # booked on, at the top, and the next rep has to start from a fresh descent.
+            self._heels_flat.set_count(min(self._air.count + self._pending, self._credit_cap))
+            return True
+        return air_booked
+
+    def force_increment(self) -> None:
+        self._air.force_increment()
+        self._heels_flat.force_increment()
+        self._clear_pending()
+
+    def force_decrement(self) -> None:
+        self._air.force_decrement()
+        self._heels_flat.force_decrement()
+        self._clear_pending()
+
+    def set_count(self, n: int) -> None:
+        # Once the heels-flat counter is in charge the air-squat one is never read again.
+        if not self.switched:
+            self._air.set_count(n)
+        self._heels_flat.set_count(n)
+        self._clear_pending()
+
+    def reset_band(self) -> None:
+        self._air.reset_band()
+        self._heels_flat.reset_band()
+        # The ascent in flight goes with the band. What was already pending does not.
+        self._clear_ascent()
+
+    def require_fresh_down(self) -> None:
+        self._air.require_fresh_down()
+        self._heels_flat.require_fresh_down()
+        self._clear_ascent()
+
+    def reset_count(self) -> None:
+        """Pending reps belong to one block of squats; the switch, once made, to the session."""
+        self._air.reset_count()
+        self._heels_flat.reset_count()
+        self._clear_pending()
+
+    def reset(self) -> None:
+        self._air.reset()
+        self._heels_flat.reset()
+        self._clear_pending()
+        self.switched = False
+
+    def _clear_pending(self) -> None:
+        self._pending = 0
+        self._clear_ascent()
+
+    def _clear_ascent(self) -> None:
+        self._air_this_ascent = False
+        self._flat_only_this_ascent = False

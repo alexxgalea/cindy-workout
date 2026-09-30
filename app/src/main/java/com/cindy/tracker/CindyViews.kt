@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
@@ -99,7 +100,7 @@ fun View.describeAsButton(label: String? = null, longPress: String? = null) {
 }
 
 /** Touch feedback that stays inside a row's rounded corners. */
-private fun Context.rowRipple(): RippleDrawable = RippleDrawable(
+internal fun Context.rowRipple(): RippleDrawable = RippleDrawable(
     ColorStateList.valueOf(Color.parseColor("#1FFFFFFF")),
     null,
     ColorDrawable(Color.WHITE)
@@ -387,3 +388,52 @@ fun Context.peakRow(rank: Int, title: String, detail: String, value: String): Vi
         addView(styledText(R.style.Cindy_MetricS, value).withStartMargin(dp(10)))
         contentDescription = "$title, $value, $detail"
     }
+
+/**
+ * A badge's disc, with its face in it.
+ *
+ * Earned, it is the colour of everything else the athlete has earned. Locked, it is a ring with
+ * the face dimmed, so that what is still to do reads as quiet rather than as broken. The faces
+ * run to four characters, so the type steps down for those to keep them inside the circle.
+ */
+fun Context.badgeDisc(badge: Badge, earned: Boolean, sizeDp: Int = 44): TextView =
+    styledText(R.style.Cindy_Eyebrow, badge.face).apply {
+        textSize = sizeDp * if (badge.face.length >= 4) 0.27f else 0.32f
+        letterSpacing = 0f
+        gravity = Gravity.CENTER
+        setTextColor(getColor(if (earned) R.color.on_primary else R.color.label_tertiary))
+        useExtraBold()
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            if (earned) {
+                setColor(getColor(R.color.achievement))
+            } else {
+                setColor(Color.TRANSPARENT)
+                setStroke(dp(1), getColor(R.color.hairline_strong))
+            }
+        }
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+    }
+
+/**
+ * The row that opens the athlete's profile: their avatar, what to call them, what they have
+ * earned, and a chevron.
+ *
+ * Its own row rather than a [navRow] with a picture bolted on, because the avatar changes the
+ * row's shape: it is taller, and the picture sits where the text would have started.
+ */
+fun Context.avatarRow(
+    photo: Bitmap?,
+    name: String?,
+    title: String,
+    value: String,
+    onTap: () -> Unit
+): View = rowFrame(tappable = true, minHeight = 72).apply {
+    addView(AvatarView(context).apply { show(photo, name) },
+        LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(14) })
+    addView(rowText(title, value, R.style.Cindy_Headline))
+    addView(chevron())
+    setOnClickListener { onTap() }
+    describeAsButton("$title, $value")
+}

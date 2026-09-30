@@ -40,6 +40,7 @@ object PhrasebookEs : Phrasebook {
         is VoiceLine.RecordingSoon -> "Grabando en ${seconds(line.seconds)}"
         VoiceLine.RecordingStarted -> "Grabando"
         VoiceLine.RecordingFailed -> "Falló la grabación"
+        VoiceLine.AdaptiveHeelsFlat -> "Cindy adaptada activada para sentadillas con los talones en el suelo."
     }
 
     private fun hint(hint: Hint): String = when (hint) {

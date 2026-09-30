@@ -39,6 +39,7 @@ object PhrasebookTr : Phrasebook {
         is VoiceLine.RecordingSoon -> "Kayıt ${line.seconds} saniye sonra başlıyor"
         VoiceLine.RecordingStarted -> "Kayıt başladı"
         VoiceLine.RecordingFailed -> "Kayıt başarısız"
+        VoiceLine.AdaptiveHeelsFlat -> "Topuklar yerde yapılan çömelmeler için uyarlanmış Cindy etkinleştirildi."
     }
 
     private fun hint(hint: Hint): String = when (hint) {

@@ -115,6 +115,16 @@ sealed interface VoiceLine {
      * that "didn't start".
      */
     data object RecordingFailed : VoiceLine
+
+    /**
+     * Smart squat counting has switched this session over to Adaptive Cindy, because the squats
+     * are heels flat.
+     *
+     * Said once, at the moment it happens, and never done quietly: the athlete did not choose it,
+     * and it changes how the rest of the session is counted and what it is filed as. Queued behind
+     * the count that caused it rather than cutting that count short.
+     */
+    data object AdaptiveHeelsFlat : VoiceLine
 }
 
 /**

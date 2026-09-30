@@ -10,6 +10,7 @@ Kotlin holds this state in 32-bit `Float`s and compares against thresholds exact
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass
 from enum import Enum
@@ -28,7 +29,7 @@ from .pose_geometry import (
     torso_length,
     upright,
 )
-from .rep_counter import NAN, Phase, RepCounter, f32
+from .rep_counter import NAN, Phase, RepCounter, SmartSquatCounter, f32
 
 
 class Exercise(Enum):
@@ -145,6 +146,7 @@ class PushVariant(Enum):
 
 class SquatVariant(Enum):
     AIR_SQUAT = "AIR_SQUAT"
+    HEELS_FLAT = "HEELS_FLAT"
     BOX_SQUAT = "BOX_SQUAT"
     SUPPORTED_SQUAT = "SUPPORTED_SQUAT"
 
@@ -216,20 +218,38 @@ class WorkoutEngine:
     START_SETTLE_DEGREES = 3.0
     #: Smoothing on the settling signal, so raw jitter does not read as still rising.
     START_SETTLE_SMOOTHING = 0.4
+    #: The least a heels-flat squat has to close the knee, in degrees, to be a rep. Heels flat on
+    #: the floor stop the knees travelling forward, so the knee closes less than it does up on the
+    #: toes. A quarter squat from chest height travels 30 to 35, so this is the line between them,
+    #: and the one number to retune after trying it on a phone.
+    HEELS_FLAT_MIN_TRAVEL = 35.0
+    #: How much of the learned travel, from the bottom, counts as having gone down. Sixty percent
+    #: where every other movement uses thirty, so a heels-flat rep after a deep one still arms.
+    HEELS_FLAT_BOTTOM_MARGIN = 0.6
+    #: Where an uncalibrated heels-flat squat has to have got to, in knee degrees. The climb from
+    #: here to the lockout (38) is just over HEELS_FLAT_MIN_TRAVEL, as the air squat's is over its own.
+    HEELS_FLAT_DOWN_BELOW = 120.0
+    #: Reps only the heels-flat counter has to accept, in one block, before smart counting goes
+    #: over to it.
+    SMART_SQUAT_SPOT_REPS = 3
 
     def __init__(
         self,
         fixed_exercise: Exercise | None = None,
         profile: CindyProfile = STANDARD_PROFILE,
+        smart_squats: bool = False,
     ) -> None:
         self._fixed_exercise = fixed_exercise
         #: Immutable for the life of the engine: a rep's meaning must not change halfway
         #: through the score it contributes to.
         self.profile = profile
+        #: Whether an air-squat session may notice heels-flat squats and start counting them as
+        #: such. Off unless asked for, and fixed for the life of the engine like the profile.
+        self.smart_squats = smart_squats
         self._counters = {
             Exercise.PULLUP: RepCounter(-140.0, -100.0, min_rep_ms=400, min_range=40.0),
             Exercise.PUSHUP: RepCounter(100.0, 150.0, min_rep_ms=350, min_range=45.0),
-            Exercise.SQUAT: RepCounter(100.0, 158.0, min_rep_ms=350, min_range=55.0),
+            Exercise.SQUAT: self._squat_counter(),
         }
         self.exercise = fixed_exercise or Exercise.PULLUP
         self.rounds = 0
@@ -271,7 +291,48 @@ class WorkoutEngine:
         #: The same for every finished round, kept per round so undo can step back into one.
         self._banked_rounds: list[dict[Exercise, int]] = []
 
+    def _squat_counter(self):
+        """The counter for the chosen squat. Only the air squat is ever made smart."""
+        squat = self.profile.squat
+        if squat is SquatVariant.HEELS_FLAT:
+            return self._heels_flat_counter()
+        if squat is SquatVariant.AIR_SQUAT:
+            if not self.smart_squats:
+                return self._air_squat_counter()
+            credit_cap = Exercise.SQUAT.target if self._fixed_exercise is None else 2 ** 31 - 1
+            return SmartSquatCounter(
+                self._air_squat_counter(), self._heels_flat_counter(),
+                self.SMART_SQUAT_SPOT_REPS, credit_cap,
+            )
+        return self._air_squat_counter()
+
+    @staticmethod
+    def _air_squat_counter() -> RepCounter:
+        return RepCounter(100.0, 158.0, min_rep_ms=350, min_range=55.0)
+
+    @classmethod
+    def _heels_flat_counter(cls) -> RepCounter:
+        return RepCounter(
+            cls.HEELS_FLAT_DOWN_BELOW, 158.0, min_rep_ms=350,
+            min_range=cls.HEELS_FLAT_MIN_TRAVEL,
+            bottom_margin=cls.HEELS_FLAT_BOTTOM_MARGIN,
+            min_travel=cls.HEELS_FLAT_MIN_TRAVEL,
+        )
+
     # -- observable state -------------------------------------------------
+
+    @property
+    def heels_flat_spotted(self) -> bool:
+        """True once smart squat counting has noticed heels-flat squats and taken over."""
+        counter = self._counters[Exercise.SQUAT]
+        return isinstance(counter, SmartSquatCounter) and counter.switched
+
+    @property
+    def counted_profile(self) -> CindyProfile:
+        """What the session was actually counted as: the choice, unless smart counting took over."""
+        if self.heels_flat_spotted:
+            return dataclasses.replace(self.profile, squat=SquatVariant.HEELS_FLAT)
+        return self.profile
 
     @property
     def counting_state(self) -> str:
