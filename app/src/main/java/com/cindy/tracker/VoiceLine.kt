@@ -70,7 +70,7 @@ sealed interface VoiceLine {
     /**
      * Something the athlete can fix by moving. [hint] is the engine's own English text: the
      * engine keeps it (the Python port compares it frame for frame), and each phrasebook
-     * translates it on the way out.
+     * translates it on the way out, through [Hint].
      */
     data class Fault(val hint: String) : VoiceLine
 
