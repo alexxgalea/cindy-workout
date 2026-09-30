@@ -152,6 +152,87 @@ class ScreenSmokeTest {
         Profile(context).reminderOn = false
     }
 
+    /** The first text view under [root] showing exactly [text]. */
+    private fun findByText(root: android.view.View, text: String): android.view.View? {
+        if (root is android.widget.TextView && root.text.toString() == text) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByText(root.getChildAt(i), text)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** The menu with its voice sheet open, as the athlete would see it: the menu, and the sheet. */
+    private fun openVoiceSheet(): Pair<android.app.Activity, android.app.Dialog> {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        val row = findByDescriptionPrefix(
+            activity.findViewById<android.view.View>(android.R.id.content), "Voice"
+        )
+        assertTrue("no Voice row", row != null)
+        row!!.performClick()
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        return activity to dialog
+    }
+
+    @Test
+    fun `the voice sheet lists every language, each with a way to hear it`() {
+        val (_, dialog) = openVoiceSheet()
+        val root = dialog.window!!.decorView
+        VoicePacks.all.forEach { pack ->
+            assertTrue("no row for ${pack.englishName}", findByDescriptionPrefix(root, pack.nativeName) != null)
+            assertTrue(
+                "no way to hear ${pack.englishName}",
+                findByDescriptionPrefix(root, "Hear ${pack.englishName}") != null
+            )
+        }
+        assertTrue("no way to manage voices", findByDescriptionPrefix(root, "Manage voices") != null)
+    }
+
+    @Test
+    fun `the voice sheet builds while the engine has not answered`() {
+        // Nothing has connected to a speech engine here, which is the state of a sheet opened in
+        // the first moment: every row is still being checked, and none of that is an error.
+        val (_, dialog) = openVoiceSheet()
+        assertTrue("no row is being checked", findByText(dialog.window!!.decorView, "Checking…") != null)
+    }
+
+    @Test
+    fun `choosing a language and saving stores it, and the Voice row names it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).voiceLanguage = "en"
+        val (activity, dialog) = openVoiceSheet()
+        val root = dialog.window!!.decorView
+
+        findByDescriptionPrefix(root, "Español")!!.performClick()
+        findByText(root, "SAVE")!!.performClick()
+
+        assertEquals("es", Profile(context).voiceLanguage)
+        assertTrue(
+            "the Voice row does not name the language",
+            findByDescriptionPrefix(
+                activity.findViewById<android.view.View>(android.R.id.content), "Voice, On"
+            )?.contentDescription?.toString()?.endsWith("Español") == true
+        )
+        Profile(context).voiceLanguage = "en"
+    }
+
+    @Test
+    fun `dismissing the voice sheet without saving leaves the language alone`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        Profile(context).voiceLanguage = "en"
+        val (_, dialog) = openVoiceSheet()
+
+        findByDescriptionPrefix(dialog.window!!.decorView, "Deutsch")!!.performClick()
+        dialog.dismiss()
+
+        assertEquals("en", Profile(context).voiceLanguage)
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 
