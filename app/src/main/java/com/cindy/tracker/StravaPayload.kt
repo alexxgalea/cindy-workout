@@ -6,6 +6,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
+ * What one movement of one round actually banked.
+ *
+ * This is the unit Strava's JSON `sets` array wants, and the only one honest to give it:
+ * [reps] is a figure [StravaSets.from] reads straight off [Attempt.setSplits] — the record
+ * [MainActivity] already keeps of what each movement scored — never a movement's target.
+ * [round] counts from 1, matching how the app already talks about rounds everywhere else.
+ */
+data class WorkoutSet(val round: Int, val exercise: Exercise, val reps: Int)
+
+/**
  * Maps a banked movement to the `exercise_type` Strava's strength-training JSON expects.
  *
  * The repo's rule is that a modified movement is *reported as* the modified movement
@@ -61,8 +71,9 @@ data class HrPoint(val secondsFromStart: Int, val bpm: Int)
  * Turns a finished attempt, its banked sets and whatever else is known into the JSON body
  * Strava's `POST /uploads` wants for `data_type=json`.
  *
- * Pure, and composed lazily by the caller (S4) from stores keyed by [Attempt.atMillis] — nothing
- * here reaches for a clock, a file, or the network, so a process death between finishing and
+ * Pure, and composed lazily by the caller (S4) from the attempt record itself — [sets] is what
+ * [StravaSets.from] built from [Attempt.setSplits], not a live store this file owns — so nothing
+ * here reaches for a clock, a file, or the network, and a process death between finishing and
  * uploading loses nothing: the same [Attempt] and [sets] rebuild the identical payload.
  */
 object StravaPayload {
@@ -75,8 +86,9 @@ object StravaPayload {
         kcal: Int?,
         heartRate: List<HrPoint>?
     ): String {
-        // The caller's job to check before ever reaching here — an attempt this old, or this
-        // broken, has nothing worth Strava's upload quota. Asserted rather than quietly upload a
+        // The caller's job to check before ever reaching here -- StravaSets.from already
+        // refuses a broken or empty set list, and an attempt this old or this broken has
+        // nothing worth Strava's upload quota. Asserted rather than quietly upload a
         // workout-shaped JSON with no workout in it.
         require(sets.any { it.reps > 0 }) { "Refusing to build a payload with no banked reps" }
 
