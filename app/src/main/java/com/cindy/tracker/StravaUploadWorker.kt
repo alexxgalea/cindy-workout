@@ -61,17 +61,19 @@ class StravaUploadWorker(
         val session = StravaSession(tokens, auth)
         val api = StravaApi(transport, session)
 
+        val trace = HeartRateStore(ctx).load(atMillis)
+        val startMillis = trace?.startedAtMillis ?: startMillisOf(attempt)
+
         fun send(): UploadOutcome {
             val existingId = StravaUploads.status(ctx, atMillis)?.uploadId
             return if (existingId != null) {
                 api.status(existingId)
             } else {
-                api.upload(
-                    payload(ctx, attempt, sets),
-                    StravaActivityText.name(attempt),
-                    description(ctx, attempt),
-                    externalId(atMillis)
+                val offsetSeconds = TimeZone.getDefault().getOffset(startMillis) / 1000
+                val composed = StravaComposer.compose(
+                    attempt, sets, startMillis, offsetSeconds, trace, Profile(ctx).body()
                 )
+                api.upload(composed.payload, composed.name, composed.description, externalId(atMillis))
             }
         }
 
@@ -107,23 +109,6 @@ class StravaUploadWorker(
             false
         }
     }
-
-    private fun payload(ctx: Context, a: Attempt, sets: List<WorkoutSet>): String {
-        val startMillis = startMillisOf(a)
-        val offsetSeconds = (TimeZone.getDefault().getOffset(startMillis) / 1000)
-        val kcal = kcalOf(ctx, a)
-        // Heart-rate streams are a later addition; every upload from this worker is body-weight
-        // or nothing.
-        return StravaPayload.build(a, sets, startMillis, offsetSeconds, kcal, heartRate = null)
-    }
-
-    private fun description(ctx: Context, a: Attempt): String {
-        val basis = if (kcalOf(ctx, a) != null) CalorieBasis.BODY_WEIGHT else CalorieBasis.NONE
-        return StravaActivityText.description(a, basis)
-    }
-
-    private fun kcalOf(ctx: Context, a: Attempt): Int? =
-        Calories.estimate(a.totalReps, a.durationMs, Profile(ctx).body(), trace = null)?.kcal
 
     private fun externalId(atMillis: Long) = "cindy-$atMillis"
 

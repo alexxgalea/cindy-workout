@@ -8,8 +8,9 @@ around it has never been compiled — see [ios/README.md](ios/README.md).
 
 Everything runs on-device: no cloud inference, and the camera stream never leaves the phone.
 The only network use is opt-in: Menu → Strava connects your own Strava account, and from then on
-each finished workout — score, sets and times — uploads there on its own. Heart rate is not part
-of the upload yet. Nothing is sent before you connect, and no video or pose data is ever sent.
+each finished workout — score, sets and times, plus heart rate and its calorie estimate when a
+watch recorded one — uploads there on its own. Nothing is sent before you connect, and no video
+or pose data is ever sent.
 
 ## How it works
 
@@ -368,15 +369,16 @@ you connect.
 
 **Once connected, every finished workout uploads on its own** — a Crossfit activity carrying the
 score, every movement as a set with the reps actually banked, clock time, paused time and real
-time, and calories estimated from your body weight. Heart rate is not part of the upload yet.
-Automatic upload is a toggle in the Strava sheet, on by default. With it off, the results screen
-offers UPLOAD instead; if you finish a workout before connecting, it offers CONNECT TO UPLOAD,
-which links the account and then sends that workout. The results screen shows where an upload
-has got to — uploading, done (with a link to the activity), failed with a retry, or asking you
-to reconnect — and the upload itself carries on in the background: it survives the app closing,
-waits for a network connection, and backs off between retries rather than hammering Strava's
-API. Workouts are sent as they finish; attempts already on the record board are not uploaded
-retroactively.
+time, and calories, estimated from your body weight or, when a watch recorded your heart rate
+during the workout, from that heart rate instead — with the heart-rate trace itself uploaded as
+a stream on the activity. Automatic upload is a toggle in the Strava sheet, on by default. With
+it off, the results screen offers UPLOAD instead; if you finish a workout before connecting, it
+offers CONNECT TO UPLOAD, which links the account and then sends that workout. The results
+screen shows where an upload has got to — uploading, done (with a link to the activity), failed
+with a retry, or asking you to reconnect — and the upload itself carries on in the background:
+it survives the app closing, waits for a network connection, and backs off between retries
+rather than hammering Strava's API. Workouts are sent as they finish; attempts already on the
+record board are not uploaded retroactively.
 
 DISCONNECT clears the tokens from the phone immediately, and also asks Strava to revoke them on
 its side; that part is best-effort, so it still clears locally even if you are offline. If Strava

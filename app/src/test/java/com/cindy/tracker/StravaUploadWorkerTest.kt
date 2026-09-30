@@ -4,8 +4,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker.Result
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.workDataOf
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -31,6 +33,7 @@ class StravaUploadWorkerTest {
         StravaTokenStore(context()).clearGrant()
         RecordStore(context()).clear()
         StravaUploads.clear(context())
+        HeartRateStore(context()).clear()
     }
 
     @After
@@ -40,6 +43,7 @@ class StravaUploadWorkerTest {
         StravaTokenStore(context()).clearGrant()
         RecordStore(context()).clear()
         StravaUploads.clear(context())
+        HeartRateStore(context()).clear()
     }
 
     private fun connect(expiresInS: Long = 3_600L) {
@@ -81,6 +85,35 @@ class StravaUploadWorkerTest {
         TestListenableWorkerBuilder<StravaUploadWorker>(
             context(), workDataOf(StravaUploadWorker.KEY_AT_MILLIS to at)
         ).build().startWork().get()
+
+    /** Enough of a body for [Calories.estimate] to use a saved trace instead of falling back. */
+    private fun saveBody() {
+        val profile = Profile(context())
+        profile.bodyWeightKg = 70.0
+        profile.birthYear = 1990
+        profile.sex = Sex.MALE
+    }
+
+    private fun boundaryOf(request: HttpRequest): String =
+        Regex("boundary=(.+)").find(request.contentType!!)!!.groupValues[1]
+
+    /** The value of one simple (non-file) multipart field, e.g. "description". */
+    private fun fieldPart(request: HttpRequest, name: String): String {
+        val body = String(request.body!!, Charsets.UTF_8)
+        val marker = "Content-Disposition: form-data; name=\"$name\"\r\n\r\n"
+        val start = body.indexOf(marker) + marker.length
+        val end = body.indexOf("\r\n--${boundaryOf(request)}", start)
+        return body.substring(start, end)
+    }
+
+    /** Parses the "file" part's own body as the JSON payload it is. */
+    private fun payloadOf(request: HttpRequest): JSONObject {
+        val body = String(request.body!!, Charsets.UTF_8)
+        val marker = "Content-Type: application/json\r\n\r\n"
+        val start = body.indexOf(marker) + marker.length
+        val end = body.indexOf("\r\n--${boundaryOf(request)}", start)
+        return JSONObject(body.substring(start, end))
+    }
 
     // ---- gates before any network call -----------------------------------------------------
 
@@ -136,6 +169,59 @@ class StravaUploadWorkerTest {
         assertEquals(42L, status?.activityId)
         assertEquals(1, transport.requests.count { it.method == "POST" })
         assertEquals(1, transport.requests.count { it.method == "GET" })
+    }
+
+    // ---- a saved heart-rate trace -------------------------------------------------------------
+
+    @Test
+    fun `a saved heart-rate trace rides along as a stream, and the description says so`() {
+        connect()
+        saveBody()
+        val attempt = saveValidAttempt()
+        val traceStart = attempt.atMillis - attempt.durationMs - 2_000L
+        val trace = HeartRateTrace(
+            startedAtMillis = traceStart,
+            // Every 5 s, exactly Calories.MAX_HOLD_MS, covers the whole clock with no gap.
+            samples = (0L until attempt.durationMs step 5_000L).map { HeartRateSample(it, 150) },
+            pauses = emptyList()
+        )
+        HeartRateStore(context()).save(atMillis, trace)
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(201, emptyMap(), """{"id_str":"555","error":null,"activity_id":null}"""))
+        transport.enqueue(HttpResponse(200, emptyMap(), """{"id_str":"555","error":null,"activity_id":42}"""))
+        useTransport(transport)
+
+        assertEquals(Result.success(), runWorker())
+
+        val post = transport.requests.first { it.method == "POST" }
+        val payload = payloadOf(post)
+        assertEquals(
+            java.time.Instant.ofEpochMilli(traceStart).truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString(),
+            payload.getString("start_time")
+        )
+        val streams = payload.getJSONObject("streams")
+        val time = streams.getJSONArray("time")
+        val heartrate = streams.getJSONArray("heartrate")
+        assertTrue(time.length() > 0)
+        assertEquals(time.length(), heartrate.length())
+        assertTrue(fieldPart(post, "description").contains("Calories estimated from heart rate"))
+    }
+
+    @Test
+    fun `without a saved trace the upload is unchanged, carrying no heart-rate stream`() {
+        connect()
+        saveBody()
+        saveValidAttempt()
+        val transport = FakeTransport()
+        transport.enqueue(HttpResponse(201, emptyMap(), """{"id_str":"555","error":null,"activity_id":null}"""))
+        transport.enqueue(HttpResponse(200, emptyMap(), """{"id_str":"555","error":null,"activity_id":42}"""))
+        useTransport(transport)
+
+        assertEquals(Result.success(), runWorker())
+
+        val post = transport.requests.first { it.method == "POST" }
+        assertFalse(payloadOf(post).has("streams"))
+        assertTrue(fieldPart(post, "description").contains("Calories estimated from body weight"))
     }
 
     @Test

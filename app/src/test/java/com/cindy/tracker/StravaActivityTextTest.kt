@@ -155,9 +155,25 @@ class StravaActivityTextTest {
     }
 
     @Test
-    fun `a heart-rate calorie basis says so plainly`() {
+    fun `a heart-rate calorie basis with full coverage says so plainly`() {
+        val description = StravaActivityText.description(
+            fullCindy, CalorieBasis.HEART_RATE, heartRateMs = fullCindy.durationMs
+        )
+        assertTrue(description.contains("Calories estimated from heart rate"))
+    }
+
+    @Test
+    fun `a heart-rate calorie basis with no coverage given says so plainly`() {
         val description = StravaActivityText.description(fullCindy, CalorieBasis.HEART_RATE)
         assertTrue(description.contains("Calories estimated from heart rate"))
+    }
+
+    @Test
+    fun `partial heart-rate coverage names the split with body weight`() {
+        val description = StravaActivityText.description(
+            fullCindy, CalorieBasis.HEART_RATE, heartRateMs = 14 * 60 * 1_000L + 20_000L
+        )
+        assertTrue(description.contains("Calories from heart rate for 14:20 of 20:00, body weight for the rest"))
     }
 
     @Test
