@@ -196,6 +196,38 @@ class MainActivity : AppCompatActivity() {
     private lateinit var records: RecordStore
     private lateinit var profile: Profile
 
+    /**
+     * Puts whatever [heartSource] hears onto the workout clock.
+     *
+     * Owned here rather than by the source itself, because the clock it keeps has to be this
+     * screen's clock — the same one [pausedMs] and [roundSplits] already run on — and a
+     * Bluetooth connection has no way to know what that clock is doing.
+     */
+    private val heartRate = HeartRateRecorder()
+    /** The live connection to whichever device [profile] has paired, or null when there is none. */
+    private var heartSource: HeartRateSource? = null
+    /** The device [heartSource] was last built for, so [syncHeartRate] only rebuilds it on a change. */
+    private var heartDevice: HeartRateDevice? = null
+    /**
+     * elapsedRealtime of the most recent reading, in any state.
+     *
+     * Kept only to judge, at [beginWorkout], whether the watch has said anything lately — a
+     * paired device that has not spoken in the last ten seconds is worth a toast, not a silent
+     * assumption that calories will have a heart rate to work with.
+     */
+    private var lastHeartRateAt = 0L
+
+    /** The one listener a [HeartRateSource] is ever handed. Status changes have nowhere to go on
+     *  this screen — see the paired-device sheet in the menu for where connection state is shown. */
+    private val heartRateListener = object : HeartRateListener {
+        override fun onHeartRate(bpm: Int, atElapsedMs: Long) {
+            heartRate.offer(bpm, atElapsedMs)
+            lastHeartRateAt = atElapsedMs
+        }
+
+        override fun onStatus(status: HeartRateStatus) = Unit
+    }
+
     @Volatile private var detector: PoseDetector? = null
     /**
      * Rebuilt rather than mutated when the movements change.
@@ -1049,12 +1081,15 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.finishSetup() }
         state = State.RUNNING
         LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
-        lastTickAt = SystemClock.elapsedRealtime()
+        val now = SystemClock.elapsedRealtime()
+        lastTickAt = now
         roundStartedAtElapsed = 0L
         roundSplits.clear()
         sets.start()
         elapsedMs = 0L
         pausedMs = 0L
+        heartRate.start(now, System.currentTimeMillis())
+        warnIfHeartRateSilent(now)
         primary(R.drawable.ic_pause)
         // The check hands over to the workout without going through [toggleRun], so this is the
         // only place the row learns there is a workout now: without it END never appears and the
@@ -1066,6 +1101,20 @@ class MainActivity : AppCompatActivity() {
         speaker.say(VoiceLine.Go(calibrated))
         apply(runEngine { RepEvent.NONE })
         ui.post(ticker)
+    }
+
+    /**
+     * Said once, at the very start, when a watch is paired but has gone quiet.
+     *
+     * Not a HUD change — the out-of-scope list rules out a live readout — just a heads-up that
+     * calories will lean on reps alone until the first reading lands, so the number on the
+     * results screen does not look like a silent downgrade nobody explained.
+     */
+    private fun warnIfHeartRateSilent(now: Long) {
+        val device = heartDevice
+        if (heartSource != null && device != null && now - lastHeartRateAt > 10_000L) {
+            toast("No heart rate from ${device.name} yet — calories will use your reps until it arrives")
+        }
     }
 
     private fun toggleRun() {
@@ -1082,6 +1131,7 @@ class MainActivity : AppCompatActivity() {
                     pausedMs += now - pauseStartedAt
                     pauseStartedAt = 0L
                 }
+                heartRate.resume(now)
                 lastTickAt = now
                 primary(R.drawable.ic_pause)
                 // The phone or the athlete may have moved while the clock was stopped, so the
@@ -1097,7 +1147,9 @@ class MainActivity : AppCompatActivity() {
             State.RUNNING -> {
                 state = State.PAUSED
                 coach.interrupted()
-                pauseStartedAt = SystemClock.elapsedRealtime()
+                val now = SystemClock.elapsedRealtime()
+                pauseStartedAt = now
+                heartRate.pause(now)
                 primary(R.drawable.ic_play)
                 status.text = "Paused"
                 music.pause()
@@ -1231,6 +1283,7 @@ class MainActivity : AppCompatActivity() {
         pausedMs = 0L
         pauseStartedAt = 0L
         synchronized(engineLock) { engine.reset() }
+        heartRate.reset()
         tracking.reset()
         coach.reset()
         detector?.resetRoi()
@@ -1274,14 +1327,18 @@ class MainActivity : AppCompatActivity() {
         renderClock()
         renderControls()
 
-        // A stop pressed from the pause dialog still owes its hidden time to the tally.
+        // A stop pressed from the pause dialog still owes its hidden time to the tally. The
+        // heart-rate trace is closed on this exact same instant, so its own pause list and
+        // Attempt.pausedMs agree about when the workout actually stopped running.
+        val now = SystemClock.elapsedRealtime()
         if (pauseStartedAt != 0L) {
-            pausedMs += SystemClock.elapsedRealtime() - pauseStartedAt
+            pausedMs += now - pauseStartedAt
             pauseStartedAt = 0L
         }
         video.stop()
 
         val snap = runEngine { RepEvent.NONE }
+        val trace = heartRate.finish(now)
         val attempt = Attempt(
             rounds = snap.rounds,
             reps = snap.repsThisRound,
@@ -1298,7 +1355,11 @@ class MainActivity : AppCompatActivity() {
             // What the camera could not see is part of the result, not a detail about it.
             untrackedMs = tracking.lostMs
         )
+        // The trace is only worth keeping beside a record that was actually stored, and the
+        // write happens synchronously and right here: ResultsActivity reads it back in its own
+        // onCreate, a few lines below, and there is no attempt to have it race against.
         val saved = records.add(attempt)
+        if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
         if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
         primary(R.drawable.ic_again)
@@ -1384,6 +1445,25 @@ class MainActivity : AppCompatActivity() {
         }
         music.volume = profile.musicVolume
         if (profile.musicOn && state == State.RUNNING) music.play() else music.pause()
+    }
+
+    /**
+     * Brings the heart-rate connection in line with whichever device the menu has paired.
+     *
+     * Read on every resume, for the same reason [syncMusic] is: pairing happens in the menu,
+     * while this screen is stopped, and coming back is exactly when the answer can have changed.
+     * Connecting only while resumed — no foreground service — is a deliberate choice, not a gap:
+     * a heart rate is only wanted while the workout clock can actually run, and this screen
+     * already gives that up in [onPause].
+     */
+    private fun syncHeartRate() {
+        val device = profile.heartRateDevice
+        if (device != heartDevice) {
+            heartSource?.stop()
+            heartDevice = device
+            heartSource = HeartRateSources.forProfile(this, profile)
+        }
+        heartSource?.start(heartRateListener)
     }
 
     // ── rendering ─────────────────────────────────────────────────────────────
@@ -1641,6 +1721,7 @@ class MainActivity : AppCompatActivity() {
         syncMovements()
         syncVoice()
         syncMusic()
+        syncHeartRate()
         // A force-stop or reboot clears alarms; put it back, but never postpone one that is due.
         ReminderScheduler.ensureArmed(this)
     }
@@ -1656,6 +1737,8 @@ class MainActivity : AppCompatActivity() {
         }
         // Do not keep playing over whatever the athlete opens next.
         if (state == State.RUNNING && !isChangingConfigurations) toggleRun() else music.pause()
+        // The camera gives up the screen here, and a heart rate is only wanted while it has it.
+        heartSource?.stop()
     }
 
     override fun onDestroy() {
@@ -1668,5 +1751,6 @@ class MainActivity : AppCompatActivity() {
         speaker.shutdown()
         music.release()
         video.stop()
+        heartSource?.stop()
     }
 }
