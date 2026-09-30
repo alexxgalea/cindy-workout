@@ -110,6 +110,55 @@ class ScreenSmokeTest {
         profile.musicOn = true
     }
 
+    /** With a watch paired, which drops the "add your age" clause once the details are set too. */
+    @Test
+    fun `the menu builds with a watch paired`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val profile = Profile(context)
+        profile.heartRateDevice = HeartRateDevice("AA:BB:CC:DD:EE:FF", "Test Strap")
+        smoke<MenuActivity>(MenuActivity.intent(context, workoutLive = false))
+        profile.heartRateDevice = null
+    }
+
+    /**
+     * Both branches of the heart-rate sheet, reached the same way an athlete would: tapping the
+     * row. Robolectric reports no BLE feature, so the paired branch's source reports UNSUPPORTED
+     * rather than actually connecting to anything — this only has to show that neither branch
+     * throws.
+     */
+    @Test
+    fun `the heart-rate sheet builds with and without a watch`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val profile = Profile(context)
+        profile.heartRateDevice = null
+
+        var activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        var row = findByDescriptionPrefix(
+            activity.findViewById<android.view.View>(android.R.id.content), "Heart rate"
+        )
+        assertTrue("no Heart rate row", row != null)
+        row!!.performClick()
+        var dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        dialog!!.dismiss()
+
+        profile.heartRateDevice = HeartRateDevice("AA:BB:CC:DD:EE:FF", "Test Strap")
+        activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        row = findByDescriptionPrefix(
+            activity.findViewById<android.view.View>(android.R.id.content), "Heart rate"
+        )
+        assertTrue("no Heart rate row", row != null)
+        row!!.performClick()
+        dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        dialog!!.dismiss()
+        profile.heartRateDevice = null
+    }
+
     /** The other branch of the reminder row's subtitle: on, and (in the test) able to post. */
     @Test
     fun `the menu builds with the reminder on`() {
