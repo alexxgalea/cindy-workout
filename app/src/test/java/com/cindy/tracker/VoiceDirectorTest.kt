@@ -27,15 +27,7 @@ class VoiceDirectorTest {
     private var clock = 0L
     private val director = VoiceDirector(engine, device = { EngineFixtures.britain }, now = { clock })
 
-    /** Google's voices, Spanish and English working, Russian offered but not fetched. */
-    private fun googlePhone() {
-        engine.listed = EngineFixtures.google
-        engine.answers["en-US"] = AVAILABLE
-        engine.answers["es-ES"] = AVAILABLE
-        engine.answers["ru-RU"] = MISSING_DATA
-        engine.defaults["en-US"] = "en-us-x-tpd-local"
-        engine.defaults["es-ES"] = "es-es-x-eea-local"
-    }
+    private fun googlePhone() = engine.likeGoogle()
 
     private fun saidFor(line: VoiceLine): String {
         director.speak(line, SpeakQueue.APPEND, 1f)

@@ -73,4 +73,17 @@ class FakeTtsEngine : TtsEngine {
     fun becomeReady(success: Boolean = true) {
         listener?.onReady(success)
     }
+
+    /**
+     * A phone with Google's voices: English and Spanish work, Russian is offered but its data
+     * has to be fetched, Polish is only spoken over the network, Portuguese not at all.
+     */
+    fun likeGoogle() {
+        listed = EngineFixtures.google
+        answers["en-US"] = LanguageAvailability.AVAILABLE
+        answers["es-ES"] = LanguageAvailability.AVAILABLE
+        answers["ru-RU"] = LanguageAvailability.MISSING_DATA
+        defaults["en-US"] = "en-us-x-tpd-local"
+        defaults["es-ES"] = "es-es-x-eea-local"
+    }
 }
