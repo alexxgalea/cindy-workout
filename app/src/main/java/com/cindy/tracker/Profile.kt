@@ -102,6 +102,20 @@ class Profile(context: Context) {
             prefs.edit().putFloat(KEY_VOICE_VOLUME, value.coerceIn(0f, 1f)).apply()
         }
 
+    /**
+     * The language the voice speaks, as a [VoicePacks] tag: `en` until the athlete picks another.
+     *
+     * Stored as the bare tag and read back through [VoicePacks.of], so a value for a language
+     * this version does not have — a preference from a newer build, restored from a backup — is
+     * English rather than an error. Choosing a language the phone has no voice for is allowed:
+     * the speaker then counts in English and says so, and switches over when the voice arrives.
+     */
+    var voiceLanguage: String
+        get() = VoicePacks.of(prefs.getString(KEY_VOICE_LANGUAGE, null)).tag
+        set(value) {
+            prefs.edit().putString(KEY_VOICE_LANGUAGE, VoicePacks.of(value).tag).apply()
+        }
+
     /** How loud the track is, 0..1, before the voice ducks it. */
     var musicVolume: Float
         get() = prefs.getFloat(KEY_MUSIC_VOLUME, DEFAULT_MUSIC_VOLUME).coerceIn(0f, 1f)
@@ -206,6 +220,7 @@ class Profile(context: Context) {
         /** The key the HUD chip used, so an athlete who had turned the voice off keeps it off. */
         private const val KEY_VOICE_ON = "voice_on"
         private const val KEY_VOICE_VOLUME = "voice_volume"
+        private const val KEY_VOICE_LANGUAGE = "voice_language"
         private const val KEY_MUSIC_VOLUME = "music_volume"
         private const val KEY_REMINDER_ON = "reminder_on"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"

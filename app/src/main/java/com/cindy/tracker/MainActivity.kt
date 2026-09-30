@@ -16,6 +16,7 @@ import android.util.Size
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.content.res.ColorStateList
@@ -62,6 +63,13 @@ class MainActivity : AppCompatActivity() {
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
+
+        /**
+         * The count between tapping REC and filming. Long enough to put the phone down and turn
+         * round; passed to the countdown explicitly so the number the voice announces is the
+         * number the ring counts.
+         */
+        const val RECORD_COUNTDOWN_SECONDS = 3
 
         /** What an unavailable control fades to: plainly off, still plainly there. */
         const val DIMMED = 0.3f
@@ -283,7 +291,7 @@ class MainActivity : AppCompatActivity() {
         binding.overlay.clear()
         if (state == State.RUNNING) {
             status.text = "Phone moved — checking framing"
-            speaker.queue("Phone moved. Check the framing.")
+            speaker.queue(VoiceLine.PhoneMoved)
         }
     }
     /** Set from the UI, acted on by the analysis thread, which owns the detector. */
@@ -923,11 +931,11 @@ class MainActivity : AppCompatActivity() {
             RepEvent.NONE -> Unit
             RepEvent.REP -> {
                 buzz(35)
-                speaker.say("${snap.eventReps}")
+                speaker.say(VoiceLine.Count(snap.eventReps))
             }
             RepEvent.UNDO -> {
                 buzz(20)
-                speaker.say("${snap.eventReps}")
+                speaker.say(VoiceLine.Count(snap.eventReps))
             }
             RepEvent.EXERCISE_DONE -> {
                 if (inWorkout()) {
@@ -937,8 +945,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 buzz(90)
                 // The count the movement reached, which a skip makes different from its target.
-                speaker.say("${snap.eventReps}")
-                speaker.queue(snap.exercise.spoken)
+                speaker.say(VoiceLine.Count(snap.eventReps))
+                speaker.queue(VoiceLine.Movement(snap.exercise))
             }
             RepEvent.ROUND_DONE -> {
                 if (inWorkout()) {
@@ -950,8 +958,8 @@ class MainActivity : AppCompatActivity() {
                 val split = elapsedMs - roundStartedAtElapsed
                 roundSplits += split
                 roundStartedAtElapsed = elapsedMs
-                speaker.say("${snap.eventReps}")
-                speaker.queue("Round ${snap.rounds} in ${spokenDuration(split)}")
+                speaker.say(VoiceLine.Count(snap.eventReps))
+                speaker.queue(VoiceLine.RoundDone(snap.rounds, split))
                 toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
         }
@@ -992,7 +1000,15 @@ class MainActivity : AppCompatActivity() {
         reps.spoken("Setting up")
         statusDot(neutral)
         status.text = "Get in frame"
-        speaker.say("Get in frame, then do two slow pull ups")
+        // A voice fetched since the screen last resumed is picked up here, before the first
+        // thing is said. If the athlete's language still is not on the phone they are told why
+        // the count is in English, rather than left to wonder whether the setting took. Only
+        // if the voice is on: with it off there is nothing to hear in any language.
+        speaker.refresh()
+        if (speaker.enabled && speaker.fallingBack) {
+            toast("The ${speaker.wanted.englishName} voice isn't on this phone yet. Counting in English.")
+        }
+        speaker.say(VoiceLine.SetUp)
     }
 
     private fun applySetup(setup: Setup) {
@@ -1047,7 +1063,7 @@ class MainActivity : AppCompatActivity() {
         statusDot(neutral)
         status.text = "Counting…"
         if (profile.musicOn) music.play()
-        speaker.say(if (calibrated) "Calibrated. Go." else "Go. Pull ups")
+        speaker.say(VoiceLine.Go(calibrated))
         apply(runEngine { RepEvent.NONE })
         ui.post(ticker)
     }
@@ -1075,7 +1091,7 @@ class MainActivity : AppCompatActivity() {
                 detector?.resetRoi()
                 status.text = "Recalibrating…"
                 if (profile.musicOn) music.play()
-                speaker.say("Resume")
+                speaker.say(VoiceLine.Resume)
                 ui.post(ticker)
             }
             State.RUNNING -> {
@@ -1294,28 +1310,16 @@ class MainActivity : AppCompatActivity() {
         statusDot(neutral)
         status.text = "${attempt.scoreLabel()} · ${attempt.caption}"
 
-        speaker.say(if (stoppedEarly) "Stopped." else "Time.")
+        speaker.say(VoiceLine.Finished(early = stoppedEarly))
         // The reps of the round in progress are zero the moment a round completes, so reading
         // the score off that field told an athlete who had just finished one that they had done
-        // none. Said with the same tally the results screen headlines, by the same coach that
-        // has been calling the score out all workout.
-        speaker.queue(coach.score(snap.rounds, snap.totalReps))
-        attempt.avgRoundMs?.let { speaker.queue("Averaging ${spokenDuration(it)} a round") }
-        if (beat) speaker.queue("You beat ${Records.BENCHMARK_NAME}")
+        // none. Said with the same tally the results screen headlines, as the coach has been
+        // calling the score out all workout.
+        speaker.queue(VoiceLine.Score(snap.rounds, snap.totalReps))
+        attempt.avgRoundMs?.let { speaker.queue(VoiceLine.Averaging(it)) }
+        if (beat) speaker.queue(VoiceLine.BeatBenchmark(Records.BENCHMARK_NAME))
 
         startActivity(ResultsActivity.intent(this, attempt, stoppedEarly))
-    }
-
-    /** "one minute twenty" — TTS makes a mess of "1:20". */
-    private fun spokenDuration(ms: Long): String {
-        val total = ms / 1000L
-        val m = total / 60
-        val sec = total % 60
-        return when {
-            m == 0L -> "$sec seconds"
-            sec == 0L -> "$m minute${if (m == 1L) "" else "s"}"
-            else -> "$m minute${if (m == 1L) "" else "s"} $sec"
-        }
     }
 
     /**
@@ -1349,6 +1353,9 @@ class MainActivity : AppCompatActivity() {
     private fun syncVoice() {
         speaker.enabled = profile.voiceOn
         speaker.volume = profile.voiceVolume
+        // The language too: it is chosen in the menu, and coming back from the menu is when it
+        // can have changed. Asking for the one already spoken costs the engine nothing.
+        speaker.language = profile.voiceLanguage
         if (!speaker.enabled) speaker.stop()
     }
 
@@ -1384,7 +1391,8 @@ class MainActivity : AppCompatActivity() {
     private fun renderClock() {
         val total = (remainingMs + 999L) / 1000L
         clock.text = String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
-        clock.spoken("${spokenDuration(remainingMs)} remaining")
+        // Screen-reader text is English like the rest of the screen; only the voice has languages.
+        clock.spoken("${PhrasebookEn.duration(remainingMs)} remaining")
     }
 
     private fun renderChips() {
@@ -1475,7 +1483,10 @@ class MainActivity : AppCompatActivity() {
             toast("Recording is not available on this camera")
             return
         }
-        binding.countdown.start { beginRecording() }
+        binding.countdown.start(RECORD_COUNTDOWN_SECONDS) { beginRecording() }
+        // Said as well as shown: the countdown is there so the athlete can walk to the bar,
+        // which is turning away from the only screen that says filming is about to begin.
+        announceRecording(VoiceLine.RecordingSoon(RECORD_COUNTDOWN_SECONDS))
         renderChips()
     }
 
@@ -1483,11 +1494,36 @@ class MainActivity : AppCompatActivity() {
     private fun beginRecording() {
         val started = video.start { name ->
             renderChips()
-            toast(if (name != null) "Saved $name to Movies/Cindy" else "Recording failed")
+            if (name != null) {
+                toast("Saved $name to Movies/Cindy")
+            } else {
+                // Reported later than the start, and to someone facing the bar rather than the
+                // screen, so the toast alone would leave them believing they are being filmed.
+                toast("Recording failed")
+                announceRecording(VoiceLine.RecordingFailed)
+            }
         }
-        if (!started) toast("Could not start recording")
+        if (started) {
+            announceRecording(VoiceLine.RecordingStarted)
+        } else {
+            toast("Could not start recording")
+            announceRecording(VoiceLine.RecordingFailed)
+        }
         buzz(40L)
         renderChips()
+    }
+
+    /**
+     * Says a REC line, unless a screen reader is running.
+     *
+     * TalkBack already announces the countdown ([CountdownView] does it, because the digits are
+     * drawn on a canvas) and reads out the toasts, and the same sentence from two voices at once
+     * is worse than either of them alone.
+     */
+    private fun announceRecording(line: VoiceLine) {
+        val screenReader = getSystemService(ACCESSIBILITY_SERVICE) as? AccessibilityManager
+        if (screenReader?.isTouchExplorationEnabled == true) return
+        speaker.queue(line)
     }
 
     /**
