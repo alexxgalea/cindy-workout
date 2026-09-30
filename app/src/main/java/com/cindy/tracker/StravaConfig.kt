@@ -31,7 +31,7 @@ object StravaConfig {
     /**
      * A reverse-DNS scheme (RFC 8252) with host `localhost`, which Strava whitelists as an
      * Authorization Callback Domain without our own web server to receive it. Handled by
-     * `StravaAuthActivity` (S2).
+     * `StravaAuthActivity`.
      */
     const val REDIRECT_URI = "com.cindy.tracker://localhost/strava"
 

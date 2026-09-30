@@ -37,7 +37,7 @@ data class HttpResponse(
  *
  * [execute] throws [IOException] on a network failure (no connection, timeout, reset, …). An
  * HTTP error status is not a failure at this level — it comes back as an ordinary [HttpResponse]
- * with `code >= 400`, for the caller to classify (see `StravaApi.UploadOutcome` in S3).
+ * with `code >= 400`, for the caller to classify (see `StravaApi`'s `UploadOutcome`).
  */
 fun interface HttpTransport {
     fun execute(request: HttpRequest): HttpResponse
@@ -164,7 +164,7 @@ class StravaAuthException(
 ) : Exception(message)
 
 /**
- * The seam between OAuth (S2 implements this) and every API call (S3 only consumes it). [get]
+ * The seam between OAuth, which implements this, and every API call, which only consumes it. [get]
  * returns a currently-valid bearer token, refreshing first when it was close to expiry, and
  * throws [StravaAuthException] when there is nothing to hand back.
  */
