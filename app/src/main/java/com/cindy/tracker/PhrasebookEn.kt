@@ -36,13 +36,11 @@ object PhrasebookEn : Phrasebook {
 
     /** "one minute twenty" — TTS makes a mess of "1:20". */
     fun duration(ms: Long): String {
-        val total = ms / 1000L
-        val m = total / 60
-        val sec = total % 60
+        val (m, sec) = minutesAndSeconds(ms)
         return when {
-            m == 0L -> "$sec seconds"
-            sec == 0L -> "$m minute${if (m == 1L) "" else "s"}"
-            else -> "$m minute${if (m == 1L) "" else "s"} $sec"
+            m == 0 -> "$sec seconds"
+            sec == 0 -> "$m minute${if (m == 1) "" else "s"}"
+            else -> "$m minute${if (m == 1) "" else "s"} $sec"
         }
     }
 
