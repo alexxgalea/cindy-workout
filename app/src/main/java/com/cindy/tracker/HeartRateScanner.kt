@@ -46,8 +46,14 @@ object HeartRateAdvert {
 
     /**
      * The list the sheet shows: devices already connected to the phone first — that is almost
-     * always the athlete's own watch — then everything heard advertising, strongest first. A
-     * connected device that was also heard advertising is listed once, keeping its signal.
+     * always the athlete's own watch — then everything heard advertising, in the order it was
+     * first heard. A connected device that was also heard advertising is listed once, keeping
+     * its signal.
+     *
+     * Not sorted by signal. A watch broadcasting heart rate advertises many times a second and
+     * its signal jitters by several dBm between packets, so two devices at a similar distance
+     * would trade places under the athlete's finger, and a tap could land on the wrong one. The
+     * signal is still on every row; the order just holds still.
      */
     fun merge(connected: List<FoundDevice>, advertising: Collection<FoundDevice>): List<FoundDevice> {
         val heard = advertising.associateBy { it.address }
@@ -55,10 +61,37 @@ object HeartRateAdvert {
             heard[c.address]?.let { c.copy(rssi = it.rssi) } ?: c
         }
         val linkedAddresses = linked.map { it.address }.toSet()
-        return linked + advertising
-            .filter { it.address !in linkedAddresses }
-            .sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+        return linked + advertising.filter { it.address !in linkedAddresses }
     }
+
+    /** What a row is called until something names the device. */
+    const val UNNAMED = "Heart-rate sensor"
+
+    /**
+     * The row for one more advertisement from [address], given the row it had before.
+     *
+     * A name, once heard, is kept. A device can name itself in one packet and not the next — the
+     * name often rides only in the scan response — and a row that flipped between its name and
+     * [UNNAMED] would be rebuilt on every other packet, which is exactly what [sameRows] exists
+     * to prevent.
+     */
+    fun heard(previous: FoundDevice?, address: String, name: String?, rssi: Int): FoundDevice =
+        FoundDevice(address, name ?: previous?.name ?: UNNAMED, rssi)
+
+    /**
+     * Whether [next] lists the same devices as [shown], under the same names and in the same
+     * order, so that the rows on screen can be relabelled where they stand rather than rebuilt.
+     *
+     * Rebuilding is what made the list untappable: Android cancels a tap when the view under the
+     * finger is removed, and a rebuild on every advertisement removes it several times a second.
+     * Only a signal changes between most updates, and a signal is a label.
+     */
+    fun sameRows(shown: List<FoundDevice>, next: List<FoundDevice>): Boolean =
+        shown.size == next.size && shown.indices.all { i ->
+            shown[i].address == next[i].address &&
+                shown[i].name == next[i].name &&
+                shown[i].connected == next[i].connected
+        }
 }
 
 /**
@@ -66,8 +99,8 @@ object HeartRateAdvert {
  *
  * Kept apart from [BleHeartRateSource], which does its own short scan to chase a watch that
  * changed address — that one runs unattended in the background, while this one exists to be
- * watched: the menu shows every device as it turns up, sorted by signal, so the athlete can tell
- * their own watch from a stranger's chest strap in the next room.
+ * watched: the menu shows every device as it turns up, each with how strong it comes in, so the
+ * athlete can tell their own watch from a stranger's chest strap in the next room.
  *
  * Two things make a Garmin easy to miss with a plain filtered scan, and this search covers both:
  *
@@ -103,10 +136,12 @@ class HeartRateScanner(private val context: Context) {
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 if (!result.advertisesHeartRate()) return
-                val found = result.toFoundDevice()
+                val address = result.device.address
+                val name = result.advertisedName()
+                val rssi = result.rssi
                 handler.post {
                     if (callback !== this) return@post
-                    seen[found.address] = found
+                    seen[address] = HeartRateAdvert.heard(seen[address], address, name, rssi)
                     onFound(HeartRateAdvert.merge(connected, seen.values))
                 }
             }
@@ -176,18 +211,15 @@ class HeartRateScanner(private val context: Context) {
         return HeartRateAdvert.matches(record.serviceUuids?.map { it.uuid }, makerIds)
     }
 
-    /** Name resolution falls back twice: the advertised name, then the bonded name, then this. */
+    /** The advertised name, else the bonded name, else null — see [HeartRateAdvert.heard]. */
     @SuppressLint("MissingPermission")
-    private fun ScanResult.toFoundDevice(): FoundDevice {
-        val name = scanRecord?.deviceName
+    private fun ScanResult.advertisedName(): String? =
+        scanRecord?.deviceName
             ?: try {
                 device.name
             } catch (e: SecurityException) {
                 null
             }
-            ?: "Heart-rate sensor"
-        return FoundDevice(device.address, name, rssi)
-    }
 
     private companion object {
         const val SCAN_WINDOW_MS = 12_000L

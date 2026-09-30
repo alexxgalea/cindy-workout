@@ -18,6 +18,7 @@ import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -688,12 +689,19 @@ class MenuActivity : AppCompatActivity() {
 
     /**
      * A 12-second scan for nearby heart-rate broadcasters. The device list is an [InsetGroup]
-     * rebuilt in place as matches arrive, so the sheet itself never flickers mid-scan; only the
+     * updated in place as matches arrive, so the sheet itself never flickers mid-scan; only the
      * one-off transition to "SCAN AGAIN" once the window ends rebuilds the sheet, for the primary
-     * button's label.
+     * button's label. Within the group, a row is relabelled where it stands when only its signal
+     * changes, and the rows are rebuilt only when a device joins the list, so a row can be tapped
+     * while the devices around it keep advertising.
      */
     private fun openScanSheet() {
         var devices = listOf<FoundDevice>()
+        // What the rows on screen were built from, and the rows themselves. An update that only
+        // changes a signal relabels them where they stand (see HeartRateAdvert.sameRows); only a
+        // new device, or a name heard for the first time, rebuilds the list.
+        var shown = listOf<FoundDevice>()
+        var rows = listOf<View>()
         // True only while a dismiss is this function's own doing (a rebuild, or a device just
         // picked) — the scanner has already been dealt with by then, so the dismiss listener
         // below must not also stop it, or (worse) stop the *next* scan it just started.
@@ -702,7 +710,16 @@ class MenuActivity : AppCompatActivity() {
         lateinit var group: InsetGroup
 
         fun renderDevices() {
+            if (rows.isNotEmpty() && HeartRateAdvert.sameRows(shown, devices)) {
+                devices.forEachIndexed { i, found ->
+                    rows[i].relabelNavRow(found.name, foundDeviceLabel(found))
+                }
+                shown = devices
+                return
+            }
             group.removeAllViews()
+            shown = devices
+            rows = emptyList()
             if (devices.isEmpty()) {
                 group.row(
                     styledText(
@@ -715,14 +732,14 @@ class MenuActivity : AppCompatActivity() {
                         }
                 )
             } else {
-                devices.forEach { found ->
-                    group.row(navRow(found.name, foundDeviceLabel(found)) {
+                rows = devices.map { found ->
+                    navRow(found.name, foundDeviceLabel(found)) {
                         rebuilding = true
                         scanner?.stop()
                         scanner = null
                         dialog.dismiss()
                         adoptHeartRateDevice(found)
-                    })
+                    }.also { group.row(it) }
                 }
             }
         }
@@ -731,6 +748,7 @@ class MenuActivity : AppCompatActivity() {
             val sheet = CindySheet(this, title = "Looking for heart-rate devices")
             group = insetGroup { }
             sheet.add(group)
+            rows = emptyList() // A new group has none of the old rows in it.
             renderDevices()
             val withActions = if (windowOpen) {
                 sheet.actions(primary = "CANCEL", onPrimary = {})

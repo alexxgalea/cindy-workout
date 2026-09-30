@@ -160,9 +160,13 @@ private fun Context.rowText(title: CharSequence, detail: CharSequence?, titleSty
         detail?.let {
             addView(styledText(R.style.Cindy_Footnote, it).apply {
                 setPadding(0, dp(2), 0, 0)
+                tag = ROW_DETAIL
             })
         }
     }
+
+/** Marks the value line [rowText] builds, so [relabelNavRow] can find it again. */
+private const val ROW_DETAIL = "cindy.row.detail"
 
 private fun Context.rowFrame(tappable: Boolean, minHeight: Int = 64): LinearLayout =
     LinearLayout(this).apply {
@@ -193,6 +197,20 @@ fun Context.navRow(title: String, value: String, onTap: () -> Unit): View =
         setOnClickListener { onTap() }
         describeAsButton("$title, $value")
     }
+
+/**
+ * Changes what a [navRow] says under its title, where it stands.
+ *
+ * For a row whose value changes while it is on screen. Replacing the row instead would cancel a
+ * tap that is under way on it: Android sends the finger's press a cancel when the view beneath
+ * it is removed, so a list rebuilt several times a second cannot be tapped at all.
+ */
+fun View.relabelNavRow(title: String, value: String) {
+    val detail = findViewWithTag<TextView>(ROW_DETAIL) ?: return
+    if (detail.text.toString() == value) return
+    detail.text = value
+    contentDescription = "$title, $value"
+}
 
 /** A label and its figure. Tappable rows get a chevron and say so. */
 fun Context.statRow(

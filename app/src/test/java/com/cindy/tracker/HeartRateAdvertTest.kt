@@ -28,11 +28,47 @@ class HeartRateAdvertTest {
     }
 
     @Test
-    fun `connected devices come first, then the rest strongest first`() {
+    fun `connected devices come first, then the rest in the order first heard`() {
         val watch = FoundDevice("AA", "fenix 7X", rssi = null, connected = true)
         val strap = FoundDevice("BB", "HRM-Pro", rssi = -80)
         val near = FoundDevice("CC", "Polar H10", rssi = -50)
-        assertEquals(listOf(watch, near, strap), HeartRateAdvert.merge(listOf(watch), listOf(strap, near)))
+        assertEquals(listOf(watch, strap, near), HeartRateAdvert.merge(listOf(watch), listOf(strap, near)))
+    }
+
+    @Test
+    fun `a stronger packet does not move a device up the list`() {
+        val first = FoundDevice("BB", "HRM-Pro", rssi = -80)
+        val second = FoundDevice("CC", "Polar H10", rssi = -70)
+        val before = HeartRateAdvert.merge(emptyList(), listOf(first, second))
+        val after = HeartRateAdvert.merge(emptyList(), listOf(first.copy(rssi = -85), second.copy(rssi = -40)))
+        assertEquals(before.map { it.address }, after.map { it.address })
+    }
+
+    @Test
+    fun `a name once heard is kept when a later packet has none`() {
+        val named = HeartRateAdvert.heard(null, "AA", "fenix 7X", -60)
+        val next = HeartRateAdvert.heard(named, "AA", null, -62)
+        assertEquals(FoundDevice("AA", "fenix 7X", -62), next)
+    }
+
+    @Test
+    fun `an unnamed device is called a heart-rate sensor until it names itself`() {
+        val unnamed = HeartRateAdvert.heard(null, "AA", null, -60)
+        assertEquals(HeartRateAdvert.UNNAMED, unnamed.name)
+        assertEquals("fenix 7X", HeartRateAdvert.heard(unnamed, "AA", "fenix 7X", -60).name)
+    }
+
+    @Test
+    fun `a signal change keeps the rows, anything else rebuilds them`() {
+        val watch = FoundDevice("AA", "fenix 7X", rssi = -60)
+        val strap = FoundDevice("BB", "HRM-Pro", rssi = -80)
+        val shown = listOf(watch, strap)
+        assertTrue(HeartRateAdvert.sameRows(shown, listOf(watch.copy(rssi = -90), strap.copy(rssi = -40))))
+        assertTrue(HeartRateAdvert.sameRows(emptyList(), emptyList()))
+        assertFalse(HeartRateAdvert.sameRows(shown, listOf(watch)))
+        assertFalse(HeartRateAdvert.sameRows(shown, listOf(strap, watch)))
+        assertFalse(HeartRateAdvert.sameRows(shown, listOf(watch.copy(name = "fenix"), strap)))
+        assertFalse(HeartRateAdvert.sameRows(shown, listOf(watch.copy(connected = true), strap)))
     }
 
     @Test
