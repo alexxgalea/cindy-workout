@@ -174,6 +174,27 @@ class SmartSquatTest {
         assertFalse(e.heelsFlatSpotted)
     }
 
+    /**
+     * The trade this mode makes, pinned so that changing it is a decision.
+     *
+     * A knee angle cannot tell a tired squat from a heels-flat one that travels the same, so
+     * anything that closes the knee 35 degrees or more counts as one, and three of them after a
+     * set of deep squats switch the session. That is the permissive choice the feature is built
+     * on, and the reason it is a setting that is off until real sessions show it is right.
+     */
+    @Test
+    fun `tired squats that stop short of full depth are taken for heels flat ones`() {
+        val e = smart(175f)
+        e.reps(175f, each(5, 80f))
+        assertFalse(e.heelsFlatSpotted)
+
+        e.reps(175f, each(3, 130f))
+
+        assertTrue(e.heelsFlatSpotted)
+        assertEquals(8, e.reps)
+        assertEquals(SquatVariant.HEELS_FLAT, e.countedProfile.squat)
+    }
+
     @Test
     fun `it stays out of a choice the athlete already made`() {
         val flat = smart(175f, CindyProfile(squat = SquatVariant.HEELS_FLAT))
@@ -230,6 +251,20 @@ class SmartSquatTest {
 
         e.reps(175f, each(2, 125f))
         assertTrue("and three counted since the takeback switch it as usual", e.heelsFlatSpotted)
+    }
+
+    @Test
+    fun `recalibrating keeps what was pending, because those reps happened`() {
+        val e = smart(175f)
+        e.reps(175f, each(2, 125f))
+
+        // A pause and a resume, a flipped camera and a knocked phone all do this.
+        e.recalibrate()
+        e.hold(PoseFixtures.squat(175f), frames = 12)
+        e.rep(175f, 125f)
+
+        assertTrue(e.heelsFlatSpotted)
+        assertEquals("the two before the pause are credited with the one after", 3, e.reps)
     }
 
     @Test

@@ -345,12 +345,13 @@ class SmartSquatCounter:
     def reset_band(self) -> None:
         self._air.reset_band()
         self._heels_flat.reset_band()
-        self._clear_pending()
+        # The ascent in flight goes with the band. What was already pending does not.
+        self._clear_ascent()
 
     def require_fresh_down(self) -> None:
         self._air.require_fresh_down()
         self._heels_flat.require_fresh_down()
-        self._clear_pending()
+        self._clear_ascent()
 
     def reset_count(self) -> None:
         """Pending reps belong to one block of squats; the switch, once made, to the session."""
@@ -366,5 +367,8 @@ class SmartSquatCounter:
 
     def _clear_pending(self) -> None:
         self._pending = 0
+        self._clear_ascent()
+
+    def _clear_ascent(self) -> None:
         self._air_this_ascent = False
         self._flat_only_this_ascent = False

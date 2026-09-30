@@ -123,11 +123,13 @@ What it cannot do, stated plainly:
   is a quarter squat, never counts.
 - 35 is the one number to retune on a phone. At 33 a good squat from the floor counts at 110
   degrees, and so does a quarter squat from chest height.
-- A switch from deep squats to heels-flat ones in the middle of a block is not spotted: the
-  learned band refuses the shallower reps as half reps, which is the rule that stops lazy ones
-  counting. Choosing Heels flat before the clock starts covers it.
+- A tired athlete looks the same. Squats that stop short of full depth but still travel 35 degrees
+  or more are heels-flat squats as far as the counter can tell, so with Spot heels-flat squats on,
+  three of them after a set of deep ones switch the session to Adaptive Cindy, and it is filed
+  that way. That is the permissive choice, and the reason the setting is off by default: it is
+  what real sessions have to show is right.
 - A `+1` tapped before the switch clears what was pending, which can leave the reps before it
-  uncredited. It can never credit one twice.
+  uncredited. It can never credit one twice. Pausing and resuming does not clear it.
 
 ### Two bugs this replaced
 

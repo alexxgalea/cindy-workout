@@ -163,7 +163,9 @@ class MenuActivity : AppCompatActivity() {
                 } else {
                     chooseMovements(movements, profile) { chosen ->
                         profile.movements = chosen
-                        toast(chosen.label())
+                        // The subtitle rather than the label, so that turning the squat setting
+                        // on or off is confirmed too: the label alone would repeat what it was.
+                        toast(movementsSubtitle(chosen))
                         render()
                     }
                 }

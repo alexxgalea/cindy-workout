@@ -113,6 +113,10 @@ class WorkoutEngine(
      * its own mind about a movement has to be wanted before it is trusted. Public so the screen
      * can tell whether the engine it holds was built for the setting as it stands now, and fixed
      * for the life of the engine like [profile], for the same reason.
+     *
+     * It acts on the frames of a workout and nowhere else. The app never runs the setup check on
+     * squats, because it calibrates on the pull-up, and it is not meant to: a switch made before
+     * the clock starts would carry into the workout with nobody told.
      */
     val smartSquats: Boolean = false
 ) {

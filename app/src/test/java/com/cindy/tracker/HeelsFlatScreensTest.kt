@@ -16,6 +16,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
+import org.robolectric.shadows.ShadowToast
 
 /**
  * The screens behind heels-flat squats: the setting that lets a session switch itself, and the
@@ -116,6 +117,20 @@ class HeelsFlatScreensTest {
 
         assertTrue(Profile(context).smartSquats)
         assertEquals("Movements, Cindy · spots heels flat", movementsRow(activity))
+        reset()
+    }
+
+    @Test
+    fun `saving says what was saved, even when only the setting changed`() {
+        reset()
+        val (_, dialog) = openMovementsSheet()
+        val root = dialog.window!!.decorView
+
+        findByDescriptionPrefix(root, "Spot heels-flat squats")!!.performClick()
+        findByText(root, "SAVE")!!.performClick()
+
+        // The movements did not change, so their name alone would be a toast about nothing.
+        assertEquals("Cindy · spots heels flat", ShadowToast.getTextOfLatestToast())
         reset()
     }
 

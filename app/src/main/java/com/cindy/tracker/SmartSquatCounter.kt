@@ -35,7 +35,9 @@ import kotlin.math.min
  *
  * Reps tapped in by hand are the athlete's own word for the count, not something either counter
  * saw, so a tap clears what is pending. That can leave the reps before the tap uncredited; it can
- * never credit one twice.
+ * never credit one twice. Recalibrating does not: a pause and a resume, a flipped camera or a
+ * knocked phone forget the band, but the reps already pending really happened, and the count
+ * they are credited to is the one the counters kept.
  */
 class SmartSquatCounter(
     private val air: RepCounter,
@@ -125,13 +127,14 @@ class SmartSquatCounter(
     override fun resetBand() {
         air.resetBand()
         heelsFlat.resetBand()
-        clearPending()
+        // The ascent in flight goes with the band. What was already pending does not.
+        clearAscent()
     }
 
     override fun requireFreshDown() {
         air.requireFreshDown()
         heelsFlat.requireFreshDown()
-        clearPending()
+        clearAscent()
     }
 
     /** Pending reps belong to one block of squats; the switch, once made, belongs to the session. */
@@ -150,6 +153,10 @@ class SmartSquatCounter(
 
     private fun clearPending() {
         pending = 0
+        clearAscent()
+    }
+
+    private fun clearAscent() {
         airThisAscent = false
         flatOnlyThisAscent = false
     }
