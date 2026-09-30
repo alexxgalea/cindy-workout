@@ -64,6 +64,16 @@ class TutorialScreenTest {
         return null
     }
 
+    private fun findByDescriptionPrefix(root: View, prefix: String): View? {
+        if (root.contentDescription?.toString()?.startsWith(prefix) == true) return root
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescriptionPrefix(root.getChildAt(i), prefix)?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun texts(root: View): List<String> = buildList {
         if (root is TextView) add(root.text.toString())
         if (root is ViewGroup) for (i in 0 until root.childCount) addAll(texts(root.getChildAt(i)))
@@ -392,6 +402,44 @@ class TutorialScreenTest {
         assertTrue(started.flags and Intent.FLAG_ACTIVITY_SINGLE_TOP != 0)
         assertTrue(activity.isFinishing)
         assertTrue(FirstRun(context).hudTourPending)
+    }
+
+    // ── Help ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `Help offers the tour first, and opens the pages as a replay`() {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+
+        val row = findByDescriptionPrefix(content(help), "Take the tour")
+        assertNotNull("Help has no way to take the tour again", row)
+        row!!.performClick()
+
+        val started = shadowOf(help).nextStartedActivity
+        assertEquals(TutorialActivity::class.java.name, started.component?.className)
+        assertTrue("it is not a replay", started.getBooleanExtra("replay", false))
+        help.finish()
+    }
+
+    @Test
+    fun `the tour row comes before the first heading`() {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+        val all = texts(content(help))
+        assertTrue(all.indexOf("Take the tour") in 0 until all.indexOf("THE WORKOUT"))
+        help.finish()
+    }
+
+    @Test
+    fun `Help still builds and lays out with the row in it`() {
+        val controller = Robolectric.buildActivity(HelpActivity::class.java)
+        val activity = controller.setup().get()
+        val root = content(activity)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY)
+        )
+        root.layout(0, 0, 1080, 2400)
+        assertTrue(root.width > 0 && root.height > 0)
+        controller.destroy()
     }
 
     // ── the pieces ────────────────────────────────────────────────────────────
