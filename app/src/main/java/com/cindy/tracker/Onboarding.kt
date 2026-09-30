@@ -10,7 +10,7 @@ package com.cindy.tracker
  * athlete after an update would be the first thing this app ever did to them that was not about
  * their workout.
  *
- * Free of Android types so that the rule can be tested. The flags themselves live in the same
+ * Free of Android types so that the rule can be tested. [FirstRun] holds the flags, in the same
  * preferences as every other setting.
  */
 object Onboarding {

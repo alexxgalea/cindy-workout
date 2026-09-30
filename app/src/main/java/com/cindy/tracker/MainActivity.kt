@@ -401,6 +401,15 @@ class MainActivity : AppCompatActivity() {
         else status.text = "Camera permission is required to count reps"
     }
 
+    /**
+     * The first-launch pages. However they end, finished or skipped, the camera comes next: its
+     * permission is only asked for once they are done, so the athlete has been told what the app
+     * is and that the picture stays on the phone before being asked to hand it the camera.
+     */
+    private val tutorial = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { ensureCamera() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, so the launch window is in place for the whole of the cold start rather
         // than after it. It paints the same black this activity opens onto, so the handover to
@@ -524,6 +533,22 @@ class MainActivity : AppCompatActivity() {
         renderChips()
         renderControls()
 
+        val firstRun = FirstRun(this)
+        if (firstRun.shouldShowTutorial(hasHistory = records.all().isNotEmpty())) {
+            // Asked first, so that the launch arcs, which honour only the first caller, play out
+            // and hand over to the first page. The streaming and timeout calls above then find
+            // them already leaving and do nothing.
+            binding.launch.dismiss { tutorial.launch(TutorialActivity.intent(this, replay = false)) }
+        } else {
+            // Someone who has already used the app is never shown the pages, and is marked as
+            // having seen them so that clearing their records later does not make them look new.
+            if (!firstRun.tutorialSeen) firstRun.tutorialSeen = true
+            ensureCamera()
+        }
+    }
+
+    /** Opens the camera, asking for its permission first if the athlete has not yet given it. */
+    private fun ensureCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) startCamera() else requestCamera.launch(Manifest.permission.CAMERA)
@@ -1634,32 +1659,7 @@ class MainActivity : AppCompatActivity() {
             )
         })
 
-        // Three facts, one line each, rather than a paragraph nobody reads on the way to a bar.
-        listOf(
-            R.drawable.ic_phone_stand to "Stand the phone up rather than laying it flat.",
-            R.drawable.ic_frame to "Keep your head and your feet both in shot.",
-            R.drawable.ic_dont_move to
-                "Then leave it there — moving it mid-workout resets what it has learned."
-        ).forEachIndexed { index, (icon, text) ->
-            sheet.add(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, if (index == 0) dp(18) else dp(13), 0, 0)
-                addView(ImageView(context).apply {
-                    setImageResource(icon)
-                    imageTintList = ColorStateList.valueOf(
-                        getColor(
-                            if (icon == R.drawable.ic_dont_move) R.color.state_caution
-                            else R.color.label_tertiary
-                        )
-                    )
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { topMargin = dp(2) })
-                addView(styledText(R.style.Cindy_Callout, text).apply {
-                    setTextColor(getColor(R.color.label_body))
-                    setPadding(dp(11), 0, 0, 0)
-                })
-            })
-        }
+        sheet.add(placementFacts())
 
         var dontAskAgain = false
         sheet.toggle("Don't show this again", checked = false) { dontAskAgain = it }
