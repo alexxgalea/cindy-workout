@@ -661,8 +661,8 @@ class MenuActivity : AppCompatActivity() {
     /**
      * Pure, so [StravaScreenTest] can check every subtitle without building the activity.
      *
-     * `available` is [stravaAvailable] rather than [StravaConfig.available] directly — see that
-     * property for why the two are not always the same thing in a test.
+     * `available` is passed in rather than read here, so a test can drive every state through
+     * [StravaConfig.availableForTest].
      */
     private fun stravaSubtitle(available: Boolean, grant: StravaGrant?): String = when {
         !available -> "Not available in this build"
