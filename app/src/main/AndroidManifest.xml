@@ -29,9 +29,13 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
+    <!-- Fine, not coarse: the platform's rule below is about a live location fix Cindy never
+         asks for either way, and declaring the coarse permission too would be one more thing to
+         explain having asked for and not read. -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
+        android:maxSdkVersion="30"
+        tools:ignore="CoarseFineLocation" />
 
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
     <!-- Not required: a phone with no BLE radio still counts reps, it just never hears a watch. -->
