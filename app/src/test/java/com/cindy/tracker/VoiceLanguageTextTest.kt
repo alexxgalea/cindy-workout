@@ -38,7 +38,7 @@ class VoiceLanguageTextTest {
         assertEquals("Downloading…", VoiceLanguageText.caption(PackState.DOWNLOADING, 0L, 0L))
         assertEquals("Downloading…", VoiceLanguageText.caption(PackState.DOWNLOADING, 2 * minute - 1, 0L))
         assertEquals(
-            "Still waiting. The voice engine may need Wi-Fi.",
+            "Still waiting. The voice engine may need Wi-Fi. Tap to retry.",
             VoiceLanguageText.caption(PackState.DOWNLOADING, 2 * minute, 0L)
         )
     }
@@ -55,6 +55,40 @@ class VoiceLanguageTextTest {
         }
         // Unknown is choosable: the engine being slow should not make the list unusable.
         assertTrue(VoiceLanguageText.selectable(null))
+    }
+
+    @Test
+    fun `choosing a language asks for its voice when there is none, or a request has gone stale`() {
+        assertTrue(VoiceLanguageText.asksForDownload(PackState.DOWNLOADABLE, null))
+        // Fresh, it is left to finish: asking again would only restart the clock.
+        assertFalse(VoiceLanguageText.asksForDownload(PackState.DOWNLOADING, 0L))
+        assertFalse(VoiceLanguageText.asksForDownload(PackState.DOWNLOADING, 2 * minute - 1))
+        // Stale, asking again is the only way out.
+        assertTrue(VoiceLanguageText.asksForDownload(PackState.DOWNLOADING, 2 * minute))
+    }
+
+    @Test
+    fun `choosing a language that needs no voice asks for none`() {
+        assertFalse(VoiceLanguageText.asksForDownload(PackState.READY, null))
+        assertFalse(VoiceLanguageText.asksForDownload(PackState.ONLINE_ONLY, null))
+        assertFalse(VoiceLanguageText.asksForDownload(PackState.UNSUPPORTED, null))
+        // Nobody knows yet; the choice is settled once somebody does.
+        assertFalse(VoiceLanguageText.asksForDownload(null, null))
+    }
+
+    @Test
+    fun `the stale wait is the same one the caption reports`() {
+        // The row that says "Tap to retry" is the row that retries, and no other.
+        PackState.entries.forEach { state ->
+            listOf(0L, 2 * minute - 1, 2 * minute, 10 * minute).forEach { waited ->
+                val offersRetry = "Tap to retry" in VoiceLanguageText.caption(state, waited, 0L)
+                assertEquals(
+                    "$state after $waited ms",
+                    offersRetry,
+                    state == PackState.DOWNLOADING && VoiceLanguageText.asksForDownload(state, waited)
+                )
+            }
+        }
     }
 
     @Test

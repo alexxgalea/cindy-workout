@@ -33,8 +33,8 @@ object VoiceLanguageText {
         null -> if (waitedMs >= NO_ANSWER_AFTER_MS) NOT_ANSWERING else "Checking…"
         PackState.READY -> "Ready"
         PackState.DOWNLOADING ->
-            if ((downloadingMs ?: 0L) >= STUCK_AFTER_MS) {
-                "Still waiting. The voice engine may need Wi-Fi."
+            if (stuck(downloadingMs)) {
+                "Still waiting. The voice engine may need Wi-Fi. Tap to retry."
             } else {
                 "Downloading…"
             }
@@ -42,6 +42,20 @@ object VoiceLanguageText {
         PackState.ONLINE_ONLY -> "Online voice only. Counting stays in English."
         PackState.UNSUPPORTED -> NOT_OFFERED
     }
+
+    private fun stuck(downloadingMs: Long?): Boolean = (downloadingMs ?: 0L) >= STUCK_AFTER_MS
+
+    /**
+     * Whether choosing the row should ask the engine for its voice.
+     *
+     * A language that is not on the phone, of course. And one whose request has gone unanswered
+     * for [STUCK_AFTER_MS] too: the engine never says that a request was dropped, or cancelled in
+     * its own screen, so asking again is the only way out of a row that would otherwise say
+     * "downloading" until the sheet is closed. A request still fresh is left alone, since asking
+     * again would only restart its clock.
+     */
+    fun asksForDownload(state: PackState?, downloadingMs: Long?): Boolean =
+        state == PackState.DOWNLOADABLE || (state == PackState.DOWNLOADING && stuck(downloadingMs))
 
     /**
      * Whether the row can be chosen.

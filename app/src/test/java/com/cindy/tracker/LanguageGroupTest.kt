@@ -159,6 +159,30 @@ class LanguageGroupTest {
     }
 
     @Test
+    fun `a download that has gone unanswered for two minutes is asked for again by a tap`() {
+        engine.likeGoogle()
+        var clock = 0L
+        val group = group(now = { clock }).opened()
+        val asks = { engine.calls.count { it == "setVoice:ru-ru-x-ruc-local" } }
+
+        row(group, "Русский").performClick()
+        assertEquals(1, asks())
+
+        // Fresh, a tap leaves it to finish: asking again would only restart its clock.
+        row(group, "Русский").performClick()
+        assertEquals(1, asks())
+
+        clock += VoiceLanguageText.STUCK_AFTER_MS
+        idleFor(3)
+        assertTrue(said(group, "Русский"), "Tap to retry" in said(group, "Русский"))
+
+        row(group, "Русский").performClick()
+        assertEquals(2, asks())
+        assertTrue(said(group, "Русский"), "Downloading" in said(group, "Русский"))
+        group.stop()
+    }
+
+    @Test
     fun `an engine with no voice to set sends the athlete to its own screen`() {
         engine.listed = emptyList()
         engine.answers["ru-RU"] = LanguageAvailability.MISSING_DATA

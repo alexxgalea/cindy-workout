@@ -148,14 +148,16 @@ class LanguageGroup(
         // The volume check and the sample are spoken in whatever is ticked, as far as the phone can.
         speaker.language = pack.tag
         render()
-        if (state == PackState.DOWNLOADABLE) download(pack)
+        if (VoiceLanguageText.asksForDownload(state, speaker.downloadingFor(pack.tag))) download(pack)
     }
 
     private fun download(pack: VoicePack) {
         when (speaker.download(pack)) {
             DownloadRequest.ASKED -> {
                 toast("Downloading the ${pack.englishName} voice")
-                poll()
+                // The engine will not say so for a while, and the row need not wait for it to.
+                states = states?.plus(pack.tag to PackState.DOWNLOADING)
+                render()
             }
             DownloadRequest.USE_ENGINE_SCREEN -> {
                 toast("Opening the voice engine to fetch ${pack.englishName}")
