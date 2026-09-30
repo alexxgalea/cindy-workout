@@ -102,6 +102,12 @@ class StravaAuthTest {
     }
 
     @Test
+    fun `a bad percent-escape is malformed rather than throwing`() {
+        val result = StravaAuth.parseRedirect("$redirect?state=%zz&code=abc123", "xyz")
+        assertEquals(RedirectResult.Malformed, result)
+    }
+
+    @Test
     fun `an unparseable uri is malformed rather than throwing`() {
         val result = StravaAuth.parseRedirect("not a uri at all ??", "xyz")
         assertEquals(RedirectResult.Malformed, result)
