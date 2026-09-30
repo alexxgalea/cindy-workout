@@ -54,9 +54,13 @@ object StravaUploads {
      * Unique work, [ExistingWorkPolicy.KEEP]: a second call for an attempt already queued or
      * running changes nothing, but one whose previous run already finished — successfully or
      * not — gets a fresh attempt, which is how a tapped retry actually retries.
+     *
+     * An upload id already on file is carried over. It means Strava accepted the file on an
+     * earlier run, and the next run has to poll that id rather than send the file again.
      */
     fun enqueue(context: Context, atMillis: Long) {
-        write(context, atMillis, StravaUploadStatus(StravaUploadState.QUEUED))
+        val acceptedAs = status(context, atMillis)?.uploadId
+        write(context, atMillis, StravaUploadStatus(StravaUploadState.QUEUED, uploadId = acceptedAs))
         val request = OneTimeWorkRequestBuilder<StravaUploadWorker>()
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
@@ -110,9 +114,15 @@ object StravaUploads {
         edit.apply()
     }
 
-    /** Written by [StravaUploadWorker] as it learns more; also used by [enqueue] above. */
+    /**
+     * Written by [StravaUploadWorker] as it learns more; also used by [enqueue] above.
+     *
+     * `commit()`, not `apply()`: an upload id has to be on disk before the worker goes on to
+     * poll it, or a process death in between leaves the next run no way to know the file was
+     * already accepted.
+     */
     internal fun write(context: Context, atMillis: Long, status: StravaUploadStatus) {
-        prefs(context).edit().putString(key(atMillis), encode(status)).apply()
+        prefs(context).edit().putString(key(atMillis), encode(status)).commit()
     }
 
     private fun prefs(context: Context) =

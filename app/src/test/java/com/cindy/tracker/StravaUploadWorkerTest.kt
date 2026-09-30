@@ -192,6 +192,20 @@ class StravaUploadWorkerTest {
         assertEquals(77L, status?.activityId)
     }
 
+    @Test
+    fun `queuing again while Strava is still processing keeps the upload id, so nothing is resent`() {
+        connect()
+        saveValidAttempt()
+        StravaUploads.write(context(), atMillis, StravaUploadStatus(StravaUploadState.PROCESSING, uploadId = "555"))
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context())
+
+        StravaUploads.enqueue(context(), atMillis)
+
+        val status = StravaUploads.status(context(), atMillis)
+        assertEquals(StravaUploadState.QUEUED, status?.state)
+        assertEquals("555", status?.uploadId)
+    }
+
     // ---- outcomes other than a clean Ready ---------------------------------------------------
 
     @Test
