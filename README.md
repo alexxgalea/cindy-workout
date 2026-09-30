@@ -422,6 +422,61 @@ Attempts persist in `SharedPreferences`, one line each, versioned so older recor
 The current format (v7) also records each set's time; v1-v6 lines still load, without sets. A
 zero-rep attempt — the app left running with nobody in front of it — is not logged.
 
+### You, and your badges
+
+**There is no account.** Nothing is signed in to and nothing is sent anywhere. The card at the top
+of the menu (your name, or "You") opens a screen of your own: a name, a photo, and the badges your
+sessions have earned.
+
+- **Name.** Kept with the other settings and tidied on the way in: trimmed, one space between
+  words, at most 30 characters. The menu and the leaderboard use it, and until there is one the
+  app says "You". It is not part of anything sent to Strava. Saving the field empty takes it back.
+- **Photo.** Picked with the system photo picker, which needs no permission. The app keeps a copy
+  rather than a pointer into the gallery, so deleting the original does not lose it: turned
+  upright from its EXIF orientation, cut to its centred square and reduced to 320 px, as
+  `avatar.jpg` in the app's own files, which is tens of kilobytes. With no photo the circle shows
+  your initials, and with no name a neutral figure. It is monochrome on purpose, because the
+  palette keeps colour for what you earned.
+- **Backup.** The name and the photo ride the same Android backup as the records and the other
+  settings, to your own Google Drive and onto a new phone, because the backup rules already carry
+  the app's preferences and files. The app itself uploads neither.
+- **Clearing records** removes the records, and so the badges, and leaves the name and photo.
+
+**Badges** are worked out from the recorded sessions each time they are asked for, and nothing is
+stored for them. They cannot disagree with the record board, they come back with the records from
+a backup, and they go when the records are cleared. Each is stamped with the session that first
+earned it, found by replaying the sessions oldest first, so a later and better session never takes
+an earlier one's date.
+
+There are 26, in six families:
+
+| Family | Badges | Earned by |
+|---|---|---|
+| Sessions | First Cindy; 10, 25, 50, 100 sessions | sessions finished, of any kind |
+| Rounds | First round; Novice, Intermediate, Advanced, Elite, Legend; Past Tom Holland | rounds in one standard Cindy. The rungs are read from the level table, and Past Tom Holland is beating the benchmark, more than 810 reps |
+| Streaks | 3, 7, 14, 30 days in a row; 4, 12, 26 weeks in a row | a run of local days or of weeks, as under Streaks above |
+| Volume | 1,000, 5,000, 10,000 reps | reps across every session |
+| Pace | Round under 2 minutes; under 45 seconds | the fastest round of a standard Cindy, the two marks Help quotes |
+| Craft | Every rep seen; Made it yours | a full 20-minute session with no rep tapped in; any Adaptive Cindy |
+
+The record board's honesty rules apply. A badge for a **score**, the rounds and the pace, is only
+earned by a standard Cindy the camera could stand behind. An adaptive session is a different
+prescription rather than a lower score, and a session the camera could not see for half a minute
+or more is a lower bound, which never claims a record. A session whose movements this version
+cannot read earns none of those, and is not counted as an adaptation either, because what it was
+is unknown. **Every rep seen** likewise needs a session recorded by a version that counted reps:
+an older record shows no taps and no blind time because they were never written down, not
+because there were none. The badges for **showing up**, the sessions, streaks and volume, count every session,
+since a session of any kind is still a session.
+
+A locked badge says how far along it is, and a tile opens a sheet with what it asks for and when
+it was won. The results screen names up to three badges the session just earned, hardest first,
+and counts the rest. The rules are in [Badges.kt](app/src/main/java/com/cindy/tracker/Badges.kt),
+the arithmetic behind the name and the photo in
+[Avatar.kt](app/src/main/java/com/cindy/tracker/Avatar.kt), the photo's storage in
+[AvatarStore.kt](app/src/main/java/com/cindy/tracker/AvatarStore.kt), and the screen is
+[AccountActivity.kt](app/src/main/java/com/cindy/tracker/AccountActivity.kt).
+
 ### Strava
 
 Menu → Strava connects a Strava account, opening Strava's own consent page (in the Strava app
@@ -481,6 +536,10 @@ The JVM suite covers the logic below. **JDK 17 is required** for Android Gradle 
 ([PoseFixtures](app/src/test/java/com/cindy/tracker/PoseFixtures.kt)) — full rounds, partial
 reps that must not count, and cross-talk between movements — and the record board is covered
 for ranking, round-tripping and corrupt-data tolerance.
+
+Every badge rule is tested on both sides of its boundary, and so are the honesty rules that keep
+a lower-bound, adaptive or unreadable session from earning a score badge. The name, the initials
+and the photo's cropping, sampling and orientation are pure and tested the same way.
 
 The voice is tested up to the speech engine: every line in every language (plural forms at the
 awkward numbers, written-out ones and twos, each clock mark), the choice of voice against lists

@@ -213,6 +213,23 @@ class Profile(context: Context) {
             edit.apply()
         }
 
+    /**
+     * What the athlete wants to be called, or null when they have not said.
+     *
+     * Null is meaningful: the app goes on saying "You", as it did before it had a name to use.
+     * Tidied on the way in and again on the way out (see [Avatar.cleanName]), so that a value a
+     * backup restored from some other build still shows the same way on every screen. It is a
+     * label for this phone's screens and is not part of anything the app sends to Strava.
+     */
+    var displayName: String?
+        get() = Avatar.cleanName(prefs.getString(KEY_DISPLAY_NAME, null))
+        set(value) {
+            val clean = Avatar.cleanName(value)
+            val edit = prefs.edit()
+            if (clean == null) edit.remove(KEY_DISPLAY_NAME) else edit.putString(KEY_DISPLAY_NAME, clean)
+            edit.apply()
+        }
+
     /** The athlete's age in [nowYear], or null when [birthYear] has never been said. */
     fun age(nowYear: Int = Calendar.getInstance().get(Calendar.YEAR)): Int? =
         if (birthYear == 0) null else nowYear - birthYear
@@ -245,6 +262,7 @@ class Profile(context: Context) {
         private const val KEY_SEX = "sex"
         private const val KEY_HR_ADDRESS = "hr_device_address"
         private const val KEY_HR_NAME = "hr_device_name"
+        private const val KEY_DISPLAY_NAME = "display_name"
 
         /**
          * The voice starts at full and the music below it.

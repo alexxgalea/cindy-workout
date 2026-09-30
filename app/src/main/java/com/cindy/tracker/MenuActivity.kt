@@ -111,19 +111,26 @@ class MenuActivity : AppCompatActivity() {
      * Only on the way in, deliberately. [render] runs again after every sheet is dismissed, and
      * a list that re-deals itself each time you change a volume would be a screen that cannot
      * keep still.
+     *
+     * Every card is dealt, on one running count. The profile card above the settings is the
+     * first thing on the screen, and the list carries on from it rather than starting again.
      */
     private fun settleRowsIn() {
-        val group = binding.rows.getChildAt(0) as? InsetGroup ?: return
-        for (i in 0 until group.childCount) {
-            val row = group.getChildAt(i)
-            row.alpha = 0f
-            row.translationY = dp(14).toFloat()
-            row.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay(i * ROW_STAGGER_MS)
-                .setDuration(240L)
-                .start()
+        var dealt = 0
+        for (g in 0 until binding.rows.childCount) {
+            val group = binding.rows.getChildAt(g) as? InsetGroup ?: continue
+            for (i in 0 until group.childCount) {
+                val row = group.getChildAt(i)
+                row.alpha = 0f
+                row.translationY = dp(14).toFloat()
+                row.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(dealt * ROW_STAGGER_MS)
+                    .setDuration(240L)
+                    .start()
+                dealt++
+            }
         }
     }
 
@@ -155,6 +162,27 @@ class MenuActivity : AppCompatActivity() {
         )
         val stravaTokens = StravaTokenStore(this)
         val stravaGrant = stravaTokens.grant
+
+        // The athlete comes first: who the scores belong to, and what they have earned so far.
+        val name = profile.displayName
+        val photo = AvatarStore.load(this)
+        val earned = Badges.earned(
+            all, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        )
+        binding.rows.addView(insetGroup {
+            row(avatarRow(
+                photo = photo,
+                name = name,
+                title = name ?: "You",
+                value = Badges.headline(earned) ?: if (name == null && photo == null) {
+                    "Add your name and photo"
+                } else {
+                    "Finish a session to earn your first badge"
+                }
+            ) { startActivity(Intent(this@MenuActivity, AccountActivity::class.java)) })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
 
         binding.rows.addView(insetGroup {
             row(navRow("Movements", movementsSubtitle(movements)) {
