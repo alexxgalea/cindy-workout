@@ -30,3 +30,11 @@ internal fun minutesAndSeconds(ms: Long): Pair<Int, Int> {
     val total = ms / 1000L
     return (total / 60).toInt() to (total % 60).toInt()
 }
+
+/**
+ * The same text with its first letter in capitals, for a counted phrase that opens a sentence.
+ *
+ * Written-out ones ("una ronda") are lower case where they fall mid-sentence and would otherwise
+ * open one that way. A voice ignores case, so this is for the people who read the lines.
+ */
+internal fun String.capitalised(): String = replaceFirstChar { it.titlecase() }
