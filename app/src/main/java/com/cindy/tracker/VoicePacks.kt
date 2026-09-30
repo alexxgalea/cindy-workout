@@ -28,6 +28,12 @@ data class VoicePack(
 
     /** The voice this pack asks the phone for first. */
     val defaultLocale: Locale get() = Locale.forLanguageTag("$tag-$defaultCountry")
+
+    /**
+     * The three-letter form of [tag], for the engines that report a voice's language that way.
+     * Worked out once, since every voice of every engine is compared against it.
+     */
+    val iso3: String = runCatching { Locale.forLanguageTag(tag).isO3Language }.getOrDefault("")
 }
 
 /**

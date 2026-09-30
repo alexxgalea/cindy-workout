@@ -31,13 +31,10 @@ data class EngineVoice(
     val latency: Int
 ) {
     /** Whether this voice speaks [pack]'s language, in whichever region. */
-    fun speaks(pack: VoicePack): Boolean = language == pack.tag || language == iso3(pack.tag)
+    fun speaks(pack: VoicePack): Boolean = language == pack.tag || language == pack.iso3
 
     /** Whether a workout can be counted with this voice for [pack]: its data is here and it is local. */
     fun countsFor(pack: VoicePack): Boolean = speaks(pack) && installed && !network
-
-    private fun iso3(tag: String): String =
-        runCatching { Locale.forLanguageTag(tag).isO3Language }.getOrDefault("")
 }
 
 /** What an engine says when asked, without changing anything, whether it can speak a locale. */
