@@ -44,6 +44,15 @@ class LanguageGroup(
     var chosen: String = VoicePacks.of(initial).tag
         private set
 
+    /**
+     * The last language chosen with the phone's answer about it in hand, or the one the sheet
+     * opened on: where an [unsettled] choice goes back to if the phone cannot speak it.
+     */
+    private var settled: String = chosen
+
+    /** The language tapped last, if that was before the engine had answered anything. */
+    private var unsettled: VoicePack? = null
+
     private inner class Row(val pack: VoicePack) {
         val caption: TextView = activity.styledText(R.style.Cindy_Footnote, "Checking…").apply {
             setPadding(0, activity.dp(2), 0, 0)
@@ -147,7 +156,31 @@ class LanguageGroup(
         chosen = pack.tag
         // The volume check and the sample are spoken in whatever is ticked, as far as the phone can.
         speaker.language = pack.tag
+        if (states == null) {
+            unsettled = pack
+        } else {
+            unsettled = null
+            settled = pack.tag
+        }
         render()
+        if (VoiceLanguageText.asksForDownload(state, speaker.downloadingFor(pack.tag))) download(pack)
+    }
+
+    /**
+     * Deals with a choice made before the engine answered, now that it has: as if the tap had
+     * come a moment later. Nothing to do for a language that is ready, or already on its way.
+     */
+    private fun settle() {
+        val pack = unsettled ?: return
+        unsettled = null
+        val state = states?.get(pack.tag)
+        if (!VoiceLanguageText.selectable(state)) {
+            chosen = settled
+            speaker.language = settled
+            toast(VoiceLanguageText.unsupportedNotice(pack))
+            return
+        }
+        settled = pack.tag
         if (VoiceLanguageText.asksForDownload(state, speaker.downloadingFor(pack.tag))) download(pack)
     }
 
@@ -210,7 +243,10 @@ class LanguageGroup(
         if (!running) return
         speaker.packStates { result ->
             states = result
-            if (running) render()
+            if (running) {
+                settle()
+                render()
+            }
         }
         // Quickly until the engine first answers, then at a pace a download can be watched at.
         handler.removeCallbacks(pollAgain)

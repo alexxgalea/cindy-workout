@@ -159,6 +159,64 @@ class LanguageGroupTest {
     }
 
     @Test
+    fun `a language tapped before the engine has answered asks for its voice when it does`() {
+        engine.likeGoogle()
+        val group = group()
+        group.start()
+
+        row(group, "Русский").performClick()
+        assertEquals("ru", group.chosen)
+        assertFalse(
+            "asked before anyone knew it needed asking",
+            engine.calls.any { it.startsWith("setVoice") }
+        )
+
+        engine.becomeReady()
+        idleFor(1)
+
+        assertTrue("setVoice:ru-ru-x-ruc-local" in engine.calls)
+        assertTrue(toasts.toString(), "Downloading the Russian voice" in toasts)
+        assertTrue(said(group, "Русский"), "Downloading" in said(group, "Русский"))
+        group.stop()
+    }
+
+    @Test
+    fun `a language tapped before the engine has answered is undone if the phone cannot speak it`() {
+        engine.likeGoogle()
+        val group = group()
+        group.start()
+
+        row(group, "Português").performClick()
+        assertEquals("pt", group.chosen)
+
+        engine.becomeReady()
+        idleFor(1)
+
+        assertEquals("en", group.chosen)
+        assertEquals("en", speaker.language)
+        assertTrue(said(group, "English"), said(group, "English").endsWith("selected"))
+        assertFalse(said(group, "Português"), said(group, "Português").endsWith("selected"))
+        assertTrue(toasts.toString(), toasts.single().contains("doesn't speak Portuguese"))
+        group.stop()
+    }
+
+    @Test
+    fun `a language that was fine to tap before the engine answered stays chosen`() {
+        engine.likeGoogle()
+        val group = group()
+        group.start()
+
+        row(group, "Español").performClick()
+        engine.becomeReady()
+        idleFor(1)
+
+        assertEquals("es", group.chosen)
+        assertEquals("es", speaker.language)
+        assertEquals("nothing needed saying", emptyList<String>(), toasts)
+        group.stop()
+    }
+
+    @Test
     fun `a download that has gone unanswered for two minutes is asked for again by a tap`() {
         engine.likeGoogle()
         var clock = 0L
