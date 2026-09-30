@@ -9,7 +9,7 @@ import org.junit.Test
 
 class StravaPayloadTest {
 
-    // ---- StravaExercises: the §2 mapping table -------------------------------------------
+    // ---- StravaExercises: every variant's exercise_type --------------------------------------
 
     @Test
     fun `every pull variant maps to the table's exercise type`() {

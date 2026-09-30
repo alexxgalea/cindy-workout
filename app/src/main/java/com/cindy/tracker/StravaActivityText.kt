@@ -20,10 +20,9 @@ enum class CalorieBasis { NONE, BODY_WEIGHT, HEART_RATE }
 object StravaActivityText {
 
     /**
-     * Mirrors `MainActivity.WORKOUT_MS`, which is private to that file and outside this phase's
-     * file set. [Records.BENCHMARK] already carries the same 20-minute literal for the same
-     * reason: the workout length is a fixed fact of Cindy, not a value worth wiring a shared
-     * constant through files this phase does not touch for.
+     * Mirrors `MainActivity.WORKOUT_MS`, which is private to that screen. [Records.BENCHMARK]
+     * already carries the same 20-minute literal for the same reason: the workout length is a
+     * fixed fact of Cindy, not a value worth widening an activity's companion to share.
      */
     private const val WORKOUT_MS = 20 * 60 * 1000L
 

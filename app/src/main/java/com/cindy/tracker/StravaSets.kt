@@ -22,8 +22,8 @@ object StravaSets {
      * *both* sides are banks, not a target and a bank: [Attempt.totalReps] is what the engine
      * actually counted from the first rep to the last, and the splits are every movement that
      * same count has already been paid out to. What is left over is exactly the movement still
-     * running when the clock stopped — never an inference, which is the line
-     * `reps-are-banked-not-inferred` exists to hold.
+     * running when the clock stopped — never an inference from rounds or targets, which is the
+     * line the rest of the app holds for every rep it reports.
      */
     fun from(a: Attempt): List<WorkoutSet>? {
         // Null means this attempt predates a counted total (pre-V5) and totalReps falls back to

@@ -71,7 +71,7 @@ data class HrPoint(val secondsFromStart: Int, val bpm: Int)
  * Turns a finished attempt, its banked sets and whatever else is known into the JSON body
  * Strava's `POST /uploads` wants for `data_type=json`.
  *
- * Pure, and composed lazily by the caller (S4) from the attempt record itself — [sets] is what
+ * Pure, and composed lazily by the upload worker from the attempt record itself — [sets] is what
  * [StravaSets.from] built from [Attempt.setSplits], not a live store this file owns — so nothing
  * here reaches for a clock, a file, or the network, and a process death between finishing and
  * uploading loses nothing: the same [Attempt] and [sets] rebuild the identical payload.
@@ -159,7 +159,7 @@ object StravaPayload {
  * Where the payload's clock starts: [Attempt.atMillis] is stamped at finish, so the start is
  * that far back, minus every millisecond — running and paused alike — the attempt actually took.
  *
- * S5 swaps in the heart-rate trace's own start when there is one, which begins recording a touch
- * before the first rep is seen.
+ * A heart-rate trace carries its own exact start, and the upload prefers that when there is one.
+ * The trace begins recording a touch before the first rep is seen.
  */
 fun startMillisOf(a: Attempt): Long = a.atMillis - a.realTimeMs
