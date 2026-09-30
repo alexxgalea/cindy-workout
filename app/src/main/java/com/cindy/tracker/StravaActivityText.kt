@@ -36,8 +36,13 @@ object StravaActivityText {
     /**
      * One fact per line, in the order the athlete would want to read them: the score, what was
      * actually done, the pace, the honesty caveats, and how the calorie figure was reached.
+     *
+     * [heartRateMs] only matters when [calorieBasis] is [CalorieBasis.HEART_RATE]: it is the
+     * workout-clock time a watch actually covered, out of [Attempt.durationMs]. Less than the
+     * full clock says so, rather than letting "estimated from heart rate" quietly claim more
+     * coverage than there was.
      */
-    fun description(a: Attempt, calorieBasis: CalorieBasis): String {
+    fun description(a: Attempt, calorieBasis: CalorieBasis, heartRateMs: Long? = null): String {
         val lines = mutableListOf<String>()
 
         val roundsPart =
@@ -72,7 +77,12 @@ object StravaActivityText {
                 "Calories estimated from body weight (≈ %.1f METs)",
                 Calories.met(a.totalReps, a.durationMs)
             )
-            CalorieBasis.HEART_RATE -> lines += "Calories estimated from heart rate"
+            CalorieBasis.HEART_RATE -> lines += if (heartRateMs != null && heartRateMs < a.durationMs) {
+                "Calories from heart rate for ${formatDuration(heartRateMs)} of " +
+                    "${formatDuration(a.durationMs)}, body weight for the rest"
+            } else {
+                "Calories estimated from heart rate"
+            }
         }
 
         lines += "Counted by Cindy Tracker"

@@ -35,7 +35,7 @@ object StravaComposer {
         return StravaComposition(
             payload = StravaPayload.build(a, sets, startMillis, utcOffsetSeconds, est?.kcal, heartRate),
             name = StravaActivityText.name(a),
-            description = StravaActivityText.description(a, basis)
+            description = StravaActivityText.description(a, basis, est?.heartRateMs)
         )
     }
 }
