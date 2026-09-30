@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -221,6 +222,31 @@ class StravaScreenTest {
         StravaTokenStore(context()).grant = testGrant()
         val activity = buildResults(stravaAttempt(103L))
         assertTrue(findText(activity.findViewById(android.R.id.content), "Upload") != null)
+        activity.finish()
+    }
+
+    private fun countText(root: android.view.View, text: String): Int {
+        var n = if (root is android.widget.TextView && root.text.toString() == text) 1 else 0
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) n += countText(root.getChildAt(i), text)
+        }
+        return n
+    }
+
+    @Test
+    fun `the results row follows a queued upload in place, as one row`() {
+        StravaConfig.availableForTest = true
+        StravaTokenStore(context()).grant = testGrant()
+        val atMillis = 110L
+        val activity = buildResults(stravaAttempt(atMillis))
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+
+        // The network constraint is never met under test, so the work stays queued.
+        StravaUploads.enqueue(context(), atMillis)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertTrue(findText(root, "Uploading…") != null)
+        assertEquals("one Strava row, replaced rather than added to", 1, countText(root, "Strava"))
         activity.finish()
     }
 

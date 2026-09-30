@@ -339,25 +339,37 @@ class ResultsActivity : AppCompatActivity() {
      */
     private fun strava(a: Attempt, group: InsetGroup) {
         if (!StravaConfig.available) return
-        val tokens = StravaTokenStore(this)
-
-        fun buildRow(): View {
-            val (value, onTap) = stravaRowContent(a, tokens)
-            return statRow("Strava", value, onTap)
-        }
-
-        var row = buildRow()
+        val row = stravaRowView(a)
+        stravaRow = row
         group.row(row)
-        val index = group.indexOfChild(row)
 
+        // Observed once for the life of the screen. [render] runs again whenever the body
+        // weight changes, and each run builds a fresh group; an observer per run would pile up,
+        // each one holding a group that is no longer on screen.
+        if (stravaObserved) return
+        stravaObserved = true
         WorkManager.getInstance(this)
             .getWorkInfosForUniqueWorkLiveData(StravaUploads.uniqueWorkName(a.atMillis))
-            .observe(this) {
-                val updated = buildRow()
-                group.removeViewAt(index)
-                group.addView(updated, index)
-                row = updated
-            }
+            .observe(this) { refreshStravaRow(a) }
+    }
+
+    /** The row currently on screen, so a state change replaces it rather than adding another. */
+    private var stravaRow: View? = null
+    private var stravaObserved = false
+
+    private fun stravaRowView(a: Attempt): View {
+        val (value, onTap) = stravaRowContent(a, StravaTokenStore(this))
+        return statRow("Strava", value, onTap)
+    }
+
+    private fun refreshStravaRow(a: Attempt) {
+        val old = stravaRow ?: return
+        val parent = old.parent as? ViewGroup ?: return
+        val index = parent.indexOfChild(old)
+        val updated = stravaRowView(a)
+        parent.removeViewAt(index)
+        parent.addView(updated, index, old.layoutParams)
+        stravaRow = updated
     }
 
     /** The Strava row's value and tap action, for whichever state applies right now. */
@@ -378,8 +390,13 @@ class ResultsActivity : AppCompatActivity() {
         }
     }
 
-    private fun openStravaActivity(activityId: Long) =
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaApi.activityUrl(activityId))))
+    private fun openStravaActivity(activityId: Long) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaApi.activityUrl(activityId))))
+        } catch (e: ActivityNotFoundException) {
+            toast("Opening the activity needs the Strava app or a web browser")
+        }
+    }
 
     /**
      * Starts OAuth for one particular attempt, rather than the menu's general connect.
