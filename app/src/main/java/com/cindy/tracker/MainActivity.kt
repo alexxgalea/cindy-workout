@@ -16,6 +16,7 @@ import android.util.Size
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.content.res.ColorStateList
@@ -1473,7 +1474,7 @@ class MainActivity : AppCompatActivity() {
         binding.countdown.start(RECORD_COUNTDOWN_SECONDS) { beginRecording() }
         // Said as well as shown: the countdown is there so the athlete can walk to the bar,
         // which is turning away from the only screen that says filming is about to begin.
-        speaker.queue(VoiceLine.RecordingSoon(RECORD_COUNTDOWN_SECONDS))
+        announceRecording(VoiceLine.RecordingSoon(RECORD_COUNTDOWN_SECONDS))
         renderChips()
     }
 
@@ -1481,16 +1482,36 @@ class MainActivity : AppCompatActivity() {
     private fun beginRecording() {
         val started = video.start { name ->
             renderChips()
-            toast(if (name != null) "Saved $name to Movies/Cindy" else "Recording failed")
+            if (name != null) {
+                toast("Saved $name to Movies/Cindy")
+            } else {
+                // Reported later than the start, and to someone facing the bar rather than the
+                // screen, so the toast alone would leave them believing they are being filmed.
+                toast("Recording failed")
+                announceRecording(VoiceLine.RecordingFailed)
+            }
         }
         if (started) {
-            speaker.queue(VoiceLine.RecordingStarted)
+            announceRecording(VoiceLine.RecordingStarted)
         } else {
             toast("Could not start recording")
-            speaker.queue(VoiceLine.RecordingFailed)
+            announceRecording(VoiceLine.RecordingFailed)
         }
         buzz(40L)
         renderChips()
+    }
+
+    /**
+     * Says a REC line, unless a screen reader is running.
+     *
+     * TalkBack already announces the countdown ([CountdownView] does it, because the digits are
+     * drawn on a canvas) and reads out the toasts, and the same sentence from two voices at once
+     * is worse than either of them alone.
+     */
+    private fun announceRecording(line: VoiceLine) {
+        val screenReader = getSystemService(ACCESSIBILITY_SERVICE) as? AccessibilityManager
+        if (screenReader?.isTouchExplorationEnabled == true) return
+        speaker.queue(line)
     }
 
     /**

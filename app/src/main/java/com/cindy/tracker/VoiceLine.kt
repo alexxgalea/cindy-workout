@@ -108,7 +108,12 @@ sealed interface VoiceLine {
     /** Filming has begun. */
     data object RecordingStarted : VoiceLine
 
-    /** Filming could not begin, so there will be no clip. */
+    /**
+     * Filming could not begin, or stopped without saving a clip.
+     *
+     * One line for both, worded so it is true of both: a failure reported minutes in is not one
+     * that "didn't start".
+     */
     data object RecordingFailed : VoiceLine
 }
 

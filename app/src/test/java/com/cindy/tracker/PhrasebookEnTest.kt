@@ -155,7 +155,7 @@ class PhrasebookEnTest {
         // Beside the rep counts a lone "3" would be taken for one.
         assertEquals("Recording in 3", say(VoiceLine.RecordingSoon(3)))
         assertEquals("Recording", say(VoiceLine.RecordingStarted))
-        assertEquals("Recording didn't start", say(VoiceLine.RecordingFailed))
+        assertEquals("Recording failed", say(VoiceLine.RecordingFailed))
     }
 
     @Test

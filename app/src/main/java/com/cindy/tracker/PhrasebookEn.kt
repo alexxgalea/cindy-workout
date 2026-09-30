@@ -31,7 +31,7 @@ object PhrasebookEn : Phrasebook {
         VoiceLine.VolumeCheck -> "Three"
         is VoiceLine.RecordingSoon -> "Recording in ${line.seconds}"
         VoiceLine.RecordingStarted -> "Recording"
-        VoiceLine.RecordingFailed -> "Recording didn't start"
+        VoiceLine.RecordingFailed -> "Recording failed"
     }
 
     /** "one minute twenty" — TTS makes a mess of "1:20". */
