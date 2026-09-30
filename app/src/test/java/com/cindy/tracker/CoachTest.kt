@@ -15,15 +15,15 @@ class CoachTest {
     private val coach = Coach()
     private var clock = 0L
 
-    /** Runs the coach for [ms] in the given state, collecting everything it says. */
-    private fun run(
+    /** Runs the coach for [ms] in the given state, collecting the lines it hands over. */
+    private fun lines(
         ms: Long,
         blocked: Boolean,
         hint: String = "",
         exercise: Exercise = Exercise.PULLUP,
         stepMs: Long = 100L
-    ): List<String> {
-        val said = mutableListOf<String>()
+    ): List<VoiceLine> {
+        val said = mutableListOf<VoiceLine>()
         val until = clock + ms
         while (clock < until) {
             coach.onFrame(exercise, blocked, hint, clock)?.let { said += it }
@@ -31,6 +31,15 @@ class CoachTest {
         }
         return said
     }
+
+    /** The same, in the English the assertions below are written in. */
+    private fun run(
+        ms: Long,
+        blocked: Boolean,
+        hint: String = "",
+        exercise: Exercise = Exercise.PULLUP,
+        stepMs: Long = 100L
+    ): List<String> = lines(ms, blocked, hint, exercise, stepMs).map { PhrasebookEn.say(it) }
 
     @Test
     fun `arriving at a movement in a good position is confirmed`() {
@@ -118,6 +127,17 @@ class CoachTest {
         assertEquals(
             "the four seconds start again after the break", emptyList<String>(),
             run(3_500, blocked = true, hint = "Get on the bar")
+        )
+    }
+
+    @Test
+    fun `the coach hands over the engine's hint as a line, not a sentence`() {
+        // The hint travels as the engine's own text so each phrasebook can translate it; the
+        // confirmation is its own line rather than the word "Ready".
+        assertEquals(
+            listOf(VoiceLine.Fault("Get on the bar"), VoiceLine.Ready),
+            lines(6_000, blocked = true, hint = "Get on the bar") +
+                lines(1_000, blocked = false)
         )
     }
 }
