@@ -68,7 +68,9 @@ class PhrasebookTrTest {
 
     @Test
     fun `a hint is translated and an unknown one falls back to something Turkish`() {
-        assertEquals("Barı tut", say(VoiceLine.Fault("Get on the bar")))
+        assertEquals("Çubuğu tut", say(VoiceLine.Fault("Get on the bar")))
+        // The bar is the çubuk; "barfiks" is the exercise, and hanging "on the pull-up" is not a thing.
+        assertEquals("Çubuğa asıl", say(VoiceLine.Fault("Hang from the bar")))
         assertEquals("Pozisyonunu kontrol et", say(VoiceLine.Fault("Something nobody catalogued")))
     }
 }
