@@ -43,6 +43,7 @@ object PhrasebookRo : Phrasebook {
         is VoiceLine.RecordingSoon -> recordingSoon(line.seconds)
         VoiceLine.RecordingStarted -> "Se înregistrează"
         VoiceLine.RecordingFailed -> "Înregistrarea a eșuat"
+        VoiceLine.AdaptiveHeelsFlat -> "Cindy adaptată activată pentru genuflexiuni cu călcâiele pe podea."
     }
 
     private fun hint(hint: Hint): String = when (hint) {

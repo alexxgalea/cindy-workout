@@ -157,13 +157,15 @@ class MenuActivity : AppCompatActivity() {
         val stravaGrant = stravaTokens.grant
 
         binding.rows.addView(insetGroup {
-            row(navRow("Movements", movements.label()) {
+            row(navRow("Movements", movementsSubtitle(movements)) {
                 if (workoutLive) {
                     toast("Reset the workout first to change movements")
                 } else {
-                    chooseMovements(movements) { chosen ->
+                    chooseMovements(movements, profile) { chosen ->
                         profile.movements = chosen
-                        toast(chosen.label())
+                        // The subtitle rather than the label, so that turning the squat setting
+                        // on or off is confirmed too: the label alone would repeat what it was.
+                        toast(movementsSubtitle(chosen))
                         render()
                     }
                 }
@@ -209,6 +211,20 @@ class MenuActivity : AppCompatActivity() {
             )
         }
     }
+
+    /**
+     * What the row says underneath "Movements": what was chosen, and whether the squats may
+     * switch themselves to heels flat.
+     *
+     * The second half is said only for the air squat, because that is the only choice the setting
+     * does anything to: said beside a box squat it would promise something that never happens.
+     */
+    private fun movementsSubtitle(movements: CindyProfile): String =
+        if (profile.smartSquats && movements.squat == SquatVariant.AIR_SQUAT) {
+            "${movements.label()} · spots heels flat"
+        } else {
+            movements.label()
+        }
 
     // ── voice ─────────────────────────────────────────────────────────────────
 

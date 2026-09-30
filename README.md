@@ -79,6 +79,58 @@ asked to find a body in a tall frame. Whether that trade is right depends on the
 long-pressing `FLIP` swaps between them at runtime and the debug readout shows the inference
 time for each.
 
+### Heels-flat squats
+
+A squat with the heels flat on the floor stops higher than one up on the toes: the heels hold the
+knees back, so the hips stop higher and the knee closes less. Both are correct squats and both
+count. Seen from a phone on the floor a good heels-flat squat closes the knee 35 to 40 degrees
+where the air squat asks for about 58, so none of it counted, and after a few deep squats even a
+phone at chest height refused the shallower ones that followed.
+
+**Heels flat** is a squat choice, under Menu → Movements. It is counted with two changes to the
+[RepCounter](app/src/main/java/com/cindy/tracker/RepCounter.kt): a floor of 35 degrees of travel per
+rep (`HEELS_FLAT_MIN_TRAVEL`), and a bottom zone of 60% of the learned travel instead of 30%, so a
+session that mixes both styles counts every rep. The floor is what still refuses quarter squats and
+partials. Measured through the real engine, the shallowest squat that still counts:
+
+| Standing reads | Air squat | Heels flat |
+|---|---|---|
+| 175° (phone at chest height) | 115° | 135° |
+| 165° | 105° | 125° |
+| 155° | 90° | 115° |
+| 145° (phone on the floor) | 80° | 105° |
+
+A session with it is filed as *Adaptive Cindy · heels-flat squats* and ranked against your other
+heels-flat sessions, like any other choice of movement.
+
+**Spot heels-flat squats** is an experiment, and it is off by default. Switched on in the same
+sheet, an air-squat session runs a heels-flat counter beside the air-squat one, on the same
+samples, and when it has accepted three reps in a block of squats that the air-squat counter
+refused, in a row or not, the session switches. Adaptive Cindy is activated, and the voice says
+so: "Adaptive Cindy activated for heels-flat squats". The three reps are credited, and the
+heels-flat counter counts every squat from then on, deep ones too. The session is filed as
+heels-flat squats, and the results screen says why and offers to make Heels flat the choice for
+every workout. It stays off until real sessions have shown it was the right call.
+
+The two counters' bookings are matched by ascent rather than by time, which credited a rep twice
+whenever they booked one a moment apart. A tapped `+1` drops what is pending, and the credit never
+passes the target of the squats, so nothing is counted twice.
+
+What it cannot do, stated plainly:
+
+- A knee angle cannot tell a heels-flat squat from a half squat of the same travel, so both count
+  as heels-flat squats. That is the permissive choice. Anything under 35 degrees of travel, which
+  is a quarter squat, never counts.
+- 35 is the one number to retune on a phone. At 33 a good squat from the floor counts at 110
+  degrees, and so does a quarter squat from chest height.
+- A tired athlete looks the same. Squats that stop short of full depth but still travel 35 degrees
+  or more are heels-flat squats as far as the counter can tell, so with Spot heels-flat squats on,
+  three of them after a set of deep ones switch the session to Adaptive Cindy, and it is filed
+  that way. That is the permissive choice, and the reason the setting is off by default: it is
+  what real sessions have to show is right.
+- A `+1` tapped before the switch clears what was pending, which can leave the reps before it
+  uncredited. It can never credit one twice. Pausing and resuming does not clear it.
+
 ### Two bugs this replaced
 
 Worth recording, because both undercounted silently rather than failing loudly:

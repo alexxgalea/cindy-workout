@@ -58,6 +58,8 @@ object StravaExercises {
     private fun squatType(variant: SquatVariant?): String = when (variant) {
         null -> "SQUAT_GENERIC"
         SquatVariant.AIR_SQUAT -> "AIR_SQUAT"
+        // No heels-flat type exists. The description names it.
+        SquatVariant.HEELS_FLAT -> "SQUAT_GENERIC"
         // BARBELL_BOX_SQUAT would claim a barbell nobody used. The description names it.
         SquatVariant.BOX_SQUAT -> "SQUAT_GENERIC"
         SquatVariant.SUPPORTED_SQUAT -> "SQUAT_GENERIC"

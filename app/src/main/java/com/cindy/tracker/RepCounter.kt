@@ -4,6 +4,39 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
+ * What [WorkoutEngine] asks of whatever counts a movement.
+ *
+ * [RepCounter] is the one that counts. The interface exists because one movement is counted by
+ * two of them at once: [SmartSquatCounter] holds an air-squat counter and a heels-flat counter
+ * side by side and answers as whichever is in charge. Public because [RepCounter] is, and a
+ * public class cannot implement an internal interface.
+ */
+interface RepCounting {
+    val phase: RepCounter.Phase
+    val count: Int
+    val smoothed: Float
+    val learnedRange: Float
+    val requiredRange: Float
+    val calibrated: Boolean
+
+    /**
+     * Feeds one sample, and says whether it completed a rep.
+     *
+     * The default lives here because an overriding function may not declare one, and callers
+     * holding a [RepCounter] still get it through this.
+     */
+    fun update(raw: Float, now: Long, mayCount: Boolean = true): Boolean
+
+    fun forceIncrement()
+    fun forceDecrement()
+    fun setCount(n: Int)
+    fun resetBand()
+    fun requireFreshDown()
+    fun reset()
+    fun resetCount()
+}
+
+/**
  * Counts oscillations of a scalar signal by measuring how far it climbs away from its trough.
  *
  * Callers must orient the signal so that the *bottom* of the movement is the low value and the
@@ -36,8 +69,27 @@ class RepCounter(
     private val upAbove: Float,
     private val minRepMs: Long = 350L,
     private val smoothing: Float = 0.4f,
-    private val minRange: Float = 0f
-) {
+    private val minRange: Float = 0f,
+    /**
+     * The share of the learned travel, measured up from the lowest value seen, that counts as the
+     * bottom of the movement: the zone a rep has to have visited to arm.
+     *
+     * Thirty percent for every movement but one. A squat done with the heels flat on the floor
+     * stops higher than one up on the toes, and both are correct, so a counter that learned its
+     * band from deep reps must still arm for the shallower kind. A wider zone is what lets it;
+     * [minTravel] is what stops it arming for a wobble.
+     */
+    private val bottomMargin: Float = MARGIN,
+    /**
+     * The least a rep must climb off its trough, in signal units, however wide the learned band.
+     *
+     * Zero for every movement but one, where the band's own share of travel is the whole rule. It
+     * is a floor under that share, and it exists because widening [bottomMargin] shrinks the
+     * share: at 60% the band asks for only a tenth of its travel, which on a wide band is a few
+     * degrees of jitter.
+     */
+    private val minTravel: Float = 0f
+) : RepCounting {
     enum class Phase { UNKNOWN, DOWN, UP }
 
     private companion object {
@@ -48,11 +100,11 @@ class RepCounter(
         const val DECAY = 0.05f
     }
 
-    var phase = Phase.UNKNOWN
+    override var phase = Phase.UNKNOWN
         private set
-    var count = 0
+    override var count = 0
         private set
-    var smoothed = Float.NaN
+    override var smoothed = Float.NaN
         private set
 
     private var seenLow = Float.NaN
@@ -71,11 +123,11 @@ class RepCounter(
     private var armed = true
 
     /** Travel observed so far. Zero until samples arrive. */
-    val learnedRange: Float
+    override val learnedRange: Float
         get() = if (seenLow.isNaN() || seenHigh.isNaN()) 0f else seenHigh - seenLow
 
     /** Travel the calibration step should see before it trusts the camera placement. */
-    val requiredRange: Float get() = minRange
+    override val requiredRange: Float get() = minRange
 
     /** Seeds the band from a calibration rep, so rep one is judged against a real range. */
     fun seedBand(low: Float, high: Float) {
@@ -85,7 +137,7 @@ class RepCounter(
     }
 
     /** True once the band is wide enough to set the thresholds itself. */
-    val calibrated: Boolean
+    override val calibrated: Boolean
         get() = minRange > 0f && learnedRange >= minRange
 
     /**
@@ -99,7 +151,7 @@ class RepCounter(
      *
      * @return true if this sample completed a rep.
      */
-    fun update(raw: Float, now: Long, mayCount: Boolean = true): Boolean {
+    override fun update(raw: Float, now: Long, mayCount: Boolean): Boolean {
         if (raw.isNaN()) return false
         smoothed = if (smoothed.isNaN()) raw else smoothed + smoothing * (raw - smoothed)
         val s = smoothed
@@ -111,9 +163,11 @@ class RepCounter(
         val useBand = calibrated
 
         // How far the signal must climb off its trough, and how close to the top it must finish.
-        val needed = if (useBand) (1f - 2f * MARGIN) * range else upAbove - downBelow
+        val needed =
+            if (useBand) max((1f - bottomMargin - MARGIN) * range, minTravel)
+            else upAbove - downBelow
         val topOfBand = if (useBand) seenHigh - MARGIN * range else upAbove
-        val bottomOfBand = if (useBand) seenLow + MARGIN * range else downBelow
+        val bottomOfBand = if (useBand) seenLow + bottomMargin * range else downBelow
 
         if (s <= bottomOfBand) {
             phase = Phase.DOWN
@@ -148,7 +202,7 @@ class RepCounter(
     }
 
     /** Books a rep without a signal crossing — used by the manual "+1" override. */
-    fun forceIncrement() {
+    override fun forceIncrement() {
         count++
         phase = Phase.UNKNOWN
         armed = false
@@ -156,7 +210,7 @@ class RepCounter(
     }
 
     /** Takes a rep back off the score — the "−1" override for a miscount. */
-    fun forceDecrement() {
+    override fun forceDecrement() {
         if (count == 0) return
         count--
         phase = Phase.UNKNOWN
@@ -165,7 +219,7 @@ class RepCounter(
     }
 
     /** Overwrites the score, for stepping back across a movement boundary. */
-    fun setCount(n: Int) {
+    override fun setCount(n: Int) {
         count = n.coerceAtLeast(0)
         phase = Phase.UNKNOWN
         armed = true
@@ -179,7 +233,7 @@ class RepCounter(
      * the phone or the athlete has moved — because a band learned from the old geometry will
      * quietly mis-score the new one.
      */
-    fun resetBand() {
+    override fun resetBand() {
         seenLow = Float.NaN
         seenHigh = Float.NaN
         trough = Float.NaN
@@ -194,13 +248,13 @@ class RepCounter(
      * Used when a pull-up loses bar contact or pose identity. The next valid low sample restores
      * the DOWN phase and arms the counter; a recovered top frame cannot finish the old cycle.
      */
-    fun requireFreshDown() {
+    override fun requireFreshDown() {
         phase = Phase.UNKNOWN
         trough = Float.NaN
         armed = false
     }
 
-    fun reset() {
+    override fun reset() {
         phase = Phase.UNKNOWN
         count = 0
         smoothed = Float.NaN
@@ -215,7 +269,7 @@ class RepCounter(
      * Drops the counted reps for the next movement but keeps the learned band — it describes this
      * athlete in front of this camera, which has not changed just because the round has.
      */
-    fun resetCount() {
+    override fun resetCount() {
         count = 0
         phase = Phase.UNKNOWN
         smoothed = Float.NaN

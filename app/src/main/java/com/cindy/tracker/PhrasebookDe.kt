@@ -41,6 +41,7 @@ object PhrasebookDe : Phrasebook {
         is VoiceLine.RecordingSoon -> "Aufnahme in ${secondsAfterIn(line.seconds)}"
         VoiceLine.RecordingStarted -> "Aufnahme läuft"
         VoiceLine.RecordingFailed -> "Aufnahme fehlgeschlagen"
+        VoiceLine.AdaptiveHeelsFlat -> "Angepasste Cindy aktiviert für Kniebeugen mit Fersen am Boden."
     }
 
     private fun hint(hint: Hint): String = when (hint) {

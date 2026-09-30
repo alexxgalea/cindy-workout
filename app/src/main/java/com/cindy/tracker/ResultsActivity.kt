@@ -30,6 +30,7 @@ class ResultsActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_ATTEMPT = "attempt"
         private const val EXTRA_STOPPED = "stopped"
+        private const val EXTRA_HEELS_FLAT = "heels_flat_spotted"
 
         /**
          * Carries the attempt in the record format, rather than a field per extra.
@@ -43,11 +44,21 @@ class ResultsActivity : AppCompatActivity() {
          *
          * One encoder, already versioned and already round-trip tested, is what stops the next
          * field being forgotten. It also makes the screen show exactly what was filed.
+         *
+         * [heelsFlatSpotted] is the one fact the record cannot carry: that its movements were not
+         * the ones the athlete chose but the ones smart squat counting switched to. The record
+         * says what the session was filed as; this lets the screen say why.
          */
-        fun intent(context: Context, a: Attempt, stoppedEarly: Boolean): Intent =
+        fun intent(
+            context: Context,
+            a: Attempt,
+            stoppedEarly: Boolean,
+            heelsFlatSpotted: Boolean = false
+        ): Intent =
             Intent(context, ResultsActivity::class.java).apply {
                 putExtra(EXTRA_ATTEMPT, Records.encode(listOf(a)))
                 putExtra(EXTRA_STOPPED, stoppedEarly)
+                putExtra(EXTRA_HEELS_FLAT, heelsFlatSpotted)
             }
     }
 
@@ -55,6 +66,7 @@ class ResultsActivity : AppCompatActivity() {
     private lateinit var profile: Profile
     private lateinit var attempt: Attempt
     private var stoppedEarly = false
+    private var heelsFlatSpotted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +81,7 @@ class ResultsActivity : AppCompatActivity() {
             return
         }
         stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
+        heelsFlatSpotted = intent.getBooleanExtra(EXTRA_HEELS_FLAT, false)
 
         binding.actions.addView(glassButton("PROGRESS").apply {
             setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
@@ -118,6 +131,9 @@ class ResultsActivity : AppCompatActivity() {
         a.fastestRoundMs?.let { stat("Fastest round", formatDuration(it)) }
         a.slowestRoundMs?.let { stat("Slowest round", formatDuration(it)) }
         stat("Total reps", "${a.totalReps}")
+        // Said beside the score it explains. The athlete did not choose this label, and a record
+        // that reads "Adaptive Cindy" with no word about why would look like a fault.
+        if (heelsFlatSpotted) stat("Squats", "Heels flat · Adaptive Cindy") { explainHeelsFlat() }
         val zone = ZoneId.systemDefault()
         val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
         val today = LocalDate.now()
@@ -352,6 +368,39 @@ class ResultsActivity : AppCompatActivity() {
             textSize = 11f
             setPadding(dp(18), 0, dp(18), dp(14))
         })
+    }
+
+    /**
+     * Why this session says Adaptive Cindy when the athlete chose the standard movements, and a
+     * way to make the change their own.
+     *
+     * The second half matters more than the first: smart squat counting is an experiment, and
+     * the honest thing to do with its first guess is to say what it guessed and let the athlete
+     * either keep it or not. The note names the one way it could have guessed wrong, which is a
+     * camera that cannot see the knees bend.
+     */
+    private fun explainHeelsFlat() {
+        CindySheet(
+            this,
+            title = "Adaptive Cindy activated",
+            subtitle = "Your squats were heels flat, so after three of them Cindy switched this " +
+                "session to Adaptive Cindy and counted every squat from then on, those three " +
+                "included. It is ranked with your other heels-flat sessions."
+        ).add(
+            sheetNote(
+                "If you were squatting to full depth, the camera may not be seeing your knees " +
+                    "bend — stand side-on to the phone, or raise it. SET HEELS FLAT makes it " +
+                    "your choice for every workout."
+            )
+        ).actions(
+            primary = "SET HEELS FLAT",
+            onPrimary = {
+                profile.movements = profile.movements.copy(squat = SquatVariant.HEELS_FLAT)
+                toast("Squats set to heels flat")
+            },
+            secondary = "NOT NOW",
+            onSecondary = {}
+        ).show()
     }
 
     /** Asks for body weight, and redraws whatever depended on it. Shared with [MenuActivity]. */
