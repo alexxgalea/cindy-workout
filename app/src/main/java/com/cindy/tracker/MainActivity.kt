@@ -63,6 +63,13 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "cindy"
         const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
+        /**
+         * The count between tapping REC and filming. Long enough to put the phone down and turn
+         * round; passed to the countdown explicitly so the number the voice announces is the
+         * number the ring counts.
+         */
+        const val RECORD_COUNTDOWN_SECONDS = 3
+
         /** What an unavailable control fades to: plainly off, still plainly there. */
         const val DIMMED = 0.3f
     }
@@ -1463,7 +1470,10 @@ class MainActivity : AppCompatActivity() {
             toast("Recording is not available on this camera")
             return
         }
-        binding.countdown.start { beginRecording() }
+        binding.countdown.start(RECORD_COUNTDOWN_SECONDS) { beginRecording() }
+        // Said as well as shown: the countdown is there so the athlete can walk to the bar,
+        // which is turning away from the only screen that says filming is about to begin.
+        speaker.queue(VoiceLine.RecordingSoon(RECORD_COUNTDOWN_SECONDS))
         renderChips()
     }
 
@@ -1473,7 +1483,12 @@ class MainActivity : AppCompatActivity() {
             renderChips()
             toast(if (name != null) "Saved $name to Movies/Cindy" else "Recording failed")
         }
-        if (!started) toast("Could not start recording")
+        if (started) {
+            speaker.queue(VoiceLine.RecordingStarted)
+        } else {
+            toast("Could not start recording")
+            speaker.queue(VoiceLine.RecordingFailed)
+        }
         buzz(40L)
         renderChips()
     }

@@ -94,6 +94,22 @@ sealed interface VoiceLine {
 
     /** The single word played when the volume slider is let go. */
     data object VolumeCheck : VoiceLine
+
+    /**
+     * REC was tapped and filming begins in [seconds].
+     *
+     * Said as well as shown. The countdown exists so the athlete can put the phone down and get
+     * into the shot, which means they are walking away from the one screen that says filming is
+     * about to start. A phrase rather than a bare number, so beside the rep counts it cannot be
+     * mistaken for one.
+     */
+    data class RecordingSoon(val seconds: Int) : VoiceLine
+
+    /** Filming has begun. */
+    data object RecordingStarted : VoiceLine
+
+    /** Filming could not begin, so there will be no clip. */
+    data object RecordingFailed : VoiceLine
 }
 
 /**

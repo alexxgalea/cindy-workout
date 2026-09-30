@@ -10,7 +10,7 @@ package com.cindy.tracker
 object VoiceLineSamples {
 
     /** The number of kinds of [VoiceLine]. Adding one means adding it to [all] and bumping this. */
-    const val KINDS = 16
+    const val KINDS = 19
 
     val all: List<VoiceLine> = buildList {
         add(VoiceLine.Count(3))
@@ -35,5 +35,8 @@ object VoiceLineSamples {
         }
         add(VoiceLine.Sample)
         add(VoiceLine.VolumeCheck)
+        add(VoiceLine.RecordingSoon(3))
+        add(VoiceLine.RecordingStarted)
+        add(VoiceLine.RecordingFailed)
     }
 }

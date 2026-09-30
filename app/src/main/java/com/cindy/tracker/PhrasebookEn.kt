@@ -29,6 +29,9 @@ object PhrasebookEn : Phrasebook {
         is VoiceLine.Clock -> clock(line)
         VoiceLine.Sample -> "Three. Four. Five. Push ups."
         VoiceLine.VolumeCheck -> "Three"
+        is VoiceLine.RecordingSoon -> "Recording in ${line.seconds}"
+        VoiceLine.RecordingStarted -> "Recording"
+        VoiceLine.RecordingFailed -> "Recording didn't start"
     }
 
     /** "one minute twenty" — TTS makes a mess of "1:20". */
