@@ -64,10 +64,10 @@ class Speaker(context: Context) {
     private val phrasebook: Phrasebook = PhrasebookEn
 
     /** Interrupts anything in progress — used for rep numbers. */
-    fun say(line: VoiceLine) = speak(phrasebook.say(line), TextToSpeech.QUEUE_FLUSH)
+    fun say(line: VoiceLine) = speak(line, TextToSpeech.QUEUE_FLUSH)
 
     /** Queues behind whatever is speaking — used for cues that must be heard. */
-    fun queue(line: VoiceLine) = speak(phrasebook.say(line), TextToSpeech.QUEUE_ADD)
+    fun queue(line: VoiceLine) = speak(line, TextToSpeech.QUEUE_ADD)
 
     /**
      * Says [line] regardless of [enabled], for previewing the voice from the menu.
@@ -75,15 +75,19 @@ class Speaker(context: Context) {
      * The callers are the volume slider and HEAR IT, where refusing to speak because the voice
      * is switched off would leave the athlete adjusting a number against silence.
      */
-    fun preview(line: VoiceLine) =
-        speak(phrasebook.say(line), TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
+    fun preview(line: VoiceLine) = speak(line, TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
 
-    private fun speak(text: String, mode: Int, ignoreEnabled: Boolean = false) {
+    /**
+     * Words the line only once the voice is going to say it. Rep counts arrive on the analysis
+     * path at camera rate, and with the voice switched off there is no reason to build a
+     * sentence for each one.
+     */
+    private fun speak(line: VoiceLine, mode: Int, ignoreEnabled: Boolean = false) {
         if ((!enabled && !ignoreEnabled) || !ready) return
         val params = Bundle().apply {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
         }
-        tts?.speak(text, mode, params, "cindy-${utteranceId.incrementAndGet()}")
+        tts?.speak(phrasebook.say(line), mode, params, "cindy-${utteranceId.incrementAndGet()}")
     }
 
     fun stop() = run { tts?.stop(); Unit }
