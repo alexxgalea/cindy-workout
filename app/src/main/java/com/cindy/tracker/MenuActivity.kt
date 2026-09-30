@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
 import android.util.Log
 import android.view.Gravity
@@ -211,7 +213,17 @@ class MenuActivity : AppCompatActivity() {
     private var preview: Speaker? = null
 
     private fun voiceSubtitle(): String =
-        if (profile.voiceOn) "On · ${percent(profile.voiceVolume)}" else "Off"
+        if (profile.voiceOn) {
+            "On · ${percent(profile.voiceVolume)} · ${VoicePacks.of(profile.voiceLanguage).nativeName}"
+        } else {
+            "Off"
+        }
+
+    /**
+     * The open sheet's language list, so it can be paused while the screen is stopped and picked
+     * up again on return — the athlete may have gone to the engine's own screen to fetch a voice.
+     */
+    private var languageGroup: LanguageGroup? = null
 
     /**
      * Whether the voice counts, and how loud.
@@ -226,6 +238,7 @@ class MenuActivity : AppCompatActivity() {
         var on = profile.voiceOn
         var volume = profile.voiceVolume
         speaker.volume = volume
+        speaker.language = profile.voiceLanguage
 
         val sheet = CindySheet(
             this,
@@ -240,7 +253,7 @@ class MenuActivity : AppCompatActivity() {
             onChange = { volume = it; speaker.volume = it },
             // Spoken only once the grip is let go: restarting the utterance on every pixel of
             // the drag would stutter rather than demonstrate.
-            onSettled = { speaker.preview("Three") }
+            onSettled = { speaker.preview(VoiceLine.VolumeCheck) }
         )
         sheet.add(
             sheetNote(
@@ -248,18 +261,52 @@ class MenuActivity : AppCompatActivity() {
                     "drops out of the way whenever the voice speaks."
             )
         )
+        val languages = LanguageGroup(
+            this, speaker, profile.voiceLanguage, ::toast, ::openVoiceInstaller
+        )
+        languageGroup = languages
+        sheet.add(languages.view)
         sheet.actions(
             primary = "SAVE",
             onPrimary = {
                 profile.voiceOn = on
                 profile.voiceVolume = volume
+                profile.voiceLanguage = languages.chosen
                 render()
             },
             secondary = "HEAR IT",
-            onSecondary = { speaker.preview("Three. Four. Five. Push ups.") },
+            // The sample of whichever language is ticked, in an online voice if that is the only
+            // one the phone has for it, rather than always the English it used to be.
+            onSecondary = { languages.previewChosen() },
             secondaryDismisses = false
         )
-        sheet.onDismiss { speaker.stop() }.show()
+        sheet.onDismiss {
+            speaker.stop()
+            languages.stop()
+            languageGroup = null
+        }.show()
+        languages.start()
+    }
+
+    /**
+     * The speech engine's own screen for fetching voice data, or failing that the system's speech
+     * settings. Voice data is the engine's to manage, and some engines can only be asked to fetch
+     * a voice from their own screen.
+     */
+    private fun openVoiceInstaller() {
+        val screens = listOf(
+            Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA),
+            Intent("com.android.settings.TTS_SETTINGS")
+        )
+        for (intent in screens) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                Log.w("Cindy", "no screen for $intent", e)
+            }
+        }
+        toast("This phone has no screen for managing voices")
     }
 
     private fun percent(value: Float): String = "${(value * 100f).toInt()}%"
@@ -387,6 +434,8 @@ class MenuActivity : AppCompatActivity() {
             wasStopped = false
             render()
         }
+        // Back from the engine's own screen, a voice may have arrived: look at once.
+        languageGroup?.start()
     }
 
     override fun onStop() {
@@ -397,6 +446,7 @@ class MenuActivity : AppCompatActivity() {
         stopAudition()
         preview?.stop()
         stopHeartRateSheetResources()
+        languageGroup?.stop()
     }
 
     override fun onDestroy() {

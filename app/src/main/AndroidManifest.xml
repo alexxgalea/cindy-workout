@@ -41,6 +41,20 @@
     <!-- Not required: a phone with no BLE radio still counts reps, it just never hears a watch. -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
+    <!--
+      Since Android 11 an app can only see the packages it declares. The text-to-speech engine is
+      one, and so is the screen that fetches its voice data, which the voice language picker
+      opens when a download needs the engine's own help.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.tts.engine.INSTALL_TTS_DATA" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
