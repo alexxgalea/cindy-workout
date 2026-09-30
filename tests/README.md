@@ -160,7 +160,7 @@ localised to one frame rather than to "the totals disagree".
 .venv/bin/python tools/video_regression/parity_check.py
 ```
 
-Run this after touching either implementation. It currently passes on all 372 frames.
+Run this after touching either implementation. It currently passes on all 1639 frames.
 
 The pull-up gates themselves — occlusion tolerance, the derived dead-hang angle and bar
 re-establishment — are covered by the Kotlin unit tests and the parity trace above. `MAX_DROPOUT_FRAMES`
