@@ -338,10 +338,18 @@ class RecordStore(context: Context) {
     /** Attempts oldest first, for charting progress over time. */
     fun chronological(): List<Attempt> = all().sortedBy { it.atMillis }
 
-    fun add(attempt: Attempt) {
-        // A zero-rep attempt is someone opening the app and letting the clock run out.
-        if (attempt.totalReps == 0) return
+    /**
+     * Stores [attempt], and says whether it actually was.
+     *
+     * A zero-rep attempt is someone opening the app and letting the clock run out, so it is
+     * dropped rather than filed. The caller needs to know which happened: a heart-rate trace
+     * belongs beside a saved attempt, and there is nothing for it to belong beside when nothing
+     * was stored.
+     */
+    fun add(attempt: Attempt): Boolean {
+        if (attempt.totalReps == 0) return false
         prefs.edit().putString(KEY, Records.encode(all() + attempt)).apply()
+        return true
     }
 
     fun clear() = prefs.edit().remove(KEY).apply()

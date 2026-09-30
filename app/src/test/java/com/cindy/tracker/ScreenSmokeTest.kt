@@ -233,6 +233,22 @@ class ScreenSmokeTest {
         assertEquals("en", Profile(context).voiceLanguage)
     }
 
+    /**
+     * The sheet that asks for a birth year and a sex. Opened directly rather than through a row,
+     * so it is covered whichever screen ends up reaching it.
+     */
+    @Test
+    fun `the heart-rate details sheet builds`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        activity.askHeartRateDetails(Profile(activity)) {}
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        dialog.dismiss()
+    }
+
     @Test
     fun `the records screen builds when empty`() = smoke<RecordsActivity>()
 

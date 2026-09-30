@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.content.Context
+import java.util.Calendar
 
 /**
  * What the athlete has told the app about themselves and about how they intend to train.
@@ -136,6 +137,80 @@ class Profile(context: Context) {
             prefs.edit().putInt(KEY_REMINDER_MINUTE, value.coerceIn(0, 1439)).apply()
         }
 
+    /**
+     * The year the athlete was born, or 0 when they have not said.
+     *
+     * A year rather than an age, for the same reason [bodyWeightKg] is asked for directly rather
+     * than guessed: an age goes stale the moment it is typed, and nobody reopens a settings
+     * screen once a year to keep a number current. A birth year never goes stale, and [age]
+     * derives the current figure from it whenever [Calories] actually needs one.
+     */
+    var birthYear: Int
+        get() = prefs.getInt(KEY_BIRTH_YEAR, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_BIRTH_YEAR, value).apply()
+        }
+
+    /**
+     * Which of the Keytel equations the heart-rate estimate should use, or null when the athlete
+     * has not chosen.
+     *
+     * The two published fits — one per sex — diverge enough that picking one for someone who
+     * has not said would be its own kind of wrong number, which is why there is a third choice,
+     * [Sex.UNSTATED], rather than only the two the equation itself offers: it averages the pair
+     * instead of guessing between them.
+     */
+    var sex: Sex?
+        get() = prefs.getString(KEY_SEX, null)?.let { name ->
+            // An unknown name — a build that knew a sex this one does not, or corrupted prefs —
+            // decodes to null rather than a guessed default, exactly as an unrecognised movement
+            // name already does in Records.
+            Sex.entries.firstOrNull { it.name == name }
+        }
+        set(value) {
+            val edit = prefs.edit()
+            if (value == null) edit.remove(KEY_SEX) else edit.putString(KEY_SEX, value.name)
+            edit.apply()
+        }
+
+    /**
+     * The watch or strap paired for heart rate, or null when none is.
+     *
+     * The two keys behind it are only ever written or cleared together: an address without the
+     * name that goes with it is not something a reconnect could fall back to, and a name without
+     * an address is not something it could connect to in the first place.
+     */
+    var heartRateDevice: HeartRateDevice?
+        get() {
+            val address = prefs.getString(KEY_HR_ADDRESS, null) ?: return null
+            val name = prefs.getString(KEY_HR_NAME, null) ?: return null
+            return HeartRateDevice(address, name)
+        }
+        set(value) {
+            val edit = prefs.edit()
+            if (value == null) {
+                edit.remove(KEY_HR_ADDRESS).remove(KEY_HR_NAME)
+            } else {
+                edit.putString(KEY_HR_ADDRESS, value.address)
+                edit.putString(KEY_HR_NAME, value.name)
+            }
+            edit.apply()
+        }
+
+    /** The athlete's age in [nowYear], or null when [birthYear] has never been said. */
+    fun age(nowYear: Int = Calendar.getInstance().get(Calendar.YEAR)): Int? =
+        if (birthYear == 0) null else nowYear - birthYear
+
+    /**
+     * Everything [Calories] needs about the athlete, gathered from the settings above.
+     *
+     * A single call rather than three separate reads, so a caller cannot accidentally read
+     * [bodyWeightKg], [age] and [sex] at three different moments and hand [Calories] a body that
+     * was never really true all at once.
+     */
+    fun body(nowYear: Int = Calendar.getInstance().get(Calendar.YEAR)): Body =
+        Body(weightKg = bodyWeightKg, age = age(nowYear), sex = sex)
+
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
         private const val KEY_MOVEMENTS = "movement_profile"
@@ -149,6 +224,10 @@ class Profile(context: Context) {
         private const val KEY_MUSIC_VOLUME = "music_volume"
         private const val KEY_REMINDER_ON = "reminder_on"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
+        private const val KEY_BIRTH_YEAR = "birth_year"
+        private const val KEY_SEX = "sex"
+        private const val KEY_HR_ADDRESS = "hr_device_address"
+        private const val KEY_HR_NAME = "hr_device_name"
 
         /**
          * The voice starts at full and the music below it.
@@ -162,5 +241,8 @@ class Profile(context: Context) {
         /** Above the heaviest recorded human, so typos are caught but nobody real is refused. */
         const val MAX_KG = 400f
         const val MIN_KG = 20f
+        /** Bounds for the age the heart-rate formula is given, wide enough to be a typo check only. */
+        const val MIN_AGE = 13
+        const val MAX_AGE = 100
     }
 }
