@@ -8,10 +8,10 @@ import org.junit.Test
 /**
  * Choosing a voice against the shapes real engines return.
  *
- * The fixtures are modelled on what the engines on Android phones actually list: Google's lists
- * hundreds of voices, installed and not, local and network, several per language; Samsung's lists
- * what is installed and little else; and some engines list nothing and answer only when asked
- * whether a language is available.
+ * The fixtures ([EngineFixtures]) are modelled on what the engines on Android phones actually
+ * list: Google's lists hundreds of voices, installed and not, local and network, several per
+ * language; Samsung's lists what is installed and little else; and some engines list nothing and
+ * answer only when asked whether a language is available.
  */
 class VoiceChoiceTest {
 
@@ -20,8 +20,8 @@ class VoiceChoiceTest {
     private val pl = VoicePacks.of("pl")
     private val pt = VoicePacks.of("pt")
 
-    /** An English-language phone in Britain, so its region says nothing about Spanish. */
-    private val britain = Locale.forLanguageTag("en-GB")
+    private val britain = EngineFixtures.britain
+    private val google = EngineFixtures.google
 
     private fun voice(
         name: String,
@@ -31,19 +31,7 @@ class VoiceChoiceTest {
         network: Boolean = false,
         quality: Int = 400,
         latency: Int = 200
-    ) = EngineVoice(name, language, country, installed, network, quality, latency)
-
-    /** Google's shape: local and network voices, some fetched and some not. */
-    private val google = listOf(
-        voice("es-es-x-eea-local", "es", "ES"),
-        voice("es-es-x-eea-network", "es", "ES", network = true, quality = 500, latency = 400),
-        voice("es-us-x-sfb-local", "es", "US"),
-        voice("es-us-x-esc-local", "es", "US", installed = false),
-        voice("ru-ru-x-ruc-local", "ru", "RU", installed = false),
-        voice("ru-ru-x-ruc-network", "ru", "RU", network = true),
-        voice("pl-pl-x-oda-network", "pl", "PL", network = true),
-        voice("en-us-x-tpd-local", "en", "US")
-    )
+    ) = EngineFixtures.voice(name, language, country, installed, network, quality, latency)
 
     // ── where each language stands ───────────────────────────────────────────
 
