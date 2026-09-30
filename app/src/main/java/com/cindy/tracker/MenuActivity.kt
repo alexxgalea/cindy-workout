@@ -596,24 +596,33 @@ class MenuActivity : AppCompatActivity() {
             })
         })
 
+        // This sheet's own handler, so clearing it clears only the hints this sheet has pending.
         val heartHandler = Handler(Looper.getMainLooper())
-        val timeout = Runnable {
-            statusLine.text = "Can't find it — is heart-rate broadcast on?"
-            statusLine.setTextColor(getColor(R.color.label_secondary))
+        fun hintLater(text: String, delayMs: Long) {
+            heartHandler.postDelayed({
+                statusLine.text = text
+                statusLine.setTextColor(getColor(R.color.label_secondary))
+            }, delayMs)
         }
         val listener = object : HeartRateListener {
             override fun onHeartRate(bpm: Int, atElapsedMs: Long) {
-                heartHandler.removeCallbacks(timeout)
+                heartHandler.removeCallbacksAndMessages(null)
                 statusLine.text = "$bpm bpm"
                 statusLine.setTextColor(getColor(R.color.state_ok))
             }
 
             override fun onStatus(status: HeartRateStatus) {
-                heartHandler.removeCallbacks(timeout)
+                heartHandler.removeCallbacksAndMessages(null)
                 val message = when (status) {
                     HeartRateStatus.CONNECTING -> {
-                        heartHandler.postDelayed(timeout, 15_000L)
+                        hintLater("Can't find it — is heart-rate broadcast on?", 15_000L)
                         "Connecting…"
+                    }
+                    // Found and listening: if nothing comes, the watch is not broadcasting, and
+                    // that is the one thing worth saying.
+                    HeartRateStatus.WAITING -> {
+                        hintLater("Connected, but no heart rate — is heart-rate broadcast on?", 8_000L)
+                        "Connected — waiting for heart rate…"
                     }
                     HeartRateStatus.NO_PERMISSION -> "Bluetooth permission is off"
                     HeartRateStatus.BLUETOOTH_OFF -> "Bluetooth is off"
@@ -646,7 +655,7 @@ class MenuActivity : AppCompatActivity() {
             },
             secondaryTint = R.color.state_alert
         ).onDismiss {
-            heartHandler.removeCallbacks(timeout)
+            heartHandler.removeCallbacksAndMessages(null)
             source?.stop()
             if (heartSource === source) heartSource = null
         }.show()

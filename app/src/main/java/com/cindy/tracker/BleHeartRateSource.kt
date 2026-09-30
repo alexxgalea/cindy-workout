@@ -217,6 +217,13 @@ class BleHeartRateSource(
 
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             HeartRateLog.d { "source: subscribe status=$status" }
+            handler.post {
+                // Subscribed, and nothing heard yet: see HeartRateStatus.WAITING. A reading that
+                // raced ahead of this callback has already said CONNECTED, which stands.
+                if (current(g) && status == BluetoothGatt.GATT_SUCCESS && !reportedConnected) {
+                    report(HeartRateStatus.WAITING)
+                }
+            }
         }
     }
 
