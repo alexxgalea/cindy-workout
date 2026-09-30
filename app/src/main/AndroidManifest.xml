@@ -14,8 +14,8 @@
         android:maxSdkVersion="28" />
 
     <!-- Heart rate: the standard Bluetooth LE profile a watch or chest strap broadcasts.
-         BLUETOOTH_SCAN is declared neverForLocation because the scan filters on the Heart Rate
-         service UUID and never turns a found device into a location — tools:targetApi silences
+         BLUETOOTH_SCAN is declared neverForLocation because nothing the scan hears is ever turned
+         into a location: it only lists heart-rate devices to pick from — tools:targetApi silences
          the lint warning a minSdk-26 manifest would otherwise raise for an API 31 attribute. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
