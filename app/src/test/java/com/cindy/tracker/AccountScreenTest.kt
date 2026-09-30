@@ -394,15 +394,26 @@ class AccountScreenTest {
     }
 
     @Test
-    fun `the menu still deals in every row, the settings under the profile card too`() {
+    fun `the menu deals in every card on one running count, the profile card first`() {
         val activity = openMenu()
-        // The last row of the settings card, a long way down the stagger. Before the profile card
-        // was added only the first card was dealt, so this row would never have been hidden.
-        val help = findByDescriptionPrefix(content(activity), "Help, ")!!
-        assertEquals("the row is waiting its turn", 0f, help.alpha, 0f)
+        val root = content(activity)
+        val profileRow = findByDescriptionPrefix(root, "You, ")!!
+        val firstSetting = findByDescriptionPrefix(root, "Movements, ")!!
+        val lastSetting = findByDescriptionPrefix(root, "Help, ")!!
 
+        // Each row waits for the ones before it, across both cards. Dealing only the first card
+        // would leave every setting with no delay at all. The delay is what is checked, not the
+        // animation itself: Robolectric does not play a start delay the way a phone does.
+        val delays = listOf(profileRow, firstSetting, lastSetting).map { it.animate().startDelay }
+        assertEquals("the profile card arrives first", 0L, delays[0])
+        assertTrue("the settings follow the profile card: $delays", delays[1] > delays[0])
+        assertTrue("and each row follows the one before: $delays", delays[2] > delays[1])
+
+        // However they arrive, none is left hidden.
         ShadowLooper.idleMainLooper(3, TimeUnit.SECONDS)
-        assertEquals("the row never arrived", 1f, help.alpha, 0f)
+        for (row in listOf(profileRow, firstSetting, lastSetting)) {
+            assertEquals("a row never arrived", 1f, row.alpha, 0f)
+        }
         activity.finish()
     }
 
