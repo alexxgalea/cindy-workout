@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Strava only, and only once connected. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Pre-scoped-storage devices need this to write the recording into Movies/. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -61,6 +63,28 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
+
+        <!--
+          The redirect target for Strava's OAuth flow. Exported and singleTask because the
+          Strava app or a browser opens this by URI, outside our own task, and there must only
+          ever be one instance of it to land the redirect on.
+        -->
+        <activity
+            android:name=".StravaAuthActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Cindy">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.cindy.tracker"
+                    android:host="localhost"
+                    android:path="/strava" />
+            </intent-filter>
+        </activity>
 
         <!-- The daily reminder, and the system events that clear or skew its alarm. -->
         <receiver

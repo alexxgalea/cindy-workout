@@ -5,16 +5,19 @@
   cloud-backup  — the athlete's own Drive, so records and settings travel to a new phone.
   device-transfer — phone to phone directly, same content.
 
-  Only the domains named are carried; recordings in shared Movies/ are out by omission.
-  See backup_rules.xml for why backup is permitted at all.
+  Only the domains named are carried; recordings in shared Movies/ are out by omission, and the
+  Strava tokens in strava.xml are excluded from both — see backup_rules.xml for why backup is
+  permitted at all, and why Strava is the one thing in it that is not.
 -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="." />
         <include domain="file" path="." />
+        <exclude domain="sharedpref" path="strava.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
         <include domain="file" path="." />
+        <exclude domain="sharedpref" path="strava.xml" />
     </device-transfer>
 </data-extraction-rules>

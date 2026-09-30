@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -16,13 +17,17 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.cindy.tracker.databinding.ActivityMenuBinding
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
+import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Everything the athlete does not need while they are on the bar.
@@ -67,7 +72,22 @@ class MenuActivity : AppCompatActivity() {
 
         /** How long each row waits behind the one above it as the list settles in. */
         private const val ROW_STAGGER_MS = 34L
+
+        /**
+         * Lets [StravaScreenTest] build the menu as if this were a build with Strava
+         * credentials, or force it back to one that has none.
+         *
+         * [StravaConfig.available] is a `val` read once from [BuildConfig] at class-init, and
+         * is always false in a unit test — there is no `strava.properties` in CI, and nothing
+         * shadows `BuildConfig` the way Robolectric shadows the platform. Production code never
+         * touches this; it stays null and [stravaAvailable] reads [StravaConfig.available] as
+         * normal. Tests must reset it in a `finally`, since it is a static and outlives the
+         * activity under test.
+         */
+        internal var stravaAvailableForTest: Boolean? = null
     }
+
+    private val stravaAvailable: Boolean get() = stravaAvailableForTest ?: StravaConfig.available
 
     private lateinit var binding: ActivityMenuBinding
     private lateinit var profile: Profile
@@ -142,6 +162,8 @@ class MenuActivity : AppCompatActivity() {
         val streak = Streak.current(
             Streak.daysTrained(all, ZoneId.systemDefault()), LocalDate.now()
         )
+        val stravaTokens = StravaTokenStore(this)
+        val stravaGrant = stravaTokens.grant
 
         binding.rows.addView(insetGroup {
             row(navRow("Movements", movements.label()) {
@@ -172,6 +194,9 @@ class MenuActivity : AppCompatActivity() {
                     "Not set — calories need it"
                 }
             ) { askBodyWeight(profile) { render() } })
+            row(navRow("Strava", stravaSubtitle(stravaAvailable, stravaGrant)) {
+                tapStrava(stravaTokens, stravaGrant)
+            })
             row(navRow("Voice", voiceSubtitle()) { chooseVoice() })
             row(navRow("Music", musicSubtitle()) { chooseMusic() })
             row(navRow(
@@ -595,6 +620,82 @@ class MenuActivity : AppCompatActivity() {
             secondary = "NOT NOW",
             onSecondary = {}
         ).show()
+    }
+
+    // ── Strava ────────────────────────────────────────────────────────────────
+
+    /**
+     * Pure, so [StravaScreenTest] can check every subtitle without building the activity.
+     *
+     * `available` is [stravaAvailable] rather than [StravaConfig.available] directly — see that
+     * property for why the two are not always the same thing in a test.
+     */
+    private fun stravaSubtitle(available: Boolean, grant: StravaGrant?): String = when {
+        !available -> "Not available in this build"
+        grant == null -> "Not connected — upload workouts"
+        else -> "Connected · ${grant.athleteName ?: "Strava"}"
+    }
+
+    private fun tapStrava(tokens: StravaTokenStore, grant: StravaGrant?) {
+        if (!stravaAvailable) {
+            toast("This build has no Strava credentials, so the feature is switched off")
+            return
+        }
+        if (grant == null) connectStrava(tokens) else openStravaSheet(tokens, grant)
+    }
+
+    /** Mints a fresh state, remembers it, and opens Strava's own consent page for it. */
+    private fun connectStrava(tokens: StravaTokenStore) {
+        val state = StravaAuth.newState()
+        tokens.pendingState = state
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaAuth.authorizeUri(state))))
+        } catch (e: ActivityNotFoundException) {
+            // Neither the Strava app nor a browser is installed to show the consent page.
+            tokens.pendingState = null
+            toast("Connecting needs the Strava app or a web browser")
+        }
+    }
+
+    /**
+     * DONE just closes; DISCONNECT is the only action that does anything.
+     */
+    private fun openStravaSheet(tokens: StravaTokenStore, grant: StravaGrant) {
+        CindySheet(
+            this,
+            title = "Strava",
+            // Says only what is true: connecting does not upload anything on its own.
+            subtitle = "Connected${grant.athleteName?.let { " as $it" } ?: ""}."
+        ).actions(
+            primary = "DONE",
+            onPrimary = {},
+            secondary = "DISCONNECT",
+            onSecondary = { disconnectStrava(tokens, grant) },
+            secondaryTint = R.color.state_alert
+        ).show()
+    }
+
+    /**
+     * Revokes on Strava's side, best-effort, and forgets the grant locally either way.
+     *
+     * The athlete may be offline, or may have already removed Cindy Tracker from strava.com
+     * themselves — neither should leave the menu row still claiming to be connected. The refresh
+     * token is what is sent, rather than the access token: it does not expire on its own, so it
+     * is the more likely of the two to still be valid.
+     */
+    private fun disconnectStrava(tokens: StravaTokenStore, grant: StravaGrant) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                StravaAuth(UrlConnectionTransport()).revoke(grant.refreshToken, "refresh_token")
+            } catch (e: IOException) {
+                // Offline. The local grant comes off regardless, on the next line below.
+            } catch (e: StravaAuthException) {
+                // Strava already considers us disconnected.
+            }
+        }
+        tokens.clearGrant()
+        render()
+        toast("Disconnected. If Strava still lists Cindy Tracker, remove it at strava.com/settings/apps")
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
