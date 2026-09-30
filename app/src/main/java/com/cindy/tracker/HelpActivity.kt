@@ -99,6 +99,12 @@ class HelpActivity : AppCompatActivity() {
             "Squats scale on reps, or by squatting \"to a target that could be set above the " +
                 "typical full range of motion\"."
         )
+        paragraph(
+            "Squatting with your heels flat? That is a correct squat too. Choose Heels flat under " +
+                "Movements in the menu. Or turn on Spot heels-flat squats there: after three " +
+                "heels-flat squats Cindy switches to Adaptive Cindy, says so out loud, and counts " +
+                "them, the first three included. It is off by default while it is being tested."
+        )
 
         heading("WHAT IT TESTS")
         quote(

@@ -111,19 +111,26 @@ class MenuActivity : AppCompatActivity() {
      * Only on the way in, deliberately. [render] runs again after every sheet is dismissed, and
      * a list that re-deals itself each time you change a volume would be a screen that cannot
      * keep still.
+     *
+     * Every card is dealt, on one running count. The profile card above the settings is the
+     * first thing on the screen, and the list carries on from it rather than starting again.
      */
     private fun settleRowsIn() {
-        val group = binding.rows.getChildAt(0) as? InsetGroup ?: return
-        for (i in 0 until group.childCount) {
-            val row = group.getChildAt(i)
-            row.alpha = 0f
-            row.translationY = dp(14).toFloat()
-            row.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay(i * ROW_STAGGER_MS)
-                .setDuration(240L)
-                .start()
+        var dealt = 0
+        for (g in 0 until binding.rows.childCount) {
+            val group = binding.rows.getChildAt(g) as? InsetGroup ?: continue
+            for (i in 0 until group.childCount) {
+                val row = group.getChildAt(i)
+                row.alpha = 0f
+                row.translationY = dp(14).toFloat()
+                row.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(dealt * ROW_STAGGER_MS)
+                    .setDuration(240L)
+                    .start()
+                dealt++
+            }
         }
     }
 
@@ -156,14 +163,37 @@ class MenuActivity : AppCompatActivity() {
         val stravaTokens = StravaTokenStore(this)
         val stravaGrant = stravaTokens.grant
 
+        // The athlete comes first: who the scores belong to, and what they have earned so far.
+        val name = profile.displayName
+        val photo = AvatarStore.load(this)
+        val earned = Badges.earned(
+            all, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        )
         binding.rows.addView(insetGroup {
-            row(navRow("Movements", movements.label()) {
+            row(avatarRow(
+                photo = photo,
+                name = name,
+                title = name ?: "You",
+                value = Badges.headline(earned) ?: if (name == null && photo == null) {
+                    "Add your name and photo"
+                } else {
+                    "Finish a session to earn your first badge"
+                }
+            ) { startActivity(Intent(this@MenuActivity, AccountActivity::class.java)) })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
+
+        binding.rows.addView(insetGroup {
+            row(navRow("Movements", movementsSubtitle(movements)) {
                 if (workoutLive) {
                     toast("Reset the workout first to change movements")
                 } else {
-                    chooseMovements(movements) { chosen ->
+                    chooseMovements(movements, profile) { chosen ->
                         profile.movements = chosen
-                        toast(chosen.label())
+                        // The subtitle rather than the label, so that turning the squat setting
+                        // on or off is confirmed too: the label alone would repeat what it was.
+                        toast(movementsSubtitle(chosen))
                         render()
                     }
                 }
@@ -209,6 +239,20 @@ class MenuActivity : AppCompatActivity() {
             )
         }
     }
+
+    /**
+     * What the row says underneath "Movements": what was chosen, and whether the squats may
+     * switch themselves to heels flat.
+     *
+     * The second half is said only for the air squat, because that is the only choice the setting
+     * does anything to: said beside a box squat it would promise something that never happens.
+     */
+    private fun movementsSubtitle(movements: CindyProfile): String =
+        if (profile.smartSquats && movements.squat == SquatVariant.AIR_SQUAT) {
+            "${movements.label()} · spots heels flat"
+        } else {
+            movements.label()
+        }
 
     // ── voice ─────────────────────────────────────────────────────────────────
 

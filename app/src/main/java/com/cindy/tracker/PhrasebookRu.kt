@@ -44,6 +44,7 @@ object PhrasebookRu : Phrasebook {
         is VoiceLine.RecordingSoon -> "Запись через ${secondsAfterCherez(line.seconds)}"
         VoiceLine.RecordingStarted -> "Идёт запись"
         VoiceLine.RecordingFailed -> "Запись не удалась"
+        VoiceLine.AdaptiveHeelsFlat -> "Адаптивная Cindy включена для приседаний с пятками на полу."
     }
 
     private fun hint(hint: Hint): String = when (hint) {

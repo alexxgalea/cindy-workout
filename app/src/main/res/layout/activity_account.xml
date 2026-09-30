@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shape every secondary screen shares: a large title, a line saying what the screen is, the
+  content, and the actions in the thumb's reach at the bottom. Rows are built in code from
+  CindyViews so that Menu, Records, Results, Help and You cannot drift apart.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/screen_margin"
+    android:paddingTop="@dimen/space_6"
+    android:paddingBottom="@dimen/space_6">
+
+    <TextView
+        style="@style/Cindy.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="You" />
+
+    <TextView
+        style="@style/Cindy.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="Your name, photo and badges. They stay on this phone." />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/space_6"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal" />
+</LinearLayout>

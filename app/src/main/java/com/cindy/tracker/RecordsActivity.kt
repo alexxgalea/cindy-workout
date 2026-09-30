@@ -76,8 +76,9 @@ class RecordsActivity : AppCompatActivity() {
         CindySheet(
             this,
             title = if (sessions == 1) "Delete your 1 session?" else "Delete all $sessions sessions?",
-            subtitle = "Every attempt logged on this phone goes, including your best. This " +
-                "cannot be undone. The benchmark stays."
+            subtitle = "Every attempt logged on this phone goes, including your best and the " +
+                "badges they earned. Your name and photo stay. This cannot be undone. The " +
+                "benchmark stays."
         ).actions(
             primary = "KEEP THEM",
             onPrimary = {},
@@ -137,13 +138,15 @@ class RecordsActivity : AppCompatActivity() {
         }
 
         val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
+        // The athlete's own name, once they have given one, and "You" until then.
+        val who = Profile(this).displayName ?: "You"
         rows.addView(insetGroup {
             row(benchmarkRow(if (beaten) "2" else "1"))
             mine.forEachIndexed { i, a ->
                 val outranks = Records.beatsBenchmark(a)
                 row(rankRow(
                     rank = if (outranks) "${i + 1}" else "${i + 2}",
-                    name = "You",
+                    name = who,
                     detail = "${dateFormat.format(Date(a.atMillis))} · ${a.caption}" +
                         (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
                     score = a.scoreLabel(),
