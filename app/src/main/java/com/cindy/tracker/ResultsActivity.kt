@@ -1,8 +1,10 @@
 package com.cindy.tracker
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
@@ -12,7 +14,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.work.WorkManager
 import com.cindy.tracker.databinding.ActivityResultsBinding
 import java.time.LocalDate
 import java.time.ZoneId
@@ -136,6 +140,7 @@ class ResultsActivity : AppCompatActivity() {
             if (a.scoreIsLowerBound) stat("Score", "At least ${a.totalReps} — some reps may be missing")
         }
         energy(a, group)
+        strava(a, group)
         previousBest?.let {
             val delta = a.totalReps - it.totalReps
             stat("Against your best", deltaText(it.scoreLabel(), delta))
@@ -322,4 +327,80 @@ class ResultsActivity : AppCompatActivity() {
 
     /** Asks for body weight, and redraws whatever depended on it. Shared with [MenuActivity]. */
     private fun askBodyWeight() = askBodyWeight(profile) { render(attempt, stoppedEarly) }
+
+    /**
+     * What happened to this attempt's Strava upload, or an offer to start one.
+     *
+     * Hidden entirely when the build carries no Strava credentials — there is nothing honest
+     * this row could say. Otherwise it stays live for as long as this screen is open: the
+     * worker walks through its states on its own schedule, with no tap here to cause most of
+     * them, so the row has to notice rather than only answer. Only this one row is rebuilt when
+     * it does, not the whole screen.
+     */
+    private fun strava(a: Attempt, group: InsetGroup) {
+        if (!StravaConfig.available) return
+        val tokens = StravaTokenStore(this)
+
+        fun buildRow(): View {
+            val (value, onTap) = stravaRowContent(a, tokens)
+            return statRow("Strava", value, onTap)
+        }
+
+        var row = buildRow()
+        group.row(row)
+        val index = group.indexOfChild(row)
+
+        WorkManager.getInstance(this)
+            .getWorkInfosForUniqueWorkLiveData(StravaUploads.uniqueWorkName(a.atMillis))
+            .observe(this) {
+                val updated = buildRow()
+                group.removeViewAt(index)
+                group.addView(updated, index)
+                row = updated
+            }
+    }
+
+    /** The Strava row's value and tap action, for whichever state applies right now. */
+    private fun stravaRowContent(a: Attempt, tokens: StravaTokenStore): Pair<String, (() -> Unit)?> {
+        if (!tokens.connected) return "Connect to upload" to { connectFromResults(a.atMillis) }
+        val status = StravaUploads.status(this, a.atMillis)
+        return when (status?.state) {
+            null -> "Upload" to { StravaUploads.enqueue(this, a.atMillis) }
+            StravaUploadState.QUEUED, StravaUploadState.PROCESSING -> "Uploading…" to null
+            StravaUploadState.DONE -> {
+                val id = status.activityId
+                if (id != null) "View activity ↗" to { openStravaActivity(id) } else "Uploaded" to null
+            }
+            StravaUploadState.FAILED ->
+                "Couldn't upload — tap to retry" to { StravaUploads.enqueue(this, a.atMillis) }
+            StravaUploadState.NEEDS_RECONNECT -> "Reconnect to upload" to { connectFromResults(a.atMillis) }
+            StravaUploadState.UNAVAILABLE -> "Not available for this attempt" to null
+        }
+    }
+
+    private fun openStravaActivity(activityId: Long) =
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaApi.activityUrl(activityId))))
+
+    /**
+     * Starts OAuth for one particular attempt, rather than the menu's general connect.
+     *
+     * [StravaTokenStore.afterConnectUploadAtMillis] carries the request across the round trip
+     * to Strava's consent page: [StravaAuthActivity] reads it back once the athlete returns,
+     * uploads that attempt, and clears it.
+     */
+    private fun connectFromResults(atMillis: Long) {
+        val tokens = StravaTokenStore(this)
+        tokens.afterConnectUploadAtMillis = atMillis
+        val state = StravaAuth.newState()
+        tokens.pendingState = state
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(StravaAuth.authorizeUri(state))))
+        } catch (e: ActivityNotFoundException) {
+            tokens.pendingState = null
+            tokens.afterConnectUploadAtMillis = null
+            toast("Connecting needs the Strava app or a web browser")
+        }
+    }
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 }
