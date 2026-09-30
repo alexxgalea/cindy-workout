@@ -10,6 +10,7 @@ import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONException
 
 /**
  * The redirect target for Strava's OAuth flow: `com.cindy.tracker://localhost/strava`.
@@ -85,6 +86,10 @@ class StravaAuthActivity : AppCompatActivity() {
             } catch (e: StravaAuthException) {
                 null
             } catch (e: IOException) {
+                null
+            } catch (e: JSONException) {
+                // A 200 whose body is not the grant Strava documents: nothing to store, and not
+                // worth crashing the screen the athlete came back to.
                 null
             }
 
