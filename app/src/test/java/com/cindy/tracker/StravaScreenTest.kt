@@ -15,8 +15,8 @@ import org.robolectric.annotation.Config
  * The Strava row and sheet, and the redirect activity — kept apart from [ScreenSmokeTest], so
  * that file's own additions and these never collide.
  *
- * The menu's three Strava states are exercised through [MenuActivity.stravaAvailableForTest],
- * the seam documented on that property: [StravaConfig.available] is always false under a unit
+ * The menu's three Strava states are exercised through [StravaConfig.availableForTest], the
+ * seam documented on that property: [StravaConfig.available] is always false under a unit
  * test build, so without it there would be no way to reach the connected or not-connected rows
  * at all, only the "not available" one every test would otherwise see by default.
  */
@@ -28,7 +28,7 @@ class StravaScreenTest {
 
     @After
     fun resetSeam() {
-        MenuActivity.stravaAvailableForTest = null
+        StravaConfig.availableForTest = null
         StravaTokenStore(context()).clearGrant()
     }
 
@@ -61,7 +61,7 @@ class StravaScreenTest {
 
     @Test
     fun `the menu builds with Strava unavailable`() {
-        MenuActivity.stravaAvailableForTest = false
+        StravaConfig.availableForTest = false
         val activity = buildMenu()
         val row = findByDescriptionPrefix(
             activity.findViewById(android.R.id.content), "Strava, Not available in this build"
@@ -72,7 +72,7 @@ class StravaScreenTest {
 
     @Test
     fun `the menu builds with Strava not connected`() {
-        MenuActivity.stravaAvailableForTest = true
+        StravaConfig.availableForTest = true
         val activity = buildMenu()
         val row = findByDescriptionPrefix(
             activity.findViewById(android.R.id.content), "Strava, Not connected"
@@ -83,7 +83,7 @@ class StravaScreenTest {
 
     @Test
     fun `the menu builds with Strava connected, and the sheet offers DONE and DISCONNECT`() {
-        MenuActivity.stravaAvailableForTest = true
+        StravaConfig.availableForTest = true
         StravaTokenStore(context()).grant = StravaGrant(
             accessToken = "a", refreshToken = "r", expiresAtEpochS = 9_999_999_999L,
             scopes = setOf("read", "activity:write"), athleteName = "Alex G"
@@ -102,7 +102,7 @@ class StravaScreenTest {
 
     @Test
     fun `tapping Strava when unavailable opens no sheet`() {
-        MenuActivity.stravaAvailableForTest = false
+        StravaConfig.availableForTest = false
         val activity = buildMenu()
         val row = findByDescriptionPrefix(
             activity.findViewById(android.R.id.content), "Strava, Not available in this build"
