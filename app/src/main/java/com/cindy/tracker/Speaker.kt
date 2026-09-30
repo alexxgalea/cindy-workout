@@ -78,10 +78,6 @@ class Speaker(context: Context) {
     fun preview(line: VoiceLine) =
         speak(phrasebook.say(line), TextToSpeech.QUEUE_FLUSH, ignoreEnabled = true)
 
-    // Raw text, for the coach's strings until it speaks in lines too.
-    fun say(text: String) = speak(text, TextToSpeech.QUEUE_FLUSH)
-    fun queue(text: String) = speak(text, TextToSpeech.QUEUE_ADD)
-
     private fun speak(text: String, mode: Int, ignoreEnabled: Boolean = false) {
         if ((!enabled && !ignoreEnabled) || !ready) return
         val params = Bundle().apply {

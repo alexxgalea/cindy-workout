@@ -13,9 +13,11 @@ package com.cindy.tracker
  * the clock in front of them, and what they cannot work out on the bar is whether the pace they
  * are keeping gets them where they wanted to be. So each mark now carries a figure with it.
  *
- * Free of Android types on purpose — the whole value here is in the timing rules and the wording,
- * and those are only worth having if they can be tested. [WorkoutEngine.blocked] supplies the
- * position input; the workout clock supplies the rest.
+ * Free of Android types on purpose — the whole value here is in the timing rules, and those are
+ * only worth having if they can be tested. [WorkoutEngine.blocked] supplies the position input;
+ * the workout clock supplies the rest. What is said is a [VoiceLine], and the words for it belong
+ * to the [Phrasebook] of the voice that ends up speaking, so this decides *when* and *what about*
+ * and never *how it sounds*.
  */
 class Coach {
 
@@ -33,7 +35,6 @@ class Coach {
         const val CONFIRM_AFTER_BLOCKED_MS = 1_500L
         /** How long the good position must hold, so a single lucky frame does not confirm. */
         const val CONFIRM_HOLD_MS = 400L
-        const val READY = "Ready"
         /** The length of a Cindy, which is what a pace is projected against. */
         const val WORKOUT_MS = 20 * 60_000L
     }
@@ -56,7 +57,7 @@ class Coach {
      * [blocked] is the engine's own judgement that this frame could not score for a reason the
      * athlete could fix by moving — as opposed to merely being mid-rep, which is not a fault.
      */
-    fun onFrame(exercise: Exercise, blocked: Boolean, hint: String, now: Long): String? {
+    fun onFrame(exercise: Exercise, blocked: Boolean, hint: String, now: Long): VoiceLine? {
         if (exercise != this.exercise) {
             this.exercise = exercise
             // Arriving at a movement always earns a confirmation, even if nothing went wrong.
@@ -67,7 +68,7 @@ class Coach {
         return if (blocked) fault(hint, now) else confirm(now)
     }
 
-    private fun fault(hint: String, now: Long): String? {
+    private fun fault(hint: String, now: Long): VoiceLine? {
         goodSince = 0L
         if (faultingSince == 0L) faultingSince = now
         // Long enough out of action that getting going again is worth hearing about.
@@ -84,10 +85,10 @@ class Coach {
         if (now - faultSince < FAULT_AFTER_MS) return null
         if (lastFaultAt != 0L && now - lastFaultAt < FAULT_EVERY_MS) return null
         lastFaultAt = now
-        return hint
+        return VoiceLine.Fault(hint)
     }
 
-    private fun confirm(now: Long): String? {
+    private fun confirm(now: Long): VoiceLine? {
         clearFault()
         if (!confirmOwed) return null
         if (goodSince == 0L) {
@@ -97,7 +98,7 @@ class Coach {
         if (now - goodSince < CONFIRM_HOLD_MS) return null
         confirmOwed = false
         goodSince = 0L
-        return READY
+        return VoiceLine.Ready
     }
 
     private fun clearFault() {
@@ -135,55 +136,36 @@ class Coach {
      * Encouragement is attached to a fact rather than issued on its own. "You're doing great" at
      * minute ten is noise; "Halfway. Six rounds — on for twelve" is the same reassurance, earned.
      */
-    fun onClock(elapsedMs: Long, remainingMs: Long, rounds: Int, totalReps: Int): String? {
+    fun onClock(elapsedMs: Long, remainingMs: Long, rounds: Int, totalReps: Int): VoiceLine? {
         val mark = marks.firstOrNull { remainingMs <= it && it !in spokenMarks } ?: return null
         spokenMarks += mark
-        return when (mark) {
-            10_000L -> "Ten seconds. Everything you have."
-            60_000L -> "One minute left. ${rounds(rounds)} down — finish the one you're in."
-            2 * 60_000L -> "Two minutes. " + push(rounds, totalReps)
-            5 * 60_000L -> "Five minutes left. " + pace(elapsedMs, rounds)
-            10 * 60_000L -> "Halfway. " + pace(elapsedMs, rounds)
-            else -> "Five minutes in. " + pace(elapsedMs, rounds)
-        }
+        return VoiceLine.Clock(
+            mark = when (mark) {
+                10_000L -> ClockMark.TEN_SECONDS_LEFT
+                60_000L -> ClockMark.ONE_MINUTE_LEFT
+                2 * 60_000L -> ClockMark.TWO_MINUTES_LEFT
+                5 * 60_000L -> ClockMark.FIVE_MINUTES_LEFT
+                10 * 60_000L -> ClockMark.HALFWAY
+                else -> ClockMark.FIVE_MINUTES_IN
+            },
+            rounds = rounds,
+            totalReps = totalReps,
+            projectedRounds = projectedRounds(elapsedMs, rounds)
+        )
     }
 
     /**
-     * Rounds so far, and where that rate lands at twenty minutes.
+     * Where the rate so far lands at twenty minutes, or null while it would not mean anything.
      *
      * Projected from elapsed time rather than from the round splits, so a workout that started
-     * slowly and sped up is described by all of itself. Falls back to the plain count before the
-     * first round is in, where a projection off a fraction of a round would be a wild number
-     * stated confidently.
+     * slowly and sped up is described by all of itself. Withheld before the first round is in,
+     * and in the first minute, where a projection off a fraction of a round would be a wild
+     * number stated confidently.
      */
-    private fun pace(elapsedMs: Long, rounds: Int): String {
-        if (rounds < 1 || elapsedMs < 60_000L) return "Keep the pace you're on."
-        val projected = (rounds * WORKOUT_MS / elapsedMs).toInt()
-        return "${rounds(rounds)} — on for $projected."
+    private fun projectedRounds(elapsedMs: Long, rounds: Int): Int? {
+        if (rounds < 1 || elapsedMs < 60_000L) return null
+        return (rounds * WORKOUT_MS / elapsedMs).toInt()
     }
-
-    private fun push(rounds: Int, totalReps: Int): String =
-        score(rounds, totalReps) + if (rounds < 1) ". Keep going." else ". Hold the pace."
-
-    /**
-     * A score in words: the rounds done, and the *whole* rep tally behind them.
-     *
-     * The rep figure has to be the total, not the part of the round in progress. Those two
-     * differ by a whole round's work at exactly the wrong moment — the reps of the current
-     * round are zero the instant one completes, so an athlete who stopped having just finished
-     * a clean round was told "1 rounds and 0 reps" over a screen reading thirty. Zero is the
-     * one number a result must never say about work that was done.
-     *
-     * "In total" is spelled out because the other reading — a round *and then* thirty more —
-     * is the one a listener reaches for, and a score is not worth saying ambiguously.
-     */
-    fun score(rounds: Int, totalReps: Int): String {
-        val reps = "$totalReps rep${if (totalReps == 1) "" else "s"}"
-        return if (rounds < 1) reps else "${rounds(rounds)} — $reps in total"
-    }
-
-    /** "1 round", "6 rounds" — said often enough to be worth getting right. */
-    private fun rounds(rounds: Int): String = "$rounds round${if (rounds == 1) "" else "s"}"
 
     /**
      * The workout stopped. Nothing said before the break should carry over it, and coming back
