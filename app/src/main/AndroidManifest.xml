@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -12,7 +13,35 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Heart rate: the standard Bluetooth LE profile a watch or chest strap broadcasts.
+         BLUETOOTH_SCAN is declared neverForLocation because the scan filters on the Heart Rate
+         service UUID and never turns a found device into a location — tools:targetApi silences
+         the lint warning a minSdk-26 manifest would otherwise raise for an API 31 attribute. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- API 26-30: Bluetooth itself was install-time, and the platform tied a BLE scan's
+         results to location whether or not the app used them — hence the runtime location
+         permission below, capped at the same API so a newer phone never asks for it. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <!-- Fine, not coarse: the platform's rule below is about a live location fix Cindy never
+         asks for either way, and declaring the coarse permission too would be one more thing to
+         explain having asked for and not read. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30"
+        tools:ignore="CoarseFineLocation" />
+
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
+    <!-- Not required: a phone with no BLE radio still counts reps, it just never hears a watch. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <!--
       Since Android 11 an app can only see the packages it declares. The text-to-speech engine is
