@@ -302,15 +302,16 @@ class LanguageGroupTest {
     fun `the play button of a language the engine does not speak says so, and plays nothing`() {
         engine.likeGoogle()
         val group = group().opened()
+        val name = VoicePacks.of("pt").englishName
         assertEquals(
-            "Hear Portuguese, not offered by this phone's voice engine",
-            said(group, "Hear Portuguese")
+            "Hear $name, not offered by this phone's voice engine",
+            said(group, "Hear $name")
         )
 
-        row(group, "Hear Portuguese").performClick()
+        row(group, "Hear $name").performClick()
 
         assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
-        assertTrue(toasts.toString(), toasts.single().contains("doesn't speak Portuguese"))
+        assertTrue(toasts.toString(), toasts.single().contains("doesn't speak $name"))
     }
 
     @Test
