@@ -46,6 +46,22 @@ class Profile(context: Context) {
         }
 
     /**
+     * Whether an air-squat session may switch itself to Adaptive Cindy when the squats turn out
+     * to be heels flat.
+     *
+     * Off until real sessions have shown it was the right call: a counter that changes its own
+     * mind about a movement has to be asked for before it is trusted. It does not change
+     * [movements], which stays what the athlete chose; it only lets the engine notice one of
+     * them. Edited together with [movements], in the same sheet, and refused while a workout is
+     * live for the same reason.
+     */
+    var smartSquats: Boolean
+        get() = prefs.getBoolean(KEY_SMART_SQUATS, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_SMART_SQUATS, value).apply()
+        }
+
+    /**
      * The chosen track, as a content URI string, or null for none.
      *
      * A string rather than a `Uri` because that is what a preference holds and what both readers
@@ -214,6 +230,7 @@ class Profile(context: Context) {
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
         private const val KEY_MOVEMENTS = "movement_profile"
+        private const val KEY_SMART_SQUATS = "smart_squats"
         /** The key [MainActivity] used when it owned the track, so existing choices survive. */
         private const val KEY_MUSIC = "music_uri"
         private const val KEY_MUSIC_ON = "music_on"

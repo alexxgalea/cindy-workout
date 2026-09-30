@@ -32,6 +32,7 @@ object PhrasebookEn : Phrasebook {
         is VoiceLine.RecordingSoon -> "Recording in ${line.seconds}"
         VoiceLine.RecordingStarted -> "Recording"
         VoiceLine.RecordingFailed -> "Recording failed"
+        VoiceLine.AdaptiveHeelsFlat -> "Adaptive Cindy activated for heels-flat squats."
     }
 
     /** "one minute twenty" — TTS makes a mess of "1:20". */

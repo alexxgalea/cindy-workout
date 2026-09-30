@@ -41,9 +41,18 @@ import java.util.Locale
  * with the camera and which it will ask to be tapped in, because that is a fact about the app
  * rather than a judgement about the person.
  *
+ * Beneath them sits one setting that is about how the squats are counted rather than which squat
+ * was chosen: whether an air-squat session may switch itself to heels flat (see
+ * [Profile.smartSquats]). It is saved and discarded with the choices, so SAVE is the one place
+ * anything here changes.
+ *
  * [onSave] receives the new profile only when something is actually chosen.
  */
-fun Activity.chooseMovements(current: CindyProfile, onSave: (CindyProfile) -> Unit) {
+fun Activity.chooseMovements(
+    current: CindyProfile,
+    profile: Profile = Profile(this),
+    onSave: (CindyProfile) -> Unit
+) {
     val sheet = CindySheet(
         this,
         title = "Make Cindy yours",
@@ -65,9 +74,22 @@ fun Activity.chooseMovements(current: CindyProfile, onSave: (CindyProfile) -> Un
         "SQUAT", SquatVariant.entries, current.squat, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
     )
 
+    var smart = profile.smartSquats
+    sheet.toggle("Spot heels-flat squats", smart) { smart = it }
+    sheet.add(
+        sheetNote(
+            "Off while it's being tested. When on, three heels-flat squats in a standard Cindy " +
+                "switch it to Adaptive Cindy — Cindy says so out loud — and count them, the " +
+                "first three included. Applies when Air squat is chosen."
+        )
+    )
+
     sheet.actions(
         primary = "SAVE",
-        onPrimary = { onSave(CindyProfile(pull = pull()!!, push = push()!!, squat = squat()!!)) },
+        onPrimary = {
+            profile.smartSquats = smart
+            onSave(CindyProfile(pull = pull()!!, push = push()!!, squat = squat()!!))
+        },
         secondary = "CANCEL",
         onSecondary = {}
     ).show()
