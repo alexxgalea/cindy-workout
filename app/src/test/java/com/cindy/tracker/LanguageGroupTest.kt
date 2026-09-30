@@ -34,6 +34,10 @@ class LanguageGroupTest {
     private val toasts = mutableListOf<String>()
     private var installerOpened = 0
 
+    /** How many questions have reached the background thread. */
+    private var dispatched = 0
+    private lateinit var speaker: Speaker
+
     /** Any themed screen to build the list on; the list needs a context with the app's styles. */
     private fun screen(): Activity = Robolectric.buildActivity(
         MenuActivity::class.java,
@@ -41,9 +45,16 @@ class LanguageGroupTest {
     ).setup().get()
 
     /** A list on a speaker that runs its background work where it is asked to. */
-    private fun group(initial: String = "en"): LanguageGroup {
-        val speaker = Speaker(
-            RuntimeEnvironment.getApplication(), engine, background = Executor { it.run() }
+    private fun group(
+        initial: String = "en",
+        on: TtsEngine = engine,
+        now: () -> Long = System::currentTimeMillis
+    ): LanguageGroup {
+        speaker = Speaker(
+            RuntimeEnvironment.getApplication(),
+            on,
+            background = Executor { dispatched++; it.run() },
+            now = now
         )
         return LanguageGroup(screen(), speaker, initial, { toasts += it }, { installerOpened++ })
     }
@@ -230,6 +241,23 @@ class LanguageGroupTest {
         idleFor(3)
 
         assertTrue(said(group, "Русский"), "Ready" in said(group, "Русский"))
+    }
+
+    @Test
+    fun `an engine that stays silent is asked less often once it has had its chance`() {
+        engine.likeGoogle()
+        val silent = object : TtsEngine by engine {
+            override fun voices(): List<EngineVoice> = error("the engine went away")
+        }
+        val group = group(on = silent).opened()
+
+        idleFor(6)
+        val early = dispatched
+        idleFor(10)
+        val later = dispatched - early
+
+        assertTrue("asked $later times in ten seconds", later in 1..6)
+        group.stop()
     }
 
     @Test

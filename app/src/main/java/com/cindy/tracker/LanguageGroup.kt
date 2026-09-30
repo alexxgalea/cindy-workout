@@ -199,13 +199,20 @@ class LanguageGroup(
         }
         // Quickly until the engine first answers, then at a pace a download can be watched at.
         handler.removeCallbacks(pollAgain)
-        handler.postDelayed(pollAgain, if (states == null) FIRST_POLL_MS else POLL_MS)
-        // Also without an answer, so "Checking…" can turn into "isn't answering" by itself.
-        render()
+        handler.postDelayed(pollAgain, if (waitingForEngine()) FIRST_POLL_MS else POLL_MS)
+        // With no answer coming back to redraw the rows, time passing is what changes them:
+        // "Checking…" turning into "isn't answering" by itself.
+        if (states == null) render()
     }
 
+    private fun waited(): Long = SystemClock.elapsedRealtime() - openedAt
+
+    /** True while the engine may yet answer soon. After that it is asked at the ordinary pace. */
+    private fun waitingForEngine(): Boolean =
+        states == null && waited() < VoiceLanguageText.NO_ANSWER_AFTER_MS
+
     private fun render() {
-        val waited = SystemClock.elapsedRealtime() - openedAt
+        val waited = waited()
         rows.forEach { row ->
             val state = states?.get(row.pack.tag)
             val caption = VoiceLanguageText.caption(state, speaker.downloadingFor(row.pack.tag), waited)
