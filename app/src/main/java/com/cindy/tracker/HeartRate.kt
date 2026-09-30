@@ -116,8 +116,10 @@ interface HeartRateListener {
 /**
  * A live connection to one heart-rate device.
  *
- * An interface so that the workout can be wired to a heart rate without a Bluetooth stack behind
- * it, which is what lets everything downstream of a reading be tested on the JVM.
+ * [BleHeartRateSource] is the one real implementation, over the standard Bluetooth LE Heart Rate
+ * profile. It stays behind an interface so that everything downstream of a reading — the
+ * recorder, the calorie estimate — can still be tested on the JVM, with no Bluetooth stack behind
+ * it at all.
  */
 interface HeartRateSource {
     /** Connect, and keep reconnecting until [stop]. Idempotent. Main thread. */
@@ -133,7 +135,16 @@ object HeartRateSources {
      * one for.
      *
      * Null until a watch has been paired: with no device saved there is nothing to connect to.
+     * Once one is, this hands back a fresh [BleHeartRateSource] for it on every call — neither
+     * this object nor [Profile] holds a connection open on the caller's behalf, so whoever asked
+     * for one owns starting and stopping it.
      */
-    @Suppress("UNUSED_PARAMETER") // Both are needed once there is a source to build.
-    fun forProfile(context: Context, profile: Profile): HeartRateSource? = null
+    fun forProfile(context: Context, profile: Profile): HeartRateSource? =
+        profile.heartRateDevice?.let { device ->
+            BleHeartRateSource(
+                context.applicationContext,
+                device,
+                onDeviceMoved = { moved -> profile.heartRateDevice = moved }
+            )
+        }
 }

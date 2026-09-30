@@ -1,6 +1,9 @@
 package com.cindy.tracker
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -8,6 +11,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.text.format.DateFormat
@@ -180,6 +185,7 @@ class MenuActivity : AppCompatActivity() {
                     "Not set — calories need it"
                 }
             ) { askBodyWeight(profile) { render() } })
+            row(navRow("Heart rate", heartRateSubtitle()) { chooseHeartRate() })
             row(navRow("Strava", stravaSubtitle(StravaConfig.available, stravaGrant)) {
                 tapStrava(stravaTokens, stravaGrant)
             })
@@ -448,6 +454,7 @@ class MenuActivity : AppCompatActivity() {
         // after, which has a player of its own.
         stopAudition()
         preview?.stop()
+        stopHeartRateSheetResources()
         languageGroup?.stop()
     }
 
@@ -475,6 +482,331 @@ class MenuActivity : AppCompatActivity() {
         profile.musicOn = true
         render()
         toast("Music: ${MusicPlayer.displayName(this, uri) ?: "track chosen"}")
+    }
+
+    // ── heart rate ───────────────────────────────────────────────────────────
+
+    /**
+     * The live connection behind whichever heart-rate sheet is open, and the scan behind
+     * "FIND MY WATCH". Both are sheet-scoped exactly like [audition]: started when their sheet
+     * opens, and stopped by that same sheet when it closes, or by [onStop].
+     *
+     * Deliberately not stopped by [render]. The menu re-renders on the way back from being
+     * stopped, and a permission or Bluetooth prompt can be what stopped it — in which case the
+     * scan its answer just started would be killed by the resume that follows the answer.
+     */
+    private var heartSource: HeartRateSource? = null
+    private var scanner: HeartRateScanner? = null
+
+    private fun stopHeartRateSheetResources() {
+        heartSource?.stop()
+        heartSource = null
+        scanner?.stop()
+        scanner = null
+    }
+
+    private fun bluetoothAdapter(): BluetoothAdapter? =
+        (getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+
+    /** What the row says underneath "Heart rate": whether a watch is paired, and by name. */
+    private fun heartRateSubtitle(): String {
+        val device = profile.heartRateDevice ?: return "No watch paired"
+        return if (!profile.body().canUseHeartRate) {
+            "${device.name} · add your age for calories"
+        } else {
+            device.name
+        }
+    }
+
+    private fun heartRateDetailsSubtitle(): String {
+        val body = profile.body()
+        return if (body.canUseHeartRate) "${body.sex!!.label} · ${body.age} y" else "Needed for heart-rate calories"
+    }
+
+    /**
+     * Everything heart rate: pairing a watch, or — once one is paired — a live status line and
+     * the age/sex the formula still needs.
+     */
+    private fun chooseHeartRate() {
+        val device = profile.heartRateDevice
+        if (device == null) chooseHeartRateUnpaired() else chooseHeartRatePaired(device)
+    }
+
+    private fun chooseHeartRateUnpaired() {
+        CindySheet(
+            this,
+            title = "Heart rate",
+            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
+                "for calories. Nothing is uploaded."
+        ).add(
+            sheetNote(
+                "Turn on heart-rate broadcast on your watch first. Garmin: Broadcast Heart " +
+                    "Rate. Polar: share heart rate with other devices. Chest straps broadcast " +
+                    "whenever they are worn. Apple Watch and most Wear OS watches do not " +
+                    "broadcast a standard heart rate."
+            )
+        ).actions(
+            primary = "FIND MY WATCH",
+            onPrimary = { findMyWatch() },
+            secondary = "CANCEL",
+            onSecondary = {}
+        ).show()
+    }
+
+    /**
+     * A short live-status card, plus the two rows the paired state adds over the unpaired one.
+     *
+     * This app has no translation seam anywhere else either — see the same warning, already
+     * unaddressed, in `Dialogs.kt` and [ResultsActivity] — so the status line's plain-string
+     * `setText` calls are suppressed rather than routed through a resource this app has no other
+     * use for.
+     */
+    @SuppressLint("SetTextI18n")
+    private fun chooseHeartRatePaired(device: HeartRateDevice) {
+        val sheet = CindySheet(
+            this,
+            title = "Heart rate",
+            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
+                "for calories. Nothing is uploaded."
+        )
+
+        val statusLine = styledText(R.style.Cindy_Footnote, "Connecting…").apply {
+            setPadding(0, dp(4), 0, 0)
+        }
+        sheet.add(insetGroup {
+            row(LinearLayout(this@MenuActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                addView(styledText(R.style.Cindy_Headline, device.name))
+                addView(statusLine)
+            })
+        })
+        sheet.add(insetGroup {
+            row(navRow("Your details", heartRateDetailsSubtitle()) {
+                askHeartRateDetails(profile) {
+                    render()
+                    sheet.dismiss()
+                    chooseHeartRate()
+                }
+            })
+            row(navRow("Find another watch", "Pair a different device") {
+                sheet.dismiss()
+                findMyWatch()
+            })
+        })
+
+        val heartHandler = Handler(Looper.getMainLooper())
+        val timeout = Runnable {
+            statusLine.text = "Can't find it — is heart-rate broadcast on?"
+            statusLine.setTextColor(getColor(R.color.label_secondary))
+        }
+        val listener = object : HeartRateListener {
+            override fun onHeartRate(bpm: Int, atElapsedMs: Long) {
+                heartHandler.removeCallbacks(timeout)
+                statusLine.text = "$bpm bpm"
+                statusLine.setTextColor(getColor(R.color.state_ok))
+            }
+
+            override fun onStatus(status: HeartRateStatus) {
+                heartHandler.removeCallbacks(timeout)
+                val message = when (status) {
+                    HeartRateStatus.CONNECTING -> {
+                        heartHandler.postDelayed(timeout, 15_000L)
+                        "Connecting…"
+                    }
+                    HeartRateStatus.NO_PERMISSION -> "Bluetooth permission is off"
+                    HeartRateStatus.BLUETOOTH_OFF -> "Bluetooth is off"
+                    HeartRateStatus.NOT_A_HEART_RATE_DEVICE -> "That device does not send heart rate"
+                    HeartRateStatus.UNSUPPORTED -> "This phone has no Bluetooth LE"
+                    HeartRateStatus.CONNECTED, HeartRateStatus.OFF -> null
+                }
+                message?.let {
+                    statusLine.text = it
+                    statusLine.setTextColor(getColor(R.color.label_secondary))
+                }
+            }
+        }
+
+        // Kept in a local as well as the field: this sheet's dismissal must stop the source this
+        // sheet started, and not whichever one a sheet opened after it has put in the field. A
+        // dialog's dismiss listener runs after the next sheet may already have been shown.
+        val source = HeartRateSources.forProfile(this, profile)
+        heartSource = source
+        source?.start(listener)
+
+        sheet.actions(
+            primary = "DONE",
+            onPrimary = {},
+            secondary = "FORGET",
+            onSecondary = {
+                profile.heartRateDevice = null
+                render()
+            },
+            secondaryTint = R.color.state_alert
+        ).onDismiss {
+            heartHandler.removeCallbacks(timeout)
+            source?.stop()
+            if (heartSource === source) heartSource = null
+        }.show()
+    }
+
+    /** "Strong" / "Good" / "Weak" — the bands the scan sheet shows instead of a raw dBm figure. */
+    private fun signalLabel(rssi: Int): String = when {
+        rssi >= -60 -> "Strong"
+        rssi >= -75 -> "Good"
+        else -> "Weak"
+    }
+
+    /**
+     * Saves [found] as the paired device and reopens the heart-rate sheet on it — straight into
+     * "Your details" first when the formula still needs them, since that is the one thing a
+     * freshly paired watch is always missing.
+     */
+    private fun adoptHeartRateDevice(found: FoundDevice) {
+        profile.heartRateDevice = HeartRateDevice(found.address, found.name)
+        render()
+        chooseHeartRate()
+        if (!profile.body().canUseHeartRate) {
+            askHeartRateDetails(profile) { render() }
+        }
+    }
+
+    /**
+     * A 12-second scan for nearby heart-rate broadcasters. The device list is an [InsetGroup]
+     * rebuilt in place as matches arrive, so the sheet itself never flickers mid-scan; only the
+     * one-off transition to "SCAN AGAIN" once the window ends rebuilds the sheet, for the primary
+     * button's label.
+     */
+    private fun openScanSheet() {
+        var devices = listOf<FoundDevice>()
+        // True only while a dismiss is this function's own doing (a rebuild, or a device just
+        // picked) — the scanner has already been dealt with by then, so the dismiss listener
+        // below must not also stop it, or (worse) stop the *next* scan it just started.
+        var rebuilding = false
+        lateinit var dialog: CindySheet
+        lateinit var group: InsetGroup
+
+        fun renderDevices() {
+            group.removeAllViews()
+            if (devices.isEmpty()) {
+                group.row(
+                    styledText(R.style.Cindy_Callout, "Nothing yet — make sure broadcast is on")
+                        .apply {
+                            setTextColor(getColor(R.color.label_secondary))
+                            setPadding(dp(18), dp(16), dp(16), dp(16))
+                        }
+                )
+            } else {
+                devices.forEach { found ->
+                    group.row(navRow(found.name, signalLabel(found.rssi)) {
+                        rebuilding = true
+                        scanner?.stop()
+                        scanner = null
+                        dialog.dismiss()
+                        adoptHeartRateDevice(found)
+                    })
+                }
+            }
+        }
+
+        fun buildSheet(windowOpen: Boolean): CindySheet {
+            val sheet = CindySheet(this, title = "Looking for heart-rate devices")
+            group = insetGroup { }
+            sheet.add(group)
+            renderDevices()
+            val withActions = if (windowOpen) {
+                sheet.actions(primary = "CANCEL", onPrimary = {})
+            } else {
+                sheet.actions(
+                    primary = "SCAN AGAIN",
+                    onPrimary = { rebuilding = true; openScanSheet() },
+                    secondary = "CANCEL",
+                    onSecondary = {}
+                )
+            }
+            return withActions.onDismiss {
+                if (rebuilding) rebuilding = false else stopHeartRateSheetResources()
+            }
+        }
+
+        dialog = buildSheet(windowOpen = true)
+        scanner = HeartRateScanner(this).also { s ->
+            s.start(
+                onFound = { found -> devices = found; renderDevices() },
+                onDone = {
+                    rebuilding = true
+                    dialog.dismiss()
+                    dialog = buildSheet(windowOpen = false)
+                    dialog.show()
+                }
+            )
+        }
+        dialog.show()
+    }
+
+    private val requestBluetoothPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) {
+            findMyWatch()
+        } else {
+            toast("Bluetooth permission is needed to find your watch")
+        }
+    }
+
+    private val requestBluetoothEnable = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // Whatever the result code, the adapter's own state is the truth: proceed only if the
+        // athlete actually turned it on, and say nothing if they backed out of the system prompt.
+        if (bluetoothAdapter()?.isEnabled == true) proceedToScan()
+    }
+
+    /**
+     * The three things that can stand between "FIND MY WATCH" and a working scan, checked in the
+     * order that makes each one's system prompt make sense: permission first, since the adapter
+     * and location checks below both need it answered; the adapter next, since a location prompt
+     * over a radio that is off would be asking the wrong question; the scan itself last.
+     */
+    @SuppressLint("MissingPermission") // HeartRatePermissions.granted() is checked just above.
+    private fun findMyWatch() {
+        // Before anything else: with no BLE radio there is no permission worth asking for, and
+        // the request-enable intent has nothing to answer it.
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            toast("This phone has no Bluetooth LE, so it cannot hear a watch")
+            return
+        }
+        if (!HeartRatePermissions.granted(this)) {
+            requestBluetoothPermissions.launch(HeartRatePermissions.required())
+            return
+        }
+        if (bluetoothAdapter()?.isEnabled != true) {
+            requestBluetoothEnable.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        proceedToScan()
+    }
+
+    private fun proceedToScan() {
+        if (HeartRatePermissions.locationSwitchBlocksScan(this)) {
+            showLocationNeeded()
+        } else {
+            openScanSheet()
+        }
+    }
+
+    private fun showLocationNeeded() {
+        CindySheet(
+            this,
+            title = "Location is off",
+            subtitle = "Android 11 and older only let apps find Bluetooth devices while " +
+                "Location is on. Cindy never reads your location."
+        ).actions(
+            primary = "OPEN SETTINGS",
+            onPrimary = { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
+            secondary = "NOT NOW",
+            onSecondary = {}
+        ).show()
     }
 
     // ── reminder ──────────────────────────────────────────────────────────────
