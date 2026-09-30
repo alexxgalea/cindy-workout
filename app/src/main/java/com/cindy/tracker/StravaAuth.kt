@@ -174,7 +174,7 @@ class StravaAuth(private val transport: HttpTransport) {
         }
 
         /**
-         * The mobile authorize URL (§2): `Intent.ACTION_VIEW` on this opens the Strava app when
+         * Strava's mobile authorize URL: `Intent.ACTION_VIEW` on this opens the Strava app when
          * it is installed, and mobile web otherwise — [MenuActivity] does not need to know which.
          *
          * `approval_prompt=auto` skips a re-consent screen for an athlete who already granted

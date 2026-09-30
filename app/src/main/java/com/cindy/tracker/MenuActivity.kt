@@ -194,7 +194,6 @@ class MenuActivity : AppCompatActivity() {
                     "Not set — calories need it"
                 }
             ) { askBodyWeight(profile) { render() } })
-            // The HR work's own "Heart rate" row lands here too, once it merges — see the plan.
             row(navRow("Strava", stravaSubtitle(stravaAvailable, stravaGrant)) {
                 tapStrava(stravaTokens, stravaGrant)
             })
@@ -660,16 +659,12 @@ class MenuActivity : AppCompatActivity() {
 
     /**
      * DONE just closes; DISCONNECT is the only action that does anything.
-     *
-     * S4 adds an "Upload automatically" toggle here, backed by [StravaTokenStore.autoUpload] —
-     * there is nothing yet for it to gate, so it waits for that phase rather than appearing
-     * switched on with no uploads behind it.
      */
     private fun openStravaSheet(tokens: StravaTokenStore, grant: StravaGrant) {
         CindySheet(
             this,
             title = "Strava",
-            // Says only what this build does. S4 changes it once finished workouts upload.
+            // Says only what is true: connecting does not upload anything on its own.
             subtitle = "Connected${grant.athleteName?.let { " as $it" } ?: ""}."
         ).actions(
             primary = "DONE",

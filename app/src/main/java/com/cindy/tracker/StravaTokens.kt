@@ -20,7 +20,7 @@ data class StravaGrant(
 
 /**
  * Everything about the athlete's Strava connection that has to survive the app closing: the
- * grant itself, the OAuth attempt in flight, and the two settings S4 reads.
+ * grant itself, the OAuth attempt in flight, and the two settings the upload reads.
  *
  * Its own prefs file, `strava` — never `cindy`, the one [Profile] uses — because
  * `backup_rules.xml` and `data_extraction_rules.xml` exclude `strava.xml` by name from every
@@ -69,7 +69,7 @@ class StravaTokenStore(context: Context) {
             edit.commit()
         }
 
-    /** Whether there is a grant to upload with. Read by S4 before it enqueues any work. */
+    /** Whether there is a grant to upload with. Read before any upload is queued. */
     val connected: Boolean get() = grant != null
 
     /** Forgets the grant. Used on DISCONNECT and when a refresh comes back revoked. */
@@ -88,7 +88,7 @@ class StravaTokenStore(context: Context) {
 
     /**
      * Set when the athlete asked to connect *in order to* upload one particular attempt — from
-     * the results screen, in S4 — rather than from the menu on its own. [StravaAuthActivity]
+     * the results screen — rather than from the menu on its own. [StravaAuthActivity]
      * enqueues this attempt once connected, then clears it.
      */
     var afterConnectUploadAtMillis: Long?
@@ -99,7 +99,7 @@ class StravaTokenStore(context: Context) {
             edit.apply()
         }
 
-    /** Whether a saved attempt uploads on its own. On by default once connected; S4's toggle. */
+    /** Whether a saved attempt uploads on its own. On by default once connected. */
     var autoUpload: Boolean
         get() = prefs.getBoolean(KEY_AUTO_UPLOAD, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_UPLOAD, value).apply()

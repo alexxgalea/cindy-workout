@@ -12,8 +12,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The Strava row and sheet, and the redirect activity — kept apart from [ScreenSmokeTest] per
- * the plan, so the HR work's own screen tests never collide with this file.
+ * The Strava row and sheet, and the redirect activity — kept apart from [ScreenSmokeTest], so
+ * that file's own additions and these never collide.
  *
  * The menu's three Strava states are exercised through [MenuActivity.stravaAvailableForTest],
  * the seam documented on that property: [StravaConfig.available] is always false under a unit
