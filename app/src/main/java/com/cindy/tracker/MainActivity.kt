@@ -62,7 +62,6 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
-        const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
         /**
          * The count between tapping REC and filming. Long enough to put the phone down and turn
@@ -1612,11 +1611,12 @@ class MainActivity : AppCompatActivity() {
      * Placement is the one thing the athlete has to get right before the camera can help them,
      * and the setup check can only report it *after* they are already in shot getting it wrong —
      * "Can't see your ankles" arrives too late to be advice. So it is offered first, once, and
-     * then stays out of the way: [KEY_PLACEMENT_SEEN] suppresses it for someone who has read it,
-     * and the same diagram lives permanently in the help screen for when they want it back.
+     * then stays out of the way: [Onboarding.KEY_PLACEMENT_SEEN] suppresses it for someone who
+     * has read it, and the same diagram lives permanently in the help screen for when they want
+     * it back.
      */
     private fun showPlacementGuide(onContinue: () -> Unit) {
-        if (prefs().getBoolean(KEY_PLACEMENT_SEEN, false)) {
+        if (prefs().getBoolean(Onboarding.KEY_PLACEMENT_SEEN, false)) {
             onContinue()
             return
         }
@@ -1667,7 +1667,9 @@ class MainActivity : AppCompatActivity() {
         sheet.actions(
             primary = "START SETUP",
             onPrimary = {
-                if (dontAskAgain) prefs().edit().putBoolean(KEY_PLACEMENT_SEEN, true).apply()
+                if (dontAskAgain) {
+                    prefs().edit().putBoolean(Onboarding.KEY_PLACEMENT_SEEN, true).apply()
+                }
                 onContinue()
             },
             secondary = "NOT NOW",
