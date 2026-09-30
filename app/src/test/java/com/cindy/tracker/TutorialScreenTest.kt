@@ -81,7 +81,7 @@ class TutorialScreenTest {
 
     private fun content(activity: Activity): View = activity.findViewById(android.R.id.content)
 
-    private fun open(replay: Boolean = false): Activity = Robolectric.buildActivity(
+    private fun open(replay: Boolean = false): TutorialActivity = Robolectric.buildActivity(
         TutorialActivity::class.java, TutorialActivity.intent(context, replay)
     ).setup().get()
 
