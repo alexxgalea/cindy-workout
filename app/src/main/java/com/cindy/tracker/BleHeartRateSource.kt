@@ -65,6 +65,10 @@ class BleHeartRateSource(
 
     private var reconnectRunnable: Runnable? = null
 
+    /** Whether the current client has already had its service cache dropped once — see
+     *  [rediscoverFresh]. One retry per connection is enough; a second miss is a real answer. */
+    private var cacheRefreshed = false
+
     private fun bluetoothManager(): BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
@@ -101,6 +105,7 @@ class BleHeartRateSource(
         }
         report(HeartRateStatus.CONNECTING)
         reportedConnected = false
+        cacheRefreshed = false
         // One client at a time. Whatever came before is finished with by now, and a client left
         // open is a slot in the phone's small connection pool that nothing will ever give back.
         gatt?.let { closeGatt(it) }
@@ -171,6 +176,10 @@ class BleHeartRateSource(
                 }
                 val characteristic = g.getService(HeartRateGatt.SERVICE)
                     ?.getCharacteristic(HeartRateGatt.MEASUREMENT)
+                if (characteristic == null && !cacheRefreshed) {
+                    rediscoverFresh(g)
+                    return@post
+                }
                 if (characteristic == null) {
                     report(HeartRateStatus.NOT_A_HEART_RATE_DEVICE)
                     wanted = false
@@ -210,6 +219,31 @@ class BleHeartRateSource(
             wanted = false
             closeGatt(g)
         }
+    }
+
+    /**
+     * Drops Android's cached copy of the device's services and discovers them again, once.
+     *
+     * Android keeps a bonded device's service list across connections rather than asking again.
+     * A Garmin bonded through Garmin Connect is exactly that case, and its Heart Rate service
+     * only exists while Broadcast Heart Rate is on — so the cache, taken while it was off, says
+     * the watch has no heart rate at all. The only way to drop that cache is
+     * `BluetoothGatt.refresh()`, which is hidden API: called by reflection, and if the platform
+     * refuses, the retry simply finds what the cache already said and the device is reported as
+     * not sending heart rate, the same as before. The short wait gives the stack time to clear
+     * the cache before discovery reads it again.
+     */
+    @SuppressLint("DiscouragedPrivateApi") // The hidden-API call described above, on purpose.
+    private fun rediscoverFresh(g: BluetoothGatt) {
+        cacheRefreshed = true
+        try {
+            g.javaClass.getMethod("refresh").invoke(g)
+        } catch (e: ReflectiveOperationException) {
+            // Hidden API refused; the retry below is still harmless.
+        } catch (e: SecurityException) {
+            // Same.
+        }
+        handler.postDelayed({ if (current(g)) discoverServices(g) }, CACHE_REFRESH_DELAY_MS)
     }
 
     @SuppressLint("MissingPermission") // Same gate as discoverServices().
@@ -358,5 +392,6 @@ class BleHeartRateSource(
         }
 
         private const val RECONNECT_SCAN_WINDOW_MS = 10_000L
+        private const val CACHE_REFRESH_DELAY_MS = 600L
     }
 }
