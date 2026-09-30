@@ -37,9 +37,16 @@ class EngineParityTraceTest {
                 else -> error("Unknown exercise in $traceId")
             }
             val pull = PullVariant.entries.first { it.name == steps.first()[PULL] }
+            // The two columns the plan grew for the heels-flat squat. A plan without them is the
+            // standard air squat with smart counting off, which is what every older row means.
+            val squat = SquatVariant.entries.first {
+                it.name == steps.first().getOrElse(SQUAT) { "AIR_SQUAT" }
+            }
+            val smart = steps.first().getOrElse(SMART) { "false" } == "true"
             val engine = WorkoutEngine(
                 fixedExercise = exercise,
-                profile = CindyProfile(pull = pull)
+                profile = CindyProfile(pull = pull, squat = squat),
+                smartSquats = smart
             )
             steps.forEach { step ->
                 val angle = step[ANGLE].toFloat()
@@ -108,6 +115,8 @@ class EngineParityTraceTest {
         const val STEP = 4
         const val ANGLE = 5
         const val PULL = 6
+        const val SQUAT = 7
+        const val SMART = 8
         const val HEADER = "traceId,step,tMs,angle,kpSum,event,count,state,signal,learnedRange," +
             "calibrated,hint,minConfidence,confidenceAdequate,poseLegible,barGateOpen,headAboveBar," +
             "resetSeen,rejection"

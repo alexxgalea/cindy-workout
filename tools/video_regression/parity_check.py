@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim import pose_fixtures
-from cindy_sim.workout_engine import CindyProfile, Exercise, PullVariant, WorkoutEngine
+from cindy_sim.workout_engine import CindyProfile, Exercise, PullVariant, SquatVariant, WorkoutEngine
 
 HEADER = [
     "traceId", "step", "tMs", "angle", "kpSum", "event", "count", "state", "signal",
@@ -45,9 +45,15 @@ def run_plan(plan_path: Path) -> list[list[str]]:
     out: list[list[str]] = []
     for trace_id in dict.fromkeys(row["traceId"] for row in rows):
         steps = [row for row in rows if row["traceId"] == trace_id]
+        # `squat` and `smart` are the two columns the plan grew for the heels-flat squat. A plan
+        # without them is the standard air squat with smart counting off.
         engine = WorkoutEngine(
             fixed_exercise=EXERCISES[steps[0]["exercise"]],
-            profile=CindyProfile(pull=PullVariant[steps[0]["pull"]]),
+            profile=CindyProfile(
+                pull=PullVariant[steps[0]["pull"]],
+                squat=SquatVariant[steps[0].get("squat") or "AIR_SQUAT"],
+            ),
+            smart_squats=(steps[0].get("smart") or "false") == "true",
         )
         for step in steps:
             angle = float(step["angle"])
