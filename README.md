@@ -168,6 +168,53 @@ Pausing and flipping the camera both trigger a recalibration: the bands describe
 seen from where the phone was standing, and either action can invalidate that without invalidating
 the reps already counted. The status line says `Recalibrating…` until the band is re-learned.
 
+### First launch
+
+A new install is shown around before the camera opens: five pages, then the camera's permission
+prompt, then a tour of the controls on the camera screen. Each happens once.
+
+1. **Cindy, counted for you.** What the workout is, and what the phone does.
+2. **Your Cindy, your movements.** Other movements count, and which ones: band-assisted pull-ups,
+   push-ups from the knees and heels-flat, on-toes or box squats are counted, and movements the
+   camera cannot follow, such as inverted rows, are tapped in with `+1`. It explains the setting
+   that spots heels-flat squats and has a button into the movement sheet. An athlete who cannot
+   do the strict movements yet is the one most likely to decide that the app counts nothing for
+   them, so this page comes before anything else about how it works.
+3. **Where to stand.** The placement diagram and its three facts, the same ones the sheet before
+   the first setup check shows, built in one place so the two cannot disagree.
+4. **Before the clock starts.** The setup check, what the status line's dot means, and what `−1`,
+   `+1` and `SKIP` are for.
+5. **Nothing leaves your phone.** Counting happens on the phone, `REC` films only when tapped, and
+   Strava stays off until it is connected.
+
+The pages come first so that Android asks for the camera only after the athlete has been told why.
+They can be swiped, stepped through or skipped, and the last button says `LET'S GO`, or `DONE` on a
+replay.
+
+Then the tour: the screen is dimmed and each control is lit in turn, `START`, the status line, the
+rep count, `SKIP`, `REC`, the menu and `FLIP`, with a card saying what it is for. A tap anywhere
+moves on, and back or `SKIP TOUR` ends it. While it is showing it takes every touch, so nothing it
+points at can be pressed by accident. It waits for the clock to be idle, so it never appears
+mid-workout, and it leaves out any control that is not showing.
+
+**Who sees it.** New installs only. [`Onboarding.shouldShowTutorial`](app/src/main/java/com/cindy/tracker/Onboarding.kt)
+wants nothing seen yet, no session on record, the placement guide never dismissed and the camera's
+permission not already held. Each of the last three means the app is not new to them. The
+permission reaches furthest back, because Android starts every fresh install without it, so an
+athlete who updated from an older version, and may never have finished a session, has it already.
+They are marked as having seen the pages without being shown them, so clearing their records later
+does not make them look new.
+
+**Again.** Help → Take the tour replays the pages and then the tour, over the camera screen. The
+placement guide before the first setup check is separate and unchanged: it is the reminder at the
+moment of need, with its own "Don't show this again".
+
+The flags are in [FirstRun.kt](app/src/main/java/com/cindy/tracker/FirstRun.kt), the pages in
+[TutorialActivity.kt](app/src/main/java/com/cindy/tracker/TutorialActivity.kt), the tour in
+[SpotlightView.kt](app/src/main/java/com/cindy/tracker/SpotlightView.kt), what it says about each
+control in [HudTour.kt](app/src/main/java/com/cindy/tracker/HudTour.kt), and where its card sits in
+[SpotlightMath.kt](app/src/main/java/com/cindy/tracker/SpotlightMath.kt).
+
 ### Interface
 
 Full-screen preview with the skeleton drawn over it, and four numbers: the clock, the round,
@@ -540,6 +587,10 @@ for ranking, round-tripping and corrupt-data tolerance.
 Every badge rule is tested on both sides of its boundary, and so are the honesty rules that keep
 a lower-bound, adaptive or unreadable session from earning a score badge. The name, the initials
 and the photo's cropping, sampling and orientation are pure and tested the same way.
+
+The first-launch rule is tested on every combination of its inputs. The pages are built and stepped
+through on a test device, and the camera-screen tour runs the real step list over the inflated HUD
+layout, checking that each hole sits on its control and each card fits on the screen.
 
 The voice is tested up to the speech engine: every line in every language (plural forms at the
 awkward numbers, written-out ones and twos, each clock mark), the choice of voice against lists

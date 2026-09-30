@@ -414,6 +414,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!--
+      ── the first-launch tour ──
+
+      Over the HUD it points at, and under the launch view, which covers it until the camera is up.
+      Gone until the tour is started; while it is showing it takes every touch.
+    -->
+    <com.cindy.tracker.SpotlightView
+        android:id="@+id/spotlight"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Over everything, and gone as soon as the preview has a frame. -->
     <com.cindy.tracker.LaunchView
         android:id="@+id/launch"

@@ -113,6 +113,12 @@
             android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".TutorialActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:parentActivityName=".MainActivity" />
+
         <!--
           The redirect target for Strava's OAuth flow. Exported and singleTask because the
           Strava app or a browser opens this by URI, outside our own task, and there must only

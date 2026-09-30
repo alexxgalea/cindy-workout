@@ -67,6 +67,16 @@ class HelpActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        // First, because it is the one thing on this screen that is for someone who is lost rather
+        // than curious: the pages and the tour of the camera screen, taken again.
+        binding.sections.addView(insetGroup {
+            row(navRow("Take the tour", "The first-launch pages and a tour of the camera screen") {
+                startActivity(TutorialActivity.intent(this@HelpActivity, replay = true))
+            })
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(6) })
+
         heading("THE WORKOUT")
         workoutCard()
         quote(

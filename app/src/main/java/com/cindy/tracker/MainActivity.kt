@@ -19,11 +19,13 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.hardware.Sensor
@@ -47,7 +49,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStarted
+import kotlinx.coroutines.launch
 import androidx.camera.view.PreviewView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.cindy.tracker.databinding.ActivityMainBinding
@@ -62,7 +68,9 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
-        const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
+
+        /** Whether the first-launch pages have been sent for, which a recreated screen must not repeat. */
+        const val STATE_TUTORIAL_LAUNCHED = "tutorial_launched"
 
         /**
          * The count between tapping REC and filming. Long enough to put the phone down and turn
@@ -410,8 +418,46 @@ class MainActivity : AppCompatActivity() {
     private val requestCamera = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        cameraAnswered = true
         if (granted) startCamera()
         else status.text = "Camera permission is required to count reps"
+        maybeStartTour()
+    }
+
+    /**
+     * The first-launch pages. However they end, finished or skipped, the camera comes next: its
+     * permission is only asked for once they are done, so the athlete has been told what the app
+     * is and that the picture stays on the phone before being asked to hand it the camera.
+     */
+    private val tutorial = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { ensureCamera() }
+
+    /**
+     * Whether the camera's permission has been answered, either way. The tour of the controls
+     * waits behind it, so the athlete is not shown a dimmed screen with a system dialog on top.
+     */
+    private var cameraAnswered = false
+
+    /** Whether the tour is on screen, so that the several things that can start it start it once. */
+    private var tourShowing = false
+
+    /** The first-launch flags, read in several places and held once. */
+    private val firstRun by lazy { FirstRun(this) }
+
+    /**
+     * Whether the pages have been sent for. Saved with the screen, because this activity is
+     * recreated by a change of language, a night-mode switch or the system reclaiming it, and a
+     * recreated one that sent for them again would stack a second copy above the first. The first
+     * copy's result is delivered to the new screen on its own.
+     */
+    private var tutorialLaunched = false
+
+    /** Back skips the tour, and only while there is one to skip. */
+    private val tourBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            binding.spotlight.skip()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -457,9 +503,13 @@ class MainActivity : AppCompatActivity() {
         // is actually ready. The timeout covers the cases where that never happens — a refused
         // camera permission, or a device that fails to open one at all.
         binding.preview.previewStreamState.observe(this) { streaming ->
-            if (streaming == PreviewView.StreamState.STREAMING) binding.launch.dismiss {}
+            if (streaming == PreviewView.StreamState.STREAMING) {
+                binding.launch.dismiss {}
+                maybeStartTour()
+            }
         }
         binding.root.postDelayed({ binding.launch.dismiss {} }, 2_500L)
+        onBackPressedDispatcher.addCallback(this, tourBack)
 
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
@@ -539,9 +589,79 @@ class MainActivity : AppCompatActivity() {
         renderChips()
         renderControls()
 
+        tutorialLaunched = savedInstanceState?.getBoolean(STATE_TUTORIAL_LAUNCHED, false) ?: false
+        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (firstRun.shouldShowTutorial(
+                hasHistory = records.all().isNotEmpty(), cameraGranted = cameraGranted
+            )
+        ) {
+            if (!tutorialLaunched) {
+                // Asked first, so that the launch arcs, which honour only the first caller, play
+                // out and hand over to the first page. The streaming and timeout calls above then
+                // find them already leaving and do nothing. Sent for once the screen is started,
+                // not when the arcs happen to finish: an activity that has been backgrounded in
+                // the meantime cannot reliably start another.
+                binding.launch.dismiss {
+                    lifecycleScope.launch {
+                        lifecycle.withStarted {
+                            tutorialLaunched = true
+                            tutorial.launch(
+                                TutorialActivity.intent(this@MainActivity, replay = false)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Someone who has already used the app is never shown the pages, and is marked as
+            // having seen them so that clearing their records later does not make them look new.
+            if (!firstRun.tutorialSeen) firstRun.tutorialSeen = true
+            ensureCamera()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_TUTORIAL_LAUNCHED, tutorialLaunched)
+    }
+
+    /** Opens the camera, asking for its permission first if the athlete has not yet given it. */
+    private fun ensureCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
-        ) startCamera() else requestCamera.launch(Manifest.permission.CAMERA)
+        ) {
+            cameraAnswered = true
+            startCamera()
+        } else {
+            requestCamera.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    /**
+     * Starts the tour of the controls if one is waiting and nothing is in its way.
+     *
+     * Called from every place it could become possible: the camera's answer, the first frame, and
+     * coming back to this screen, which is how a replay from Help arrives. It is guarded rather
+     * than scheduled, so that however many of them fire, it starts once, and never mid-workout:
+     * it stays pending until the clock is idle. It waits for a layout before lighting anything,
+     * because the hole is cut from where the controls actually are.
+     */
+    private fun maybeStartTour() {
+        if (tourShowing || !cameraAnswered || state != State.IDLE) return
+        if (!firstRun.hudTourPending) return
+        tourShowing = true
+        tourBack.isEnabled = true
+        binding.root.doOnLayout {
+            binding.spotlight.start(HudTour.steps(binding)) { endTour() }
+        }
+    }
+
+    /** Done or skipped: it is taken, and does not come back until Help asks for it. */
+    private fun endTour() {
+        tourShowing = false
+        tourBack.isEnabled = false
+        firstRun.hudTourPending = false
     }
 
     private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -1318,6 +1438,8 @@ class MainActivity : AppCompatActivity() {
         music.stop()
         renderClock()
         apply(runEngine { RepEvent.NONE })
+        // A tour that was put off for a live workout is owed now that the clock is idle again.
+        maybeStartTour()
     }
 
     private fun onManualRep() {
@@ -1639,11 +1761,12 @@ class MainActivity : AppCompatActivity() {
      * Placement is the one thing the athlete has to get right before the camera can help them,
      * and the setup check can only report it *after* they are already in shot getting it wrong —
      * "Can't see your ankles" arrives too late to be advice. So it is offered first, once, and
-     * then stays out of the way: [KEY_PLACEMENT_SEEN] suppresses it for someone who has read it,
-     * and the same diagram lives permanently in the help screen for when they want it back.
+     * then stays out of the way: [Onboarding.KEY_PLACEMENT_SEEN] suppresses it for someone who
+     * has read it, and the same diagram lives permanently in the help screen for when they want
+     * it back.
      */
     private fun showPlacementGuide(onContinue: () -> Unit) {
-        if (prefs().getBoolean(KEY_PLACEMENT_SEEN, false)) {
+        if (prefs().getBoolean(Onboarding.KEY_PLACEMENT_SEEN, false)) {
             onContinue()
             return
         }
@@ -1661,32 +1784,7 @@ class MainActivity : AppCompatActivity() {
             )
         })
 
-        // Three facts, one line each, rather than a paragraph nobody reads on the way to a bar.
-        listOf(
-            R.drawable.ic_phone_stand to "Stand the phone up rather than laying it flat.",
-            R.drawable.ic_frame to "Keep your head and your feet both in shot.",
-            R.drawable.ic_dont_move to
-                "Then leave it there — moving it mid-workout resets what it has learned."
-        ).forEachIndexed { index, (icon, text) ->
-            sheet.add(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, if (index == 0) dp(18) else dp(13), 0, 0)
-                addView(ImageView(context).apply {
-                    setImageResource(icon)
-                    imageTintList = ColorStateList.valueOf(
-                        getColor(
-                            if (icon == R.drawable.ic_dont_move) R.color.state_caution
-                            else R.color.label_tertiary
-                        )
-                    )
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { topMargin = dp(2) })
-                addView(styledText(R.style.Cindy_Callout, text).apply {
-                    setTextColor(getColor(R.color.label_body))
-                    setPadding(dp(11), 0, 0, 0)
-                })
-            })
-        }
+        sheet.add(placementFacts())
 
         var dontAskAgain = false
         sheet.toggle("Don't show this again", checked = false) { dontAskAgain = it }
@@ -1694,7 +1792,9 @@ class MainActivity : AppCompatActivity() {
         sheet.actions(
             primary = "START SETUP",
             onPrimary = {
-                if (dontAskAgain) prefs().edit().putBoolean(KEY_PLACEMENT_SEEN, true).apply()
+                if (dontAskAgain) {
+                    prefs().edit().putBoolean(Onboarding.KEY_PLACEMENT_SEEN, true).apply()
+                }
                 onContinue()
             },
             secondary = "NOT NOW",
@@ -1757,6 +1857,17 @@ class MainActivity : AppCompatActivity() {
         syncHeartRate()
         // A force-stop or reboot clears alarms; put it back, but never postpone one that is due.
         ReminderScheduler.ensureArmed(this)
+        maybeStartTour()
+    }
+
+    /**
+     * A replay of the pages from Help brings this screen back to the front with a new intent, and
+     * leaves the tour waiting. [onResume] follows and would start it on its own; this is for the
+     * case where it does not, and costs nothing when it does.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        maybeStartTour()
     }
 
     override fun onPause() {
