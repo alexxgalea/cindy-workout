@@ -143,6 +143,10 @@ dependencies {
 
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
+    // Drives the Strava upload after a workout is saved: survives process death, waits for a
+    // network, and backs off between retries on its own.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     testImplementation("junit:junit:4.13.2")
     // Builds the screens for real on the JVM. The suite was 200 tests of pure logic and none of
     // a single view, which is how a null layoutParams reached a device.
@@ -151,6 +155,8 @@ dependencies {
     // Android ships org.json at runtime, but plain JVM tests need the real artifact, so that
     // Strava payload and response parsing are testable without Robolectric.
     testImplementation("org.json:json:20240303")
+    // TestListenableWorkerBuilder and a synchronous WorkManager for the upload worker's tests.
+    testImplementation("androidx.work:work-testing:2.9.1")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
