@@ -33,11 +33,19 @@ object Onboarding {
     /**
      * Whether to show the pages before the camera opens.
      *
-     * Only to a new install: nothing seen, no session on record, and the placement guide never
-     * dismissed. Each of the last two is proof enough that the app is not new to them, and the
-     * records alone are not: a person can dismiss the guide and close the app before finishing
-     * anything.
+     * Only to a new install: nothing seen, no session on record, the placement guide never
+     * dismissed, and the camera's permission not already held. Each of the last three is proof
+     * enough that the app is not new to them, and the records alone are not: a person can dismiss
+     * the guide, or only ever run the setup check, and close the app before finishing anything.
+     *
+     * The permission is the evidence that reaches furthest back. Android starts every install
+     * without it, so a fresh one cannot have it, while an athlete who updated from a version that
+     * predates these pages has held it since the first time they opened the camera.
      */
-    fun shouldShowTutorial(seen: Boolean, hasHistory: Boolean, placementDismissed: Boolean): Boolean =
-        !seen && !hasHistory && !placementDismissed
+    fun shouldShowTutorial(
+        seen: Boolean,
+        hasHistory: Boolean,
+        placementDismissed: Boolean,
+        cameraGranted: Boolean
+    ): Boolean = !seen && !hasHistory && !placementDismissed && !cameraGranted
 }

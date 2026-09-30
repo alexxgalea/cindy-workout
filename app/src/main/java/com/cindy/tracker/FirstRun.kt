@@ -38,9 +38,12 @@ class FirstRun(context: Context) {
     val placementDismissed: Boolean
         get() = prefs.getBoolean(Onboarding.KEY_PLACEMENT_SEEN, false)
 
-    /** Whether to show the pages now. [hasHistory] is whether any session is on record. */
-    fun shouldShowTutorial(hasHistory: Boolean): Boolean =
-        Onboarding.shouldShowTutorial(tutorialSeen, hasHistory, placementDismissed)
+    /**
+     * Whether to show the pages now. [hasHistory] is whether any session is on record, and
+     * [cameraGranted] whether the camera's permission is already held.
+     */
+    fun shouldShowTutorial(hasHistory: Boolean, cameraGranted: Boolean): Boolean =
+        Onboarding.shouldShowTutorial(tutorialSeen, hasHistory, placementDismissed, cameraGranted)
 
     /** The end of the pages, however they ended: they will not come back, and the tour is next. */
     fun finishPages() {

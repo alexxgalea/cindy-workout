@@ -226,6 +226,66 @@ class HudTourTest {
         assertTrue(hud.spotlight.isClickable)
     }
 
+    // ── the screen beneath ────────────────────────────────────────────────────
+
+    @Test
+    fun `while the tour shows, the screen under it is hidden from a screen reader, and back after`() {
+        val hud = hud()
+        val under = listOf(hud.bandTop, hud.bandBottom, hud.preview)
+        val before = under.map { it.importantForAccessibility }
+
+        start(hud)
+
+        for (view in under) {
+            assertEquals(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, view.importantForAccessibility
+            )
+        }
+        // The tour is not hidden from itself.
+        assertTrue(
+            hud.spotlight.importantForAccessibility !=
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        )
+
+        hud.spotlight.skip()
+        assertEquals(before, under.map { it.importantForAccessibility })
+    }
+
+    @Test
+    fun `the hole follows a control that has moved`() {
+        val hud = hud()
+        start(hud)
+        press(hud, "NEXT") // the status line
+        val before = hud.spotlight.holeBounds
+
+        // The status line grows, as it does when its text wraps. Laying the screen out again does
+        // not lay the tour out again, so the light stays where the control was.
+        hud.statusRow.layoutParams.height = 300
+        hud.statusRow.requestLayout()
+        layout(hud)
+        assertEquals(before, hud.spotlight.holeBounds)
+
+        hud.spotlight.refresh()
+        layout(hud)
+
+        assertTrue(
+            "the hole did not grow with the control: $before, then ${hud.spotlight.holeBounds}",
+            hud.spotlight.holeBounds.height() > before.height()
+        )
+    }
+
+    @Test
+    fun `looking again at a control that has not moved changes nothing`() {
+        val hud = hud()
+        start(hud)
+        val before = hud.spotlight.holeBounds
+
+        hud.spotlight.refresh()
+        layout(hud)
+
+        assertEquals(before, hud.spotlight.holeBounds)
+    }
+
     // ── what is left out ──────────────────────────────────────────────────────
 
     @Test

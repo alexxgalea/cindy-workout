@@ -11,6 +11,7 @@ import android.util.AttributeSet
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -51,6 +52,8 @@ class SpotlightView @JvmOverloads constructor(
     private var onDone: (() -> Unit)? = null
 
     private val hole = RectF()
+    private val hidden = ArrayList<Pair<View, Int>>()
+    private val recheck = ViewTreeObserver.OnGlobalLayoutListener { refresh() }
     private val cutout = Path()
     private val dim = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = DIM }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -152,11 +155,30 @@ class SpotlightView @JvmOverloads constructor(
         index = 0
         onDone = done
         visibility = VISIBLE
+        hideScreenBeneath()
+        viewTreeObserver.addOnGlobalLayoutListener(recheck)
         render()
     }
 
     /** Ends the tour where it is. */
     fun skip() = finish()
+
+    /**
+     * Looks again at where the control is, and lays the tour out again if it has moved.
+     *
+     * The window is worked out when this view is laid out, and this view is not laid out again
+     * because something beside it was: a status line that wraps, or a band that resizes, moves the
+     * control and leaves the light where it was. So this is asked after every layout of the
+     * screen, and acts only on a difference, which is also what stops it asking for the layout it
+     * is answering.
+     */
+    fun refresh() {
+        if (steps.isEmpty() || width == 0) return
+        val window = windowAround(
+            steps[index].target, left, top, width.toFloat(), height.toFloat()
+        ) ?: return
+        if (window != hole) requestLayout()
+    }
 
     private fun advance() {
         if (index < steps.lastIndex) {
@@ -172,7 +194,29 @@ class SpotlightView @JvmOverloads constructor(
         onDone = null
         steps = emptyList()
         visibility = GONE
+        if (viewTreeObserver.isAlive) viewTreeObserver.removeOnGlobalLayoutListener(recheck)
+        showScreenBeneath()
         done()
+    }
+
+    /**
+     * While the tour is showing the screen under it is for nobody. The dim keeps it from sight and
+     * from touch; this keeps it from a screen reader, so that swiping cannot reach START any more
+     * than a tap can.
+     */
+    private fun hideScreenBeneath() {
+        val container = parent as? ViewGroup ?: return
+        for (i in 0 until container.childCount) {
+            val sibling = container.getChildAt(i)
+            if (sibling === this) continue
+            hidden += sibling to sibling.importantForAccessibility
+            sibling.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+    }
+
+    private fun showScreenBeneath() {
+        for ((view, mode) in hidden) view.importantForAccessibility = mode
+        hidden.clear()
     }
 
     private fun render() {
@@ -192,16 +236,7 @@ class SpotlightView @JvmOverloads constructor(
         val width = (r - l).toFloat()
         val height = (b - t).toFloat()
 
-        val target = steps[index].target
-        val origin = originIn(parent as? View ?: return, target)
-        val pad = context.dpf(8f)
-        hole.set(
-            origin.x - l - pad,
-            origin.y - t - pad,
-            origin.x - l + target.width + pad,
-            origin.y - t + target.height + pad
-        )
-        hole.intersect(0f, 0f, width, height)
+        hole.set(windowAround(steps[index].target, l, t, width, height) ?: return)
 
         val top = SpotlightMath.captionTop(
             hole.top, hole.bottom, card.measuredHeight.toFloat(), height,
@@ -221,6 +256,23 @@ class SpotlightView @JvmOverloads constructor(
         cutout.addRoundRect(hole, radius, radius, Path.Direction.CW)
         canvas.drawPath(cutout, dim)
         canvas.drawRoundRect(hole, radius, radius, ring)
+    }
+
+    /**
+     * The bright window around [target], in this view's own coordinates, which start at [left] and
+     * [top] in the parent and run for [width] by [height]. Kept on the screen.
+     */
+    private fun windowAround(
+        target: View, left: Int, top: Int, width: Float, height: Float
+    ): RectF? {
+        val origin = originIn(parent as? View ?: return null, target)
+        val pad = context.dpf(8f)
+        return RectF(
+            origin.x - left - pad,
+            origin.y - top - pad,
+            origin.x - left + target.width + pad,
+            origin.y - top + target.height + pad
+        ).apply { intersect(0f, 0f, width, height) }
     }
 
     /**

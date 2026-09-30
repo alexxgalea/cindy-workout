@@ -217,12 +217,12 @@ class TutorialScreenTest {
 
     @Test
     fun `once the pages have ended they are not shown to that install again`() {
-        assertTrue(FirstRun(context).shouldShowTutorial(hasHistory = false))
+        assertTrue(FirstRun(context).shouldShowTutorial(hasHistory = false, cameraGranted = false))
 
         val activity = open()
         findByDescription(content(activity), "Skip the introduction")!!.performClick()
 
-        assertFalse(FirstRun(context).shouldShowTutorial(hasHistory = false))
+        assertFalse(FirstRun(context).shouldShowTutorial(hasHistory = false, cameraGranted = false))
     }
 
     @Test
@@ -483,11 +483,16 @@ class TutorialScreenTest {
 
         val firstRun = FirstRun(context)
         assertTrue(firstRun.placementDismissed)
-        assertFalse(firstRun.shouldShowTutorial(hasHistory = false))
+        assertFalse(firstRun.shouldShowTutorial(hasHistory = false, cameraGranted = false))
     }
 
     @Test
     fun `a session on record is enough too`() {
-        assertFalse(FirstRun(context).shouldShowTutorial(hasHistory = true))
+        assertFalse(FirstRun(context).shouldShowTutorial(hasHistory = true, cameraGranted = false))
+    }
+
+    @Test
+    fun `so is a camera permission that is already held`() {
+        assertFalse(FirstRun(context).shouldShowTutorial(hasHistory = false, cameraGranted = true))
     }
 }

@@ -7,47 +7,52 @@ import org.junit.Test
 
 class OnboardingTest {
 
-    private fun show(seen: Boolean, history: Boolean, dismissed: Boolean) =
-        Onboarding.shouldShowTutorial(seen, history, dismissed)
+    private fun show(
+        seen: Boolean = false,
+        history: Boolean = false,
+        dismissed: Boolean = false,
+        camera: Boolean = false
+    ) = Onboarding.shouldShowTutorial(seen, history, dismissed, camera)
 
     @Test
     fun `a new install is shown around`() {
-        assertTrue(show(seen = false, history = false, dismissed = false))
+        assertTrue(show())
     }
 
     @Test
     fun `nobody is shown around twice`() {
-        assertFalse(show(seen = true, history = false, dismissed = false))
+        assertFalse(show(seen = true))
     }
 
     @Test
     fun `someone with a session on record has used the app`() {
-        assertFalse(show(seen = false, history = true, dismissed = false))
+        assertFalse(show(history = true))
     }
 
     @Test
     fun `someone who dismissed the placement guide has used the app, records or not`() {
-        assertFalse(show(seen = false, history = false, dismissed = true))
+        assertFalse(show(dismissed = true))
     }
 
     @Test
-    fun `every combination, written out`() {
-        // Shown only when none of the three says the app is not new to them.
-        val expected = mapOf(
-            Triple(false, false, false) to true,
-            Triple(false, false, true) to false,
-            Triple(false, true, false) to false,
-            Triple(false, true, true) to false,
-            Triple(true, false, false) to false,
-            Triple(true, false, true) to false,
-            Triple(true, true, false) to false,
-            Triple(true, true, true) to false
-        )
-        for ((inputs, shown) in expected) {
+    fun `someone who already holds the camera permission has used the app`() {
+        // A fresh install cannot: Android starts every one without it. An athlete who updated from
+        // a version older than these pages has held it since the first time they opened the camera,
+        // and may never have finished a session or met the placement guide.
+        assertFalse(show(camera = true))
+    }
+
+    @Test
+    fun `any one sign that the app is not new is enough, and every combination agrees`() {
+        for (bits in 0 until 16) {
+            val seen = bits and 1 != 0
+            val history = bits and 2 != 0
+            val dismissed = bits and 4 != 0
+            val camera = bits and 8 != 0
             assertEquals(
-                "seen=${inputs.first} history=${inputs.second} dismissed=${inputs.third}",
-                shown,
-                show(inputs.first, inputs.second, inputs.third)
+                "seen=$seen history=$history dismissed=$dismissed camera=$camera",
+                bits == 0,
+                show(seen, history, dismissed, camera)
             )
         }
     }

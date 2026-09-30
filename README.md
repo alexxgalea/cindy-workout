@@ -146,10 +146,12 @@ points at can be pressed by accident. It waits for the clock to be idle, so it n
 mid-workout, and it leaves out any control that is not showing.
 
 **Who sees it.** New installs only. [`Onboarding.shouldShowTutorial`](app/src/main/java/com/cindy/tracker/Onboarding.kt)
-wants nothing seen yet, no session on record and the placement guide never dismissed. Someone with
-records, or who ticked "Don't show this again" on the placement guide, has used the app before, and
-is marked as having seen the pages without being shown them, so clearing their records later does
-not make them look new.
+wants nothing seen yet, no session on record, the placement guide never dismissed and the camera's
+permission not already held. Each of the last three means the app is not new to them. The
+permission reaches furthest back, because Android starts every fresh install without it, so an
+athlete who updated from an older version, and may never have finished a session, has it already.
+They are marked as having seen the pages without being shown them, so clearing their records later
+does not make them look new.
 
 **Again.** Help → Take the tour replays the pages and then the tour, over the camera screen. The
 placement guide before the first setup check is separate and unchanged: it is the reminder at the

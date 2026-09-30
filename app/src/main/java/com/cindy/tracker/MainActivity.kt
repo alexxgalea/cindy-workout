@@ -51,6 +51,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStarted
+import kotlinx.coroutines.launch
 import androidx.camera.view.PreviewView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.cindy.tracker.databinding.ActivityMainBinding
@@ -65,6 +68,9 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "Cindy"
         const val WORKOUT_MS = 20 * 60 * 1000L
         const val PREFS = "cindy"
+
+        /** Whether the first-launch pages have been sent for, which a recreated screen must not repeat. */
+        const val STATE_TUTORIAL_LAUNCHED = "tutorial_launched"
 
         /**
          * The count between tapping REC and filming. Long enough to put the phone down and turn
@@ -424,6 +430,17 @@ class MainActivity : AppCompatActivity() {
     /** Whether the tour is on screen, so that the several things that can start it start it once. */
     private var tourShowing = false
 
+    /** The first-launch flags, read in several places and held once. */
+    private val firstRun by lazy { FirstRun(this) }
+
+    /**
+     * Whether the pages have been sent for. Saved with the screen, because this activity is
+     * recreated by a change of language, a night-mode switch or the system reclaiming it, and a
+     * recreated one that sent for them again would stack a second copy above the first. The first
+     * copy's result is delivered to the new screen on its own.
+     */
+    private var tutorialLaunched = false
+
     /** Back skips the tour, and only while there is one to skip. */
     private val tourBack = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -558,18 +575,41 @@ class MainActivity : AppCompatActivity() {
         renderChips()
         renderControls()
 
-        val firstRun = FirstRun(this)
-        if (firstRun.shouldShowTutorial(hasHistory = records.all().isNotEmpty())) {
-            // Asked first, so that the launch arcs, which honour only the first caller, play out
-            // and hand over to the first page. The streaming and timeout calls above then find
-            // them already leaving and do nothing.
-            binding.launch.dismiss { tutorial.launch(TutorialActivity.intent(this, replay = false)) }
+        tutorialLaunched = savedInstanceState?.getBoolean(STATE_TUTORIAL_LAUNCHED, false) ?: false
+        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (firstRun.shouldShowTutorial(
+                hasHistory = records.all().isNotEmpty(), cameraGranted = cameraGranted
+            )
+        ) {
+            if (!tutorialLaunched) {
+                // Asked first, so that the launch arcs, which honour only the first caller, play
+                // out and hand over to the first page. The streaming and timeout calls above then
+                // find them already leaving and do nothing. Sent for once the screen is started,
+                // not when the arcs happen to finish: an activity that has been backgrounded in
+                // the meantime cannot reliably start another.
+                binding.launch.dismiss {
+                    lifecycleScope.launch {
+                        lifecycle.withStarted {
+                            tutorialLaunched = true
+                            tutorial.launch(
+                                TutorialActivity.intent(this@MainActivity, replay = false)
+                            )
+                        }
+                    }
+                }
+            }
         } else {
             // Someone who has already used the app is never shown the pages, and is marked as
             // having seen them so that clearing their records later does not make them look new.
             if (!firstRun.tutorialSeen) firstRun.tutorialSeen = true
             ensureCamera()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_TUTORIAL_LAUNCHED, tutorialLaunched)
     }
 
     /** Opens the camera, asking for its permission first if the athlete has not yet given it. */
@@ -595,7 +635,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeStartTour() {
         if (tourShowing || !cameraAnswered || state != State.IDLE) return
-        if (!FirstRun(this).hudTourPending) return
+        if (!firstRun.hudTourPending) return
         tourShowing = true
         tourBack.isEnabled = true
         binding.root.doOnLayout {
@@ -607,7 +647,7 @@ class MainActivity : AppCompatActivity() {
     private fun endTour() {
         tourShowing = false
         tourBack.isEnabled = false
-        FirstRun(this).hudTourPending = false
+        firstRun.hudTourPending = false
     }
 
     private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -1374,6 +1414,8 @@ class MainActivity : AppCompatActivity() {
         music.stop()
         renderClock()
         apply(runEngine { RepEvent.NONE })
+        // A tour that was put off for a live workout is owed now that the clock is idle again.
+        maybeStartTour()
     }
 
     private fun onManualRep() {
