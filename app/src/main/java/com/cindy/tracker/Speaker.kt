@@ -22,10 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 class Speaker(
     context: Context,
     private val engine: TtsEngine = AndroidTtsEngine(context),
-    private val background: Executor = Executors.newSingleThreadExecutor()
+    private val background: Executor = Executors.newSingleThreadExecutor(),
+    now: () -> Long = System::currentTimeMillis
 ) {
 
-    private val director = VoiceDirector(engine)
+    private val director = VoiceDirector(engine, now = now)
     private val main = Handler(Looper.getMainLooper())
 
     /** Set on [shutdown], so nothing the background thread finishes late reaches a dead screen. */

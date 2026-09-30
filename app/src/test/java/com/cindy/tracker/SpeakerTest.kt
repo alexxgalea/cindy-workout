@@ -280,6 +280,23 @@ class SpeakerTest {
         assertNull(speaker.downloadingFor("es"))
     }
 
+    @Test
+    fun `a download is timed from when it was asked for`() {
+        engine.likeGoogle()
+        var clock = 1_000L
+        val speaker = Speaker(
+            RuntimeEnvironment.getApplication(),
+            engine,
+            background = Executor { it.run() },
+            now = { clock }
+        )
+        engine.becomeReady()
+        speaker.download(VoicePacks.of("ru"))
+
+        clock += 90_000L
+        assertEquals(90_000L, speaker.downloadingFor("ru"))
+    }
+
     // ── previewing ───────────────────────────────────────────────────────────
 
     @Test
