@@ -31,7 +31,7 @@ object PhrasebookRo : Phrasebook {
         is VoiceLine.Finished -> if (line.early) "Oprit." else "Timpul a expirat."
         is VoiceLine.Score -> score(line.rounds, line.totalReps)
         is VoiceLine.Averaging -> "În medie ${duration(line.roundMs)} pe rundă"
-        is VoiceLine.BeatBenchmark -> "L-ai depășit pe ${line.name}"
+        is VoiceLine.BeatBenchmark -> "Scor mai bun decât ${line.name}"
         VoiceLine.Ready -> "Gata"
         is VoiceLine.Fault -> Hint.of(line.hint)?.let { hint(it) } ?: "Verifică-ți poziția"
         is VoiceLine.Clock -> clock(line)

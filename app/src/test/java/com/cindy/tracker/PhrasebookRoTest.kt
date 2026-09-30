@@ -84,6 +84,12 @@ class PhrasebookRoTest {
     }
 
     @Test
+    fun `the benchmark is a comparison, with no pronoun to agree with the name`() {
+        // "L-ai depășit pe" would fit a man and be wrong for a woman; the name travels as data.
+        assertEquals("Scor mai bun decât Tom Holland", say(VoiceLine.BeatBenchmark("Tom Holland")))
+    }
+
+    @Test
     fun `a hint is translated and an unknown one falls back to something Romanian`() {
         assertEquals("Prinde bara", say(VoiceLine.Fault("Get on the bar")))
         assertEquals("Verifică-ți poziția", say(VoiceLine.Fault("Something nobody catalogued")))
