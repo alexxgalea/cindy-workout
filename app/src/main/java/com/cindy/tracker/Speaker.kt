@@ -67,7 +67,10 @@ class Speaker(
     /** The language asked for, whether or not the phone can speak it yet. */
     val wanted: VoicePack get() = director.wanted
 
-    /** True while the athlete is being answered in English because their language is not ready. */
+    /**
+     * True while the athlete is being answered in English because their language is not ready.
+     * Only once the engine has answered; before that English is simply where everything starts.
+     */
     val fallingBack: Boolean get() = director.fallingBack
 
     /**
@@ -119,8 +122,11 @@ class Speaker(
         }
     }
 
-    /** Asks the engine to fetch [pack]'s voice. True if there was something to ask for. */
-    fun download(pack: VoicePack): Boolean = director.download(pack)
+    /**
+     * Asks the engine to fetch [pack]'s voice, and says what came of it: asked, or an engine
+     * that can only be asked through its own screen, or nothing to ask. See [DownloadRequest].
+     */
+    fun download(pack: VoicePack): DownloadRequest = director.download(pack)
 
     /** Milliseconds since [tag]'s download was asked for, or null if it has not been. */
     fun downloadingFor(tag: String): Long? = director.downloadingFor(tag)

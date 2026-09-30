@@ -154,6 +154,14 @@ class SpeakerTest {
     }
 
     @Test
+    fun `English before the engine answers is not reported as a fall-back`() {
+        engine.likeGoogle()
+        val speaker = speaker()
+        speaker.language = "es"
+        assertFalse(speaker.fallingBack)
+    }
+
+    @Test
     fun `a tag nobody has is English`() {
         engine.likeGoogle()
         val speaker = speaker()
@@ -204,7 +212,7 @@ class SpeakerTest {
         engine.likeGoogle()
         val speaker = speaker()
         engine.becomeReady()
-        assertTrue(speaker.download(VoicePacks.of("ru")))
+        assertEquals(DownloadRequest.ASKED, speaker.download(VoicePacks.of("ru")))
         assertNotNull(speaker.downloadingFor("ru"))
         assertNull(speaker.downloadingFor("es"))
     }

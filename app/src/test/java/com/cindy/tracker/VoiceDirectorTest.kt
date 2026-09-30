@@ -72,6 +72,26 @@ class VoiceDirectorTest {
     }
 
     @Test
+    fun `English is not a fall-back before the engine has answered`() {
+        // Until then it is only where everything starts. Calling it a fall-back would tell
+        // someone whose Spanish voice is installed that it isn't.
+        googlePhone()
+        director.choose(es)
+        assertFalse(director.fallingBack)
+
+        engine.becomeReady()
+        assertFalse(director.fallingBack)
+        assertSame(es, director.using)
+    }
+
+    @Test
+    fun `an engine that never connects is not a fall-back either`() {
+        director.choose(es)
+        engine.becomeReady(success = false)
+        assertFalse(director.fallingBack)
+    }
+
+    @Test
     fun `a language chosen before the engine is ready is applied when it is`() {
         googlePhone()
         director.choose(es)
@@ -270,6 +290,44 @@ class VoiceDirectorTest {
     }
 
     @Test
+    fun `a refused preview still puts the engine back before the next thing is said`() {
+        // It cannot be known what a refusal left behind, so the engine is not trusted to still
+        // be on the athlete's voice.
+        googlePhone()
+        engine.becomeReady()
+        director.choose(es)
+        director.preview(pt, 1f) {}
+        val before = engine.calls.size
+
+        saidFor(VoiceLine.Movement(Exercise.SQUAT))
+        assertEquals("setLanguage:es-ES", engine.calls[before])
+    }
+
+    @Test
+    fun `a preview that is cut off lets go of its callback`() {
+        googlePhone()
+        engine.becomeReady()
+        var failure: SpeechFailure? = null
+        director.preview(ru, 1f) { failure = it }
+        val id = engine.said.last().id
+
+        engine.listener!!.onStop(id)
+        engine.listener!!.onError(id, SpeechFailure.NETWORK)
+        assertNull("called after the preview was cut off", failure)
+    }
+
+    @Test
+    fun `an utterance being cut off does not let the music swell between counts`() {
+        val seen = mutableListOf<Boolean>()
+        director.whenSpeaking = { seen += it }
+        engine.becomeReady()
+        engine.listener!!.onStart("a")
+        engine.listener!!.onStop("a")
+        engine.listener!!.onStart("b")
+        assertEquals(listOf(true, true), seen)
+    }
+
+    @Test
     fun `a preview before the engine is ready is refused`() {
         googlePhone()
         assertFalse(director.preview(es, 1f) {})
@@ -284,7 +342,7 @@ class VoiceDirectorTest {
         director.choose(es)
         clock = 1_000L
 
-        assertTrue(director.download(ru))
+        assertEquals(DownloadRequest.ASKED, director.download(ru))
 
         val calls = engine.calls
         assertEquals("setVoice:ru-ru-x-ruc-local", calls[calls.size - 2])
@@ -302,26 +360,31 @@ class VoiceDirectorTest {
         googlePhone()
         engine.refused += "ru-ru-x-ruc-local"
         engine.becomeReady()
-        assertTrue(director.download(ru))
+        assertEquals(DownloadRequest.ASKED, director.download(ru))
         assertEquals(PackState.DOWNLOADING, director.states()["ru"])
     }
 
     @Test
-    fun `with no voice listed the engine is asked for the language`() {
+    fun `with no voice to set, the engine's own screen is the only way to ask`() {
+        // The engine says the data is missing but lists nothing to set, and setting a language
+        // does not fetch anything. Claiming a download was asked for would leave the athlete
+        // watching "downloading" for something nobody requested.
         engine.listed = emptyList()
         engine.answers["ru-RU"] = MISSING_DATA
         engine.becomeReady()
+        val before = engine.calls.toList()
 
-        assertTrue(director.download(ru))
-        assertTrue("setLanguage:ru-RU" in engine.calls)
-        assertEquals(PackState.DOWNLOADING, director.states()["ru"])
+        assertEquals(DownloadRequest.USE_ENGINE_SCREEN, director.download(ru))
+        assertEquals("the engine was touched", before, engine.calls)
+        assertNull(director.downloadingFor("ru"))
+        assertEquals(PackState.DOWNLOADABLE, director.states()["ru"])
     }
 
     @Test
     fun `there is nothing to ask for when the engine does not offer the language`() {
         googlePhone()
         engine.becomeReady()
-        assertFalse(director.download(pt))
+        assertEquals(DownloadRequest.NOT_OFFERED, director.download(pt))
         assertNull(director.downloadingFor("pt"))
     }
 

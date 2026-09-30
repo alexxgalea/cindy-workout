@@ -1002,9 +1002,10 @@ class MainActivity : AppCompatActivity() {
         status.text = "Get in frame"
         // A voice fetched since the screen last resumed is picked up here, before the first
         // thing is said. If the athlete's language still is not on the phone they are told why
-        // the count is in English, rather than left to wonder whether the setting took.
+        // the count is in English, rather than left to wonder whether the setting took. Only
+        // if the voice is on: with it off there is nothing to hear in any language.
         speaker.refresh()
-        if (speaker.fallingBack) {
+        if (speaker.enabled && speaker.fallingBack) {
             toast("The ${speaker.wanted.englishName} voice isn't on this phone yet. Counting in English.")
         }
         speaker.say(VoiceLine.SetUp)

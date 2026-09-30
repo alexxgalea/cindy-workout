@@ -22,12 +22,27 @@ enum class SpeechFailure {
     OTHER
 }
 
+/** What came of asking the engine to fetch a language's voice. */
+enum class DownloadRequest {
+    /** A voice the engine lists was set, which is the documented way to ask for its data. */
+    ASKED,
+    /**
+     * The engine says the data is missing but lists no voice to set. Only its own screen can
+     * fetch it, so the caller should send the athlete there.
+     */
+    USE_ENGINE_SCREEN,
+    /** The engine does not offer the language, or is not ready, so there is nothing to fetch. */
+    NOT_OFFERED
+}
+
 /** What an engine reports back: when it is ready, and how each utterance goes. */
 interface EngineListener {
     /** The engine has connected ([success]) or has failed to and never will. */
     fun onReady(success: Boolean)
     fun onStart(utteranceId: String)
     fun onDone(utteranceId: String)
+    /** Cut off before it finished, by the next utterance or by a stop. */
+    fun onStop(utteranceId: String)
     fun onError(utteranceId: String, failure: SpeechFailure)
 }
 

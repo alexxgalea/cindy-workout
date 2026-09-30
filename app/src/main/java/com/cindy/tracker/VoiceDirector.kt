@@ -15,6 +15,13 @@ import java.util.concurrent.atomic.AtomicInteger
  * mumbling. [wanted] keeps what they asked for, so the moment the voice arrives it takes over.
  *
  * Free of Android types, so all of that is testable against a fake engine.
+ *
+ * **Threads.** Everything here is for the main thread — that is where the workout's rep counts
+ * are spoken from, since the analysis thread only posts a frame for the screen to render — with
+ * two exceptions that are safe elsewhere: [states], which only reads, and the [EngineListener]
+ * callbacks, which the engine delivers from its own threads. So the state kept here is not
+ * locked, and [download] and [preview], which list the engine's voices, block for as long as
+ * that takes. They answer a tap, never a rep.
  */
 class VoiceDirector(
     private val engine: TtsEngine,
@@ -37,8 +44,15 @@ class VoiceDirector(
     /** Words for the voice in use. */
     val phrasebook: Phrasebook get() = using.phrasebook
 
-    /** True while the athlete is being answered in English because their language is not ready. */
-    val fallingBack: Boolean get() = using !== wanted
+    /**
+     * True while the athlete is being answered in English because their language is not ready.
+     *
+     * Never true before the engine has connected: until then English is only where everything
+     * starts, and reporting it as a fall-back would tell someone whose Spanish voice is installed
+     * that it isn't. It is also never true for an engine that failed to connect at all, which is
+     * a different problem with nothing to say about languages.
+     */
+    val fallingBack: Boolean get() = ready && using !== wanted
 
     /** Told when the engine's readiness is known. */
     var whenReady: ((Boolean) -> Unit)? = null
@@ -86,7 +100,7 @@ class VoiceDirector(
      * arrived: coming back to the screen, and starting a workout.
      */
     fun refresh() {
-        if (ready && fallingBack) apply()
+        if (fallingBack) apply()
     }
 
     private fun apply() {
@@ -150,6 +164,8 @@ class VoiceDirector(
     fun preview(pack: VoicePack, volume: Float, onFailure: (SpeechFailure) -> Unit): Boolean {
         if (!ready) return false
         val voice = VoiceChoice.bestForPreview(pack, engine.voices(), device())
+        // Whatever comes of it, the engine may no longer be on the athlete's voice.
+        applied = null
         val accepted = when {
             voice != null -> engine.setVoice(voice.name)
             pack.tag == VoicePacks.english.tag -> engine.setLanguage(Locale.US)
@@ -159,7 +175,6 @@ class VoiceDirector(
         }
         if (!accepted) return false
 
-        applied = null
         val id = "preview-${ids.incrementAndGet()}"
         previewId = id
         onPreviewFailure = onFailure
@@ -192,33 +207,37 @@ class VoiceDirector(
     }
 
     /**
-     * Asks the engine to fetch [pack]'s voice. True if there was something to ask for.
+     * Asks the engine to fetch [pack]'s voice, and says what came of it.
      *
-     * The engine reports no progress, so this only starts the clock: [states] shows the language
-     * as downloading until its voice turns up, and [downloadingFor] says for how long, which is
-     * the only way to tell a slow download from one that is waiting for Wi-Fi.
+     * The only documented way to ask is to set a voice whose data is missing, so that is all
+     * this claims to have done: [DownloadRequest.ASKED]. An engine that says the data is missing
+     * without listing a voice to set cannot be asked from here, and pretending otherwise would
+     * leave the athlete watching "downloading" for something nobody requested. That is
+     * [DownloadRequest.USE_ENGINE_SCREEN], for the caller to send them to the engine's own
+     * installer.
+     *
+     * The engine reports no progress, so a request only starts the clock: [states] shows the
+     * language as downloading until its voice turns up, and [downloadingFor] says for how long,
+     * which is the only way to tell a slow download from one that is waiting for Wi-Fi.
      */
-    fun download(pack: VoicePack): Boolean {
-        if (!ready) return false
-        val voices = engine.voices()
-        val voice = VoiceChoice.bestToDownload(pack, voices, device())
-        val asked = when {
-            // Setting a voice whose data is missing is what asks for it. It may say it failed
-            // while the request goes through, so what it answers is not used.
-            voice != null -> { engine.setVoice(voice.name); true }
-            engine.availability(pack.defaultLocale) == LanguageAvailability.MISSING_DATA -> {
-                engine.setLanguage(pack.defaultLocale)
-                true
+    fun download(pack: VoicePack): DownloadRequest {
+        if (!ready) return DownloadRequest.NOT_OFFERED
+        val voice = VoiceChoice.bestToDownload(pack, engine.voices(), device())
+        if (voice == null) {
+            return if (engine.availability(pack.defaultLocale) == LanguageAvailability.MISSING_DATA) {
+                DownloadRequest.USE_ENGINE_SCREEN
+            } else {
+                DownloadRequest.NOT_OFFERED
             }
-            else -> false
         }
-        if (!asked) return false
 
-        downloads[pack.tag] = now()
-        // Asking moved the engine onto a voice that cannot speak yet.
+        // Asking moves the engine onto a voice that cannot speak yet, and a voice whose data is
+        // missing may answer "error" while the request goes through, so the answer is not used.
         applied = null
+        engine.setVoice(voice.name)
+        downloads[pack.tag] = now()
         apply()
-        return true
+        return DownloadRequest.ASKED
     }
 
     /** Milliseconds since [tag]'s download was asked for, or null if it has not been. */
@@ -238,6 +257,14 @@ class VoiceDirector(
 
     override fun onDone(utteranceId: String) {
         whenSpeaking?.invoke(false)
+        if (utteranceId == previewId) forgetPreview()
+    }
+
+    override fun onStop(utteranceId: String) {
+        // Cut off by the next thing said, or by stop(). Not "done" as far as the music is
+        // concerned — a rep count flushing the last one would otherwise let it swell between
+        // every pair of numbers — but a preview that was cut off is over, and its callback,
+        // which holds on to a screen, should not outlive it.
         if (utteranceId == previewId) forgetPreview()
     }
 
