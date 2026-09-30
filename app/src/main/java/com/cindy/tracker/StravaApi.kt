@@ -5,7 +5,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * What happened to one upload, whether just posted or polled. The caller (S4) acts on this
+ * What happened to one upload, whether just posted or polled. The upload worker acts on this
  * instead of re-deriving meaning from a status code or an `error` string itself.
  */
 sealed interface UploadOutcome {
@@ -38,9 +38,10 @@ sealed interface UploadOutcome {
  *
  * [token].get() runs before anything is sent, on every call. When the athlete is not connected —
  * or the grant was revoked — it throws [StravaAuthException]. This class does not catch that: it
- * propagates to the caller and no request goes out. Reconnecting or refreshing is S4's job, not
- * this one's; [UploadOutcome.Unauthorized] only covers a 401 that gets past a token that looked
- * good when it was fetched (for example, revoked moments earlier on Strava's side).
+ * propagates to the caller and no request goes out. Reconnecting or refreshing is the upload
+ * worker's job, not this one's; [UploadOutcome.Unauthorized] only covers a 401 that gets past a
+ * token that looked good when it was fetched (for example, revoked moments earlier on Strava's
+ * side).
  */
 class StravaApi(
     private val transport: HttpTransport,
