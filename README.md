@@ -152,6 +152,38 @@ already own; it loops for the workout, pauses when you pause, and ducks to 18% w
 voice speaks. The chosen track is remembered across launches through a persistable URI
 permission, and quietly forgotten if that permission lapses.
 
+### Heart rate
+
+Menu -> Heart rate pairs a watch or chest strap that broadcasts the standard Bluetooth LE Heart
+Rate profile (service `0x180D`), the same one nearly every chest strap speaks and Garmin watches
+from about 2019 on can turn on under Wrist Heart Rate -> Broadcast Heart Rate. Apple Watch and
+most Wear OS watches do not broadcast it without a third-party app. Pairing is a scan, once, from
+the menu; the watch then reconnects on its own whenever the camera screen is open, and a dropped
+connection is retried with backoff rather than left for the athlete to notice and refix.
+
+Where there is a heart rate, calories come from the Keytel et al. (2005) heart-rate equation
+instead of the MET model above — fitted separately for women and men from measured energy
+expenditure, so it follows the effort actually made rather than a table's idea of it. Below the
+equation's fitted range it undershoots badly, so it is floored at 1 MET rather than trusted past
+where it was validated. Any minute the watch did not cover — no watch paired, a connection gap, a
+reading outside a plausible range — falls back to the MET model for exactly that stretch, and the
+results screen says which parts came from which.
+
+The formula needs a birth year and a sex beyond body weight, asked for separately in the same
+sheet: a birth year rather than an age, because an age goes stale the moment it is typed, and a
+third sex option that averages the other two rather than assuming one for someone who has not
+said. Both are asked only here, not beside body weight, because the MET model has no use for them
+and a setting nobody reads should not be asked for on that account alone.
+
+Bluetooth needs a runtime permission either way; which one depends on the phone. Android 12 and
+newer ask for Bluetooth's own scan and connect permissions. Android 11 and older instead ask for
+location, because that is the permission the platform ties a Bluetooth scan to on those versions
+— Cindy never reads it, and the menu explains as much when it asks. Those older versions also tie
+a scan to system Location being switched on at all; if it is off, the menu says so rather than
+leaving a scan that silently finds nothing unexplained.
+
+Nothing about it leaves the phone.
+
 ### Filming
 
 `REC` records the workout with the skeleton, clock, round, movement, rep count and a **CINDY**
