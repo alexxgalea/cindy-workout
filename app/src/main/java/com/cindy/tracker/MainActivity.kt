@@ -1282,7 +1282,8 @@ class MainActivity : AppCompatActivity() {
             // What the camera could not see is part of the result, not a detail about it.
             untrackedMs = tracking.lostMs
         )
-        records.add(attempt)
+        val saved = records.add(attempt)
+        if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
         primary(R.drawable.ic_again)
         renderControls()
