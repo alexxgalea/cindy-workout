@@ -105,7 +105,16 @@ class WorkoutEngine(
      * change halfway through the score it contributes to. Changing movements means a new
      * session, which is also the only way the history line can stay true.
      */
-    val profile: CindyProfile = CindyProfile.STANDARD
+    val profile: CindyProfile = CindyProfile.STANDARD,
+    /**
+     * Whether an air-squat session may notice heels-flat squats and start counting them as such.
+     *
+     * Off unless the athlete has switched it on: it is being tested, and a counter that changes
+     * its own mind about a movement has to be wanted before it is trusted. Public so the screen
+     * can tell whether the engine it holds was built for the setting as it stands now, and fixed
+     * for the life of the engine like [profile], for the same reason.
+     */
+    val smartSquats: Boolean = false
 ) {
 
     private companion object {
@@ -239,9 +248,19 @@ class WorkoutEngine(
          * refuse.
          */
         const val HEELS_FLAT_DOWN_BELOW = 120f
+
+        /**
+         * How many reps only the heels-flat counter has to accept, in one block of squats, before
+         * smart squat counting goes over to it.
+         *
+         * Three because one is a rep, and two is a coincidence a single half-hearted squat could
+         * make; it is also few enough that the athlete has lost almost nothing by the time the
+         * count catches up, which it does by crediting all three.
+         */
+        const val SMART_SQUAT_SPOT_REPS = 3
     }
 
-    private val counters = mapOf(
+    private val counters: Map<Exercise, RepCounting> = mapOf(
         // All three signals are joint angles in degrees. The pull-up one is negated because a
         // dead hang is the *extended* end of its range, the opposite way round to the others.
         // minRange is the projected travel below which a swing is not believed to be a rep at
@@ -255,18 +274,34 @@ class WorkoutEngine(
      * The counter for the chosen squat.
      *
      * Exhaustive over [SquatVariant] with no `else`, like the Strava mapping, so a new squat has
-     * to be given a counter on purpose. Box and supported squats keep the air squat's.
+     * to be given a counter on purpose. Box and supported squats keep the air squat's. Only the
+     * air squat is ever handed to [SmartSquatCounter]: someone who has chosen heels flat has
+     * already said, and someone on a box has a depth of their own.
      */
-    private fun squatCounter(): RepCounter = when (profile.squat) {
-        SquatVariant.HEELS_FLAT -> RepCounter(
-            HEELS_FLAT_DOWN_BELOW, 158f, minRepMs = 350L,
-            minRange = HEELS_FLAT_MIN_TRAVEL,
-            bottomMargin = HEELS_FLAT_BOTTOM_MARGIN,
-            minTravel = HEELS_FLAT_MIN_TRAVEL
-        )
-        SquatVariant.AIR_SQUAT, SquatVariant.BOX_SQUAT, SquatVariant.SUPPORTED_SQUAT ->
-            RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
+    private fun squatCounter(): RepCounting = when (profile.squat) {
+        SquatVariant.HEELS_FLAT -> heelsFlatCounter()
+        SquatVariant.AIR_SQUAT ->
+            if (smartSquats) {
+                SmartSquatCounter(
+                    air = airSquatCounter(),
+                    heelsFlat = heelsFlatCounter(),
+                    spotAfter = SMART_SQUAT_SPOT_REPS,
+                    creditCap = if (fixedExercise == null) Exercise.SQUAT.target else Int.MAX_VALUE
+                )
+            } else {
+                airSquatCounter()
+            }
+        SquatVariant.BOX_SQUAT, SquatVariant.SUPPORTED_SQUAT -> airSquatCounter()
     }
+
+    private fun airSquatCounter() = RepCounter(100f, 158f, minRepMs = 350L, minRange = 55f)
+
+    private fun heelsFlatCounter() = RepCounter(
+        HEELS_FLAT_DOWN_BELOW, 158f, minRepMs = 350L,
+        minRange = HEELS_FLAT_MIN_TRAVEL,
+        bottomMargin = HEELS_FLAT_BOTTOM_MARGIN,
+        minTravel = HEELS_FLAT_MIN_TRAVEL
+    )
 
     var exercise = fixedExercise ?: Exercise.PULLUP
         private set
@@ -289,6 +324,28 @@ class WorkoutEngine(
     /** How the most recent rep was booked. */
     var lastRepSource = Tracking.AUTO
         private set
+
+    /**
+     * True once smart squat counting has noticed heels-flat squats and taken over the count.
+     *
+     * Only ever true for an engine built with [smartSquats], on an air-squat profile. Read by the
+     * screen, which announces it once and tells the results screen.
+     */
+    val heelsFlatSpotted: Boolean
+        get() = (counters.getValue(Exercise.SQUAT) as? SmartSquatCounter)?.switched == true
+
+    /**
+     * The movements this session was actually counted as.
+     *
+     * [profile] is what the athlete chose and never changes. This is that, unless smart squat
+     * counting took over, in which case the squats were counted as heels-flat squats and the
+     * record has to say so: a rep's meaning must not be different from the one it was scored
+     * under. The whole session is filed that way, not only the squats after the switch, because a
+     * squat on the toes also meets the heels-flat standard, so the label errs the honest way and
+     * never claims more than was done.
+     */
+    val countedProfile: CindyProfile
+        get() = if (heelsFlatSpotted) profile.copy(squat = SquatVariant.HEELS_FLAT) else profile
 
     /**
      * The score the movement had actually reached when the last event fired.
@@ -614,7 +671,7 @@ class WorkoutEngine(
      * which is what rules out arriving halfway up. Getting off the floor satisfies the first for
      * most of a second before it satisfies the second.
      */
-    private fun takeUpPosition(k: Array<Keypoint>, s: Float, now: Long, counter: RepCounter) {
+    private fun takeUpPosition(k: Array<Keypoint>, s: Float, now: Long, counter: RepCounting) {
         if (!inStartPosition(k)) {
             startPositionSince = 0L
             startSmoothed = Float.NaN
