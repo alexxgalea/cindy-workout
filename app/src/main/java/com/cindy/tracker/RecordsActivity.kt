@@ -84,6 +84,7 @@ class RecordsActivity : AppCompatActivity() {
             secondary = "DELETE",
             onSecondary = {
                 store.clear()
+                StravaUploads.clear(this)
                 toast("Records cleared")
                 render()
             },
