@@ -180,7 +180,77 @@ object Calories {
             met = effortMet
         )
     }
+
+    /**
+     * The same estimate as [estimate], as a running total across the clock: where it stood at the
+     * start of every stretch it was built from, so the results timeline can draw it and say which
+     * stretches a watch measured and which came from the reps.
+     *
+     * Walks [estimate]'s own loop in the same order and adds the same terms, so the last point
+     * rounds to exactly `estimate(...)!!.kcal`. Two sums that were merely close would put one
+     * number on the timeline and another on the energy row above it. [estimate] is deliberately
+     * left alone: it is the figure the app already shows, and re-expressing it through this would
+     * change that figure's arithmetic for the sake of a chart.
+     *
+     * Empty exactly when [estimate] is null. Without a usable heart rate it is just the origin
+     * and the end, joined by one stretch flagged as estimated; nothing here claims a watch was
+     * heard when none was.
+     */
+    fun timeline(totalReps: Int, activeMs: Long, body: Body, trace: HeartRateTrace?): List<CaloriePoint> {
+        if (body.weightKg <= 0.0 || activeMs <= 0L) return emptyList()
+        val effortMet = met(totalReps, activeMs)
+
+        val usable = trace?.samples
+            ?.filter {
+                it.bpm in HeartRateMeasurement.MIN_BPM..HeartRateMeasurement.MAX_BPM &&
+                    it.clockMs in 0 until activeMs
+            }
+            ?.sortedBy { it.clockMs }
+            .orEmpty()
+
+        val points = mutableListOf(CaloriePoint(0L, 0.0, fromHeartRate = false))
+        if (!body.canUseHeartRate || usable.isEmpty()) {
+            val minutes = activeMs / 60_000.0
+            points += CaloriePoint(
+                activeMs, effortMet * 3.5 * body.weightKg / 200.0 * minutes, fromHeartRate = false
+            )
+            return points
+        }
+
+        var kcal = 0.0
+        var cursor = 0L
+        val metKcalPerMs = effortMet * 3.5 * body.weightKg / 200.0 / 60_000.0
+
+        for (i in usable.indices) {
+            val at = usable[i].clockMs
+            val next = if (i + 1 < usable.size) usable[i + 1].clockMs else Long.MAX_VALUE
+            val end = minOf(next, at + MAX_HOLD_MS, activeMs)
+            if (end <= at) continue
+            if (at > cursor) {
+                kcal += metKcalPerMs * (at - cursor)
+                points += CaloriePoint(at, kcal, fromHeartRate = false)
+            }
+            val coveredMs = end - at
+            kcal += keytelKcalPerMinute(usable[i].bpm, body) * (coveredMs / 60_000.0)
+            points += CaloriePoint(end, kcal, fromHeartRate = true)
+            cursor = maxOf(cursor, end)
+        }
+        if (cursor < activeMs) {
+            kcal += metKcalPerMs * (activeMs - cursor)
+            points += CaloriePoint(activeMs, kcal, fromHeartRate = false)
+        }
+        return points
+    }
 }
+
+/**
+ * Kilocalories burned by [clockMs] on the workout clock, cumulative and unrounded.
+ *
+ * [fromHeartRate] describes the stretch that *ends* here, from the previous point to this one:
+ * true where a heart rate measured it, false where the work rate estimated it. The first point,
+ * the origin, has no stretch before it and says false.
+ */
+data class CaloriePoint(val clockMs: Long, val kcal: Double, val fromHeartRate: Boolean)
 
 /** Female and male are the Keytel equation's own two fits; the third is what averages them. */
 enum class Sex(val label: String) { FEMALE("Female"), MALE("Male"), UNSTATED("Prefer not to say") }
