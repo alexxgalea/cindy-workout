@@ -70,6 +70,18 @@ class SessionStatsTest {
     }
 
     @Test
+    fun `a round of a session the camera lost you in says at least`() {
+        val stats = SessionStats.from(attempt(round() + listOf(split(Exercise.PULLUP, 5)), openReps = 7))!!
+        val plurals = SessionStats.plurals(CindyProfile.STANDARD)
+
+        assertEquals("Round 1 · at least 30 of 30 · 0:52", stats.rounds[0].caption(plurals, atLeast = true))
+        assertEquals(
+            "Round 2 · at least 12 of 30 · 5 strict pull-ups, 7 standard push-ups · unfinished",
+            stats.rounds[1].caption(plurals, atLeast = true)
+        )
+    }
+
+    @Test
     fun `a skipped set is a finished round worth less than thirty`() {
         // Pull-ups skipped at zero: the cycle still moves on, and the round is finished at 25.
         val a = attempt(round(pull = 0, pullMs = 1_000L) + round())

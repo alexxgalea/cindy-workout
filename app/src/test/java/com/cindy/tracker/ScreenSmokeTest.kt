@@ -670,6 +670,30 @@ class ScreenSmokeTest {
         RecordStore(activity).clear()
     }
 
+    /** A session the camera lost you in says so over the round track and the movement card. */
+    @Test
+    fun `the results screen says at least over a lower bound session's rounds`() {
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = listOf(52_000L),
+            profile = CindyProfile.STANDARD,
+            countedReps = 30,
+            untrackedMs = 60_000L,
+            setSplits = timedRound
+        )
+        val activity = showResults(attempt)
+
+        val track = textsIn(activity.findViewById(R.id.track))
+        assertTrue(track.toString(), track.any { it.contains("The camera lost you for 1:00") })
+        val movements = textsIn(activity.findViewById(R.id.movements))
+        assertEquals(movements.toString(), 3, movements.count { it == "at least" })
+        activity.finish()
+        RecordStore(activity).clear()
+    }
+
     /** A record from before sets were timed has its tiles and nothing drawn from sets it lacks. */
     @Test
     fun `the results screen hides the round track and movements without set times`() {

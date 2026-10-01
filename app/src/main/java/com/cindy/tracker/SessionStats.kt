@@ -44,11 +44,12 @@ data class RoundStat(
      * A full round says what it cost; anything less says what went into it, because "25 of 30"
      * alone cannot tell a skipped set from a round the clock ran out on. Tapped reps are named
      * rather than folded in. [plurals] is the session's own movement words, so a knee push-up
-     * session never reads "push-ups".
+     * session never reads "push-ups". [atLeast] is for a session the camera lost the athlete in:
+     * what was banked is a floor, so the round says "at least" before its reps.
      */
-    fun caption(plurals: Map<Exercise, String>): String = buildString {
+    fun caption(plurals: Map<Exercise, String>, atLeast: Boolean = false): String = buildString {
         val target = parts.sumOf { it.movement.target }
-        append("Round $number · $reps of $target")
+        append("Round $number · ${if (atLeast) "at least " else ""}$reps of $target")
         if (!complete) {
             val done = parts.filter { it.reps > 0 }
                 .joinToString(", ") { "${it.reps} ${plurals.getValue(it.movement)}" }

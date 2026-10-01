@@ -174,20 +174,22 @@ private fun Context.statTile(tile: StatTile): View = LinearLayout(this).apply {
  * attribute) rather than shown as a dash, and the dot beside each name carries the same weight
  * mapping the round track and the Help page use.
  */
-fun Context.movementCard(movements: List<MovementStat>): View = LinearLayout(this).apply {
+fun Context.movementCard(movements: List<MovementStat>, atLeast: Boolean = false): View = LinearLayout(this).apply {
     orientation = LinearLayout.HORIZONTAL
     setBackgroundResource(R.drawable.glass_card)
     setPadding(dp(14), dp(14), dp(14), dp(14))
     movements.forEachIndexed { i, m ->
-        addView(movementColumn(m), LinearLayout.LayoutParams(
+        addView(movementColumn(m, atLeast), LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
         ).apply { if (i > 0) marginStart = dp(10) })
     }
 }
 
-private fun Context.movementColumn(m: MovementStat): View = LinearLayout(this).apply {
+private fun Context.movementColumn(m: MovementStat, atLeast: Boolean): View = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     val lines = buildList {
+        // The reps above come from the sets, which sum to the score, so they are a floor too.
+        if (atLeast) add("at least")
         m.timeMs?.let { add("${formatDuration(it)} total") }
         m.averageCompleteSetMs?.let { add("${formatDuration(it)} a set") }
         m.shareOfClock?.let { add("${(it * 100).roundToInt()}% of set time") }

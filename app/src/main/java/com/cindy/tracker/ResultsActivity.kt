@@ -246,7 +246,7 @@ class ResultsActivity : AppCompatActivity() {
         binding.tiles.removeAllViews()
         binding.tiles.addView(statTileGrid(SessionTiles.of(a, stats)))
         roundTrack(a, stats)
-        renderMovements(stats)
+        renderMovements(a, stats)
     }
 
     private fun roundTrack(a: Attempt, stats: SessionStats?) {
@@ -263,9 +263,10 @@ class ResultsActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, 0)
             minHeight = dp(48)
         }
+        fun say(i: Int) = rounds[i].caption(plurals, a.scoreIsLowerBound)
         val track = RoundTrackView(this).apply {
-            show(rounds) { rounds[it].caption(plurals) }
-            onSelect = { i -> caption.text = i?.let { rounds[it].caption(plurals) } ?: hint }
+            show(rounds, ::say)
+            onSelect = { i -> caption.text = i?.let(::say) ?: hint }
         }
         val scheme = Exercise.entries.joinToString(", ") { "${it.target} ${plurals.getValue(it)}" }
         binding.track.addView(
@@ -281,7 +282,13 @@ class ResultsActivity : AppCompatActivity() {
                 // read: knee push-ups are not "push-ups", and the order is the order they are done.
                 addView(styledText(
                     R.style.Cindy_Footnote,
-                    "A round is $scheme, in that order, left to right. What was not done stays hollow."
+                    "A round is $scheme, in that order, left to right. What was not done stays " +
+                        "hollow." + if (a.scoreIsLowerBound) {
+                        " The camera lost you for ${formatDuration(a.untrackedMs)}, so rounds " +
+                            "may hold more than shown."
+                    } else {
+                        ""
+                    }
                 ).apply {
                     textSize = 11f
                     setPadding(0, dp(4), 0, 0)
@@ -293,7 +300,7 @@ class ResultsActivity : AppCompatActivity() {
         )
     }
 
-    private fun renderMovements(stats: SessionStats?) {
+    private fun renderMovements(a: Attempt, stats: SessionStats?) {
         binding.movements.removeAllViews()
         val movements = stats?.movements.orEmpty()
         val show = if (movements.isEmpty()) View.GONE else View.VISIBLE
@@ -301,7 +308,7 @@ class ResultsActivity : AppCompatActivity() {
         binding.movements.visibility = show
         if (movements.isEmpty()) return
         binding.movements.addView(
-            movementCard(movements),
+            movementCard(movements, a.scoreIsLowerBound),
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
