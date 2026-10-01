@@ -196,6 +196,26 @@ class RoundSplitsTest {
         assertFalse(RoundSplits.of(a)!!.bars.last().atLeast)
     }
 
+    @Test
+    fun `a floor of zero reps is left out of an unfinished round`() {
+        val a = attempt(listOf(160_000L), round(40_000L, 50_000L, 70_000L), durationMs = 240_000L, counted = 30)
+            .copy(untrackedMs = Records.UNTRACKED_TOLERANCE_MS)
+
+        val open = RoundSplits.of(a)!!.bars.last()
+
+        assertEquals(0, open.reps)
+        assertNull(open.repsToQuote)
+        assertEquals("not a finished round", readout(a, 1).detail)
+    }
+
+    @Test
+    fun `zero reps of a trusted score are still said`() {
+        val a = attempt(listOf(160_000L), round(40_000L, 50_000L, 70_000L), durationMs = 240_000L, counted = 30)
+
+        assertEquals(0, RoundSplits.of(a)!!.bars.last().repsToQuote)
+        assertEquals("0 of 30 reps · not a finished round", readout(a, 1).detail)
+    }
+
     // ── the comparison ──────────────────────────────────────────────────────────
 
     @Test

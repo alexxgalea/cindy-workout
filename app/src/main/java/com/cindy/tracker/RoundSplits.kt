@@ -54,7 +54,10 @@ object RoundSplits {
         val unfinished: Boolean = false,
         val reps: Int? = null,
         val atLeast: Boolean = false
-    )
+    ) {
+        /** [reps] where saying it means something: a floor of zero says nothing, so it is left out. */
+        val repsToQuote: Int? get() = reps?.takeIf { !(atLeast && it == 0) }
+    }
 
     /** The bars, in round order, with the unfinished round (if any) last. */
     data class Split(val bars: List<Bar>, val fastest: Int, val averageMs: Long) {
@@ -176,7 +179,7 @@ object RoundSplits {
         if (bar.unfinished) {
             val title = "Round ${bar.round} · ${formatDuration(bar.ms)} so far"
             val parts = mutableListOf<String>()
-            bar.reps?.let { parts += "${if (bar.atLeast) "at least " else ""}$it of $ROUND_TARGET reps" }
+            bar.repsToQuote?.let { parts += "${if (bar.atLeast) "at least " else ""}$it of $ROUND_TARGET reps" }
             parts += "not a finished round"
             val timed = timedSets(names, bar.sets)
             val detail = listOfNotNull(parts.joinToString(" · "), timed, handNote(bar)).joinToString(". ")

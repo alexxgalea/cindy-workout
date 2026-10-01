@@ -225,7 +225,7 @@ class RoundSplitsView @JvmOverloads constructor(
         repLabels = Array(bars.size) { i ->
             val b = bars[i]
             // A floor reads "≥12/30": the camera lost the athlete, so the count may be short.
-            b.reps?.let { reps -> "${if (b.atLeast) "≥" else ""}$reps/${RoundSplits.ROUND_TARGET}" }
+            b.repsToQuote?.let { reps -> "${if (b.atLeast) "≥" else ""}$reps/${RoundSplits.ROUND_TARGET}" }
         }
         selected = null
         rescale()
