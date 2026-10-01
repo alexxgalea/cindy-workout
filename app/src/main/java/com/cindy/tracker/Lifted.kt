@@ -28,7 +28,7 @@ data class Lifted(
     /** One movement's contribution, at the variant the session was actually done with. */
     data class Part(
         val movement: Exercise,
-        /** The variant's own plural: "knee push-ups", never the standard movement's name. */
+        /** The plain name for an unchanged movement, the variant's own plural ("knee push-ups") for a changed one. */
         val label: String,
         val reps: Int,
         /** The share of body mass one rep lifts. */
@@ -131,13 +131,24 @@ data class Lifted(
             SquatVariant.SUPPORTED_SQUAT -> Rule.LeftOut("the share the support takes isn't known")
         }
 
-        /** The rule and the label for [movement] as [profile] performed it. */
-        private fun ruleFor(profile: CindyProfile, movement: Exercise): Pair<Rule, String> =
-            when (movement) {
-                Exercise.PULLUP -> rule(profile.pull) to profile.pull.plural
-                Exercise.PUSHUP -> rule(profile.push) to profile.push.plural
-                Exercise.SQUAT -> rule(profile.squat) to profile.squat.plural
+        /**
+         * The rule and the label for [movement] as [profile] performed it.
+         *
+         * An unchanged movement keeps its plain name ("pull-ups"), as the rest of the app does;
+         * only a movement the athlete changed is named by its variant ("knee push-ups"), so a
+         * standard session never reads "strict pull-ups" for what it simply called pull-ups.
+         */
+        private fun ruleFor(profile: CindyProfile, movement: Exercise): Pair<Rule, String> {
+            val standard = CindyProfile.STANDARD
+            return when (movement) {
+                Exercise.PULLUP ->
+                    rule(profile.pull) to if (profile.pull == standard.pull) "pull-ups" else profile.pull.plural
+                Exercise.PUSHUP ->
+                    rule(profile.push) to if (profile.push == standard.push) "push-ups" else profile.push.plural
+                Exercise.SQUAT ->
+                    rule(profile.squat) to if (profile.squat == standard.squat) "squats" else profile.squat.plural
             }
+        }
 
         /**
          * What [a] lifted at [bodyWeightKg], or null when that cannot be said honestly: no weight,

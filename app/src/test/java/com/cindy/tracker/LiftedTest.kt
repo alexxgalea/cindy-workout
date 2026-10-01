@@ -52,6 +52,13 @@ class LiftedTest {
     }
 
     @Test
+    fun `a standard session names its movements plainly`() {
+        val lifted = Lifted.of(attempt(), 80.0)!!
+
+        assertEquals(listOf("pull-ups", "push-ups", "squats"), lifted.parts.map { it.label })
+    }
+
+    @Test
     fun `knee push-ups use their own share and their own name`() {
         val lifted = Lifted.of(attempt(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP)), 80.0)!!
 
@@ -177,9 +184,13 @@ class LiftedTest {
         val note = Lifted.of(attempt(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP)), 80.0)!!
             .footnote(tappedIn = false)
 
-        assertTrue(note, note.contains("strict pull-ups 95%"))
+        // Unchanged movements keep their plain names; only the changed one is named by variant.
+        assertTrue(note, note.contains("pull-ups 95%"))
         assertTrue(note, note.contains("knee push-ups 49%"))
-        assertTrue(note, note.contains("air squats 88%"))
+        assertTrue(note, note.contains("squats 88%"))
+        assertFalse(note, note.contains("strict"))
+        assertFalse(note, note.contains("air squats"))
+        assertFalse(note, note.contains("standard"))
         assertFalse(note, note.contains("64%"))
         assertTrue(note, note.startsWith("An estimate"))
     }
