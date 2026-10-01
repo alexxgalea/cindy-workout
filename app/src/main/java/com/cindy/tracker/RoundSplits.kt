@@ -43,6 +43,8 @@ object RoundSplits {
      * @param byHand a rep in one of its sets was tapped in rather than seen.
      * @param reps what had been counted in an [unfinished] round, or null when the record does
      *   not allow that to be said.
+     * @param atLeast [reps] is a floor, because the camera lost the athlete for long enough that
+     *   the score it derives from is a lower bound.
      */
     data class Bar(
         val round: Int,
@@ -50,7 +52,8 @@ object RoundSplits {
         val sets: List<Long>?,
         val byHand: Boolean = false,
         val unfinished: Boolean = false,
-        val reps: Int? = null
+        val reps: Int? = null,
+        val atLeast: Boolean = false
     )
 
     /** The bars, in round order, with the unfinished round (if any) last. */
@@ -127,6 +130,7 @@ object RoundSplits {
             ?.sumOf { it.reps }
         return Bar(
             round = done + 1, ms = trailing, sets = sets, unfinished = true, reps = reps,
+            atLeast = reps != null && a.scoreIsLowerBound,
             byHand = inOrder && left.any { it.manualReps > 0 }
         )
     }
@@ -172,7 +176,7 @@ object RoundSplits {
         if (bar.unfinished) {
             val title = "Round ${bar.round} · ${formatDuration(bar.ms)} so far"
             val parts = mutableListOf<String>()
-            bar.reps?.let { parts += "$it of $ROUND_TARGET reps" }
+            bar.reps?.let { parts += "${if (bar.atLeast) "at least " else ""}$it of $ROUND_TARGET reps" }
             parts += "not a finished round"
             val timed = timedSets(names, bar.sets)
             val detail = listOfNotNull(parts.joinToString(" · "), timed, handNote(bar)).joinToString(". ")

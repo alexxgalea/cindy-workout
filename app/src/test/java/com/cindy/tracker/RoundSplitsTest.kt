@@ -166,6 +166,36 @@ class RoundSplitsTest {
         assertEquals(2, open.reps)
     }
 
+    @Test
+    fun `an unfinished round of a lower bound score is a floor`() {
+        val sets = round(40_000L, 50_000L, 70_000L) + set(Exercise.PULLUP, 38_000L)
+        val a = attempt(listOf(160_000L), sets, durationMs = 240_000L, counted = 36)
+            .copy(untrackedMs = Records.UNTRACKED_TOLERANCE_MS)
+
+        val open = RoundSplits.of(a)!!.bars.last()
+
+        assertTrue(open.atLeast)
+        assertEquals(6, open.reps)
+        assertTrue(readout(a, 1).detail.startsWith("at least 6 of 30 reps"))
+    }
+
+    @Test
+    fun `an unfinished round of a trusted score is not a floor`() {
+        val sets = round(40_000L, 50_000L, 70_000L) + set(Exercise.PULLUP, 38_000L)
+        val a = attempt(listOf(160_000L), sets, durationMs = 240_000L, counted = 36)
+
+        assertFalse(RoundSplits.of(a)!!.bars.last().atLeast)
+        assertTrue(readout(a, 1).detail.startsWith("6 of 30 reps"))
+    }
+
+    @Test
+    fun `a lower bound with no reps to quote does not claim a floor`() {
+        val a = attempt(listOf(160_000L), durationMs = 240_000L, counted = null)
+            .copy(untrackedMs = Records.UNTRACKED_TOLERANCE_MS)
+
+        assertFalse(RoundSplits.of(a)!!.bars.last().atLeast)
+    }
+
     // ── the comparison ──────────────────────────────────────────────────────────
 
     @Test
