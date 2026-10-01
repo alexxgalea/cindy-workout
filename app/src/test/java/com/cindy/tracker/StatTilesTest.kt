@@ -26,7 +26,7 @@ class StatTilesTest {
     @Test
     fun `six tiles in reading order`() {
         assertEquals(
-            listOf("ROUNDS", "REPS", "TIME", "AVG ROUND", "FASTEST", "SLOWEST"),
+            listOf("ROUNDS", "REPS", "TIME", "AVG", "FASTEST", "SLOWEST"),
             SessionTiles.of(attempt(), null).map { it.label }
         )
     }
@@ -45,7 +45,7 @@ class StatTilesTest {
         assertEquals("round 1", t.getValue("FASTEST").footnote)
         assertEquals("2:54", t.getValue("SLOWEST").value)
         assertEquals("round 7", t.getValue("SLOWEST").footnote)
-        assertEquals("over 7 rounds", t.getValue("AVG ROUND").footnote)
+        assertEquals("over 7 rounds", t.getValue("AVG").footnote)
     }
 
     @Test
@@ -59,7 +59,7 @@ class StatTilesTest {
     fun `a lower bound says at least, for the score and the pace`() {
         val t = byLabel(attempt(untrackedMs = 60_000L))
 
-        assertEquals("At least · 11.1 reps/min or more", t.getValue("REPS").footnote)
+        assertEquals("at least 11.1 reps/min", t.getValue("REPS").footnote)
         assertTrue(t.getValue("REPS").speech, t.getValue("REPS").speech.startsWith("Reps: at least 222"))
         assertTrue(t.getValue("REPS").speech.contains("at least 11.1 reps a minute"))
     }
@@ -82,6 +82,12 @@ class StatTilesTest {
     }
 
     @Test
+    fun `a lower bound with tapped reps keeps the tapped count after the pace`() {
+        val t = byLabel(attempt(untrackedMs = 60_000L, manualReps = 12))
+        assertEquals("at least 11.1 reps/min · 12 tapped", t.getValue("REPS").footnote)
+    }
+
+    @Test
     fun `paused time is said beside the clock`() {
         val t = byLabel(attempt(pausedMs = 65_000L))
         assertEquals("plus 1:05 paused", t.getValue("TIME").footnote)
@@ -91,7 +97,7 @@ class StatTilesTest {
     fun `no complete round is a dash rather than a zero`() {
         val t = byLabel(attempt(rounds = 0, reps = 4, splits = emptyList(), countedReps = 4))
 
-        assertEquals(SessionTiles.NONE, t.getValue("AVG ROUND").value)
+        assertEquals(SessionTiles.NONE, t.getValue("AVG").value)
         assertEquals(SessionTiles.NONE, t.getValue("FASTEST").value)
         assertEquals(SessionTiles.NONE, t.getValue("SLOWEST").value)
         assertEquals("+4 reps into round 1", t.getValue("ROUNDS").footnote)
@@ -119,6 +125,6 @@ class StatTilesTest {
     @Test
     fun `without round splits the average says it is the clock over the rounds`() {
         val t = byLabel(attempt(splits = emptyList()))
-        assertEquals("clock over rounds", t.getValue("AVG ROUND").footnote)
+        assertEquals("clock over rounds", t.getValue("AVG").footnote)
     }
 }

@@ -71,8 +71,11 @@ object SessionTiles {
         // athlete, so the true figure, and the pace made from it, can only be higher.
         val rate = pace?.let { "${"%.1f".format(Locale.US, it)} reps/min" }
         val parts = listOfNotNull(
-            if (atLeast) "At least" else null,
-            rate?.let { if (atLeast) "$it or more" else it },
+            when {
+                rate == null -> if (atLeast) "at least" else null
+                atLeast -> "at least $rate"
+                else -> rate
+            },
             if (a.manualReps > 0) "${a.manualReps} tapped" else null
         )
         val footnote = parts.joinToString(" · ")
@@ -101,7 +104,7 @@ object SessionTiles {
 
     private fun average(a: Attempt): StatTile {
         val avg = a.avgRoundMs ?: return StatTile(
-            "AVG ROUND", NONE, "no full round", "Average round: no full round yet"
+            "AVG", NONE, "no full round", "Average round: no full round yet"
         )
         // Without round splits the figure is the clock over the rounds, which charges the
         // unfinished round to the average, and says so rather than passing as a mean of rounds.
@@ -111,7 +114,7 @@ object SessionTiles {
             "clock over rounds"
         }
         return StatTile(
-            "AVG ROUND", formatDuration(avg), footnote,
+            "AVG", formatDuration(avg), footnote,
             "Average round: ${formatDuration(avg)}, $footnote"
         )
     }
@@ -152,7 +155,15 @@ private fun Context.statTile(tile: StatTile): View = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     setBackgroundResource(R.drawable.glass_card)
     setPadding(dp(14), dp(12), dp(14), dp(12))
-    addView(eyebrow(tile.label))
+    addView(eyebrow(tile.label).apply {
+        // One line that shrinks to fit, so no label is ever cut mid-word, whatever the font scale
+        // or the width of the phone. It needs the full width of the tile to have anything to shrink
+        // into, so it matches the parent rather than wrapping its text.
+        maxLines = 1
+        setAutoSizeTextTypeUniformWithConfiguration(8, 11, 1, TypedValue.COMPLEX_UNIT_SP)
+    }, LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+    ))
     addView(styledText(R.style.Cindy_MetricS, tile.value).apply {
         // A figure that does not fit shrinks rather than clipping or wrapping: "20:00" at the
         // style's size is too wide for a third of a narrow phone.
@@ -184,18 +195,22 @@ fun Context.movementCard(movements: List<MovementStat>, atLeast: Boolean = false
     orientation = LinearLayout.HORIZONTAL
     setBackgroundResource(R.drawable.glass_card)
     setPadding(dp(14), dp(14), dp(14), dp(14))
+    // A long adaptive label ("band-assisted pull-ups") wraps; every label then reserves two
+    // lines, so the three figures stay level. In the ordinary case no line is wasted.
+    val tall = movements.any { it.label.length > LONG_LABEL }
     movements.forEachIndexed { i, m ->
-        addView(movementColumn(m, atLeast), LinearLayout.LayoutParams(
+        addView(movementColumn(m, atLeast, tall), LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
         ).apply { if (i > 0) marginStart = dp(10) })
     }
 }
 
-private fun Context.movementColumn(m: MovementStat, atLeast: Boolean): View = LinearLayout(this).apply {
+/** Past this many characters a label no longer fits one line in a third of a phone. */
+private const val LONG_LABEL = 10
+
+private fun Context.movementColumn(m: MovementStat, atLeast: Boolean, tall: Boolean): View = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     val lines = buildList {
-        // The reps above come from the sets, which sum to the score, so they are a floor too.
-        if (atLeast) add("at least")
         m.timeMs?.let { add("${formatDuration(it)} total") }
         m.averageCompleteSetMs?.let { add("${formatDuration(it)} a set") }
         m.shareOfClock?.let { add("${(it * 100).roundToInt()}% of set time") }
@@ -205,20 +220,31 @@ private fun Context.movementColumn(m: MovementStat, atLeast: Boolean): View = Li
 
     addView(LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        gravity = Gravity.TOP
+        // On the first line of the label, wherever it wraps.
         addView(View(context).apply { background = dotDrawable(colour) },
-            LinearLayout.LayoutParams(dp(6), dp(6)).apply { marginEnd = dp(6) })
+            LinearLayout.LayoutParams(dp(6), dp(6)).apply { marginEnd = dp(6); topMargin = dp(5) })
         addView(styledText(R.style.Cindy_Footnote, m.label).apply {
             maxLines = 2
+            if (tall) minLines = 2
         }, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
         ))
     })
+    // The reps come from the sets, which sum to the score, so they are a floor too: said between
+    // the name and the figure, where it reads as "pull-ups, at least, 75".
+    if (atLeast) {
+        addView(styledText(R.style.Cindy_Footnote, "at least").apply {
+            textSize = 11f
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(4) })
+    }
     addView(styledText(R.style.Cindy_MetricS, "${m.reps}").apply {
         setAutoSizeTextTypeUniformWithConfiguration(14, 22, 1, TypedValue.COMPLEX_UNIT_SP)
     }, LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-    ).apply { topMargin = dp(6) })
+    ).apply { topMargin = dp(if (atLeast) 0 else 6) })
     lines.forEach { line ->
         addView(styledText(R.style.Cindy_Footnote, line).apply {
             textSize = 11f
@@ -228,7 +254,7 @@ private fun Context.movementColumn(m: MovementStat, atLeast: Boolean): View = Li
     }
 
     contentDescription = buildString {
-        append("${m.label}: ${m.reps} reps")
+        append("${m.label}: ${if (atLeast) "at least " else ""}${m.reps} reps")
         lines.forEach { append(", $it") }
     }
     isFocusable = true
