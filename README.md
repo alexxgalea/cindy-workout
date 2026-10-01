@@ -450,6 +450,28 @@ denied the row says "Blocked". Nothing leaves the phone. See
 [Reminder.kt](app/src/main/java/com/cindy/tracker/Reminder.kt) and
 [ReminderScheduler.kt](app/src/main/java/com/cindy/tracker/ReminderScheduler.kt).
 
+#### The session timeline
+
+The results screen draws the session across its own workout clock: reps banked as a stepped
+line, and the heart rate beneath it when a watch was connected. Touch the chart, or drag along
+it, and one cursor crosses both lanes. The line above reads the instant back — the clock, the
+round and movement, the reps banked by then, the bpm, and how far ahead of or behind the session
+it is measured against (the same choice of "Your best" or "Last time" as the card above, drawn
+dashed) at the latest round both sessions had finished. A round is one stop for TalkBack, which
+reads when it ran, how long it took, the reps banked by its end and its average heart rate.
+
+Everything on it was banked, never worked out. A session with its rep times draws a step for
+every rep; one recorded before they existed draws a step per set instead and says so under the
+chart, and one with neither has no reps line rather than one drawn from the round count. Each
+session's rep times are checked against that session's own counted total, so the reviewed
+session and the one it is compared with fall back to per-set independently. Reps tapped in are
+counted and said to be by hand, and a score the camera could not stand behind reads "at least".
+A heart-rate line is broken wherever the watch was silent for longer than the calorie estimate
+will hold a reading, and the whole section is hidden when there is neither reps nor heart rate
+to draw. See
+[SessionTimeline.kt](app/src/main/java/com/cindy/tracker/SessionTimeline.kt) and
+[SessionTimelineView.kt](app/src/main/java/com/cindy/tracker/SessionTimelineView.kt).
+
 #### Set times
 
 The workout clock also times each set. Pauses are excluded and getting into position is
