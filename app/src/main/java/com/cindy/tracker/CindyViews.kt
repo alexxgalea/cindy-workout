@@ -233,15 +233,23 @@ fun Context.statRow(
     }
 }
 
-/** A leaderboard row: rank, who, when, and the score in metric type. */
+/**
+ * A leaderboard row: rank, who, when, and the score in metric type.
+ *
+ * [onTap], when given, opens the session it stands for — the athlete's own rows, never the
+ * benchmark's, which is not a session anyone can reopen. It gets the same treatment [navRow]
+ * already gives an opener: a chevron, the ripple, and a Button role, rather than [statRow]'s "tap
+ * to change", which would be the wrong thing to tell someone about a row that opens a page.
+ */
 fun Context.rankRow(
     rank: String,
     name: String,
     detail: String,
     score: String,
     mine: Boolean,
-    best: Boolean
-): View = rowFrame(tappable = false).apply {
+    best: Boolean,
+    onTap: (() -> Unit)? = null
+): View = rowFrame(tappable = onTap != null).apply {
     // The athlete's own rows sit on a slightly brighter film; the benchmark recedes.
     if (mine) setBackgroundColor(getColor(R.color.surface_glass))
     addView(styledText(R.style.Cindy_Callout, rank).apply {
@@ -264,7 +272,13 @@ fun Context.rankRow(
     addView(styledText(R.style.Cindy_MetricS, score).apply {
         if (!mine) setTextColor(getColor(R.color.label_secondary))
     }.withStartMargin(dp(10)))
-    contentDescription = "$rank, $name, $score, $detail"
+    if (onTap != null) {
+        addView(chevron())
+        setOnClickListener { onTap() }
+        describeAsButton("$rank, $name, $score, $detail")
+    } else {
+        contentDescription = "$rank, $name, $score, $detail"
+    }
 }
 
 /** Lifts one word to the heaviest weight without disturbing the rest of its style. */

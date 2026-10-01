@@ -132,6 +132,24 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/compareTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="COMPARED WITH"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/compare"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/statsTitle"
             style="@style/Cindy.Eyebrow"
             android:layout_width="wrap_content"
