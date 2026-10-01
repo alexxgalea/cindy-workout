@@ -65,6 +65,15 @@ class StatTilesTest {
     }
 
     @Test
+    fun `a lower bound says at least over the reps into the next round, spoken too`() {
+        val t = byLabel(attempt(untrackedMs = 60_000L)).getValue("ROUNDS")
+
+        assertEquals("at least +12 reps into round 8", t.footnote)
+        assertEquals("Rounds: 7, plus at least 12 reps into round 8", t.speech)
+        assertEquals("Rounds: 7, plus 12 reps into round 8", byLabel(attempt()).getValue("ROUNDS").speech)
+    }
+
+    @Test
     fun `tapped reps are named on the reps tile`() {
         val t = byLabel(attempt(manualReps = 12))
 

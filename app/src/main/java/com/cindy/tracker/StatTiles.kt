@@ -47,15 +47,21 @@ object SessionTiles {
 
     private fun rounds(a: Attempt, stats: SessionStats?): StatTile {
         val leftover = stats?.let { it.unfinished?.reps ?: 0 } ?: a.reps
+        // The reps into the next round come from the score, so a floor says "at least" here
+        // too, on the tile and in the sentence read out for it.
+        val atLeast = if (a.scoreIsLowerBound) "at least " else ""
+        val into = "$leftover ${reps(leftover)} into round ${a.rounds + 1}"
         val footnote = when {
-            leftover > 0 -> "+$leftover ${reps(leftover)} into round ${a.rounds + 1}"
+            leftover > 0 -> "${atLeast}+$into"
             a.rounds == 0 -> "none finished"
             else -> "all finished"
         }
-        return StatTile(
-            "ROUNDS", "${a.rounds}", footnote,
+        val speech = if (leftover > 0) {
+            "Rounds: ${a.rounds}, plus ${atLeast}$into"
+        } else {
             "Rounds: ${a.rounds}, $footnote"
-        )
+        }
+        return StatTile("ROUNDS", "${a.rounds}", footnote, speech)
     }
 
     private fun reps(a: Attempt): StatTile {
