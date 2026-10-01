@@ -48,10 +48,7 @@ class RecordingOverlay {
         val height: Int,
         /** Whether the analysis frame was mirrored, as it is for the selfie camera. */
         val mirrored: Boolean,
-        val clock: String,
-        val round: String,
-        val exercise: String,
-        val reps: String,
+        val hud: RecordedHudText,
         val debug: Boolean
     )
 
@@ -88,6 +85,11 @@ class RecordingOverlay {
         color = Color.argb(150, 255, 255, 255)
         textAlign = Paint.Align.RIGHT
     }
+    private val bannerText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
 
     /** Called from the analysis thread with everything the next drawn frame should show. */
     fun update(
@@ -95,13 +97,10 @@ class RecordingOverlay {
         width: Int,
         height: Int,
         mirrored: Boolean,
-        clock: String,
-        round: String,
-        exercise: String,
-        reps: String,
+        hud: RecordedHudText,
         debug: Boolean = false
     ) {
-        state = State(keypoints, width, height, mirrored, clock, round, exercise, reps, debug)
+        state = State(keypoints, width, height, mirrored, hud, debug)
     }
 
     fun clear() {
@@ -139,6 +138,7 @@ class RecordingOverlay {
         canvas.save()
         canvas.concat(transform(frame, s, mirror = false))
         drawHud(canvas, s, safe)
+        s.hud.banner?.let { drawBanner(canvas, it, safe) }
         drawWatermark(canvas, safe)
         canvas.restore()
         return true
@@ -212,28 +212,28 @@ class RecordingOverlay {
         accentText.textSize = small
 
         // top-left: the clock
-        val clockWidth = text.measureText(s.clock)
+        val clockWidth = text.measureText(s.hud.clock)
         roundedPanel(
             canvas,
             safe.left + pad, safe.top + pad,
             safe.left + pad * 2 + clockWidth, safe.top + pad + big * 1.5f
         )
-        canvas.drawText(s.clock, safe.left + pad * 1.5f, safe.top + pad + big * 1.1f, text)
+        canvas.drawText(s.hud.clock, safe.left + pad * 1.5f, safe.top + pad + big * 1.1f, text)
 
         // top-right: the round
         accentText.textAlign = Paint.Align.RIGHT
-        val roundWidth = accentText.measureText(s.round)
+        val roundWidth = accentText.measureText(s.hud.round)
         roundedPanel(
             canvas,
             safe.right - pad * 2 - roundWidth, safe.top + pad,
             safe.right - pad, safe.top + pad + small * 2f
         )
-        canvas.drawText(s.round, safe.right - pad * 1.5f, safe.top + pad + small * 1.4f, accentText)
+        canvas.drawText(s.hud.round, safe.right - pad * 1.5f, safe.top + pad + small * 1.4f, accentText)
         accentText.textAlign = Paint.Align.LEFT
 
         // bottom-left: movement and rep count
-        val label = s.exercise
-        val count = s.reps
+        val label = s.hud.label
+        val count = s.hud.count
         text.textSize = big
         accentText.textSize = small
         val blockWidth = maxOf(text.measureText(count), accentText.measureText(label))
@@ -248,6 +248,25 @@ class RecordingOverlay {
             count,
             safe.left + pad * 1.5f, blockTop + small * 1.4f + big * 1.1f, text
         )
+    }
+
+    /**
+     * The few seconds of banner after the setup check ends: "CALIBRATED · 2 REPS" once it
+     * passes, "CALIBRATION SKIPPED" when SKIP leaves it early. Centred in the safe area like
+     * every other piece of text here — the frame's own edges are what the crop takes.
+     */
+    private fun drawBanner(canvas: Canvas, label: String, safe: SourceRect) {
+        bannerText.textSize = safe.height * 0.034f
+        val pad = safe.height * 0.018f
+        val halfWidth = bannerText.measureText(label) / 2f
+        val cx = safe.left + safe.width / 2f
+        val cy = safe.top + safe.height / 2f
+        val rect = RectF(
+            cx - halfWidth - pad * 2f, cy - bannerText.textSize * 0.9f,
+            cx + halfWidth + pad * 2f, cy + bannerText.textSize * 0.6f
+        )
+        canvas.drawRoundRect(rect, rect.height() * 0.28f, rect.height() * 0.28f, panel)
+        canvas.drawText(label, cx, cy + bannerText.textSize * 0.32f, bannerText)
     }
 
     private fun drawWatermark(canvas: Canvas, safe: SourceRect) {
