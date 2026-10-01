@@ -5,6 +5,7 @@
   a bordered level box and then a bare column of rows with no card around them at all.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
@@ -177,8 +178,12 @@
                 style="@style/Cindy.MetricS"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:textSize="18sp" />
+                android:maxLines="1"
+                android:textSize="18sp"
+                app:autoSizeMaxTextSize="18sp"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeStepGranularity="1sp"
+                app:autoSizeTextType="uniform" />
 
             <TextView
                 android:id="@+id/timelineDetail"
