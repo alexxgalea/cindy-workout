@@ -188,8 +188,8 @@ class RecordingOverlay {
 
     private fun drawSkeleton(canvas: Canvas, s: State) {
         // Stroke widths are relative to the frame, so they survive the scale into the buffer.
-        bone.strokeWidth = s.height * 0.010f
-        val jointRadius = s.height * 0.008f
+        bone.strokeWidth = s.height * BONE_WIDTH_FRACTION
+        val jointRadius = s.height * JOINT_RADIUS_FRACTION
         for ((a, b) in KP.SKELETON) {
             val pa = s.keypoints[a]
             val pb = s.keypoints[b]
@@ -287,5 +287,19 @@ class RecordingOverlay {
         const val MIN_SCORE = 0.30f
         /** The HUD's secondary label. Burned into the file, so it follows the app's palette. */
         val ACCENT = Color.argb(168, 255, 255, 255)
+
+        /**
+         * Bone stroke width, as a fraction of frame height.
+         *
+         * Matches the live overlay's own weight: [OverlayView] draws 7 px bones and 9 px joint
+         * radii in view pixels, which on its roughly 2.25x preview scale is about 3.1 and 4
+         * analysis-frame pixels. This file used to draw 0.010 and 0.008 of the frame height
+         * instead — about twice that — so the filmed skeleton read as heavier and less faithful
+         * to the body than the one the athlete actually watched while training.
+         */
+        const val BONE_WIDTH_FRACTION = 0.0045f
+
+        /** Joint radius, as a fraction of frame height. See [BONE_WIDTH_FRACTION]. */
+        const val JOINT_RADIUS_FRACTION = 0.0055f
     }
 }
