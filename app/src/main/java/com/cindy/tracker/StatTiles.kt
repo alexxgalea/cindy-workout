@@ -160,6 +160,10 @@ private fun Context.statTile(tile: StatTile): View = LinearLayout(this).apply {
         // or the width of the phone. It needs the full width of the tile to have anything to shrink
         // into, so it matches the parent rather than wrapping its text.
         maxLines = 1
+        // A shrunk label is a shorter line, which would lift its tile's figure above its
+        // neighbours' at a large font scale. Every eyebrow keeps the height of the unshrunk
+        // style, read before autosize takes over, so the figures start level across the row.
+        minHeight = lineHeight
         setAutoSizeTextTypeUniformWithConfiguration(8, 11, 1, TypedValue.COMPLEX_UNIT_SP)
     }, LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT

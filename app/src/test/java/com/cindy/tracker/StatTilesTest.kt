@@ -1,9 +1,20 @@
 package com.cindy.tracker
 
+import android.content.Context
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class StatTilesTest {
 
     private fun attempt(
@@ -126,5 +137,36 @@ class StatTilesTest {
     fun `without round splits the average says it is the clock over the rounds`() {
         val t = byLabel(attempt(splits = emptyList()))
         assertEquals("clock over rounds", t.getValue("AVG").footnote)
+    }
+
+    /** The figure view of every tile in the grid: the TextView after each tile's eyebrow. */
+    private fun valueViews(grid: View): List<TextView> {
+        val tiles = mutableListOf<ViewGroup>()
+        fun walk(v: View) {
+            if (v is ViewGroup && v.contentDescription != null) tiles += v
+            else if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(grid)
+        return tiles.map { it.getChildAt(1) as TextView }
+    }
+
+    @Test
+    fun `the figures of a row of tiles start level at a large font scale`() {
+        RuntimeEnvironment.setFontScale(1.5f)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val a = attempt()
+        val grid = context.statTileGrid(SessionTiles.of(a, null))
+        grid.measure(
+            View.MeasureSpec.makeMeasureSpec(context.dp(328), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        grid.layout(0, 0, grid.measuredWidth, grid.measuredHeight)
+
+        val values = valueViews(grid)
+        assertEquals(6, values.size)
+        for (row in values.chunked(3)) {
+            val tops = row.map { (it.parent as View).top + it.top }
+            assertTrue("figures start at $tops", tops.max() - tops.min() <= 1)
+        }
     }
 }
