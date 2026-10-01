@@ -106,7 +106,15 @@ class SessionTimelineView @JvmOverloads constructor(
     private var snapClocks = LongArray(0)
     private var laneLo = DoubleArray(0)
     private var laneHi = DoubleArray(0)
-    private var laneTicks: List<List<Double>> = emptyList()
+    private var laneTicks: List<DoubleArray> = emptyList()
+
+    /**
+     * What the axis says, written once in [setLanes]: a lane's lowest and highest tick, and the
+     * clock's far end. Drawing only reads them, so a frame allocates no strings.
+     */
+    private var tickLabelLow: Array<String> = emptyArray()
+    private var tickLabelHigh: Array<String> = emptyArray()
+    private var endLabel = ""
 
     /** Geometry, rebuilt by [layoutLanes]. */
     private val plot = RectF()
@@ -262,8 +270,11 @@ class SessionTimelineView @JvmOverloads constructor(
             val ticks = Progress.niceTicks(lo, max(values.maxOrNull() ?: 1.0, lo + 1.0))
             laneLo[i] = ticks.first()
             laneHi[i] = ticks.last()
-            ticks
+            ticks.toDoubleArray()
         }
+        tickLabelLow = Array(lanes.size) { i -> lanes[i].format(laneLo[i]) }
+        tickLabelHigh = Array(lanes.size) { i -> lanes[i].format(laneHi[i]) }
+        endLabel = formatDuration(durationMs)
         snapClocks = snapPoints(lanes.firstOrNull(), roundEndsMs)
         if (selectedMs?.let { it > durationMs } == true) selectedMs = null
         if (firstData) startReveal() else reveal = 1f
@@ -417,21 +428,20 @@ class SessionTimelineView @JvmOverloads constructor(
         textPaint.textAlign = Paint.Align.LEFT
         canvas.drawText(lane.label, plot.left, top - context.dpf(5f), textPaint)
 
-        for (t in laneTicks[i]) {
-            val y = yFor(i, t)
+        val ticks = laneTicks[i]
+        for (k in ticks.indices) {
+            val y = yFor(i, ticks[k])
             canvas.drawLine(plot.left, y, plot.right, y, gridPaint)
         }
         textPaint.textAlign = Paint.Align.RIGHT
         // Only the first and last tick are named: a short band with four labels is all labels.
-        val ticks = laneTicks[i]
+        val right = (width - paddingRight).toFloat()
         canvas.drawText(
-            lane.format(ticks.last()), (width - paddingRight).toFloat(),
-            yFor(i, ticks.last()) + textPaint.textSize * 0.35f, textPaint
+            tickLabelHigh[i], right, yFor(i, laneHi[i]) + textPaint.textSize * 0.35f, textPaint
         )
         if (ticks.size > 1) {
             canvas.drawText(
-                lane.format(ticks.first()), (width - paddingRight).toFloat(),
-                yFor(i, ticks.first()) + textPaint.textSize * 0.35f, textPaint
+                tickLabelLow[i], right, yFor(i, laneLo[i]) + textPaint.textSize * 0.35f, textPaint
             )
         }
         for (k in roundEnds.indices) {
@@ -445,7 +455,7 @@ class SessionTimelineView @JvmOverloads constructor(
         textPaint.textAlign = Paint.Align.LEFT
         canvas.drawText("0:00", plot.left, baseline, textPaint)
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(formatDuration(durationMs), plot.right, baseline, textPaint)
+        canvas.drawText(endLabel, plot.right, baseline, textPaint)
     }
 
     private fun drawLane(canvas: Canvas, i: Int) {
