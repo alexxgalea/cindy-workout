@@ -44,17 +44,23 @@ data class Lifted(
         val reason: String
     )
 
+    /** "About" or, for a lower-bound score, "At least": the word that goes before [kgNumber]. */
+    val kgPrefix: String get() = if (atLeast) "At least" else "About"
+
     /**
-     * "About 12,940 kg", or "At least 12,940 kg" for a lower-bound score.
+     * The kilograms as a grouped number: "12,940".
      *
      * Rounded to the nearest 10 kg from 100 kg up: a figure built from a body-segment share is no
      * more exact than that, and a spurious last digit would claim it was.
      */
-    fun kgText(): String {
-        val rounded = if (totalKg >= 100.0) Math.round(totalKg / 10.0) * 10L else Math.round(totalKg)
-        val figure = String.format(Locale.US, "%,d kg", rounded)
-        return if (atLeast) "At least $figure" else "About $figure"
-    }
+    val kgNumber: String
+        get() {
+            val rounded = if (totalKg >= 100.0) Math.round(totalKg / 10.0) * 10L else Math.round(totalKg)
+            return String.format(Locale.US, "%,d", rounded)
+        }
+
+    /** "About 12,940 kg", or "At least 12,940 kg" for a lower-bound score. */
+    fun kgText(): String = "$kgPrefix $kgNumber kg"
 
     /**
      * The small print: which shares were applied, which movements were left out and why, and

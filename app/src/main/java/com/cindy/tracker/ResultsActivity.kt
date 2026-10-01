@@ -4,18 +4,24 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.work.WorkManager
@@ -38,6 +44,12 @@ class ResultsActivity : AppCompatActivity() {
         private const val EXTRA_STOPPED = "stopped"
         private const val EXTRA_HEELS_FLAT = "heels_flat_spotted"
         private const val EXTRA_REVIEW_AT = "review_at"
+
+        /**
+         * Stands in for the font check when set. The JVM test environment has no emoji font and
+         * answers "no glyph" to every question, which would leave the animal row untestable.
+         */
+        internal var glyphCheck: ((String) -> Boolean)? = null
 
         /** The width of the icon at the start of a celebration row, so the text lines up. */
         private const val ICON_SLOT_DP = 36
@@ -171,6 +183,7 @@ class ResultsActivity : AppCompatActivity() {
 
         celebrate(a, all)
         renderLevel(a)
+        liftedCard(a)
         compareCard(a, all)
 
         binding.stats.removeAllViews()
@@ -240,6 +253,198 @@ class ResultsActivity : AppCompatActivity() {
                 if (a.pausedMs > 0L) append(" Splits exclude paused time.")
             }
         }
+    }
+
+    /**
+     * Whether this phone can actually draw [emoji]. Asked of the same typeface the emoji are drawn
+     * with, so a "yes" here is a promise about the card and not about some other font: the oldest
+     * phone this app runs on (API 26) predates the hippo, and an empty box in its place would be
+     * worse than a different animal.
+     */
+    private val emojiPaint = Paint().apply { typeface = Typeface.DEFAULT }
+
+    private fun canDraw(emoji: String): Boolean =
+        glyphCheck?.invoke(emoji) ?: emojiPaint.hasGlyph(emoji)
+
+    /**
+     * What the session lifted and burned, as an animal and a cup of tea: one card between the
+     * level and the comparison, or, with no body weight on file, one row inviting the athlete to
+     * enter it. Hidden when there is nothing to say. Cleared first because [render] runs again
+     * when the body weight changes, which is also what turns the invitation into the card.
+     *
+     * Both figures are estimates and the footnote says how each was reached. The animal is picked
+     * by the day the session happened, not today, so reopening it shows the animal it showed
+     * the first time.
+     */
+    private fun liftedCard(a: Attempt) {
+        val holder = binding.lifted
+        holder.removeAllViews()
+        val lifted = Lifted.of(a, profile.bodyWeightKg)
+        // The same call, with the same inputs, as the energy row under SESSION: this card must
+        // never disagree with the number it sits above.
+        val est = Calories.estimate(
+            a.totalReps, a.durationMs, profile.body(), HeartRateStore(this).load(a.atMillis)
+        )
+        if (lifted == null && est == null) {
+            val invite = !profile.hasBodyWeight && (a.durationMs > 0L || Lifted.measurable(a))
+            holder.visibility = if (invite) View.VISIBLE else View.GONE
+            if (invite) {
+                holder.addView(
+                    InsetGroup(this).apply {
+                        row(navRow("Your weight", "Add it to see what you lifted and burned") {
+                            askBodyWeight()
+                        })
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            }
+            return
+        }
+        holder.visibility = View.VISIBLE
+
+        val rotation = Instant.ofEpochMilli(a.atMillis).atZone(ZoneId.systemDefault())
+            .toLocalDate().toEpochDay()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            // One sentence for the whole card: its parts are hidden below, and the emoji, which
+            // a screen reader would otherwise name one by one, are never announced on their own.
+            isFocusable = true
+        }
+        // The card is one TalkBack stop, so every child leaves the accessibility tree.
+        fun add(view: View, topDp: Int = 0): View {
+            view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            card.addView(
+                view,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(topDp) }
+            )
+            return view
+        }
+        val spoken = mutableListOf<String>()
+
+        if (lifted != null) {
+            add(eyebrow("YOU LIFTED"))
+            val match = Equivalents.animalFor(lifted.totalKg, rotation, ::canDraw)
+            if (match != null) add(animalRow(match), topDp = 12)
+            add(figure(lifted.kgPrefix, lifted.kgNumber, "kg"), topDp = if (match != null) 8 else 10)
+            spoken += "You lifted ${lifted.kgText().replaceFirstChar { it.lowercase() }}."
+            if (match != null) {
+                val sentence = Equivalents.heavySentence(match, lifted.atLeast)
+                add(styledText(R.style.Cindy_Body, sentence), topDp = 2)
+                spoken += sentence
+            }
+        }
+
+        var energyMethod: String? = null
+        if (est != null) {
+            if (lifted != null) {
+                add(View(this).apply { setBackgroundColor(getColor(R.color.hairline)) }, topDp = 18)
+                    .layoutParams.height = hairlinePx()
+            }
+            add(eyebrow("YOU BURNED"), topDp = if (lifted != null) 18 else 0)
+            val match = Equivalents.energyFor(est.kcal.toDouble(), rotation, ::canDraw)
+            val prefix = if (a.scoreIsLowerBound) "At least" else null
+            val figure = figure(prefix, "${est.kcal}", "kcal")
+            if (match == null) {
+                add(figure, topDp = 10)
+            } else {
+                // The emoji sits at the end of the figure's line, so the sentence under it keeps
+                // the full width of the card.
+                add(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(figure, LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    ))
+                    addView(emoji(match.reference.emoji, sp = 28f))
+                }, topDp = 10)
+            }
+            spoken += "You burned ${if (prefix != null) "at least " else ""}${est.kcal} kcal."
+            if (match != null) {
+                val sentence = match.reference.sentence(match.count, a.scoreIsLowerBound)
+                add(styledText(R.style.Cindy_Body, sentence), topDp = 2)
+                spoken += sentence
+                energyMethod = match.reference.method
+            }
+        }
+
+        val note = listOfNotNull(
+            lifted?.footnote(tappedIn = a.manualReps > 0),
+            // The energy figure is the one the calories row already explains; this only points at it.
+            if (est != null) {
+                buildString {
+                    append("Energy is the same estimate as the calories row below.")
+                    energyMethod?.let { append(" $it") }
+                    if (lifted == null && a.scoreIsLowerBound) {
+                        append(" The camera lost you for part of this session, so this is a floor.")
+                    }
+                }
+            } else null
+        ).joinToString(" ")
+        add(styledText(R.style.Cindy_Footnote, note), topDp = 16)
+        spoken += note
+
+        card.contentDescription = spoken.joinToString(" ")
+        holder.addView(
+            card,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    /** One animal's emoji, up to [Equivalents.MAX_EMOJI], and a "×9" when there are more of it. */
+    private fun animalRow(match: Equivalents.AnimalMatch): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        repeat(Equivalents.emojiCount(match.count)) { addView(emoji(match.animal.emoji, sp = 36f)) }
+        if (match.count.roundToInt() > Equivalents.MAX_EMOJI) {
+            addView(
+                styledText(R.style.Cindy_MetricS, "×${match.count.roundToInt()}").apply {
+                    setTextColor(getColor(R.color.label_secondary))
+                }.withStartMargin(dp(10))
+            )
+        }
+    }
+
+    /**
+     * An emoji, in the system's own typeface and full colour. This card is the one place in the
+     * app that has colour beyond the accent, deliberately: an animal in monochrome is a glyph.
+     */
+    private fun emoji(text: String, sp: Float): TextView = TextView(this).apply {
+        this.text = text
+        typeface = Typeface.DEFAULT
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+        includeFontPadding = false
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginEnd = dp(4) }
+    }
+
+    /**
+     * A big figure with a small word either side: "About **12,940** kg". The qualifier and the
+     * unit drop to half size and a shade, so the number is what the eye lands on.
+     */
+    private fun figure(prefix: String?, number: String, unit: String): TextView {
+        val text = SpannableStringBuilder()
+        fun small(word: String) {
+            val start = text.length
+            text.append(word)
+            text.setSpan(RelativeSizeSpan(0.5f), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(
+                ForegroundColorSpan(getColor(R.color.label_secondary)),
+                start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        if (prefix != null) small("$prefix ")
+        text.append(number)
+        small(" $unit")
+        return styledText(R.style.Cindy_MetricM, text).apply { maxLines = 2 }
     }
 
     /**

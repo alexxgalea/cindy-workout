@@ -131,6 +131,15 @@
                 android:layout_marginTop="10dp" />
         </LinearLayout>
 
+        <!-- What the session lifted and burned, as animals and tea. Built in code. -->
+        <LinearLayout
+            android:id="@+id/lifted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/compareTitle"
             style="@style/Cindy.Eyebrow"

@@ -995,4 +995,189 @@ class ScreenSmokeTest {
         reopened.finish()
         store.clear()
     }
+
+    /** A full round with its sets banked, so there is something for the lifted card to count. */
+    private fun liftedAttempt(profile: CindyProfile = CindyProfile.STANDARD) = Attempt(
+        rounds = 1,
+        reps = 0,
+        atMillis = System.currentTimeMillis(),
+        durationMs = 20 * 60 * 1000L,
+        countedReps = 30,
+        profile = profile,
+        setSplits = listOf(
+            SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+            SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+            SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+        )
+    )
+
+    /** With a weight on file the card says what was lifted and burned, as one TalkBack sentence. */
+    @Test
+    fun `the results screen shows what was lifted and burned once a weight is on file`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        val card = holder.getChildAt(0)
+        val spoken = card.contentDescription.toString()
+        // (5 x 0.95 + 10 x 0.64 + 15 x 0.88) x 80 = 1,948 kg, rounded to the nearest 10.
+        assertTrue(spoken, spoken.contains("You lifted about 1,950 kg."))
+        assertTrue(spoken, spoken.contains("You burned"))
+        assertTrue(spoken, spoken.contains("An estimate from your weight"))
+        assertTrue("card is one stop", card.isFocusable)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Without one, a single row invites the athlete to enter it, and nothing is made up. */
+    @Test
+    fun `the results screen invites a weight rather than showing an empty card`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        Profile(context).bodyWeightKg = 0.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        assertTrue("no invitation", findByDescriptionPrefix(holder, "Your weight") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+    }
+
+    /** An old record cannot say which movement its reps were, so only the burned half remains. */
+    @Test
+    fun `the results screen says nothing of what was lifted for an old record`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val old = Attempt(
+            rounds = 2, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        store.add(old)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, old, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertTrue("no energy card", findByDescriptionContains(holder, "You burned") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Band-assisted pull-ups are named as left out, and the shares applied are the athlete's own. */
+    @Test
+    fun `the results screen names the movements it left out of what was lifted`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt(CindyProfile(pull = PullVariant.BAND_ASSISTED_PULL_UP))
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+            .getChildAt(0).contentDescription.toString()
+
+        assertTrue(spoken, spoken.contains("Band-assisted pull-ups are left out"))
+        assertTrue(spoken, !spoken.contains("strict pull-ups"))
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** The same card draws when a past session is reopened. */
+    @Test
+    fun `a reopened session shows the lifted card too`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, attempt.atMillis)
+        ).setup().get()
+
+        assertTrue(
+            "no lifted card on review",
+            findByDescriptionContains(activity.findViewById(R.id.lifted), "You lifted") != null
+        )
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /**
+     * The animal row: as many of the animal as the count, five at most, and a "×N" beyond that.
+     * The JVM has no emoji font, so the font check is told every glyph is available.
+     */
+    @Test
+    fun `the lifted card draws the animal and its count when the phone can draw it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+        ResultsActivity.glyphCheck = { true }
+        try {
+            val activity = Robolectric.buildActivity(
+                ResultsActivity::class.java,
+                ResultsActivity.intent(context, attempt, stoppedEarly = false)
+            ).setup().get()
+            val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+                .getChildAt(0).contentDescription.toString()
+
+            // 1,948 kg is 2.8 cows, 3.9 horses or 6.5 bears, whichever the day's rotation picked.
+            assertTrue(spoken, spoken.contains("As heavy as "))
+            val emojiViews = mutableListOf<android.widget.TextView>()
+            fun walk(v: android.view.View) {
+                if (v is android.widget.TextView && v.typeface == android.graphics.Typeface.DEFAULT) emojiViews += v
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+            walk(activity.findViewById(R.id.lifted))
+            // Three to five of the animal, plus the one beside the energy figure.
+            assertTrue("emoji drawn: ${emojiViews.size}", emojiViews.size in 4..6)
+            activity.finish()
+        } finally {
+            ResultsActivity.glyphCheck = null
+            store.clear()
+            profile.bodyWeightKg = 0.0
+        }
+    }
 }
