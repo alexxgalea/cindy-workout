@@ -995,4 +995,186 @@ class ScreenSmokeTest {
         reopened.finish()
         store.clear()
     }
+
+    /** One round of five, ten and fifteen reps, timed set by set, filed with its rep times. */
+    private fun timedRound(atMillis: Long, withMarks: Boolean, context: android.content.Context): Attempt {
+        val attempt = Attempt(
+            rounds = 1, reps = 0, atMillis = atMillis, durationMs = 120_000L,
+            roundSplitsMs = listOf(60_000L), profile = CindyProfile.STANDARD, countedReps = 30,
+            setSplits = listOf(
+                SetSplit(Exercise.PULLUP, 10_000L, 5, 0),
+                SetSplit(Exercise.PUSHUP, 20_000L, 10, 0),
+                SetSplit(Exercise.SQUAT, 30_000L, 15, 0)
+            )
+        )
+        if (withMarks) {
+            val movements = List(5) { Exercise.PULLUP } + List(10) { Exercise.PUSHUP } +
+                List(15) { Exercise.SQUAT }
+            RepTimesStore(context).save(
+                atMillis, movements.mapIndexed { i, m -> RepMark((i + 1) * 2_000L, m, manual = false) }
+            )
+        }
+        return attempt
+    }
+
+    private fun resultsFor(context: android.content.Context, a: Attempt) =
+        Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, a, stoppedEarly = false)
+        ).setup().get()
+
+    private fun clearTimelineFixtures(context: android.content.Context) {
+        RecordStore(context).clear()
+        HeartRateStore(context).clear()
+        RepTimesStore(context).clear()
+    }
+
+    @Test
+    fun `the results screen draws the timeline for a session with rep times and no earlier one`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = timedRound(System.currentTimeMillis(), withMarks = true, context)
+        RecordStore(context).add(attempt)
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timelineTitle).visibility)
+        // Nothing earlier to measure against, so nothing dashed to explain.
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timelineLegend).visibility)
+        assertEquals(1, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        assertEquals(
+            "2:00 · 1 round",
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `the results screen hides the timeline for a record with nothing to plot`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val old = Attempt(
+            rounds = 5, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        RecordStore(context).add(old)
+
+        val activity = resultsFor(context, old)
+
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timelineTitle).visibility)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    /** A heart rate alone is enough: reps may be unknown, the watch was not. */
+    @Test
+    fun `the results screen draws the timeline from a heart-rate trace alone`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = Attempt(
+            rounds = 5, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        RecordStore(context).add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(
+                attempt.atMillis,
+                (0 until 60).map { HeartRateSample(it * 1_000L, 110 + it) },
+                emptyList()
+            )
+        )
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(1, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `the results screen stacks reps and heart rate when it has both`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = timedRound(System.currentTimeMillis(), withMarks = true, context)
+        RecordStore(context).add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(attempt.atMillis, listOf(HeartRateSample(1_000L, 130)), emptyList())
+        )
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(2, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    /**
+     * The legend follows whichever chip is chosen, and the cursor the athlete left on the chart
+     * stays where it was across the change, with the readout drawn again from there.
+     */
+    @Test
+    fun `the timeline follows the comparison chip and keeps the cursor`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60 * 60 * 1000
+        val store = RecordStore(context)
+        // Best by a distance, then a worse one more recently, then today's.
+        store.add(timedRound(now - 3 * day, withMarks = false, context).copy(countedReps = 45))
+        store.add(timedRound(now - day, withMarks = false, context))
+        val today = timedRound(now, withMarks = true, context)
+        store.add(today)
+
+        val activity = resultsFor(context, today)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        val legend = activity.findViewById<android.widget.TextView>(R.id.timelineLegend)
+        assertTrue(legend.text.toString(), legend.text.toString().startsWith("Dashed: your best."))
+
+        val chart = activity.findViewById<SessionTimelineView>(R.id.timelineChart)
+        chart.select(30_000L)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+                .startsWith("0:30 · Round 1")
+        )
+
+        findByText(root, "Last time")!!.performClick()
+
+        assertTrue(legend.text.toString(), legend.text.toString().startsWith("Dashed: last time."))
+        assertEquals(30_000L, chart.selectedMs)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+                .startsWith("0:30 · Round 1")
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `a reopened session draws its own timeline against what came before it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60 * 60 * 1000
+        val earlier = timedRound(now - 2 * day, withMarks = true, context)
+        val reopened = timedRound(now - day, withMarks = true, context)
+        val later = timedRound(now, withMarks = true, context)
+        RecordStore(context).apply { add(earlier); add(reopened); add(later) }
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, reopened.atMillis)
+        ).setup().get()
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineLegend).text.toString()
+                .startsWith("Dashed: your best")
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
 }

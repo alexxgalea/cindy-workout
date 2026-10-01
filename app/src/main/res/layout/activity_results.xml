@@ -149,6 +149,60 @@
             android:orientation="vertical"
             android:visibility="gone" />
 
+        <!-- Reps and heart rate across the clock, scrubbed by touch. Hidden without either. -->
+        <TextView
+            android:id="@+id/timelineTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="TIMELINE"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/timeline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/timelineReadout"
+                style="@style/Cindy.MetricS"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/timelineDetail"
+                style="@style/Cindy.Callout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFeatureSettings="tnum"
+                android:minLines="2" />
+
+            <com.cindy.tracker.SessionTimelineView
+                android:id="@+id/timelineChart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp" />
+
+            <TextView
+                android:id="@+id/timelineLegend"
+                style="@style/Cindy.Footnote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/statsTitle"
             style="@style/Cindy.Eyebrow"

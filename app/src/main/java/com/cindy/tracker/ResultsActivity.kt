@@ -99,6 +99,8 @@ class ResultsActivity : AppCompatActivity() {
     private var reviewing = false
     /** What this session is measured against; the one field later sections also hang off. */
     private var comparison: Attempt? = null
+    /** Which chip [comparison] came from, so a section can say "your best" or "last time". */
+    private var comparisonKind: Comparisons.Kind? = null
     private lateinit var compareCardHolder: FrameLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -385,6 +387,9 @@ class ResultsActivity : AppCompatActivity() {
             binding.compareTitle.visibility = View.GONE
             binding.compare.visibility = View.GONE
             comparison = null
+            comparisonKind = null
+            // The sections that follow still draw, just with nothing to measure against.
+            onComparisonChanged()
             return
         }
         binding.compareTitle.visibility = View.VISIBLE
@@ -395,10 +400,12 @@ class ResultsActivity : AppCompatActivity() {
         val kept = comparison?.atMillis?.let { prior -> options.firstOrNull { it.attempt.atMillis == prior } }
         val initial = kept ?: options.first()
         comparison = initial.attempt
+        comparisonKind = initial.kind
 
         binding.compare.addView(
             chipRow(options.map { it.label }, options.indexOf(initial)) { i ->
                 comparison = options[i].attempt
+                comparisonKind = options[i].kind
                 onComparisonChanged()
             }.apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -416,13 +423,112 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * Redraws whatever depends on [comparison]. Only the card itself for now; later sections of
-     * this page hang their own charts here rather than each keeping a selection of their own.
+     * Redraws whatever depends on [comparison]: the card, and the sections that follow it, which
+     * hang their own charts here rather than each keeping a selection of their own. Runs with no
+     * comparison too, because those sections are still worth drawing without something to
+     * measure against; only the card needs one.
      */
     private fun onComparisonChanged() {
-        val reference = comparison ?: return
-        compareCardHolder.removeAllViews()
-        compareCardHolder.addView(comparisonCardView(attempt, reference))
+        val reference = comparison
+        if (reference != null && ::compareCardHolder.isInitialized) {
+            compareCardHolder.removeAllViews()
+            compareCardHolder.addView(comparisonCardView(attempt, reference))
+        }
+        renderTimeline()
+    }
+
+    /**
+     * Reps and heart rate across the clock, with what the athlete is touching read out above.
+     * Hidden unless there is a reps line or a heart rate to draw: an empty chart would say less
+     * than none. The same chart view is kept across [render]s and [onComparisonChanged], so a
+     * cursor the athlete left somewhere survives a chip change, and the readout is drawn again
+     * from wherever it is.
+     */
+    private fun renderTimeline() {
+        val a = attempt
+        val reference = comparison
+        val repTimes = RepTimesStore(this)
+        val timeline = SessionTimeline.of(
+            a,
+            marks = repTimes.load(a.atMillis),
+            trace = HeartRateStore(this).load(a.atMillis),
+            reference = reference,
+            referenceKind = comparisonKind,
+            referenceMarks = reference?.let { repTimes.load(it.atMillis) }
+        )
+        val show = if (timeline.hasData) View.VISIBLE else View.GONE
+        binding.timelineTitle.visibility = show
+        binding.timeline.visibility = show
+        if (!timeline.hasData) return
+
+        val chart = binding.timelineChart
+        chart.setLanes(
+            timelineLanes(timeline),
+            timeline.durationMs,
+            roundEndsMs = timeline.roundEnds,
+            stops = timeline.rounds.map {
+                TimelineStop(it.startMs, it.endMs, timeline.describeRound(it))
+            }
+        )
+        chart.contentDescription = "Timeline of this session: " +
+            (if (timeline.reps != null) "reps" else "") +
+            (if (timeline.reps != null && timeline.heartRuns.isNotEmpty()) " and " else "") +
+            (if (timeline.heartRuns.isNotEmpty()) "heart rate" else "") +
+            ", one stop for each round"
+        chart.onSelect = { showTimelineReadout(timeline, it) }
+        showTimelineReadout(timeline, chart.selectedMs)
+
+        val legend = timeline.legend()
+        binding.timelineLegend.text = legend
+        binding.timelineLegend.visibility = if (legend == null) View.GONE else View.VISIBLE
+    }
+
+    private fun showTimelineReadout(timeline: SessionTimeline, clockMs: Long?) {
+        if (clockMs == null) {
+            binding.timelineReadout.text = timeline.idleReadout().title
+            binding.timelineDetail.text = "Drag across the chart to scrub through the session."
+            return
+        }
+        val readout = timeline.readout(timeline.at(clockMs))
+        binding.timelineReadout.text = readout.title
+        binding.timelineDetail.text = readout.detail.orEmpty()
+    }
+
+    /**
+     * The timeline's lanes, in the order they stack. Reps step: a rep is banked and then held, so
+     * a per-set session shows its sets as steps with a dot at each, which says "this much by the
+     * end of that set" and nothing about the reps in between.
+     */
+    private fun timelineLanes(t: SessionTimeline): List<TimelineLane> {
+        val lanes = mutableListOf<TimelineLane>()
+        val reps = t.reps
+        if (reps != null) {
+            lanes += TimelineLane(
+                label = "REPS",
+                colour = getColor(R.color.label),
+                runs = listOf(TimelineRun(reps.points.map { TimelinePoint(it.clockMs, it.reps.toDouble()) })),
+                comparison = t.reference?.reps?.points
+                    ?.map { TimelinePoint(it.clockMs, it.reps.toDouble()) }.orEmpty(),
+                format = { Progress.formatReps(it.roundToInt()) },
+                stepped = true,
+                zeroBased = true,
+                markPoints = !reps.exact,
+                heightDp = 132
+            )
+        }
+        if (t.heartRuns.isNotEmpty()) {
+            lanes += TimelineLane(
+                label = "HEART RATE",
+                colour = getColor(R.color.heart),
+                runs = t.heartRuns.map { run ->
+                    TimelineRun(run.map { TimelinePoint(it.clockMs, it.bpm.toDouble()) })
+                },
+                format = { "${it.roundToInt()}" },
+                holdMs = Calories.MAX_HOLD_MS,
+                heightDp = 88
+            )
+        }
+        return lanes
     }
 
     /** The reference session and the delta, as one tappable card that opens it in review. */
