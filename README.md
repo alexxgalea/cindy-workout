@@ -353,6 +353,21 @@ Nothing about it leaves the phone.
 `REC` records the workout with the skeleton, clock, round, movement, rep count and a **CINDY**
 watermark burned into the file — not just drawn on screen.
 
+Filming through the setup check used to burn in `ROUND 1` and `0 / 5` over the two calibration
+pull-ups, because nothing told the recorder the clock had not started — so a film of the check
+read as a workout that had already lost its first two reps. It now reads as what it is: the clock
+panel says `SETUP`, the round panel says `CALIBRATION`, and the movement is labelled
+`PULL-UPS · NOT SCORED` with its own count against the two reps the check asks for. Once it
+passes, the clock starts under a `CALIBRATED · 2 REPS` banner burned in for three seconds; skipping
+the check instead shows `CALIBRATION SKIPPED` for the same three seconds.
+[RecordedHud](app/src/main/java/com/cindy/tracker/RecordedHud.kt) is the one place that decides
+what any of this says — [RecordingOverlay](app/src/main/java/com/cindy/tracker/RecordingOverlay.kt)
+only draws it.
+
+The filmed skeleton is drawn at the same weight the live overlay uses on screen — bones at 0.45%
+of the frame's height, joints at 0.55% — rather than the heavier line an earlier version burned in
+at roughly twice that.
+
 The preview's overlay is a view on top of the screen and never reaches the encoder, so the video
 gets its own renderer through CameraX's `OverlayEffect`, which hands back a canvas over the
 recorded buffer. The effect targets `VIDEO_CAPTURE` only; pointing it at the preview as well would
