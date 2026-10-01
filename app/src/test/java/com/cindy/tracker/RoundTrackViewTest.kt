@@ -100,7 +100,7 @@ class RoundTrackViewTest {
         assertEquals(7, view.selected)
         assertEquals(listOf<Int?>(3, 7), received)
         assertEquals(
-            "Round 8 · 9 of 30 · 5 strict pull-ups, 4 standard push-ups · unfinished",
+            "Round 8 · 9 of 30 · 5 pull-ups, 4 push-ups · unfinished",
             data[received.last()!!].caption(plurals)
         )
     }

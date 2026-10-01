@@ -64,7 +64,7 @@ class SessionStatsTest {
 
         assertEquals("Round 1 · 30 of 30 · 0:52", stats.rounds[0].caption(plurals))
         assertEquals(
-            "Round 2 · 12 of 30 · 5 strict pull-ups, 7 standard push-ups · unfinished",
+            "Round 2 · 12 of 30 · 5 pull-ups, 7 push-ups · unfinished",
             stats.rounds[1].caption(plurals)
         )
     }
@@ -76,7 +76,7 @@ class SessionStatsTest {
 
         assertEquals("Round 1 · at least 30 of 30 · 0:52", stats.rounds[0].caption(plurals, atLeast = true))
         assertEquals(
-            "Round 2 · at least 12 of 30 · 5 strict pull-ups, 7 standard push-ups · unfinished",
+            "Round 2 · at least 12 of 30 · 5 pull-ups, 7 push-ups · unfinished",
             stats.rounds[1].caption(plurals, atLeast = true)
         )
     }
@@ -92,7 +92,7 @@ class SessionStatsTest {
         assertFalse(skipped.complete)
         assertEquals(25, skipped.reps)
         assertEquals(
-            "Round 1 · 25 of 30 · 10 standard push-ups, 15 air squats · 0:52",
+            "Round 1 · 25 of 30 · 10 push-ups, 15 squats · 0:52",
             skipped.caption(SessionStats.plurals(CindyProfile.STANDARD))
         )
         assertEquals(55, stats.rounds.sumOf { it.reps })
@@ -222,14 +222,14 @@ class SessionStatsTest {
     }
 
     @Test
-    fun `labels use the profile's own plurals`() {
+    fun `a mixed profile names only what was changed`() {
         val adaptive = CindyProfile(
             pull = PullVariant.BAND_ASSISTED_PULL_UP, push = PushVariant.KNEE_PUSH_UP
         )
         val stats = SessionStats.from(attempt(round(), profile = adaptive))!!
 
         assertEquals(
-            listOf("band-assisted pull-ups", "knee push-ups", "air squats"),
+            listOf("band-assisted pull-ups", "knee push-ups", "squats"),
             stats.movements.map { it.label }
         )
         assertEquals(
@@ -241,6 +241,18 @@ class SessionStatsTest {
             SessionStats.from(
                 attempt(round() + listOf(split(Exercise.PULLUP, 5)), openReps = 5, profile = adaptive)
             )!!.rounds[1].caption(SessionStats.plurals(adaptive))
+        )
+    }
+
+    @Test
+    fun `a standard profile uses the plain movement names`() {
+        assertEquals(
+            listOf("pull-ups", "push-ups", "squats"),
+            SessionStats.plurals(CindyProfile.STANDARD).values.toList()
+        )
+        assertEquals(
+            listOf("pull-ups", "push-ups", "squats"),
+            SessionStats.from(attempt(round()))!!.movements.map { it.label }
         )
     }
 

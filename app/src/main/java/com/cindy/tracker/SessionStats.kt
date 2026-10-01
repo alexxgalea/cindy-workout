@@ -177,14 +177,23 @@ data class SessionStats(
         }
 
         /**
-         * The session's own movement words in cycle order, from its profile. A null profile is a
-         * record written before profiles existed, which was the standard movements.
+         * The session's movement words in cycle order: the plain name for a movement the athlete
+         * did not change, the profile's own plural for one they did ("knee push-ups"). The other
+         * session-page sections speak the same way, so a standard session never reads "strict
+         * pull-ups" in one place and "pull-ups" in the next. A null profile is a record written
+         * before profiles existed, which was the standard movements.
          */
-        fun plurals(profile: CindyProfile?): Map<Exercise, String> = mapOf(
-            Exercise.PULLUP to (profile?.pull?.plural ?: "pull-ups"),
-            Exercise.PUSHUP to (profile?.push?.plural ?: "push-ups"),
-            Exercise.SQUAT to (profile?.squat?.plural ?: "squats")
-        )
+        fun plurals(profile: CindyProfile?): Map<Exercise, String> {
+            val standard = CindyProfile.STANDARD
+            return mapOf(
+                Exercise.PULLUP to
+                    (profile?.pull?.takeIf { it != standard.pull }?.plural ?: "pull-ups"),
+                Exercise.PUSHUP to
+                    (profile?.push?.takeIf { it != standard.push }?.plural ?: "push-ups"),
+                Exercise.SQUAT to
+                    (profile?.squat?.takeIf { it != standard.squat }?.plural ?: "squats")
+            )
+        }
 
         /**
          * Reps a minute of workout clock, or null before the clock ran. Pauses are not in the

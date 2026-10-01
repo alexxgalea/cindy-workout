@@ -661,7 +661,7 @@ class ScreenSmokeTest {
         val tiles = textsIn(activity.findViewById(R.id.tiles))
         assertTrue(tiles.toString(), tiles.containsAll(listOf("ROUNDS", "REPS", "TIME", "FASTEST")))
         val movements = textsIn(activity.findViewById(R.id.movements))
-        assertTrue(movements.toString(), movements.contains("strict pull-ups"))
+        assertTrue(movements.toString(), movements.contains("pull-ups"))
         assertTrue(movements.toString(), movements.contains("0:14 total"))
         // The headline numbers moved up into the tiles; the details keep only what is left.
         val details = textsIn(activity.findViewById(R.id.stats))
