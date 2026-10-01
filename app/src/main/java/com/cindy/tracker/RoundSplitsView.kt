@@ -66,6 +66,10 @@ class RoundSplitsView @JvmOverloads constructor(
     private var describe: (Int) -> String = { "" }
     private var maxMs = 1L
 
+    /** Text built once in [show], so [onDraw] only reads it. */
+    private var roundLabels: Array<String> = emptyArray()
+    private var repLabels: Array<String?> = emptyArray()
+
     /** Geometry, rebuilt by [layoutBars]. */
     private val plot = RectF()
     private var slot = 0f
@@ -217,6 +221,12 @@ class RoundSplitsView @JvmOverloads constructor(
         this.averageLabel = averageLabel
         this.describe = describe
         this.reference = emptyList()
+        roundLabels = Array(bars.size) { "${bars[it].round}" }
+        repLabels = Array(bars.size) { i ->
+            val b = bars[i]
+            // A floor reads "≥12/30": the camera lost the athlete, so the count may be short.
+            b.reps?.let { reps -> "${if (b.atLeast) "≥" else ""}$reps/${RoundSplits.ROUND_TARGET}" }
+        }
         selected = null
         rescale()
         startReveal()
@@ -326,9 +336,9 @@ class RoundSplitsView @JvmOverloads constructor(
                 val inset = outlinePaint.strokeWidth / 2f
                 topRounded(cx - half + inset, top + inset, cx + half - inset, plot.bottom)
                 canvas.drawPath(barPath, outlinePaint)
-                bar.reps?.let { reps ->
+                repLabels[i]?.let { label ->
                     textPaint.color = colourSecondary
-                    drawLabel(canvas, "$reps/${RoundSplits.ROUND_TARGET}", cx, top - context.dpf(5f))
+                    drawLabel(canvas, label, cx, top - context.dpf(5f))
                 }
             }
             bar.sets != null -> drawStack(canvas, bar.sets, cx, half, top, fade)
@@ -363,7 +373,10 @@ class RoundSplitsView @JvmOverloads constructor(
         top: Float,
         fade: Float
     ) {
-        val sum = sets.sum().coerceAtLeast(1L).toFloat()
+        // An index loop: a list's sum() would allocate an iterator on every frame.
+        var total = 0L
+        for (k in sets.indices) total += sets[k]
+        val sum = total.coerceAtLeast(1L).toFloat()
         val height = plot.bottom - top
         val gap = context.dpf(1f)
         var floor = plot.bottom
@@ -397,7 +410,7 @@ class RoundSplitsView @JvmOverloads constructor(
             // A neighbour of the selected number would overlap it.
             if (!isSelected && chosen != null && abs(i - chosen) * slot < wanted) continue
             textPaint.color = if (isSelected) colourLabel else colourTertiary
-            canvas.drawText("${bars[i].round}", centreX(i), y, textPaint)
+            canvas.drawText(roundLabels[i], centreX(i), y, textPaint)
         }
     }
 
