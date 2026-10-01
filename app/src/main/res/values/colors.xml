@@ -31,6 +31,10 @@
     <!-- Personal records, streaks, the best-so-far line, the best week. Nothing else. -->
     <color name="achievement">#FFFC4C02</color>
 
+    <!-- ── heart ── -->
+    <!-- Heart-rate data and nothing else: a line, a zone, a bpm figure. Never an alert. -->
+    <color name="heart">#FFFF375F</color>
+
     <!-- ── material ── -->
     <!-- Glass over a page: a light film lifting off black. -->
     <color name="surface_glass">#0EFFFFFF</color>
