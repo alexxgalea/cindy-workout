@@ -100,6 +100,9 @@ class ResultsActivity : AppCompatActivity() {
     /** What this session is measured against; the one field later sections also hang off. */
     private var comparison: Attempt? = null
     private lateinit var compareCardHolder: FrameLayout
+    /** The round splits on screen, kept so a new comparison can redraw them without a rebuild. */
+    private var splitData: RoundSplits.Split? = null
+    private var comparisonKind: Comparisons.Kind? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -221,25 +224,94 @@ class ResultsActivity : AppCompatActivity() {
 
         movementBreakdown(a)
 
-        val splits = a.roundSplitsMs
-        if (splits.isEmpty()) {
+        roundSplits(a)
+    }
+
+    /**
+     * Where each round's time went. Hidden when there is no complete round, because a bar of
+     * nothing says nothing. Built again, whole, every time [render] runs, which is what the body
+     * weight prompt triggers; the comparison ticks are the one part that changes without it.
+     */
+    private fun roundSplits(a: Attempt) {
+        val split = RoundSplits.of(a)
+        splitData = split
+        if (split == null) {
             binding.splitsTitle.visibility = View.GONE
-            binding.splits.visibility = View.GONE
+            binding.splitsCard.visibility = View.GONE
             binding.splitsNote.text = "No complete rounds to chart."
-        } else {
-            val fastest = splits.indexOf(splits.min())
-            binding.splits.setValues(
-                splits,
-                highlightIndex = fastest,
-                labels = splits.indices.map { "${it + 1}" },
-                meanLabel = a.avgRoundMs?.let { "AVG ${formatDuration(it)}" }
-            )
-            // Taller is slower here, so say which way to read it.
-            binding.splitsNote.text = buildString {
-                append("Taller is slower. Fastest was round ${fastest + 1} at ${formatDuration(splits[fastest])}.")
-                if (a.pausedMs > 0L) append(" Splits exclude paused time.")
+            return
+        }
+        binding.splitsTitle.visibility = View.VISIBLE
+        binding.splitsCard.visibility = View.VISIBLE
+        binding.splits.onSelect = { showSplitReadout(it) }
+        binding.splits.show(
+            split.bars, split.fastest, split.averageMs, "AVG ${formatDuration(split.averageMs)}"
+        ) { i -> RoundSplits.readout(a, split, i, comparison, comparisonKind).spoken() }
+        // The comparison was chosen before this ran, so the ticks, the note and the readout are
+        // all drawn against it here, the same way a later chip tap redraws them.
+        splitsComparison()
+    }
+
+    /**
+     * Redraws what the round splits take from [comparison]: the tick over each bar, the readout
+     * and the note under the chart. A no-op until the splits themselves have been built.
+     */
+    private fun splitsComparison() {
+        val split = splitData ?: return
+        val reference = comparison
+        // Which sentence "your best's round 5" or "round 5 last time" is: worked out once here,
+        // not per scrub step, because it reads the record board.
+        comparisonKind = reference?.let {
+            if (Comparisons.best(RecordStore(this).all(), attempt)?.atMillis == it.atMillis) {
+                Comparisons.Kind.BEST
+            } else {
+                Comparisons.Kind.LAST
             }
         }
+        val ticks = RoundSplits.reference(split, reference)
+        binding.splits.setReference(ticks)
+
+        val fastest = split.bars[split.fastest]
+        // Taller is slower here, so say which way to read it.
+        binding.splitsNote.text = buildString {
+            append("Taller is slower. Fastest was round ${fastest.round} at ${formatDuration(fastest.ms)}.")
+            if (attempt.pausedMs > 0L) append(" Splits exclude paused time.")
+            if (split.hasBreakdown) {
+                val names = RoundSplits.movementNames(attempt.profile)
+                append(" Each bar stacks ${names[0]}, ${names[1]} and ${names[2]}, bottom to top.")
+            }
+            if (ticks.any { it != null }) {
+                append(
+                    if (comparisonKind == Comparisons.Kind.LAST) {
+                        " The tick over each bar marks the same round last time."
+                    } else {
+                        " The tick over each bar marks the same round in your best."
+                    }
+                )
+            }
+            if (split.hasUnfinished) append(" The outlined bar is the round still under way when the clock stopped.")
+        }
+        showSplitReadout(binding.splits.selected)
+    }
+
+    /** The line above the splits for bar [selected], or the fastest and the average for none. */
+    private fun showSplitReadout(selected: Int?) {
+        val split = splitData ?: return
+        val reading = RoundSplits.readout(attempt, split, selected, comparison, comparisonKind)
+        binding.splitsReadout.text = reading.title
+        binding.splitsDetail.text = reading.detail
+        // Invisible, not gone, while a comparison exists: a line that comes and goes as the
+        // finger crosses a round the comparison never played would move the chart under it.
+        val versus = reading.versus
+        binding.splitsVersus.visibility = when {
+            comparison == null -> View.GONE
+            versus == null -> View.INVISIBLE
+            else -> View.VISIBLE
+        }
+        binding.splitsVersus.text = versus?.text.orEmpty()
+        binding.splitsVersus.setTextColor(
+            getColor(if (versus?.faster == true) R.color.state_ok else R.color.label_secondary)
+        )
     }
 
     /**
@@ -385,6 +457,7 @@ class ResultsActivity : AppCompatActivity() {
             binding.compareTitle.visibility = View.GONE
             binding.compare.visibility = View.GONE
             comparison = null
+            onComparisonChanged()
             return
         }
         binding.compareTitle.visibility = View.VISIBLE
@@ -416,13 +489,18 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * Redraws whatever depends on [comparison]. Only the card itself for now; later sections of
-     * this page hang their own charts here rather than each keeping a selection of their own.
+     * Redraws whatever depends on [comparison]: the compare card, and the round splits' ticks.
+     * Later sections of this page hang their own charts here rather than each keeping a
+     * selection of their own. Runs with no comparison too, since a section that does not need
+     * one still has to be drawn; only the card is skipped then.
      */
     private fun onComparisonChanged() {
-        val reference = comparison ?: return
-        compareCardHolder.removeAllViews()
-        compareCardHolder.addView(comparisonCardView(attempt, reference))
+        val reference = comparison
+        if (reference != null && ::compareCardHolder.isInitialized) {
+            compareCardHolder.removeAllViews()
+            compareCardHolder.addView(comparisonCardView(attempt, reference))
+        }
+        splitsComparison()
     }
 
     /** The reference session and the delta, as one tappable card that opens it in review. */

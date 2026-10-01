@@ -995,4 +995,135 @@ class ScreenSmokeTest {
         reopened.finish()
         store.clear()
     }
+
+    // ── the round splits on the results page ───────────────────────────────────
+
+    private fun launchResults(attempt: Attempt, vararg others: Attempt): android.app.Activity {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        others.forEach { store.add(it) }
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        return Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+    }
+
+    private fun splitsAttempt(
+        at: Long,
+        splits: List<Long>,
+        sets: List<SetSplit> = emptyList(),
+        durationMs: Long = splits.sum(),
+        counted: Int? = splits.size * 30
+    ) = Attempt(
+        rounds = splits.size, reps = 0, atMillis = at, durationMs = durationMs,
+        roundSplitsMs = splits, setSplits = sets, countedReps = counted, profile = CindyProfile.STANDARD
+    )
+
+    private fun threeSets(pull: Long, push: Long, squat: Long) = listOf(
+        SetSplit(Exercise.PULLUP, pull, 5, 0), SetSplit(Exercise.PUSHUP, push, 10, 0),
+        SetSplit(Exercise.SQUAT, squat, 15, 0)
+    )
+
+    private fun text(activity: android.app.Activity, id: Int) =
+        activity.findViewById<android.widget.TextView>(id).text.toString()
+
+    @Test
+    fun `the splits are stacked by movement when the sets were timed, and read out when chosen`() {
+        val now = System.currentTimeMillis()
+        val activity = launchResults(
+            splitsAttempt(
+                now, listOf(168_000L, 150_000L),
+                threeSets(41_000L, 52_000L, 75_000L) + threeSets(40_000L, 50_000L, 60_000L)
+            )
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.splitsCard).visibility)
+        assertEquals(2, view.barCount)
+        assertEquals("Fastest: round 2 at 2:30 · average 2:39", text(activity, R.id.splitsReadout))
+
+        view.select(0)
+
+        assertEquals("Round 1 · 2:48", text(activity, R.id.splitsReadout))
+        assertEquals("Pull-ups 0:41 · push-ups 0:52 · squats 1:15", text(activity, R.id.splitsDetail))
+        assertEquals(
+            "no comparison, so no line for one",
+            android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsVersus).visibility
+        )
+        activity.finish()
+    }
+
+    /** A record from before set times existed has round splits and nothing else. */
+    @Test
+    fun `a very old record still draws plain bars and says it has no movement times`() {
+        val activity = launchResults(
+            splitsAttempt(System.currentTimeMillis(), listOf(168_000L, 150_000L, 160_000L), counted = null)
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(3, view.barCount)
+
+        view.select(1)
+
+        assertEquals("No per-movement times for this round", text(activity, R.id.splitsDetail))
+        assertTrue(!text(activity, R.id.splitsNote).contains("stacks"))
+        activity.finish()
+    }
+
+    @Test
+    fun `no complete round hides the splits instead of charting nothing`() {
+        val activity = launchResults(
+            splitsAttempt(System.currentTimeMillis(), emptyList(), durationMs = 90_000L)
+        )
+
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsCard).visibility)
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsTitle).visibility)
+        activity.finish()
+    }
+
+    @Test
+    fun `the round the clock stopped in is drawn as an open bar`() {
+        val activity = launchResults(
+            splitsAttempt(
+                System.currentTimeMillis(), listOf(168_000L),
+                threeSets(41_000L, 52_000L, 75_000L) + SetSplit(Exercise.PULLUP, 38_000L, 5, 0),
+                durationMs = 248_000L, counted = 35
+            )
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(2, view.barCount)
+
+        view.select(1)
+
+        assertEquals("Round 2 · 1:20 so far", text(activity, R.id.splitsReadout))
+        assertTrue(text(activity, R.id.splitsDetail).startsWith("5 of 30 reps"))
+        assertTrue(text(activity, R.id.splitsNote).contains("outlined bar"))
+        activity.finish()
+    }
+
+    @Test
+    fun `an earlier session adds a tick and a line against it, and the chip changes which`() {
+        val now = System.currentTimeMillis()
+        val day = 24 * 60 * 60 * 1000L
+        val best = splitsAttempt(now - 3 * day, listOf(177_000L, 140_000L, 150_000L, 150_000L))
+        val last = splitsAttempt(now - day, listOf(160_000L, 160_000L))
+        val activity = launchResults(splitsAttempt(now, listOf(168_000L, 150_000L)), best, last)
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        view.select(0)
+
+        assertEquals("9 s faster than your best's round 1", text(activity, R.id.splitsVersus))
+        assertTrue(text(activity, R.id.splitsNote).contains("in your best"))
+
+        val chip = findByText(activity.findViewById(R.id.compare), "Last time")
+        assertTrue("no Last time chip", chip != null)
+        chip!!.performClick()
+
+        // The selection survives the new comparison; the sentence is now about the other one.
+        assertEquals(0, view.selected)
+        assertEquals("8 s slower than round 1 last time", text(activity, R.id.splitsVersus))
+        assertTrue(text(activity, R.id.splitsNote).contains("last time"))
+        activity.finish()
+    }
 }

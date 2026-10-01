@@ -193,12 +193,53 @@
             android:layout_marginStart="4dp"
             android:text="ROUND SPLITS" />
 
-        <com.cindy.tracker.SplitsChartView
-            android:id="@+id/splits"
+        <!-- The readout has a fixed height (its lines are minimums), so choosing another bar
+             never moves the chart under the finger that is scrubbing it. -->
+        <LinearLayout
+            android:id="@+id/splitsCard"
             android:layout_width="match_parent"
-            android:layout_height="182dp"
+            android:layout_height="wrap_content"
             android:background="@drawable/glass_card"
-            android:padding="16dp" />
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/splitsReadout"
+                style="@style/Cindy.MetricS"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:autoSizeMaxTextSize="17sp"
+                android:autoSizeMinTextSize="12sp"
+                android:autoSizeStepGranularity="1sp"
+                android:autoSizeTextType="uniform" />
+
+            <TextView
+                android:id="@+id/splitsDetail"
+                style="@style/Cindy.Callout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
+                android:maxLines="3"
+                android:minLines="2" />
+
+            <TextView
+                android:id="@+id/splitsVersus"
+                style="@style/Cindy.Callout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
+                android:maxLines="1" />
+
+            <com.cindy.tracker.RoundSplitsView
+                android:id="@+id/splits"
+                android:layout_width="match_parent"
+                android:layout_height="176dp"
+                android:layout_marginTop="12dp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/splitsNote"
