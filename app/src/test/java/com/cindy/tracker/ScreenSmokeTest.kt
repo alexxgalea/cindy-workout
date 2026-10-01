@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -826,6 +828,169 @@ class ScreenSmokeTest {
         activity.finish()
         HeartRateStore(context).clear()
         store.clear()
+    }
+
+    // ── the heart-rate card ─────────────────────────────────────────────────
+
+    /** Every text under [root], in order, so a card built in code can be read as a person would. */
+    private fun allText(root: android.view.View): List<String> {
+        val out = mutableListOf<String>()
+        fun walk(v: android.view.View) {
+            if (v is android.widget.TextView) out += v.text.toString()
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        return out
+    }
+
+    /** Two rounds, a minute at 140 bpm then fifty seconds at 170 and ten at 150, a reading a second. */
+    private fun twoRoundHeartRateAttempt(context: android.content.Context): Attempt {
+        val attempt = Attempt(
+            rounds = 2, reps = 0, atMillis = System.currentTimeMillis(), durationMs = 120_000L,
+            roundSplitsMs = listOf(60_000L, 50_000L), countedReps = 60
+        )
+        RecordStore(context).add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(
+                startedAtMillis = attempt.atMillis,
+                samples = (0 until 120).map {
+                    HeartRateSample(it * 1_000L, if (it < 60) 140 else if (it < 110) 170 else 150)
+                },
+                pauses = emptyList()
+            )
+        )
+        return attempt
+    }
+
+    private fun openResults(context: android.content.Context, attempt: Attempt, reviewing: Boolean = false) =
+        Robolectric.buildActivity(
+            ResultsActivity::class.java,
+            if (reviewing) ResultsActivity.review(context, attempt.atMillis)
+            else ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+
+    private fun clearHeartRateState(context: android.content.Context) {
+        HeartRateStore(context).clear()
+        RecordStore(context).clear()
+        Profile(context).apply { bodyWeightKg = 0.0; birthYear = 0; sex = null }
+    }
+
+    @Test
+    fun `the heart-rate card shows figures, zones, the hardest round and its method with an age on file`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        Profile(context).apply {
+            bodyWeightKg = 70.0
+            birthYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - 30
+            sex = Sex.MALE
+        }
+        val attempt = twoRoundHeartRateAttempt(context)
+
+        val activity = openResults(context, attempt)
+        val card = activity.findViewById<android.view.ViewGroup>(R.id.heart)
+        val text = allText(card)
+
+        assertEquals(android.view.View.VISIBLE, card.visibility)
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.heartTitle).visibility)
+        assertNotNull(firstOfType<ZoneBarView>(card))
+        assertTrue("no hardest round: $text", text.any { it.startsWith("Round 2") && it.contains("bpm avg") })
+        assertTrue("no Tanaka method: $text", text.any { it.contains("Tanaka") && it.contains("187") })
+        assertTrue("no lag footnote: $text", text.any { it.contains("lag your actual effort") })
+        assertTrue("no verdict: $text", text.any { it.startsWith("Longest in ") })
+        assertTrue("no covered figure: $text", text.contains("2:00") && text.contains("of 2:00"))
+
+        activity.finish()
+        clearHeartRateState(context)
+    }
+
+    @Test
+    fun `without an age the card keeps its figures and offers to ask for one instead of zones`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        Profile(context).apply { bodyWeightKg = 70.0; birthYear = 0; sex = null }
+        val attempt = twoRoundHeartRateAttempt(context)
+
+        val activity = openResults(context, attempt)
+        val card = activity.findViewById<android.view.ViewGroup>(R.id.heart)
+        val text = allText(card)
+
+        assertEquals(android.view.View.VISIBLE, card.visibility)
+        assertNull("zones need an age", firstOfType<ZoneBarView>(card))
+        assertTrue("no figures: $text", text.contains("AVERAGE") && text.contains("MAXIMUM"))
+        assertTrue("no Tanaka claim without an age: $text", text.none { it.contains("Tanaka") })
+        assertTrue("no verdict without zones: $text", text.none { it.startsWith("Longest in ") })
+
+        val invitation = findByDescription(card, "Heart-rate zones, Add your birth year to see them")
+        assertNotNull("no invitation to add an age", invitation)
+        invitation!!.performClick()
+        assertNotNull("the details sheet did not open", ShadowDialog.getLatestDialog())
+
+        activity.finish()
+        clearHeartRateState(context)
+    }
+
+    @Test
+    fun `the heart-rate card is hidden without a trace`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        Profile(context).apply { bodyWeightKg = 70.0; birthYear = 1990; sex = Sex.MALE }
+        val attempt = Attempt(
+            rounds = 1, reps = 0, atMillis = System.currentTimeMillis(), durationMs = 4_000L, countedReps = 10
+        )
+        RecordStore(context).add(attempt)
+
+        val activity = openResults(context, attempt)
+
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.heart).visibility)
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.heartTitle).visibility)
+
+        activity.finish()
+        clearHeartRateState(context)
+    }
+
+    @Test
+    fun `a reopened session draws the heart-rate card too`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        Profile(context).apply { bodyWeightKg = 70.0; birthYear = 1990; sex = Sex.MALE }
+        val attempt = twoRoundHeartRateAttempt(context)
+
+        val activity = openResults(context, attempt, reviewing = true)
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.heart).visibility)
+
+        activity.finish()
+        clearHeartRateState(context)
+    }
+
+    /**
+     * [ResultsActivity.render] runs again when the athlete saves an age from this very card; the
+     * card must be rebuilt in place rather than grown a second copy under the first.
+     */
+    @Test
+    fun `rendering again rebuilds the heart-rate card instead of stacking another`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        val profile = Profile(context).apply { bodyWeightKg = 70.0; birthYear = 0; sex = null }
+        val attempt = twoRoundHeartRateAttempt(context)
+        val activity = openResults(context, attempt)
+        val card = activity.findViewById<android.view.ViewGroup>(R.id.heart)
+        assertNull(firstOfType<ZoneBarView>(card))
+
+        profile.birthYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - 30
+        profile.sex = Sex.MALE
+        val render = ResultsActivity::class.java.getDeclaredMethod(
+            "render", Attempt::class.java, Boolean::class.javaPrimitiveType
+        ).apply { isAccessible = true }
+        render.invoke(activity, attempt, false)
+        render.invoke(activity, attempt, false)
+
+        assertEquals(1, card.childCount)
+        assertNotNull("the age did not turn the zones on", firstOfType<ZoneBarView>(card))
+
+        activity.finish()
+        clearHeartRateState(context)
     }
 
     // ── reopening a session from Progress ───────────────────────────────────

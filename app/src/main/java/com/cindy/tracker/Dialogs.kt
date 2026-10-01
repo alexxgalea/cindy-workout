@@ -179,9 +179,10 @@ fun Activity.askHeartRateDetails(profile: Profile, onSaved: () -> Unit) {
 
     val sheet = CindySheet(
         this,
-        title = "For heart-rate calories",
+        title = "For heart rate",
         subtitle = "Heart-rate calorie formulas are fitted separately for women and men, and " +
-            "shift with age. Used only for calories, and it stays on this phone."
+            "shift with age, and so does the maximum your heart rate zones are measured against. " +
+            "Used only for those, and it stays on this phone."
     )
     sheet.add(input)
     // Same reasoning as askBodyWeight: the athlete opened this sheet to type, so the keyboard
