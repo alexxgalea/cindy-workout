@@ -67,6 +67,12 @@ class TimelineLane(
     val holdMs: Long = Long.MAX_VALUE,
     /** Draw a dot at each point, for a series whose points are all there is. */
     val markPoints: Boolean = false,
+    /**
+     * True for a running total whose points are the ends of stretches that rose steadily: the
+     * cursor's dot rides the line between two points instead of sitting on the last one, so a
+     * scrub reads the line the athlete can see. False reads only values that were really banked.
+     */
+    val interpolate: Boolean = false,
     val heightDp: Int = 96
 )
 
@@ -509,7 +515,7 @@ class SessionTimelineView @JvmOverloads constructor(
         canvas.drawLine(x, laneTop[0], x, laneBottom[lanes.lastIndex], cursorPaint)
         for (i in lanes.indices) {
             val lane = lanes[i]
-            val theirs = valueAt(lane.comparison, clockMs, lane.stepped, lane.holdMs)
+            val theirs = valueAt(lane.comparison, clockMs, lane.stepped, lane.holdMs, false)
             if (!theirs.isNaN()) drawDot(canvas, x, yFor(i, theirs), colourTertiary, 4f)
             val mine = valueAtRuns(lane, clockMs)
             if (!mine.isNaN()) drawDot(canvas, x, yFor(i, mine), lane.colour, 5.5f)
@@ -527,21 +533,22 @@ class SessionTimelineView @JvmOverloads constructor(
         for (r in lane.runs.indices.reversed()) {
             val run = lane.runs[r]
             if (run.points.isNotEmpty() && run.points[0].clockMs <= clockMs) {
-                return valueAt(run.points, clockMs, lane.stepped, lane.holdMs)
+                return valueAt(run.points, clockMs, lane.stepped, lane.holdMs, lane.interpolate)
             }
         }
         return Double.NaN
     }
 
     /**
-     * The latest point at or before [clockMs] — never a position between two — or NaN when there
-     * is none, or for a lane with a hold when it is older than that.
+     * The latest point at or before [clockMs] — never a position between two, unless [interpolate]
+     * — or NaN when there is none, or for a lane with a hold when it is older than that.
      */
     private fun valueAt(
         points: List<TimelinePoint>,
         clockMs: Long,
         stepped: Boolean,
-        holdMs: Long
+        holdMs: Long,
+        interpolate: Boolean
     ): Double {
         var lo = 0
         var hi = points.size
@@ -551,6 +558,10 @@ class SessionTimelineView @JvmOverloads constructor(
         }
         if (lo == 0) return Double.NaN
         val p = points[lo - 1]
+        if (interpolate && lo < points.size) {
+            val q = points[lo]
+            return p.value + (q.value - p.value) * (clockMs - p.clockMs).toDouble() / (q.clockMs - p.clockMs)
+        }
         if (!stepped && clockMs - p.clockMs > holdMs) return Double.NaN
         return p.value
     }

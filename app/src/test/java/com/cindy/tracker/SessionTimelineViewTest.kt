@@ -70,6 +70,20 @@ class SessionTimelineViewTest {
         heightDp = 88
     )
 
+    private fun kcalLane() = TimelineLane(
+        label = "KCAL (EST.)",
+        colour = 0xFFAAAAAA.toInt(),
+        runs = listOf(
+            TimelineRun(listOf(TimelinePoint(0L, 0.0), TimelinePoint(300_000L, 40.0)), dashed = true),
+            TimelineRun(listOf(TimelinePoint(300_000L, 40.0), TimelinePoint(900_000L, 130.0))),
+            TimelineRun(listOf(TimelinePoint(900_000L, 130.0), TimelinePoint(duration, 180.0)), dashed = true)
+        ),
+        format = { it.toInt().toString() },
+        zeroBased = true,
+        interpolate = true,
+        heightDp = 88
+    )
+
     private fun stops() = (0 until 5).map {
         TimelineStop(it * 240_000L, (it + 1) * 240_000L, "Round ${it + 1}")
     }
@@ -112,6 +126,28 @@ class SessionTimelineViewTest {
         assertTrue(two.measuredHeight > one.measuredHeight)
         two.select(130_000L)
         two.drawOnce()
+    }
+
+    @Test
+    fun `a calorie lane of solid and dashed runs adds a lane and draws with a cursor on every run`() {
+        val v = view().apply {
+            setLanes(listOf(repsLane(), heartLane(), kcalLane()), duration, listOf(240_000L), stops())
+        }.lay()
+
+        assertEquals(3, v.laneCount)
+        // One instant inside each run: the cursor looks the lane's value up in whichever run holds it.
+        for (at in listOf(150_000L, 600_000L, 1_000_000L, duration)) {
+            v.select(at)
+            v.drawOnce()
+        }
+    }
+
+    @Test
+    fun `a taller stack of lanes is measured taller`() {
+        val two = view().apply { setLanes(listOf(repsLane(), heartLane()), duration) }.lay()
+        val three = view().apply { setLanes(listOf(repsLane(), heartLane(), kcalLane()), duration) }.lay()
+
+        assertTrue(three.measuredHeight > two.measuredHeight)
     }
 
     @Test

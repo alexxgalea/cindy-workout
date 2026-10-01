@@ -3,6 +3,7 @@ package com.cindy.tracker
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -776,6 +777,55 @@ class ScreenSmokeTest {
         profile.bodyWeightKg = 0.0
         profile.birthYear = 0
         profile.sex = null
+    }
+
+    /**
+     * The KCAL lane needs a weight and nothing else: with a trace but no age it is one dashed
+     * stretch from the reps, and the heart-rate lane is still there beside it.
+     */
+    @Test
+    fun `the timeline grows a calorie lane once a body weight is on file`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 70.0
+        profile.birthYear = 0
+        profile.sex = null
+        val attempt = heartRateAttempt(context)
+
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val chart = activity.findViewById<SessionTimelineView>(R.id.timelineChart)
+
+        assertEquals(2, chart.laneCount)
+        assertTrue(chart.contentDescription.contains("estimated calories"))
+
+        activity.finish()
+        HeartRateStore(context).clear()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    @Test
+    fun `the timeline has no calorie lane without a body weight`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 0.0
+        val attempt = heartRateAttempt(context)
+
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val chart = activity.findViewById<SessionTimelineView>(R.id.timelineChart)
+
+        assertEquals(1, chart.laneCount)
+        assertFalse(chart.contentDescription.contains("calories"))
+
+        activity.finish()
+        HeartRateStore(context).clear()
+        store.clear()
     }
 
     // ── reopening a session from Progress ───────────────────────────────────

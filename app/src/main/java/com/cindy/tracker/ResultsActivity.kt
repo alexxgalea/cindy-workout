@@ -242,6 +242,7 @@ class ResultsActivity : AppCompatActivity() {
                 if (a.pausedMs > 0L) append(" Splits exclude paused time.")
             }
         }
+
     }
 
     /**
@@ -448,13 +449,16 @@ class ResultsActivity : AppCompatActivity() {
         val a = attempt
         val reference = comparison
         val repTimes = RepTimesStore(this)
+        val trace = HeartRateStore(this).load(a.atMillis)
         val timeline = SessionTimeline.of(
             a,
             marks = repTimes.load(a.atMillis),
-            trace = HeartRateStore(this).load(a.atMillis),
+            trace = trace,
             reference = reference,
             referenceKind = comparisonKind,
-            referenceMarks = reference?.let { repTimes.load(it.atMillis) }
+            referenceMarks = reference?.let { repTimes.load(it.atMillis) },
+            // Empty without a body weight, which hides the lane rather than guessing a weight.
+            calories = Calories.timeline(a.totalReps, a.durationMs, profile.body(), trace)
         )
         val show = if (timeline.hasData) View.VISIBLE else View.GONE
         binding.timelineTitle.visibility = show
@@ -471,9 +475,11 @@ class ResultsActivity : AppCompatActivity() {
             }
         )
         chart.contentDescription = "Timeline of this session: " +
-            (if (timeline.reps != null) "reps" else "") +
-            (if (timeline.reps != null && timeline.heartRuns.isNotEmpty()) " and " else "") +
-            (if (timeline.heartRuns.isNotEmpty()) "heart rate" else "") +
+            listOfNotNull(
+                "reps".takeIf { timeline.reps != null },
+                "heart rate".takeIf { timeline.heartRuns.isNotEmpty() },
+                "estimated calories".takeIf { timeline.calorieRuns.isNotEmpty() }
+            ).joinToString(", ").replace(Regex(", ([^,]*)$"), " and $1") +
             ", one stop for each round"
         chart.onSelect = { showTimelineReadout(timeline, it) }
         showTimelineReadout(timeline, chart.selectedMs)
@@ -525,6 +531,22 @@ class ResultsActivity : AppCompatActivity() {
                 },
                 format = { "${it.roundToInt()}" },
                 holdMs = Calories.MAX_HOLD_MS,
+                heightDp = 88
+            )
+        }
+        if (t.calorieRuns.isNotEmpty()) {
+            // Solid where a heart rate measured the stretch and dashed where the reps estimated
+            // it, so the line says for itself how far to trust each part. Not the heart colour:
+            // this is energy, and that colour is reserved for the pulse.
+            lanes += TimelineLane(
+                label = "KCAL (EST.)",
+                colour = getColor(R.color.label_secondary),
+                runs = t.calorieRuns.map { run ->
+                    TimelineRun(run.points.map { TimelinePoint(it.clockMs, it.kcal) }, dashed = run.estimated)
+                },
+                format = { "${it.roundToInt()}" },
+                zeroBased = true,
+                interpolate = true,
                 heightDp = 88
             )
         }
