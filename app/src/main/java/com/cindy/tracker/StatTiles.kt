@@ -156,7 +156,7 @@ private fun Context.statTile(tile: StatTile): View = LinearLayout(this).apply {
     ).apply { topMargin = dp(6) })
     addView(styledText(R.style.Cindy_Footnote, tile.footnote).apply {
         textSize = 11f
-        maxLines = 2
+        maxLines = 3
     }, LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
     ).apply { topMargin = dp(2) })
