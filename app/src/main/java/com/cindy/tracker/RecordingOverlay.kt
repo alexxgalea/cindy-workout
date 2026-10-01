@@ -90,6 +90,13 @@ class RecordingOverlay {
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
     }
+    /** Debug-only outline; a stroke [Paint] whose colour and width [drawFrameBorder] sets per use. */
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
+
+    /** Scratch rect for every rounded panel and the banner, one at a time, never held across a call. */
+    private val panelRect = RectF()
 
     /** Called from the analysis thread with everything the next drawn frame should show. */
     fun update(
@@ -176,11 +183,8 @@ class RecordingOverlay {
      * the crop takes: whatever falls outside the inner one is not in the file.
      */
     private fun drawFrameBorder(canvas: Canvas, s: State, safe: SourceRect) {
-        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ACCENT
-            style = Paint.Style.STROKE
-            strokeWidth = s.height * 0.006f
-        }
+        edge.color = ACCENT
+        edge.strokeWidth = s.height * 0.006f
         canvas.drawRect(0f, 0f, s.width.toFloat(), s.height.toFloat(), edge)
         edge.color = Color.RED
         canvas.drawRect(safe.left, safe.top, safe.right, safe.bottom, edge)
@@ -261,11 +265,11 @@ class RecordingOverlay {
         val halfWidth = bannerText.measureText(label) / 2f
         val cx = safe.left + safe.width / 2f
         val cy = safe.top + safe.height / 2f
-        val rect = RectF(
+        panelRect.set(
             cx - halfWidth - pad * 2f, cy - bannerText.textSize * 0.9f,
             cx + halfWidth + pad * 2f, cy + bannerText.textSize * 0.6f
         )
-        canvas.drawRoundRect(rect, rect.height() * 0.28f, rect.height() * 0.28f, panel)
+        canvas.drawRoundRect(panelRect, panelRect.height() * 0.28f, panelRect.height() * 0.28f, panel)
         canvas.drawText(label, cx, cy + bannerText.textSize * 0.32f, bannerText)
     }
 
@@ -280,7 +284,8 @@ class RecordingOverlay {
 
     private fun roundedPanel(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {
         val radius = (bottom - top) * 0.28f
-        canvas.drawRoundRect(RectF(left, top, right, bottom), radius, radius, panel)
+        panelRect.set(left, top, right, bottom)
+        canvas.drawRoundRect(panelRect, radius, radius, panel)
     }
 
     private companion object {
