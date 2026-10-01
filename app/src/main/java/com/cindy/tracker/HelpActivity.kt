@@ -267,7 +267,8 @@ class HelpActivity : AppCompatActivity() {
                 "screen are from CrossFit's own page for Cindy."
         )
         quiet(SOURCE)
-        quiet("Everything from HOW THIS APP COUNTS onward is this app's own, not CrossFit's.")
+        quiet("Everything from HOW THIS APP COUNTS to this credit is this app's own, " +
+            "not CrossFit's.")
     }
 
     // ── this app's own sections ───────────────────────────────────────────────
@@ -497,7 +498,7 @@ class HelpActivity : AppCompatActivity() {
                 "score to chase when there is none, and it never appears during a workout."
         )
         bullets(
-            "It can arrive a few minutes after the time you set.",
+            "It can arrive up to fifteen minutes after the time you set.",
             "Android 13 and newer asks to allow notifications when you switch it on. If they " +
                 "are off the row says Blocked and offers the system settings.",
             "It is worked out on the phone. Nothing leaves it."
@@ -517,8 +518,8 @@ class HelpActivity : AppCompatActivity() {
                 "paused and real time, and calories when you have a body weight set, from " +
                 "your heart rate when a watch recorded one. The heart-rate trace goes with it.",
             "Upload automatically is a switch in the Strava sheet, on by default. With it off " +
-                "the Strava row under Details offers UPLOAD instead. Finish a workout before " +
-                "connecting and it offers CONNECT TO UPLOAD, which links the account and then " +
+                "the Strava row under Details offers \"Upload\" instead. Finish a workout before " +
+                "connecting and it offers \"Connect to upload\", which links the account and then " +
                 "sends that workout.",
             "That row shows where the upload has got to: uploading, then a link to the " +
                 "activity. If it fails it says so and you tap to retry, and if Strava needs " +
