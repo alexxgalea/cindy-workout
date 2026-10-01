@@ -88,8 +88,12 @@ class HelpActivity : AppCompatActivity() {
         card {
             big("AMRAP 12:00")
             body("3 ring rows\n6 assisted push-ups\n9 squats")
-            quiet("CrossFit's beginner version. This app counts the prescribed workout only — " +
-                "use the +1 and −1 buttons if you are working at the scaled version.")
+            quiet("CrossFit's beginner version. This app always runs the 20-minute clock and " +
+                "the 5, 10 and 15 reps, so it does not run this rep scheme — but it does count " +
+                "scaled movements. Choose them under Movements in the menu: the camera counts " +
+                "band-assisted pull-ups, push-ups from the knees and box squats, and you tap +1 " +
+                "for the ones it cannot follow, such as inverted rows. Either way the session " +
+                "is saved as an Adaptive Cindy.")
         }
         bullets(
             "Pull-ups scale to \"any movement that is an upper-body pulling option\" — " +
@@ -144,15 +148,16 @@ class HelpActivity : AppCompatActivity() {
             )
             else -> quiet("Finish a Cindy and your best will show up against these.")
         }
-        quiet("This app's own ladder in RECORDS is a separate, finer-grained scale. These four " +
-            "are CrossFit's.")
+        quiet("The level on your session page, First Steps up to Legend, is this app's own " +
+            "ladder and a separate, finer-grained scale. These four are CrossFit's.")
 
         heading("PACING")
         bullets(
             "\"The fastest athletes will complete rounds in under 45 seconds.\"",
             "\"Striving to complete each round in under 2 minutes is a great goal for all " +
                 "levels to shoot for.\"",
-            "The results screen charts every round split, so you can see where the pace went."
+            "The session page charts every round split, stacked by movement, so you can see " +
+                "where the pace went."
         )
         quote(
             "If muscular failure and full range of motion are a concern with push-ups, consider " +
@@ -182,8 +187,8 @@ class HelpActivity : AppCompatActivity() {
         bullets(
             "Stand the phone so your whole body stays in frame, and leave it there — moving it " +
                 "mid-workout invalidates what it has learned, so a pause re-calibrates.",
-            "START runs a setup check first: two slow pull-ups teach it your range. SKIP goes " +
-                "straight in and calibrates as you go.",
+            "START runs a setup check first: two slow pull-ups teach it your range. SKIP, " +
+                "pressed during the check, asks and then goes straight in, calibrating as you go.",
             "For pull-ups it works out where your bar is from your dead hangs. The box on screen " +
                 "is the bar zone your hands must be inside; the dashed line under it is where " +
                 "your head has to drop back below before the next rep can count.",
@@ -191,15 +196,26 @@ class HelpActivity : AppCompatActivity() {
                 "\"Get set on the floor\", \"Stand up to start\". Getting up off the floor after " +
                 "push-ups is not a squat.",
             "When a rep will not count, the status line says why, and says it out loud if " +
-                "nothing changes. VOICE turns that off.",
-            "−1 and +1 fix a miscount. Hold +1 to skip to the next movement."
+                "nothing changes. The voice can be turned off under Voice in the menu.",
+            "−1 and +1 fix a miscount while the clock is running. Once it has started, SKIP " +
+                "leaves the movement you are in for the next one: the reps you did in it stay counted, and " +
+                "the rest are not made up.",
+            "Once the clock has started, the stop button takes FLIP's place. It asks first, " +
+                "then ends the workout early and saves your score so far."
         )
+
+        voiceAndMusic()
+        filming()
+        sessionPage()
+        comparing()
+        lifted()
+        heartRate()
 
         heading("CALORIES AND STREAKS")
         paragraph(
-            "The calorie figure on the results screen is an estimate, and it is labelled as one. " +
-                "Without a heart-rate strap there is no honest way to measure this, so it uses " +
-                "the standard MET equation that every strapless tracker uses underneath: " +
+            "The calorie figure on the session page is an estimate, and it is labelled as one. " +
+                "With no watch there is no honest way to measure this, so it uses the standard " +
+                "MET equation that every strapless tracker uses underneath: " +
                 "kcal = MET × 3.5 × your weight in kg ÷ 200, per minute."
         )
         bullets(
@@ -210,16 +226,40 @@ class HelpActivity : AppCompatActivity() {
                 "The MET is scaled by the rate you actually worked at, and capped at both ends — " +
                 "no one sustains more than 14 METs for twenty minutes.",
             "Paused time is excluded. Resting with the clock stopped is not work.",
-            "Nothing is shown until you enter your body weight, because a guessed weight would " +
-                "produce a confident number that is wrong by however far the guess missed. It " +
-                "is stored on this phone only."
+            "Nothing is shown until you enter your body weight, under Body weight in the menu " +
+                "or from the session page, because a guessed weight would produce a confident " +
+                "number that is wrong by however far the guess missed. It is stored on this " +
+                "phone only."
         )
         paragraph(
-            "The streak on the RECORDS screen counts consecutive days on which you trained, in " +
+            "A watch changes the method. When a paired watch was sending during the workout, " +
+                "and your birth year and sex are set as well as your weight, the minutes it " +
+                "covered use the Keytel et al. (2005) heart-rate equation, fitted separately " +
+                "for women and men from measured energy expenditure. Any minute the watch did " +
+                "not cover — a dropped connection, a reading that cannot be right — falls back " +
+                "to the MET model for exactly that stretch, and the note under the figure says " +
+                "how much came from which."
+        )
+        bullets(
+            "Heart rate makes it a better estimate, not a measurement, and it stays labelled " +
+                "as one.",
+            "A session recorded with a watch before your details were set can use it once you " +
+                "add them: the session page offers to, and the figure is worked out again.",
+            "On the timeline the same estimate builds up across the workout, solid where your " +
+                "heart rate measured a stretch and dashed where your reps estimated it. It ends " +
+                "on the figure in Details."
+        )
+        paragraph(
+            "The streak on the Progress screen counts consecutive days on which you trained, in " +
                 "your own time zone. It does not break the moment midnight passes — a day you " +
                 "have not finished living yet still counts as alive, so training this evening " +
-                "keeps it going."
+                "keeps it going. The weekly streak does the same for weeks with at least one " +
+                "session."
         )
+
+        profileAndBadges()
+        reminders()
+        strava()
 
         heading("SOURCE")
         paragraph(
@@ -227,6 +267,270 @@ class HelpActivity : AppCompatActivity() {
                 "screen are from CrossFit's own page for Cindy."
         )
         quiet(SOURCE)
+        quiet("Everything from HOW THIS APP COUNTS onward is this app's own, not CrossFit's.")
+    }
+
+    // ── this app's own sections ───────────────────────────────────────────────
+
+    private fun voiceAndMusic() {
+        heading("VOICE AND MUSIC")
+        paragraph(
+            "Voice, under Voice in the menu, counts each rep out loud, calls the movement " +
+                "changes and the clock, and says when you are in a position that will score. " +
+                "It has a switch and a volume, and HEAR IT plays a sample."
+        )
+        bullets(
+            "It speaks English, Spanish, French, German, Italian, Portuguese (Brazil), Dutch, " +
+                "Polish, Romanian, Turkish or Russian. The screens stay in English; only what " +
+                "is said aloud changes.",
+            "The voices belong to your phone's speech engine, not to Cindy. Choosing a " +
+                "language the phone does not have yet asks the engine to fetch it, and Manage " +
+                "voices opens the engine's own screen if it will not come.",
+            "A workout only uses voices stored on the phone, so counting works offline. If " +
+                "your language is not there yet it counts in English and a note says so as " +
+                "the workout starts.",
+            "A language the engine does not speak at all is dimmed and cannot be chosen.",
+            "The wording in the languages other than English has not been read by native " +
+                "speakers yet."
+        )
+        paragraph(
+            "Music, under Music in the menu, is one track you already have on the phone. It " +
+                "plays while the clock runs, pauses when you pause, and drops in volume " +
+                "whenever the voice speaks. Nothing is uploaded."
+        )
+    }
+
+    private fun filming() {
+        heading("FILMING")
+        paragraph(
+            "REC films the workout to Movies/Cindy on your phone, after a three-second " +
+                "countdown that the voice counts too. The skeleton, clock, round, movement and " +
+                "rep count are burned into the picture, with a CINDY watermark. There is no " +
+                "sound."
+        )
+        bullets(
+            "Filming through the setup check shows it for what it is. The clock panel says " +
+                "SETUP, the round panel says CALIBRATION, and the movement is marked NOT " +
+                "SCORED, with its count against the two calibration reps. They are not the " +
+                "first two reps of a round.",
+            "When the check passes, a CALIBRATED · 2 REPS banner is burned in for three " +
+                "seconds as the clock starts. If you skipped the check it says CALIBRATION " +
+                "SKIPPED instead."
+        )
+    }
+
+    private fun sessionPage() {
+        heading("THE SESSION PAGE")
+        paragraph(
+            "Every workout ends on its session page. Any session can be opened again from " +
+                "Progress, as it was: tap a row on the leaderboard, tap a session in a day on " +
+                "the calendar, or select a session on the chart and tap OPEN. Opened again it " +
+                "is headed by its date, shows a single DONE, and has no streak, because a " +
+                "streak describes today."
+        )
+        bullets(
+            "Six tiles sit under the score: rounds, reps, time, average round, fastest and " +
+                "slowest. Each says what it is made of, and a tile with nothing to say shows " +
+                "a dash, never a zero.",
+            "ROUND BY ROUND has a pill for every round, split into pull-ups, push-ups and " +
+                "squats in the 5:10:15 proportions of the scheme, in the same three " +
+                "brightnesses as the card at the top of this screen. It is filled by what you " +
+                "actually did, so a round with a skipped set is hollow where it was skipped. " +
+                "Tap a pill, or drag along them, to read one.",
+            "MOVEMENTS gives each movement's reps, its time, its average finished set and its " +
+                "share of the set time, in your own movement words: \"knee push-ups\", not " +
+                "\"push-ups\".",
+            "TIMELINE draws the session across its 20 minutes: your reps climbing, and your " +
+                "heart rate and the calorie estimate beneath when there are any. Touch it or " +
+                "drag along it and one cursor crosses every line, reading out the clock, the " +
+                "round and movement, your reps by then, your heart rate, and how far ahead or " +
+                "behind you were against the session you are comparing with.",
+            "ROUND SPLITS is a bar for each round, stacked by movement. Taller is slower. " +
+                "Tap or drag across the bars to read one, with a tick over each bar marking " +
+                "the same round in the session you are comparing with. An outlined bar is a " +
+                "round still under way when the clock stopped.",
+            "DETAILS, at the foot, holds paused and real time, reps added by hand, how long " +
+                "the camera lost you, the calorie estimate and the Strava upload."
+        )
+        paragraph(
+            "Only what was recorded is shown, and nothing is worked out from the round count " +
+                "to fill a gap. A session from before sets or rep times were kept shows less: " +
+                "the tiles, and per-set steps on the timeline where that is all there is, with " +
+                "a note under the chart saying so. Reps you tapped in count, and are named as " +
+                "tapped in wherever they appear. A score the camera could not fully see says " +
+                "\"at least\" wherever a figure comes from it."
+        )
+    }
+
+    private fun comparing() {
+        heading("COMPARING SESSIONS")
+        paragraph(
+            "COMPARED WITH sets the session against your best or your last time. A card gives " +
+                "that session's date, score and reps, and how this one went: reps ahead or " +
+                "behind, rounds, and how much faster or slower the average round was. Tap the " +
+                "card to open that session. The choice also draws the dashed line on the " +
+                "timeline and the ticks on the round splits."
+        )
+        bullets(
+            "Only sessions at the same movements are compared. A band-assisted session is " +
+                "never set against a strict one.",
+            "Only earlier sessions are. A session is never measured against one that had not " +
+                "happened yet, so opening an old one cannot credit it with a comparison a later " +
+                "session earned.",
+            "With no earlier session at the same movements there is no card, and the timeline " +
+                "and splits are drawn on their own."
+        )
+    }
+
+    private fun lifted() {
+        heading("WHAT YOU LIFTED")
+        paragraph(
+            "Between the level and the comparison, one card puts the session in things you " +
+                "can picture: how heavy it was in animals, and how much energy it burned in " +
+                "cups of tea, phone charges or hours of an LED bulb. Never in food. The animal " +
+                "changes from day to day, and a session opened again shows the one it showed " +
+                "the first time."
+        )
+        paragraph(
+            "Both are estimates, and a footnote on the card says how. A rep does not lift " +
+                "all of your weight, only a share of it:"
+        )
+        bullets(
+            "Pull-ups: 95%, because your hands and forearms stay on the bar.",
+            "Push-ups: 64%, or 49% from the knees (Ebben et al., 2011).",
+            "Air, heels-flat and box squats: 88%, the body above the knees.",
+            "The total is your weight, times that share, times the reps you banked, added " +
+                "up. Reps you tapped in count, and the card says so.",
+            "Left out, and named on the card rather than guessed: band-assisted, foot-assisted " +
+                "and negative pull-ups, inverted rows, incline push-ups and supported squats. " +
+                "There is no share of your weight the app can stand behind for them.",
+            "The energy is the calorie estimate from Details, so the two never disagree."
+        )
+        paragraph(
+            "A session the camera could not fully see says \"at least\". A session from " +
+                "before sets were timed shows the energy but no weight lifted. With no body " +
+                "weight on file the card is one row asking for it."
+        )
+    }
+
+    private fun heartRate() {
+        heading("HEART RATE")
+        paragraph(
+            "Cindy can read the heart rate a watch or chest strap broadcasts, and uses it for " +
+                "calories and on the session page. There is no heart-rate number on the camera " +
+                "screen. It appears afterwards."
+        )
+        bullets(
+            "Pair it under Heart rate in the menu, with FIND MY WATCH. The scan lasts twelve " +
+                "seconds, you tap your device once, and after that it reconnects by itself " +
+                "whenever the camera screen is open.",
+            "Broadcast has to be on first. Garmin: Broadcast Heart Rate. Polar: share heart " +
+                "rate with other devices. Chest straps broadcast whenever they are worn. Apple " +
+                "Watch and most Wear OS watches do not broadcast a standard heart rate.",
+            "A Garmin already linked to the phone through Garmin Connect is listed as " +
+                "\"Connected to this phone\". If the sheet says it is connected but there is " +
+                "no heart rate, broadcast is off on the watch.",
+            "Android asks for Bluetooth permission the first time. On Android 11 and older " +
+                "that is Location, which Cindy never reads, and Location has to be on for the " +
+                "scan.",
+            "Right after pairing it asks for your birth year and sex, if it does not have them. The calorie formula is " +
+                "fitted separately for women and men and shifts with age, and the zones are " +
+                "measured against a maximum worked out from your age. Prefer not to say uses " +
+                "the average of the two formulas. Change them under Your details in the same " +
+                "sheet.",
+            "If a watch is paired but silent when you start, a note says calories will use " +
+                "your reps until it arrives."
+        )
+        paragraph(
+            "The heart-rate card on the session page gives your average and maximum, how much " +
+                "of the clock the watch covered, your time in each of five zones, and your " +
+                "hardest round: the finished round with the highest average among those the " +
+                "watch saw for at least thirty seconds. The timeline gains a heart-rate line. " +
+                "Average, maximum and zone time count only the time the watch covered. A gap is " +
+                "left out, not averaged in as zero."
+        )
+        bullets(
+            "Zones are shares of a maximum heart rate worked out from your age as " +
+                "208 − 0.7 × age (Tanaka et al., 2001). That is an estimate, not a maximum " +
+                "measured on you. Under 60% is Warm-up, then Easy from 60%, Aerobic from 70%, " +
+                "Threshold from 80% and Maximum from 90%, with each zone's range printed beside it.",
+            "Without your birth year the card keeps its figures and offers to ask for it, " +
+                "rather than guessing an age.",
+            "A watch can lag your effort by a few seconds.",
+            "A session with no heart rate shows no card at all, and an older one shows " +
+                "nothing rather than a guess."
+        )
+    }
+
+    private fun profileAndBadges() {
+        heading("YOU AND YOUR BADGES")
+        paragraph(
+            "The card at the top of the menu opens You: a name, a photo, and the badges your " +
+                "sessions have earned. There is no account. Nothing is signed in to, and the " +
+                "app uploads neither."
+        )
+        bullets(
+            "Your name is used on the leaderboard, and \"You\" stands in until there is one.",
+            "Your photo comes from the system photo picker, which needs no permission. The app " +
+                "keeps its own small copy, so deleting the original loses nothing. Without one " +
+                "the circle shows your initials.",
+            "There are 26 badges in six families: sessions, rounds, streaks, volume, pace and " +
+                "craft. Each is worked out from the sessions you have recorded, never handed " +
+                "out for opening the app. A locked one says how far along you are, and a tap " +
+                "opens what it asks for and when you won it.",
+            "Badges for a score, the rounds and the pace, are earned only by a standard Cindy " +
+                "the camera could stand behind, as a record is. The two pace badges are the " +
+                "marks quoted under PACING. A session at other movements is a different " +
+                "workout, not a lower score, and earns the badge for making it yours.",
+            "The session page names up to three badges a session just earned, and counts the " +
+                "rest.",
+            "Clearing your records removes the badges with them, and keeps your name and photo."
+        )
+    }
+
+    private fun reminders() {
+        heading("REMINDERS")
+        paragraph(
+            "Off until you ask. Daily reminder in the menu sets the time, six in the evening " +
+                "to start with, and TRY IT sends one now. There is at most one a day, and none " +
+                "on a day you have already trained. It names the streak at stake, or the best " +
+                "score to chase when there is none, and it never appears during a workout."
+        )
+        bullets(
+            "It can arrive a few minutes after the time you set.",
+            "Android 13 and newer asks to allow notifications when you switch it on. If they " +
+                "are off the row says Blocked and offers the system settings.",
+            "It is worked out on the phone. Nothing leaves it."
+        )
+    }
+
+    private fun strava() {
+        heading("STRAVA")
+        paragraph(
+            "Strava, in the menu, connects your Strava account on Strava's own page, in the " +
+                "Strava app if you have it. Nothing is sent before you connect, and no video " +
+                "or pose data is ever sent."
+        )
+        bullets(
+            "Once connected, each finished workout uploads by itself as a Crossfit activity: " +
+                "the score, every movement as a set with the reps actually banked, clock, " +
+                "paused and real time, and calories when you have a body weight set, from " +
+                "your heart rate when a watch recorded one. The heart-rate trace goes with it.",
+            "Upload automatically is a switch in the Strava sheet, on by default. With it off " +
+                "the Strava row under Details offers UPLOAD instead. Finish a workout before " +
+                "connecting and it offers CONNECT TO UPLOAD, which links the account and then " +
+                "sends that workout.",
+            "That row shows where the upload has got to: uploading, then a link to the " +
+                "activity. If it fails it says so and you tap to retry, and if Strava needs " +
+                "you to connect again it says that. The upload carries on in the background, " +
+                "waits for a connection and retries by itself.",
+            "Sessions from before you connected are not sent on their own; open one and use " +
+                "its Strava row. One recorded before reps and sets were banked cannot be " +
+                "described honestly, and says it is not available.",
+            "DISCONNECT clears the connection from the phone at once and asks Strava to end " +
+                "it. If Strava still lists Cindy Tracker at strava.com/settings/apps " +
+                "afterwards, remove it there too."
+        )
     }
 
     // ── building blocks ───────────────────────────────────────────────────────
