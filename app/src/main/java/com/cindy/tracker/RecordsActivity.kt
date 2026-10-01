@@ -87,6 +87,7 @@ class RecordsActivity : AppCompatActivity() {
                 store.clear()
                 // A trace with nothing left to sit beside is not a record of anything.
                 HeartRateStore(this).clear()
+                RepTimesStore(this).clear()
                 StravaUploads.clear(this)
                 toast("Records cleared")
                 render()
