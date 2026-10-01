@@ -100,7 +100,7 @@ class SessionTimeline private constructor(
     val durationMs: Long get() = attempt.durationMs
 
     /** There is something to draw: reps, or a heart rate. */
-    val hasData: Boolean get() = reps != null || heartRuns.isNotEmpty()
+    val hasData: Boolean get() = durationMs > 0L && (reps != null || heartRuns.isNotEmpty())
 
     private val heart: List<HeartRateSample> = heartRuns.flatten()
 
