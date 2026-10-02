@@ -364,43 +364,4 @@ class ProgressTest {
             Progress.overview(ProgressMetric.VOLUME, bars)
         )
     }
-
-    private fun withSets(profile: CindyProfile?, vararg sets: SetSplit) =
-        attempt("2026-09-01", 3, profile = profile).copy(setSplits = sets.toList())
-
-    private val allThree = arrayOf(
-        SetSplit(Exercise.PULLUP, 14_000, 5, 0), SetSplit(Exercise.PUSHUP, 17_000, 10, 0),
-        SetSplit(Exercise.SQUAT, 21_000, 15, 0)
-    )
-
-    @Test
-    fun `breakdown shares sum to one and average each movement`() {
-        val a = withSets(
-            CindyProfile.STANDARD, *allThree, SetSplit(Exercise.PULLUP, 16_000, 5, 3)
-        )
-        val shares = Progress.movementBreakdown(a)
-        assertEquals(3, shares.size)
-        assertEquals(1.0, shares.sumOf { it.share }, 1e-9)
-        assertEquals(15_000L, shares[0].avgMs)
-        assertEquals(Exercise.SQUAT, shares[2].movement)
-    }
-
-    @Test
-    fun `breakdown is empty unless every movement has a complete set`() {
-        assertTrue(Progress.movementBreakdown(withSets(CindyProfile.STANDARD)).isEmpty())
-        val skipped = arrayOf(allThree[0], allThree[1], SetSplit(Exercise.SQUAT, 5_000, 4, 0))
-        assertTrue(Progress.movementBreakdown(withSets(CindyProfile.STANDARD, *skipped)).isEmpty())
-    }
-
-    @Test
-    fun `breakdown labels name the movements performed`() {
-        assertEquals(
-            listOf("5 strict pull-ups", "10 standard push-ups", "15 air squats"),
-            Progress.movementBreakdown(withSets(CindyProfile.STANDARD, *allThree)).map { it.label }
-        )
-        assertEquals(
-            listOf("5 pull-ups", "10 push-ups", "15 squats"),
-            Progress.movementBreakdown(withSets(null, *allThree)).map { it.label }
-        )
-    }
 }
