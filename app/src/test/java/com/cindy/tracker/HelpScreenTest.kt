@@ -1,0 +1,78 @@
+package com.cindy.tracker
+
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * What Help says has to stay true of the app. Each phrase below once described a control that
+ * has since moved or changed, and a Help screen that describes something that is not there is
+ * worse than none.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class HelpScreenTest {
+
+    private fun helpText(): String {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+        val text = texts(help.findViewById<View>(android.R.id.content)).joinToString("\n")
+        help.finish()
+        return text
+    }
+
+    private fun texts(root: View): List<String> = buildList {
+        if (root is TextView) add(root.text.toString())
+        if (root is ViewGroup) for (i in 0 until root.childCount) addAll(texts(root.getChildAt(i)))
+    }
+
+    @Test
+    fun `Help no longer describes controls that have moved`() {
+        val text = helpText()
+        for (stale in listOf(
+            // Voice is a menu row with its own language and volume, not a chip on the camera.
+            "VOICE turns that off",
+            // +1 has no long press; SKIP is a control of its own.
+            "Hold +1",
+            // A paired watch's heart rate now drives the estimate.
+            "Without a heart-rate strap there is no honest way",
+            // The screen is called Progress, and the ladder is the level on the session page.
+            "RECORDS",
+            // The scaled movements are counted now.
+            "use the +1 and −1 buttons if you are working at the scaled version"
+        )) {
+            assertFalse("Help still says: $stale", text.contains(stale))
+        }
+    }
+
+    @Test
+    fun `Help has a section for each part of the app it describes`() {
+        val text = helpText()
+        for (heading in listOf(
+            "VOICE AND MUSIC", "FILMING", "THE SESSION PAGE", "COMPARING SESSIONS",
+            "WHAT YOU LIFTED", "HEART RATE", "YOU AND YOUR BADGES", "REMINDERS", "STRAVA"
+        )) {
+            assertTrue("Help has no $heading section", text.contains(heading))
+        }
+    }
+
+    @Test
+    fun `CrossFit's words are still quoted as they were`() {
+        val text = helpText()
+        for (quote in listOf(
+            "Complete as many rounds and reps as possible in 20 minutes of: " +
+                "5 pull-ups, 10 push-ups, 15 squats",
+            "The fastest athletes will complete rounds in under 45 seconds.",
+            "Adhering to the full range of motion in all movements is important for " +
+                "structural integrity and joint health."
+        )) {
+            assertTrue("a CrossFit quotation changed: $quote", text.contains(quote))
+        }
+    }
+}
