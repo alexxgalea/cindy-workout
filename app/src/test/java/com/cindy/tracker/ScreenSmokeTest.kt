@@ -1280,4 +1280,320 @@ class ScreenSmokeTest {
         activity.finish()
         clearTimelineFixtures(context)
     }
+
+    /** A full round with its sets banked, so there is something for the lifted card to count. */
+    private fun liftedAttempt(profile: CindyProfile = CindyProfile.STANDARD) = Attempt(
+        rounds = 1,
+        reps = 0,
+        atMillis = System.currentTimeMillis(),
+        durationMs = 20 * 60 * 1000L,
+        countedReps = 30,
+        profile = profile,
+        setSplits = listOf(
+            SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+            SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+            SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+        )
+    )
+
+    /** With a weight on file the card says what was lifted and burned, as one TalkBack sentence. */
+    @Test
+    fun `the results screen shows what was lifted and burned once a weight is on file`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        val card = holder.getChildAt(0)
+        val spoken = card.contentDescription.toString()
+        // (5 x 0.95 + 10 x 0.64 + 15 x 0.88) x 80 = 1,948 kg, rounded to the nearest 10.
+        assertTrue(spoken, spoken.contains("You lifted about 1,950 kg."))
+        assertTrue(spoken, spoken.contains("You burned"))
+        assertTrue(spoken, spoken.contains("An estimate from your weight"))
+        assertTrue("card is one stop", card.isFocusable)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Without one, a single row invites the athlete to enter it, and nothing is made up. */
+    @Test
+    fun `the results screen invites a weight rather than showing an empty card`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        Profile(context).bodyWeightKg = 0.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        assertTrue("no invitation", findByDescriptionPrefix(holder, "Your weight") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+    }
+
+    /** An old record cannot say which movement its reps were, so only the burned half remains. */
+    @Test
+    fun `the results screen says nothing of what was lifted for an old record`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val old = Attempt(
+            rounds = 2, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        store.add(old)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, old, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertTrue("no energy card", findByDescriptionContains(holder, "You burned") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Band-assisted pull-ups are named as left out, and the shares applied are the athlete's own. */
+    @Test
+    fun `the results screen names the movements it left out of what was lifted`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt(CindyProfile(pull = PullVariant.BAND_ASSISTED_PULL_UP))
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+            .getChildAt(0).contentDescription.toString()
+
+        assertTrue(spoken, spoken.contains("Band-assisted pull-ups are left out"))
+        assertTrue(spoken, !spoken.contains("strict pull-ups"))
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** The same card draws when a past session is reopened. */
+    @Test
+    fun `a reopened session shows the lifted card too`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, attempt.atMillis)
+        ).setup().get()
+
+        assertTrue(
+            "no lifted card on review",
+            findByDescriptionContains(activity.findViewById(R.id.lifted), "You lifted") != null
+        )
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /**
+     * The animal row: as many of the animal as the count, five at most, and a "×N" beyond that.
+     * The JVM has no emoji font, so the font check is told every glyph is available.
+     */
+    @Test
+    fun `the lifted card draws the animal and its count when the phone can draw it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+        ResultsActivity.glyphCheck = { true }
+        try {
+            val activity = Robolectric.buildActivity(
+                ResultsActivity::class.java,
+                ResultsActivity.intent(context, attempt, stoppedEarly = false)
+            ).setup().get()
+            val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+                .getChildAt(0).contentDescription.toString()
+
+            // 1,948 kg is 2.8 cows, 3.9 horses or 6.5 bears, whichever the day's rotation picked.
+            assertTrue(spoken, spoken.contains("As heavy as "))
+            val emojiViews = mutableListOf<android.widget.TextView>()
+            fun walk(v: android.view.View) {
+                if (v is android.widget.TextView && v.typeface == android.graphics.Typeface.DEFAULT) emojiViews += v
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+            walk(activity.findViewById(R.id.lifted))
+            // Three to five of the animal, plus the one beside the energy figure.
+            assertTrue("emoji drawn: ${emojiViews.size}", emojiViews.size in 4..6)
+            activity.finish()
+        } finally {
+            ResultsActivity.glyphCheck = null
+            store.clear()
+            profile.bodyWeightKg = 0.0
+        }
+    }
+
+    // ── the round splits on the results page ───────────────────────────────────
+
+    private fun launchResults(attempt: Attempt, vararg others: Attempt): android.app.Activity {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        others.forEach { store.add(it) }
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        return Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+    }
+
+    private fun splitsAttempt(
+        at: Long,
+        splits: List<Long>,
+        sets: List<SetSplit> = emptyList(),
+        durationMs: Long = splits.sum(),
+        counted: Int? = splits.size * 30
+    ) = Attempt(
+        rounds = splits.size, reps = 0, atMillis = at, durationMs = durationMs,
+        roundSplitsMs = splits, setSplits = sets, countedReps = counted, profile = CindyProfile.STANDARD
+    )
+
+    private fun threeSets(pull: Long, push: Long, squat: Long) = listOf(
+        SetSplit(Exercise.PULLUP, pull, 5, 0), SetSplit(Exercise.PUSHUP, push, 10, 0),
+        SetSplit(Exercise.SQUAT, squat, 15, 0)
+    )
+
+    private fun text(activity: android.app.Activity, id: Int) =
+        activity.findViewById<android.widget.TextView>(id).text.toString()
+
+    @Test
+    fun `the splits are stacked by movement when the sets were timed, and read out when chosen`() {
+        val now = System.currentTimeMillis()
+        val activity = launchResults(
+            splitsAttempt(
+                now, listOf(168_000L, 150_000L),
+                threeSets(41_000L, 52_000L, 75_000L) + threeSets(40_000L, 50_000L, 60_000L)
+            )
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.splitsCard).visibility)
+        assertEquals(2, view.barCount)
+        assertEquals("Fastest: round 2 at 2:30 · average 2:39", text(activity, R.id.splitsReadout))
+
+        view.select(0)
+
+        assertEquals("Round 1 · 2:48", text(activity, R.id.splitsReadout))
+        assertEquals("Pull-ups 0:41 · push-ups 0:52 · squats 1:15", text(activity, R.id.splitsDetail))
+        assertEquals(
+            "no comparison, so no line for one",
+            android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsVersus).visibility
+        )
+        activity.finish()
+    }
+
+    /** A record from before set times existed has round splits and nothing else. */
+    @Test
+    fun `a very old record still draws plain bars and says it has no movement times`() {
+        val activity = launchResults(
+            splitsAttempt(System.currentTimeMillis(), listOf(168_000L, 150_000L, 160_000L), counted = null)
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(3, view.barCount)
+
+        view.select(1)
+
+        assertEquals("No per-movement times for this round", text(activity, R.id.splitsDetail))
+        assertTrue(!text(activity, R.id.splitsNote).contains("stacks"))
+        activity.finish()
+    }
+
+    @Test
+    fun `no complete round hides the splits instead of charting nothing`() {
+        val activity = launchResults(
+            splitsAttempt(System.currentTimeMillis(), emptyList(), durationMs = 90_000L)
+        )
+
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsCard).visibility)
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.splitsTitle).visibility)
+        activity.finish()
+    }
+
+    @Test
+    fun `the round the clock stopped in is drawn as an open bar`() {
+        val activity = launchResults(
+            splitsAttempt(
+                System.currentTimeMillis(), listOf(168_000L),
+                threeSets(41_000L, 52_000L, 75_000L) + SetSplit(Exercise.PULLUP, 38_000L, 5, 0),
+                durationMs = 248_000L, counted = 35
+            )
+        )
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        assertEquals(2, view.barCount)
+
+        view.select(1)
+
+        assertEquals("Round 2 · 1:20 so far", text(activity, R.id.splitsReadout))
+        assertTrue(text(activity, R.id.splitsDetail).startsWith("5 of 30 reps"))
+        assertTrue(text(activity, R.id.splitsNote).contains("outlined bar"))
+        activity.finish()
+    }
+
+    @Test
+    fun `an earlier session adds a tick and a line against it, and the chip changes which`() {
+        val now = System.currentTimeMillis()
+        val day = 24 * 60 * 60 * 1000L
+        val best = splitsAttempt(now - 3 * day, listOf(177_000L, 140_000L, 150_000L, 150_000L))
+        val last = splitsAttempt(now - day, listOf(160_000L, 160_000L))
+        val activity = launchResults(splitsAttempt(now, listOf(168_000L, 150_000L)), best, last)
+
+        val view = activity.findViewById<RoundSplitsView>(R.id.splits)
+        view.select(0)
+
+        assertEquals("9 s faster than your best's round 1", text(activity, R.id.splitsVersus))
+        assertTrue(text(activity, R.id.splitsNote).contains("in your best"))
+
+        val chip = findByText(activity.findViewById(R.id.compare), "Last time")
+        assertTrue("no Last time chip", chip != null)
+        chip!!.performClick()
+
+        // The selection survives the new comparison; the sentence is now about the other one.
+        assertEquals(0, view.selected)
+        assertEquals("8 s slower than round 1 last time", text(activity, R.id.splitsVersus))
+        assertTrue(text(activity, R.id.splitsNote).contains("last time"))
+        activity.finish()
+    }
 }
