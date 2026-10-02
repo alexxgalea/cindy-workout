@@ -465,6 +465,11 @@ included, as they are for round splits. The results screen shows where a round's
 include the fastest 5 pull-ups, 10 push-ups and 15 squats, taken only from sets where the camera
 saw every rep and the set reached its target.
 
+Each rep's own moment on the workout clock is kept too, from this version on — in a small file
+beside the record rather than on the attempt itself, the same reason the heart-rate trace lives
+apart from it. A session recorded before this exists shows only the per-set detail above; nothing
+older is guessed to fill in a timeline it never kept.
+
 Levels are ranked by rounds, since in a fixed 20-minute AMRAP that is the same measurement as
 average round time:
 

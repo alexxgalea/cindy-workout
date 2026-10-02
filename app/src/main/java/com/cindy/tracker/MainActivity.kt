@@ -266,6 +266,8 @@ class MainActivity : AppCompatActivity() {
     private val roundSplits = mutableListOf<Long>()
     /** The clock time and score of each finished set, unwound across an undo. */
     private val sets = SplitBook()
+    /** Every rep's moment on the workout clock, for a later screen's timeline. */
+    private val repLog = RepLog()
     /** Clock time at which the current round began, so a pause cannot inflate its split. */
     private var roundStartedAtElapsed = 0L
     private var elapsedMs = 0L
@@ -1135,6 +1137,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // RepLog follows the engine's own banked totals rather than this event, so a skip (which
+        // changes snap.exercise without changing snap.totalReps) costs it nothing to see.
+        if (inWorkout()) {
+            val repMovement = when (snap.event) {
+                RepEvent.EXERCISE_DONE, RepEvent.ROUND_DONE -> snap.exercise.previous()
+                else -> snap.exercise
+            }
+            repLog.follow(snap.totalReps, snap.manualReps, repMovement, elapsedMs)
+        }
+
         // After the count, not before: a rep is said with a flush, which would cut a line queued
         // ahead of it short, and the rep that caused the switch has just been said above.
         if (snap.heelsFlatSpotted && inWorkout() && !heelsFlatAnnounced) {
@@ -1248,6 +1260,7 @@ class MainActivity : AppCompatActivity() {
         roundStartedAtElapsed = 0L
         roundSplits.clear()
         sets.start()
+        repLog.start()
         elapsedMs = 0L
         pausedMs = 0L
         heartRate.start(now, System.currentTimeMillis())
@@ -1506,6 +1519,9 @@ class MainActivity : AppCompatActivity() {
         video.stop()
 
         val snap = runEngine { RepEvent.NONE }
+        // One last reconciliation against the engine's final totals: apply() may not have seen
+        // this exact snapshot yet, and the saved marks must agree with the attempt to the rep.
+        repLog.follow(snap.totalReps, snap.manualReps, snap.exercise, elapsedMs)
         // What the session was counted as, which is not always what was chosen: smart squat
         // counting may have gone over to heels-flat squats part of the way through.
         val countedProfile = synchronized(engineLock) { engine.countedProfile }
@@ -1531,6 +1547,7 @@ class MainActivity : AppCompatActivity() {
         // onCreate, a few lines below, and there is no attempt to have it race against.
         val saved = records.add(attempt)
         if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
+        if (saved) RepTimesStore(this).save(attempt.atMillis, repLog.marks)
         if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
         primary(R.drawable.ic_again)
