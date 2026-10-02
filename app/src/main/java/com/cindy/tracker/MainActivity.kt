@@ -190,15 +190,16 @@ class MainActivity : AppCompatActivity() {
     private val COACH_AFTER_MS = 1_200L
 
     /**
-     * The round and rep lines as single strings, for [RecordingOverlay].
+     * Produces what the burned-in recording shows, which disagrees with the screen during the
+     * setup check and for a few seconds after it ends.
      *
-     * The HUD splits both — ROUND is a static label beside its number, and the target drops a
-     * weight and a shade behind the live count — but a video burned with "4" and "3" where it
-     * used to read "ROUND 4" and "3 / 5" would be strictly worse than before. The recorder is
-     * fed these rather than reading the views back.
+     * [RecordedHud.workout] is called from [apply], because the HUD splits the round and rep
+     * lines that the film wants as one string each — ROUND is a static label beside its number,
+     * and the target drops a weight and a shade behind the live count — and a video burned with
+     * "4" and "3" where it used to read "ROUND 4" and "3 / 5" would be strictly worse than
+     * before.
      */
-    private var recordedRound = "ROUND 1"
-    private var recordedReps = "0 / 5"
+    private val recordedHud = RecordedHud()
     private lateinit var analysisExecutor: ExecutorService
     private lateinit var speaker: Speaker
     private lateinit var music: MusicPlayer
@@ -265,6 +266,8 @@ class MainActivity : AppCompatActivity() {
     private val roundSplits = mutableListOf<Long>()
     /** The clock time and score of each finished set, unwound across an undo. */
     private val sets = SplitBook()
+    /** Every rep's moment on the workout clock, for a later screen's timeline. */
+    private val repLog = RepLog()
     /** Clock time at which the current round began, so a pause cannot inflate its split. */
     private var roundStartedAtElapsed = 0L
     private var elapsedMs = 0L
@@ -381,16 +384,20 @@ class MainActivity : AppCompatActivity() {
         latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
         if (frame.snap != null && state == State.RUNNING) apply(frame.snap)
         if (frame.setup != null && state == State.SETUP) applySetup(frame.setup)
-        // Feed the burned-in overlay the same numbers the screen is showing.
+        // Feed the burned-in overlay what the film shows right now -- apart from the score while
+        // the setup check runs, not the screen's own numbers.
+        val now = SystemClock.elapsedRealtime()
+        val hud = if (state == State.SETUP) {
+            recordedHud.forSetup(now, frame.setup, setupExerciseLabel())
+        } else {
+            recordedHud.forWorkout(now, clock.text, exercise.text)
+        }
         video.overlay.update(
             keypoints = frame.keypoints,
             width = frame.width,
             height = frame.height,
             mirrored = frame.mirrored,
-            clock = clock.text,
-            round = recordedRound,
-            exercise = exercise.text,
-            reps = recordedReps,
+            hud = hud,
             debug = debug
         )
     }
@@ -1061,8 +1068,7 @@ class MainActivity : AppCompatActivity() {
         reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
         round.text = "${snap.rounds + 1}"
         round.spoken("Round ${snap.rounds + 1}")
-        recordedRound = "ROUND ${snap.rounds + 1}"
-        recordedReps = "${snap.reps} / ${snap.exercise.target}"
+        recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
         // Readable from the bar, when the digits are not.
         binding.repProgress.progress =
             snap.reps * 100 / snap.exercise.target.coerceAtLeast(1)
@@ -1131,6 +1137,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // RepLog follows the engine's own banked totals rather than this event, so a skip (which
+        // changes snap.exercise without changing snap.totalReps) costs it nothing to see.
+        if (inWorkout()) {
+            val repMovement = when (snap.event) {
+                RepEvent.EXERCISE_DONE, RepEvent.ROUND_DONE -> snap.exercise.previous()
+                else -> snap.exercise
+            }
+            repLog.follow(snap.totalReps, snap.manualReps, repMovement, elapsedMs)
+        }
+
         // After the count, not before: a rep is said with a flush, which would cut a line queued
         // ahead of it short, and the rep that caused the switch has just been said above.
         if (snap.heelsFlatSpotted && inWorkout() && !heelsFlatAnnounced) {
@@ -1197,8 +1213,8 @@ class MainActivity : AppCompatActivity() {
             }
             SetupStage.MOVING -> {
                 reps.text = "${setup.reps}"
-                repsTarget.text = "/2"
-                reps.spoken("${setup.reps} of 2 calibration reps")
+                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(neutral)
                 status.text = if (readout == Readout.COUNTING) {
                     "calibrating · rng %.0f / %.0f".format(Locale.US, setup.range, setup.needed)
@@ -1208,14 +1224,29 @@ class MainActivity : AppCompatActivity() {
             }
             SetupStage.POOR -> {
                 reps.text = "${setup.reps}"
-                repsTarget.text = "/2"
-                reps.spoken("${setup.reps} of 2 calibration reps")
+                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(alert)
                 status.text = "Movement barely registers — raise the phone or step back"
             }
-            SetupStage.READY -> beginWorkout(calibrated = true)
+            SetupStage.READY -> {
+                // The banner belongs to the moment the check ends, not to beginWorkout(), which
+                // also runs for a workout that skipped the check altogether.
+                recordedHud.calibrated(SystemClock.elapsedRealtime())
+                beginWorkout(calibrated = true)
+            }
         }
     }
+
+    /**
+     * The movement the recorded setup banner names.
+     *
+     * Read from the engine rather than [exercise] (which [enterSetup] has already overwritten to
+     * "SET UP" on screen): the setup check always calibrates on the pull-up, so this reads
+     * "PULL-UPS" today, but asking the engine keeps that the engine's fact instead of one assumed
+     * here.
+     */
+    private fun setupExerciseLabel(): String = synchronized(engineLock) { engine.exercise.label }
 
     // ── workout control ───────────────────────────────────────────────────────
 
@@ -1229,6 +1260,7 @@ class MainActivity : AppCompatActivity() {
         roundStartedAtElapsed = 0L
         roundSplits.clear()
         sets.start()
+        repLog.start()
         elapsedMs = 0L
         pausedMs = 0L
         heartRate.start(now, System.currentTimeMillis())
@@ -1389,7 +1421,10 @@ class MainActivity : AppCompatActivity() {
                     "your bar. Reps may be missed or counted twice."
             ).actions(
                 primary = "SKIP",
-                onPrimary = { beginWorkout(calibrated = false) },
+                onPrimary = {
+                    recordedHud.skipped(SystemClock.elapsedRealtime())
+                    beginWorkout(calibrated = false)
+                },
                 secondary = "KEEP CHECKING",
                 onSecondary = {}
             ).show()
@@ -1484,6 +1519,9 @@ class MainActivity : AppCompatActivity() {
         video.stop()
 
         val snap = runEngine { RepEvent.NONE }
+        // One last reconciliation against the engine's final totals: apply() may not have seen
+        // this exact snapshot yet, and the saved marks must agree with the attempt to the rep.
+        repLog.follow(snap.totalReps, snap.manualReps, snap.exercise, elapsedMs)
         // What the session was counted as, which is not always what was chosen: smart squat
         // counting may have gone over to heels-flat squats part of the way through.
         val countedProfile = synchronized(engineLock) { engine.countedProfile }
@@ -1509,6 +1547,7 @@ class MainActivity : AppCompatActivity() {
         // onCreate, a few lines below, and there is no attempt to have it race against.
         val saved = records.add(attempt)
         if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
+        if (saved) RepTimesStore(this).save(attempt.atMillis, repLog.marks)
         if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
         primary(R.drawable.ic_again)
