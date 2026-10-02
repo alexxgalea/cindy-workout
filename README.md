@@ -475,6 +475,28 @@ still a session. Milestones are celebrated on the results screen: 3, 7, 14, 21, 
 150, 200 and 365 days, and 2, 4, 8, 12, 26 and 52 weeks. The rules are in
 [Streak.kt](app/src/main/java/com/cindy/tracker/Streak.kt).
 
+#### What you lifted
+
+Between the level and the comparison, the session page says what the session lifted and burned in
+things you can picture: **You lifted** about 12,940 kg, as heavy as 9 hippos; **You burned** 312
+kcal, enough to boil water for 16 cups of tea. Up to five of the animal are drawn, and a "×9"
+beyond that. Which animal turns on the day the session happened, so consecutive sessions tend to
+meet a different one, and a reopened session shows the animal it showed the first time. An animal
+the phone's emoji font cannot draw is never picked. The energy is compared with a cup of tea, a
+phone charge or an hour of an LED bulb, on purpose never with food.
+
+Both are estimates, and a footnote on the card says how. A rep lifts a share of your body weight,
+not all of it: 95% for a strict pull-up (the hands and forearms stay on the bar), 64% for a
+standard push-up and 49% from the knees (Ebben et al., 2011), 88% for an air, heels-flat or box
+squat (the body above the knees), all from a body-segment table. A variation with no share the app
+can stand behind is left out and named, rather than guessed: band-assisted, foot-assisted and
+negative pull-ups, inverted rows, incline push-ups and supported squats. Reps you tapped in count,
+and the card says so. A session the camera could not fully see says "at least". The reps come
+from the session's own banked sets, so a session from before sets were timed shows the energy but
+no weight lifted, and without a body weight on file the card is a single row asking for it. See
+[Lifted.kt](app/src/main/java/com/cindy/tracker/Lifted.kt) and
+[Equivalents.kt](app/src/main/java/com/cindy/tracker/Equivalents.kt).
+
 #### Reminders
 
 Off by default. Menu -> Daily reminder sets the time, and `TRY IT` sends one now. There is at most
@@ -490,6 +512,28 @@ opened. Android 13+ asks for notification permission when the reminder is switch
 denied the row says "Blocked". Nothing leaves the phone. See
 [Reminder.kt](app/src/main/java/com/cindy/tracker/Reminder.kt) and
 [ReminderScheduler.kt](app/src/main/java/com/cindy/tracker/ReminderScheduler.kt).
+
+#### The session timeline
+
+The results screen draws the session across its own workout clock: reps banked as a stepped
+line, and the heart rate beneath it when a watch was connected. Touch the chart, or drag along
+it, and one cursor crosses both lanes. The line above reads the instant back — the clock, the
+round and movement, the reps banked by then, the bpm, and how far ahead of or behind the session
+it is measured against (the same choice of "Your best" or "Last time" as the card above, drawn
+dashed) at the latest round both sessions had finished. A round is one stop for TalkBack, which
+reads when it ran, how long it took, the reps banked by its end and its average heart rate.
+
+Everything on it was banked, never worked out. A session with its rep times draws a step for
+every rep; one recorded before they existed draws a step per set instead and says so under the
+chart, and one with neither has no reps line rather than one drawn from the round count. Each
+session's rep times are checked against that session's own counted total, so the reviewed
+session and the one it is compared with fall back to per-set independently. Reps tapped in are
+counted and said to be by hand, and a score the camera could not stand behind reads "at least".
+A heart-rate line is broken wherever the watch was silent for longer than the calorie estimate
+will hold a reading, and the whole section is hidden when there is neither reps nor heart rate
+to draw. See
+[SessionTimeline.kt](app/src/main/java/com/cindy/tracker/SessionTimeline.kt) and
+[SessionTimelineView.kt](app/src/main/java/com/cindy/tracker/SessionTimelineView.kt).
 
 #### Set times
 

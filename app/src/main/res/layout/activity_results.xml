@@ -5,6 +5,7 @@
   a bordered level box and then a bare column of rows with no card around them at all.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
@@ -175,6 +176,15 @@
                 android:layout_marginTop="10dp" />
         </LinearLayout>
 
+        <!-- What the session lifted and burned, as animals and tea. Built in code. -->
+        <LinearLayout
+            android:id="@+id/lifted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/compareTitle"
             style="@style/Cindy.Eyebrow"
@@ -192,6 +202,64 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone" />
+
+        <!-- Reps and heart rate across the clock, scrubbed by touch. Hidden without either. -->
+        <TextView
+            android:id="@+id/timelineTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="TIMELINE"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/timeline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_card"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/timelineReadout"
+                style="@style/Cindy.MetricS"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textSize="18sp"
+                app:autoSizeMaxTextSize="18sp"
+                app:autoSizeMinTextSize="12sp"
+                app:autoSizeStepGranularity="1sp"
+                app:autoSizeTextType="uniform" />
+
+            <TextView
+                android:id="@+id/timelineDetail"
+                style="@style/Cindy.Callout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFeatureSettings="tnum"
+                android:minLines="2" />
+
+            <com.cindy.tracker.SessionTimelineView
+                android:id="@+id/timelineChart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp" />
+
+            <TextView
+                android:id="@+id/timelineLegend"
+                style="@style/Cindy.Footnote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/splitsTitle"

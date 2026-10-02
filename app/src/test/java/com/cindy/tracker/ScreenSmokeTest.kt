@@ -1099,6 +1099,373 @@ class ScreenSmokeTest {
         store.clear()
     }
 
+    /** One round of five, ten and fifteen reps, timed set by set, filed with its rep times. */
+    private fun timedRound(atMillis: Long, withMarks: Boolean, context: android.content.Context): Attempt {
+        val attempt = Attempt(
+            rounds = 1, reps = 0, atMillis = atMillis, durationMs = 120_000L,
+            roundSplitsMs = listOf(60_000L), profile = CindyProfile.STANDARD, countedReps = 30,
+            setSplits = listOf(
+                SetSplit(Exercise.PULLUP, 10_000L, 5, 0),
+                SetSplit(Exercise.PUSHUP, 20_000L, 10, 0),
+                SetSplit(Exercise.SQUAT, 30_000L, 15, 0)
+            )
+        )
+        if (withMarks) {
+            val movements = List(5) { Exercise.PULLUP } + List(10) { Exercise.PUSHUP } +
+                List(15) { Exercise.SQUAT }
+            RepTimesStore(context).save(
+                atMillis, movements.mapIndexed { i, m -> RepMark((i + 1) * 2_000L, m, manual = false) }
+            )
+        }
+        return attempt
+    }
+
+    private fun resultsFor(context: android.content.Context, a: Attempt) =
+        Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, a, stoppedEarly = false)
+        ).setup().get()
+
+    private fun clearTimelineFixtures(context: android.content.Context) {
+        RecordStore(context).clear()
+        HeartRateStore(context).clear()
+        RepTimesStore(context).clear()
+    }
+
+    @Test
+    fun `the results screen draws the timeline for a session with rep times and no earlier one`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = timedRound(System.currentTimeMillis(), withMarks = true, context)
+        RecordStore(context).add(attempt)
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timelineTitle).visibility)
+        // Nothing earlier to measure against, so nothing dashed to explain.
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timelineLegend).visibility)
+        assertEquals(1, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        assertEquals(
+            "2:00 · 1 round",
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `the results screen hides the timeline for a record with nothing to plot`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val old = Attempt(
+            rounds = 5, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        RecordStore(context).add(old)
+
+        val activity = resultsFor(context, old)
+
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(android.view.View.GONE, activity.findViewById<android.view.View>(R.id.timelineTitle).visibility)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    /** A heart rate alone is enough: reps may be unknown, the watch was not. */
+    @Test
+    fun `the results screen draws the timeline from a heart-rate trace alone`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = Attempt(
+            rounds = 5, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        RecordStore(context).add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(
+                attempt.atMillis,
+                (0 until 60).map { HeartRateSample(it * 1_000L, 110 + it) },
+                emptyList()
+            )
+        )
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertEquals(1, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `the results screen stacks reps and heart rate when it has both`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val attempt = timedRound(System.currentTimeMillis(), withMarks = true, context)
+        RecordStore(context).add(attempt)
+        HeartRateStore(context).save(
+            attempt.atMillis,
+            HeartRateTrace(attempt.atMillis, listOf(HeartRateSample(1_000L, 130)), emptyList())
+        )
+
+        val activity = resultsFor(context, attempt)
+
+        assertEquals(2, activity.findViewById<SessionTimelineView>(R.id.timelineChart).laneCount)
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    /**
+     * The legend follows whichever chip is chosen, and the cursor the athlete left on the chart
+     * stays where it was across the change, with the readout drawn again from there.
+     */
+    @Test
+    fun `the timeline follows the comparison chip and keeps the cursor`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60 * 60 * 1000
+        val store = RecordStore(context)
+        // Best by a distance, then a worse one more recently, then today's.
+        store.add(timedRound(now - 3 * day, withMarks = false, context).copy(countedReps = 45))
+        store.add(timedRound(now - day, withMarks = false, context))
+        val today = timedRound(now, withMarks = true, context)
+        store.add(today)
+
+        val activity = resultsFor(context, today)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        val legend = activity.findViewById<android.widget.TextView>(R.id.timelineLegend)
+        assertTrue(legend.text.toString(), legend.text.toString().startsWith("Dashed: your best."))
+
+        val chart = activity.findViewById<SessionTimelineView>(R.id.timelineChart)
+        chart.select(30_000L)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+                .startsWith("0:30 · Round 1")
+        )
+
+        findByText(root, "Last time")!!.performClick()
+
+        assertTrue(legend.text.toString(), legend.text.toString().startsWith("Dashed: last time."))
+        assertEquals(30_000L, chart.selectedMs)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineReadout).text.toString()
+                .startsWith("0:30 · Round 1")
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    @Test
+    fun `a reopened session draws its own timeline against what came before it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        clearTimelineFixtures(context)
+        val now = System.currentTimeMillis()
+        val day = 24L * 60 * 60 * 1000
+        val earlier = timedRound(now - 2 * day, withMarks = true, context)
+        val reopened = timedRound(now - day, withMarks = true, context)
+        val later = timedRound(now, withMarks = true, context)
+        RecordStore(context).apply { add(earlier); add(reopened); add(later) }
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, reopened.atMillis)
+        ).setup().get()
+
+        assertEquals(android.view.View.VISIBLE, activity.findViewById<android.view.View>(R.id.timeline).visibility)
+        assertTrue(
+            activity.findViewById<android.widget.TextView>(R.id.timelineLegend).text.toString()
+                .startsWith("Dashed: your best")
+        )
+        activity.finish()
+        clearTimelineFixtures(context)
+    }
+
+    /** A full round with its sets banked, so there is something for the lifted card to count. */
+    private fun liftedAttempt(profile: CindyProfile = CindyProfile.STANDARD) = Attempt(
+        rounds = 1,
+        reps = 0,
+        atMillis = System.currentTimeMillis(),
+        durationMs = 20 * 60 * 1000L,
+        countedReps = 30,
+        profile = profile,
+        setSplits = listOf(
+            SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+            SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+            SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+        )
+    )
+
+    /** With a weight on file the card says what was lifted and burned, as one TalkBack sentence. */
+    @Test
+    fun `the results screen shows what was lifted and burned once a weight is on file`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        val card = holder.getChildAt(0)
+        val spoken = card.contentDescription.toString()
+        // (5 x 0.95 + 10 x 0.64 + 15 x 0.88) x 80 = 1,948 kg, rounded to the nearest 10.
+        assertTrue(spoken, spoken.contains("You lifted about 1,950 kg."))
+        assertTrue(spoken, spoken.contains("You burned"))
+        assertTrue(spoken, spoken.contains("An estimate from your weight"))
+        assertTrue("card is one stop", card.isFocusable)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Without one, a single row invites the athlete to enter it, and nothing is made up. */
+    @Test
+    fun `the results screen invites a weight rather than showing an empty card`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        Profile(context).bodyWeightKg = 0.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertEquals(android.view.View.VISIBLE, holder.visibility)
+        assertTrue("no invitation", findByDescriptionPrefix(holder, "Your weight") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+    }
+
+    /** An old record cannot say which movement its reps were, so only the burned half remains. */
+    @Test
+    fun `the results screen says nothing of what was lifted for an old record`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val old = Attempt(
+            rounds = 2, reps = 0, atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        store.add(old)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, old, stoppedEarly = false)
+        ).setup().get()
+        val holder = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+
+        assertTrue("no energy card", findByDescriptionContains(holder, "You burned") != null)
+        assertTrue("claims a lifted figure", findByDescriptionContains(holder, "You lifted") == null)
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** Band-assisted pull-ups are named as left out, and the shares applied are the athlete's own. */
+    @Test
+    fun `the results screen names the movements it left out of what was lifted`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt(CindyProfile(pull = PullVariant.BAND_ASSISTED_PULL_UP))
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+        val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+            .getChildAt(0).contentDescription.toString()
+
+        assertTrue(spoken, spoken.contains("Band-assisted pull-ups are left out"))
+        assertTrue(spoken, !spoken.contains("strict pull-ups"))
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /** The same card draws when a past session is reopened. */
+    @Test
+    fun `a reopened session shows the lifted card too`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, attempt.atMillis)
+        ).setup().get()
+
+        assertTrue(
+            "no lifted card on review",
+            findByDescriptionContains(activity.findViewById(R.id.lifted), "You lifted") != null
+        )
+
+        activity.finish()
+        store.clear()
+        profile.bodyWeightKg = 0.0
+    }
+
+    /**
+     * The animal row: as many of the animal as the count, five at most, and a "×N" beyond that.
+     * The JVM has no emoji font, so the font check is told every glyph is available.
+     */
+    @Test
+    fun `the lifted card draws the animal and its count when the phone can draw it`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val profile = Profile(context)
+        profile.bodyWeightKg = 80.0
+        val attempt = liftedAttempt()
+        store.add(attempt)
+        ResultsActivity.glyphCheck = { true }
+        try {
+            val activity = Robolectric.buildActivity(
+                ResultsActivity::class.java,
+                ResultsActivity.intent(context, attempt, stoppedEarly = false)
+            ).setup().get()
+            val spoken = activity.findViewById<android.view.ViewGroup>(R.id.lifted)
+                .getChildAt(0).contentDescription.toString()
+
+            // 1,948 kg is 2.8 cows, 3.9 horses or 6.5 bears, whichever the day's rotation picked.
+            assertTrue(spoken, spoken.contains("As heavy as "))
+            val emojiViews = mutableListOf<android.widget.TextView>()
+            fun walk(v: android.view.View) {
+                if (v is android.widget.TextView && v.typeface == android.graphics.Typeface.DEFAULT) emojiViews += v
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+            walk(activity.findViewById(R.id.lifted))
+            // Three to five of the animal, plus the one beside the energy figure.
+            assertTrue("emoji drawn: ${emojiViews.size}", emojiViews.size in 4..6)
+            activity.finish()
+        } finally {
+            ResultsActivity.glyphCheck = null
+            store.clear()
+            profile.bodyWeightKg = 0.0
+        }
+    }
+
     // ── the round splits on the results page ───────────────────────────────────
 
     private fun launchResults(attempt: Attempt, vararg others: Attempt): android.app.Activity {

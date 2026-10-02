@@ -4,18 +4,24 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.work.WorkManager
@@ -28,6 +34,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** What just happened: score, rank, pace, and how the rounds actually went. */
 class ResultsActivity : AppCompatActivity() {
@@ -37,6 +44,12 @@ class ResultsActivity : AppCompatActivity() {
         private const val EXTRA_STOPPED = "stopped"
         private const val EXTRA_HEELS_FLAT = "heels_flat_spotted"
         private const val EXTRA_REVIEW_AT = "review_at"
+
+        /**
+         * Stands in for the font check when set. The JVM test environment has no emoji font and
+         * answers "no glyph" to every question, which would leave the animal row untestable.
+         */
+        internal var glyphCheck: ((String) -> Boolean)? = null
 
         /** The width of the icon at the start of a celebration row, so the text lines up. */
         private const val ICON_SLOT_DP = 36
@@ -98,10 +111,11 @@ class ResultsActivity : AppCompatActivity() {
     private var reviewing = false
     /** What this session is measured against; the one field later sections also hang off. */
     private var comparison: Attempt? = null
+    /** Which chip [comparison] came from, so a section can say "your best" or "last time". */
+    private var comparisonKind: Comparisons.Kind? = null
     private lateinit var compareCardHolder: FrameLayout
     /** The round splits on screen, kept so a new comparison can redraw them without a rebuild. */
     private var splitData: RoundSplits.Split? = null
-    private var comparisonKind: Comparisons.Kind? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,6 +188,7 @@ class ResultsActivity : AppCompatActivity() {
         celebrate(a, all)
         sessionNumbers(a)
         renderLevel(a)
+        liftedCard(a)
         compareCard(a, all)
 
         binding.stats.removeAllViews()
@@ -251,15 +266,6 @@ class ResultsActivity : AppCompatActivity() {
     private fun splitsComparison() {
         val split = splitData ?: return
         val reference = comparison
-        // Which sentence "your best's round 5" or "round 5 last time" is: worked out once here,
-        // not per scrub step, because it reads the record board.
-        comparisonKind = reference?.let {
-            if (Comparisons.best(RecordStore(this).all(), attempt)?.atMillis == it.atMillis) {
-                Comparisons.Kind.BEST
-            } else {
-                Comparisons.Kind.LAST
-            }
-        }
         val ticks = RoundSplits.reference(split, reference)
         binding.splits.setReference(ticks)
 
@@ -304,6 +310,198 @@ class ResultsActivity : AppCompatActivity() {
         binding.splitsVersus.setTextColor(
             getColor(if (versus?.faster == true) R.color.state_ok else R.color.label_secondary)
         )
+    }
+
+    /**
+     * Whether this phone can actually draw [emoji]. Asked of the same typeface the emoji are drawn
+     * with, so a "yes" here is a promise about the card and not about some other font: the oldest
+     * phone this app runs on (API 26) predates the hippo, and an empty box in its place would be
+     * worse than a different animal.
+     */
+    private val emojiPaint = Paint().apply { typeface = Typeface.DEFAULT }
+
+    private fun canDraw(emoji: String): Boolean =
+        glyphCheck?.invoke(emoji) ?: emojiPaint.hasGlyph(emoji)
+
+    /**
+     * What the session lifted and burned, as an animal and a cup of tea: one card between the
+     * level and the comparison, or, with no body weight on file, one row inviting the athlete to
+     * enter it. Hidden when there is nothing to say. Cleared first because [render] runs again
+     * when the body weight changes, which is also what turns the invitation into the card.
+     *
+     * Both figures are estimates and the footnote says how each was reached. The animal is picked
+     * by the day the session happened, not today, so reopening it shows the animal it showed
+     * the first time.
+     */
+    private fun liftedCard(a: Attempt) {
+        val holder = binding.lifted
+        holder.removeAllViews()
+        val lifted = Lifted.of(a, profile.bodyWeightKg)
+        // The same call, with the same inputs, as the energy row under SESSION: this card must
+        // never disagree with the number it sits above.
+        val est = Calories.estimate(
+            a.totalReps, a.durationMs, profile.body(), HeartRateStore(this).load(a.atMillis)
+        )
+        if (lifted == null && est == null) {
+            val invite = !profile.hasBodyWeight && (a.durationMs > 0L || Lifted.measurable(a))
+            holder.visibility = if (invite) View.VISIBLE else View.GONE
+            if (invite) {
+                holder.addView(
+                    InsetGroup(this).apply {
+                        row(navRow("Your weight", "Add it to see what you lifted and burned") {
+                            askBodyWeight()
+                        })
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            }
+            return
+        }
+        holder.visibility = View.VISIBLE
+
+        val rotation = Instant.ofEpochMilli(a.atMillis).atZone(ZoneId.systemDefault())
+            .toLocalDate().toEpochDay()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.glass_card)
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            // One sentence for the whole card: its parts are hidden below, and the emoji, which
+            // a screen reader would otherwise name one by one, are never announced on their own.
+            isFocusable = true
+        }
+        // The card is one TalkBack stop, so every child leaves the accessibility tree.
+        fun add(view: View, topDp: Int = 0): View {
+            view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            card.addView(
+                view,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(topDp) }
+            )
+            return view
+        }
+        val spoken = mutableListOf<String>()
+
+        if (lifted != null) {
+            add(eyebrow("YOU LIFTED"))
+            val match = Equivalents.animalFor(lifted.totalKg, rotation, ::canDraw)
+            if (match != null) add(animalRow(match), topDp = 12)
+            add(figure(lifted.kgPrefix, lifted.kgNumber, "kg"), topDp = if (match != null) 8 else 10)
+            spoken += "You lifted ${lifted.kgText().replaceFirstChar { it.lowercase() }}."
+            if (match != null) {
+                val sentence = Equivalents.heavySentence(match, lifted.atLeast)
+                add(styledText(R.style.Cindy_Body, sentence), topDp = 2)
+                spoken += sentence
+            }
+        }
+
+        var energyMethod: String? = null
+        if (est != null) {
+            if (lifted != null) {
+                add(View(this).apply { setBackgroundColor(getColor(R.color.hairline)) }, topDp = 18)
+                    .layoutParams.height = hairlinePx()
+            }
+            add(eyebrow("YOU BURNED"), topDp = if (lifted != null) 18 else 0)
+            val match = Equivalents.energyFor(est.kcal.toDouble(), rotation, ::canDraw)
+            val prefix = if (a.scoreIsLowerBound) "At least" else null
+            val figure = figure(prefix, "${est.kcal}", "kcal")
+            if (match == null) {
+                add(figure, topDp = 10)
+            } else {
+                // The emoji sits at the end of the figure's line, so the sentence under it keeps
+                // the full width of the card.
+                add(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(figure, LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                    ))
+                    addView(emoji(match.reference.emoji, sp = 28f))
+                }, topDp = 10)
+            }
+            spoken += "You burned ${if (prefix != null) "at least " else ""}${est.kcal} kcal."
+            if (match != null) {
+                val sentence = match.reference.sentence(match.count, a.scoreIsLowerBound)
+                add(styledText(R.style.Cindy_Body, sentence), topDp = 2)
+                spoken += sentence
+                energyMethod = match.reference.method
+            }
+        }
+
+        val note = listOfNotNull(
+            lifted?.footnote(tappedIn = a.manualReps > 0),
+            // The energy figure is the one the calories row already explains; this only points at it.
+            if (est != null) {
+                buildString {
+                    append("Energy is the same estimate as the calories row below.")
+                    energyMethod?.let { append(" $it") }
+                    if (lifted == null && a.scoreIsLowerBound) {
+                        append(" The camera lost you for part of this session, so this is a floor.")
+                    }
+                }
+            } else null
+        ).joinToString(" ")
+        add(styledText(R.style.Cindy_Footnote, note), topDp = 16)
+        spoken += note
+
+        card.contentDescription = spoken.joinToString(" ")
+        holder.addView(
+            card,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    /** One animal's emoji, up to [Equivalents.MAX_EMOJI], and a "×9" when there are more of it. */
+    private fun animalRow(match: Equivalents.AnimalMatch): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        repeat(Equivalents.emojiCount(match.count)) { addView(emoji(match.animal.emoji, sp = 36f)) }
+        if (match.count.roundToInt() > Equivalents.MAX_EMOJI) {
+            addView(
+                styledText(R.style.Cindy_MetricS, "×${match.count.roundToInt()}").apply {
+                    setTextColor(getColor(R.color.label_secondary))
+                }.withStartMargin(dp(10))
+            )
+        }
+    }
+
+    /**
+     * An emoji, in the system's own typeface and full colour. This card is the one place in the
+     * app that has colour beyond the accent, deliberately: an animal in monochrome is a glyph.
+     */
+    private fun emoji(text: String, sp: Float): TextView = TextView(this).apply {
+        this.text = text
+        typeface = Typeface.DEFAULT
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+        includeFontPadding = false
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { marginEnd = dp(4) }
+    }
+
+    /**
+     * A big figure with a small word either side: "About **12,940** kg". The qualifier and the
+     * unit drop to half size and a shade, so the number is what the eye lands on.
+     */
+    private fun figure(prefix: String?, number: String, unit: String): TextView {
+        val text = SpannableStringBuilder()
+        fun small(word: String) {
+            val start = text.length
+            text.append(word)
+            text.setSpan(RelativeSizeSpan(0.5f), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(
+                ForegroundColorSpan(getColor(R.color.label_secondary)),
+                start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        if (prefix != null) small("$prefix ")
+        text.append(number)
+        small(" $unit")
+        return styledText(R.style.Cindy_MetricM, text).apply { maxLines = 2 }
     }
 
     /**
@@ -503,6 +701,8 @@ class ResultsActivity : AppCompatActivity() {
             binding.compareTitle.visibility = View.GONE
             binding.compare.visibility = View.GONE
             comparison = null
+            comparisonKind = null
+            // The sections that follow still draw, just with nothing to measure against.
             onComparisonChanged()
             return
         }
@@ -514,10 +714,12 @@ class ResultsActivity : AppCompatActivity() {
         val kept = comparison?.atMillis?.let { prior -> options.firstOrNull { it.attempt.atMillis == prior } }
         val initial = kept ?: options.first()
         comparison = initial.attempt
+        comparisonKind = initial.kind
 
         binding.compare.addView(
             chipRow(options.map { it.label }, options.indexOf(initial)) { i ->
                 comparison = options[i].attempt
+                comparisonKind = options[i].kind
                 onComparisonChanged()
             }.apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -535,10 +737,10 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * Redraws whatever depends on [comparison]: the compare card, and the round splits' ticks.
-     * Later sections of this page hang their own charts here rather than each keeping a
-     * selection of their own. Runs with no comparison too, since a section that does not need
-     * one still has to be drawn; only the card is skipped then.
+     * Redraws whatever depends on [comparison]: the card, and the sections that follow it, which
+     * hang their own charts here rather than each keeping a selection of their own. Runs with no
+     * comparison too, because those sections are still worth drawing without something to
+     * measure against; only the card needs one.
      */
     private fun onComparisonChanged() {
         val reference = comparison
@@ -546,7 +748,102 @@ class ResultsActivity : AppCompatActivity() {
             compareCardHolder.removeAllViews()
             compareCardHolder.addView(comparisonCardView(attempt, reference))
         }
+        renderTimeline()
         splitsComparison()
+    }
+
+    /**
+     * Reps and heart rate across the clock, with what the athlete is touching read out above.
+     * Hidden unless there is a reps line or a heart rate to draw: an empty chart would say less
+     * than none. The same chart view is kept across [render]s and [onComparisonChanged], so a
+     * cursor the athlete left somewhere survives a chip change, and the readout is drawn again
+     * from wherever it is.
+     */
+    private fun renderTimeline() {
+        val a = attempt
+        val reference = comparison
+        val repTimes = RepTimesStore(this)
+        val timeline = SessionTimeline.of(
+            a,
+            marks = repTimes.load(a.atMillis),
+            trace = HeartRateStore(this).load(a.atMillis),
+            reference = reference,
+            referenceKind = comparisonKind,
+            referenceMarks = reference?.let { repTimes.load(it.atMillis) }
+        )
+        val show = if (timeline.hasData) View.VISIBLE else View.GONE
+        binding.timelineTitle.visibility = show
+        binding.timeline.visibility = show
+        if (!timeline.hasData) return
+
+        val chart = binding.timelineChart
+        chart.setLanes(
+            timelineLanes(timeline),
+            timeline.durationMs,
+            roundEndsMs = timeline.roundEnds,
+            stops = timeline.rounds.map {
+                TimelineStop(it.startMs, it.endMs, timeline.describeRound(it))
+            }
+        )
+        chart.contentDescription = "Timeline of this session: " +
+            (if (timeline.reps != null) "reps" else "") +
+            (if (timeline.reps != null && timeline.heartRuns.isNotEmpty()) " and " else "") +
+            (if (timeline.heartRuns.isNotEmpty()) "heart rate" else "") +
+            ", one stop for each round"
+        chart.onSelect = { showTimelineReadout(timeline, it) }
+        showTimelineReadout(timeline, chart.selectedMs)
+
+        val legend = timeline.legend()
+        binding.timelineLegend.text = legend
+        binding.timelineLegend.visibility = if (legend == null) View.GONE else View.VISIBLE
+    }
+
+    private fun showTimelineReadout(timeline: SessionTimeline, clockMs: Long?) {
+        if (clockMs == null) {
+            binding.timelineReadout.text = timeline.idleReadout().title
+            binding.timelineDetail.text = "Drag across the chart to scrub through the session."
+            return
+        }
+        val readout = timeline.readout(timeline.at(clockMs))
+        binding.timelineReadout.text = readout.title
+        binding.timelineDetail.text = readout.detail.orEmpty()
+    }
+
+    /**
+     * The timeline's lanes, in the order they stack. Reps step: a rep is banked and then held, so
+     * a per-set session shows its sets as steps with a dot at each, which says "this much by the
+     * end of that set" and nothing about the reps in between.
+     */
+    private fun timelineLanes(t: SessionTimeline): List<TimelineLane> {
+        val lanes = mutableListOf<TimelineLane>()
+        val reps = t.reps
+        if (reps != null) {
+            lanes += TimelineLane(
+                label = "REPS",
+                colour = getColor(R.color.label),
+                runs = listOf(TimelineRun(reps.points.map { TimelinePoint(it.clockMs, it.reps.toDouble()) })),
+                comparison = t.reference?.reps?.points
+                    ?.map { TimelinePoint(it.clockMs, it.reps.toDouble()) }.orEmpty(),
+                format = { Progress.formatReps(it.roundToInt()) },
+                stepped = true,
+                zeroBased = true,
+                markPoints = !reps.exact,
+                heightDp = 132
+            )
+        }
+        if (t.heartRuns.isNotEmpty()) {
+            lanes += TimelineLane(
+                label = "HEART RATE",
+                colour = getColor(R.color.heart),
+                runs = t.heartRuns.map { run ->
+                    TimelineRun(run.map { TimelinePoint(it.clockMs, it.bpm.toDouble()) })
+                },
+                format = { "${it.roundToInt()}" },
+                holdMs = Calories.MAX_HOLD_MS,
+                heightDp = 88
+            )
+        }
+        return lanes
     }
 
     /** The reference session and the delta, as one tappable card that opens it in review. */
