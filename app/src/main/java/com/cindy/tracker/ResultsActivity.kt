@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** What just happened: score, rank, pace, and how the rounds actually went. */
 class ResultsActivity : AppCompatActivity() {
