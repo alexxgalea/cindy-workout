@@ -516,7 +516,7 @@ denied the row says "Blocked". Nothing leaves the phone. See
 #### Set times
 
 The workout clock also times each set. Pauses are excluded and getting into position is
-included, as they are for round splits. The results screen shows where a round's time went, per movement. Peaks
+included, as they are for round splits. The results screen shows where a round's time went, per movement. Each round's bar is stacked by movement, and a tap or a drag across the bars reads one round out against the same round in your best or last time. Peaks
 include the fastest 5 pull-ups, 10 push-ups and 15 squats, taken only from sets where the camera
 saw every rep and the set reached its target.
 
