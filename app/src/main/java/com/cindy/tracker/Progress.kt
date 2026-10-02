@@ -15,11 +15,6 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-/** One movement's share of a round. */
-data class MovementShare(
-    val movement: Exercise, val label: String, val avgMs: Long, val share: Double
-)
-
 /** What the progress chart can plot. */
 enum class ProgressMetric(val label: String) { SCORE("Score"), PACE("Pace"), VOLUME("Volume") }
 
@@ -192,32 +187,6 @@ object Progress {
             lastWeek = period { !it.isBefore(lastStart) && it.isBefore(thisStart) },
             thisMonth = period { YearMonth.from(it) == month }
         )
-    }
-
-    /**
-     * Average complete set per movement and its share of the three; empty unless all three have
-     * one. Tapped reps are allowed: this describes the session, it is not a record.
-     */
-    fun movementBreakdown(attempt: Attempt): List<MovementShare> {
-        val averages = Exercise.entries.map { movement ->
-            attempt.setSplits.filter { it.movement == movement && it.complete }
-                .map { it.ms }.takeIf { it.isNotEmpty() }?.average() ?: return emptyList()
-        }
-        val total = averages.sum()
-        if (total <= 0.0) return emptyList()
-        val profile = attempt.profile
-        return Exercise.entries.mapIndexed { i, movement ->
-            val plural = when {
-                profile == null -> movement.label.lowercase()
-                movement == Exercise.PULLUP -> profile.pull.plural
-                movement == Exercise.PUSHUP -> profile.push.plural
-                else -> profile.squat.plural
-            }
-            MovementShare(
-                movement, "${movement.target} $plural", averages[i].roundToInt().toLong(),
-                averages[i] / total
-            )
-        }
     }
 
     /** Round axis values in 1-2-5 steps that cover [min]..[max]. */

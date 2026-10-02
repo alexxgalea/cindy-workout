@@ -74,6 +74,50 @@
             android:paddingVertical="16dp"
             android:visibility="gone" />
 
+        <!-- The session in numbers: six tiles, a pill per round, and what each movement came to. Built in code. -->
+        <LinearLayout
+            android:id="@+id/tiles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/trackTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="ROUND BY ROUND"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/track"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/movementsTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="MOVEMENTS"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/movements"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
         <!-- ── the rung, and what the next one costs ── -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -159,40 +203,6 @@
             android:visibility="gone" />
 
         <TextView
-            android:id="@+id/statsTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="SESSION" />
-
-        <LinearLayout
-            android:id="@+id/stats"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-
-        <TextView
-            android:id="@+id/movementsTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="MOVEMENTS"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/movements"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <TextView
             android:id="@+id/splitsTitle"
             style="@style/Cindy.Eyebrow"
             android:layout_width="wrap_content"
@@ -217,10 +227,27 @@
             android:layout_marginTop="10dp"
             android:layout_marginStart="4dp" />
 
+        <TextView
+            android:id="@+id/statsTitle"
+            style="@style/Cindy.Eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="4dp"
+            android:text="DETAILS" />
+
+        <LinearLayout
+            android:id="@+id/stats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
         <LinearLayout
             android:id="@+id/actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_6"
             android:orientation="horizontal" />
     </LinearLayout>
 </ScrollView>
