@@ -68,8 +68,19 @@ data class Moment(
     /** The latest round both sessions had finished by [clockMs]. */
     val aheadRound: Int?,
     /** That round's end in the reference minus its end here: positive is ahead, or faster. */
-    val aheadMs: Long?
+    val aheadMs: Long?,
+    /** Estimated kilocalories burned by [clockMs], or null with no calorie line. */
+    val kcal: Int? = null,
+    /** True when [kcal] includes stretches estimated from the reps, so it is a floor on a lower-bound score. */
+    val kcalFromReps: Boolean = false
 )
+
+/**
+ * One stretch of the calorie line that is all one kind: measured by a heart rate, or estimated
+ * from the work rate. Runs share their boundary point, so drawn one after another they read as a
+ * single line that changes style where its source changes.
+ */
+class CalorieRun(val points: List<CaloriePoint>, val estimated: Boolean)
 
 /** The two lines above the chart; [detail] is null when there is nothing to add to [title]. */
 data class Readout(val title: String, val detail: String?)
@@ -94,7 +105,12 @@ class SessionTimeline private constructor(
     val rounds: List<RoundSpan>,
     /** Heart-rate samples, broken wherever the watch went quiet for longer than it could be held. */
     val heartRuns: List<List<HeartRateSample>>,
-    val reference: ReferenceTimeline?
+    val reference: ReferenceTimeline?,
+    /**
+     * Cumulative estimated kilocalories, from [Calories.timeline]; empty without a body weight.
+     * An estimate throughout, which is why every place it is worded says so.
+     */
+    val calories: List<CaloriePoint> = emptyList()
 ) {
 
     val durationMs: Long get() = attempt.durationMs
@@ -103,6 +119,43 @@ class SessionTimeline private constructor(
     val hasData: Boolean get() = durationMs > 0L && (reps != null || heartRuns.isNotEmpty())
 
     private val heart: List<HeartRateSample> = heartRuns.flatten()
+
+    /** [calories] cut into stretches of one kind each, in clock order; empty for no line. */
+    val calorieRuns: List<CalorieRun> = calorieRuns(calories)
+
+    /**
+     * Kilocalories at [clockMs], by the straight line between the two points either side: each
+     * stretch was built from one rate held across it, so a line between its ends is the estimate
+     * itself rather than a smoothing of it. Null with no calorie line.
+     */
+    private fun kcalAt(clockMs: Long): Double? {
+        if (calories.isEmpty()) return null
+        val i = calories.indexOfFirst { it.clockMs >= clockMs }
+        if (i < 0) return calories.last().kcal
+        if (i == 0) return calories[0].kcal
+        val a = calories[i - 1]
+        val b = calories[i]
+        return a.kcal + (b.kcal - a.kcal) * (clockMs - a.clockMs).toDouble() / (b.clockMs - a.clockMs)
+    }
+
+    /** Whether any stretch before [clockMs] was estimated from the reps rather than a heart rate. */
+    private fun repsEstimatedBy(clockMs: Long): Boolean {
+        for (i in 1 until calories.size) {
+            if (calories[i - 1].clockMs >= clockMs) break
+            if (!calories[i].fromHeartRate) return true
+        }
+        return false
+    }
+
+    /**
+     * "at least 84 kcal (est.)" or "84 kcal (est.)"; [spoken] writes it for TalkBack, which would
+     * otherwise read "kcal" as a word. "At least" when the score is a lower bound and any of the
+     * figure comes from the reps: missing reps can only have lowered that part.
+     */
+    private fun kcalPhrase(kcal: Int, fromReps: Boolean, spoken: Boolean = false): String {
+        val floor = if (attempt.scoreIsLowerBound && fromReps) "at least " else ""
+        return if (spoken) "$floor$kcal kilocalories, estimated" else "$floor$kcal kcal (est.)"
+    }
 
     /** The latest sample no more than [Calories.MAX_HOLD_MS] before [clockMs]; none otherwise. */
     private fun bpmAt(clockMs: Long): Int? {
@@ -135,6 +188,7 @@ class SessionTimeline private constructor(
         val finishedThere = reference?.roundEnds?.count { it <= t } ?: 0
         val common = minOf(finishedHere, finishedThere)
         val ahead = if (common >= 1) aheadOfReference(common) else null
+        val kcal = kcalAt(t)
         return Moment(
             clockMs = t,
             round = round,
@@ -143,7 +197,9 @@ class SessionTimeline private constructor(
             manualReps = point?.manualReps ?: 0,
             bpm = bpmAt(t),
             aheadRound = if (ahead != null) common else null,
-            aheadMs = ahead
+            aheadMs = ahead,
+            kcal = kcal?.let { Math.round(it).toInt() },
+            kcalFromReps = kcal != null && repsEstimatedBy(t)
         )
     }
 
@@ -205,6 +261,7 @@ class SessionTimeline private constructor(
         val parts = listOfNotNull(
             m.reps?.let { repsPhrase(it, m.manualReps) },
             m.bpm?.let { "$it bpm" },
+            m.kcal?.let { kcalPhrase(it, m.kcalFromReps) },
             m.aheadMs?.let { "round ${m.aheadRound}: ${aheadPhrase(it, spoken = false)}" }
         )
         return Readout(title, parts.joinToString(" · ").ifEmpty { null })
@@ -227,6 +284,10 @@ class SessionTimeline private constructor(
             parts += "${repsPhrase(it.reps, it.manualReps)} by ${if (round.complete) "its" else "the"} end"
         }
         averageBpm(round.startMs, round.endMs)?.let { parts += "$it beats per minute on average" }
+        kcalAt(round.endMs)?.let {
+            parts += "${kcalPhrase(Math.round(it).toInt(), repsEstimatedBy(round.endMs), spoken = true)}, " +
+                "by ${if (round.complete) "its" else "the"} end"
+        }
         if (round.complete) aheadOfReference(round.number)?.let { parts += aheadPhrase(it, spoken = true) }
         return parts.joinToString(", ")
     }
@@ -250,10 +311,56 @@ class SessionTimeline private constructor(
             theirs -> parts += "Reps are plotted per set for ${ref!!.phrase}."
         }
         if (manualInSession) parts += "Reps added by hand count, but the camera did not see them."
+        calorieLegend()?.let { parts += it }
         return parts.joinToString(" ").ifEmpty { null }
     }
 
+    /**
+     * What the calorie line is, and what its dashes mean on that lane, where they are not the
+     * reference's. Without a body weight there is no line and nothing to say.
+     */
+    private fun calorieLegend(): String? {
+        if (calorieRuns.isEmpty()) return null
+        val fromReps = calorieRuns.any { it.estimated }
+        val lowerBound = if (attempt.scoreIsLowerBound) {
+            ", and since some reps may be missing, those read as at least"
+        } else {
+            ""
+        }
+        val what = when {
+            !fromReps -> "KCAL is an estimate from your heart rate"
+            calorieRuns.any { !it.estimated } ->
+                "KCAL is an estimate; its dashed stretches come from your reps, not your heart rate$lowerBound"
+            else -> "KCAL is an estimate from your reps$lowerBound"
+        }
+        // The method is written once, on the row that totals it, and pointed at from here.
+        return "$what. The Calories (est.) row below says how."
+    }
+
     companion object {
+
+        /**
+         * Cuts [points] into runs by whether the stretch ending at each point was measured. Two
+         * neighbouring stretches of one kind are one run, and a run starts at the point the
+         * previous one ended on, so the line has no break where its style changes.
+         */
+        internal fun calorieRuns(points: List<CaloriePoint>): List<CalorieRun> {
+            if (points.size < 2) return emptyList()
+            val runs = mutableListOf<CalorieRun>()
+            var current = mutableListOf(points[0])
+            var estimated = !points[1].fromHeartRate
+            for (i in 1 until points.size) {
+                val p = points[i]
+                if (!p.fromHeartRate != estimated) {
+                    runs += CalorieRun(current, estimated)
+                    current = mutableListOf(points[i - 1])
+                    estimated = !p.fromHeartRate
+                }
+                current += p
+            }
+            runs += CalorieRun(current, estimated)
+            return runs
+        }
 
         /**
          * [marks] and [referenceMarks] are whatever [RepTimesStore.load] answered for each
@@ -266,7 +373,8 @@ class SessionTimeline private constructor(
             trace: HeartRateTrace?,
             reference: Attempt? = null,
             referenceKind: Comparisons.Kind? = null,
-            referenceMarks: List<RepMark>? = null
+            referenceMarks: List<RepMark>? = null,
+            calories: List<CaloriePoint> = emptyList()
         ): SessionTimeline {
             val ends = roundEnds(attempt)
             val sets = setSpans(attempt)
@@ -280,7 +388,8 @@ class SessionTimeline private constructor(
                 reference = if (reference == null || referenceKind == null) null
                 else ReferenceTimeline(
                     referenceKind, repSeries(reference, referenceMarks), roundEnds(reference)
-                )
+                ),
+                calories = calories
             )
         }
 

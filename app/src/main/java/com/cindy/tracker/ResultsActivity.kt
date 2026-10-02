@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
@@ -232,6 +233,7 @@ class ResultsActivity : AppCompatActivity() {
         binding.stats.addView(group)
 
         roundSplits(a)
+        renderHeartRate(a)
     }
 
     /**
@@ -763,13 +765,16 @@ class ResultsActivity : AppCompatActivity() {
         val a = attempt
         val reference = comparison
         val repTimes = RepTimesStore(this)
+        val trace = HeartRateStore(this).load(a.atMillis)
         val timeline = SessionTimeline.of(
             a,
             marks = repTimes.load(a.atMillis),
-            trace = HeartRateStore(this).load(a.atMillis),
+            trace = trace,
             reference = reference,
             referenceKind = comparisonKind,
-            referenceMarks = reference?.let { repTimes.load(it.atMillis) }
+            referenceMarks = reference?.let { repTimes.load(it.atMillis) },
+            // Empty without a body weight, which hides the lane rather than guessing a weight.
+            calories = Calories.timeline(a.totalReps, a.durationMs, profile.body(), trace)
         )
         val show = if (timeline.hasData) View.VISIBLE else View.GONE
         binding.timelineTitle.visibility = show
@@ -786,9 +791,11 @@ class ResultsActivity : AppCompatActivity() {
             }
         )
         chart.contentDescription = "Timeline of this session: " +
-            (if (timeline.reps != null) "reps" else "") +
-            (if (timeline.reps != null && timeline.heartRuns.isNotEmpty()) " and " else "") +
-            (if (timeline.heartRuns.isNotEmpty()) "heart rate" else "") +
+            listOfNotNull(
+                "reps".takeIf { timeline.reps != null },
+                "heart rate".takeIf { timeline.heartRuns.isNotEmpty() },
+                "estimated calories".takeIf { timeline.calorieRuns.isNotEmpty() }
+            ).joinToString(", ").replace(Regex(", ([^,]*)$"), " and $1") +
             ", one stop for each round"
         chart.onSelect = { showTimelineReadout(timeline, it) }
         showTimelineReadout(timeline, chart.selectedMs)
@@ -843,8 +850,209 @@ class ResultsActivity : AppCompatActivity() {
                 heightDp = 88
             )
         }
+        if (t.calorieRuns.isNotEmpty()) {
+            // Solid where a heart rate measured the stretch and dashed where the reps estimated
+            // it, so the line says for itself how far to trust each part. Not the heart colour:
+            // this is energy, and that colour is reserved for the pulse.
+            lanes += TimelineLane(
+                label = "KCAL (EST.)",
+                colour = getColor(R.color.label_secondary),
+                runs = t.calorieRuns.map { run ->
+                    TimelineRun(run.points.map { TimelinePoint(it.clockMs, it.kcal) }, dashed = run.estimated)
+                },
+                format = { "${it.roundToInt()}" },
+                zeroBased = true,
+                interpolate = true,
+                heightDp = 88
+            )
+        }
         return lanes
     }
+
+    /**
+     * Average, maximum and coverage, the zones the time was spent in, the hardest round and a
+     * line on what that adds up to. Hidden unless a watch covered some of the clock: an empty card
+     * would say less than none. Cleared first because [render] runs again when the body weight or
+     * the heart-rate details change, and the latter is exactly what turns the zones on.
+     *
+     * Without an age on file there are no zones, because they are shares of a maximum worked out
+     * from it; the card says so and offers the sheet that asks, rather than guessing an age.
+     */
+    private fun renderHeartRate(a: Attempt) {
+        binding.heart.removeAllViews()
+        val rounds = SessionTimeline.roundSpans(a, SessionTimeline.roundEnds(a)).filter { it.complete }
+        val summary = HeartRateStats.of(
+            HeartRateStore(this).load(a.atMillis), a.durationMs, rounds, profile.age()
+        )
+        val show = if (summary == null) View.GONE else View.VISIBLE
+        binding.heartTitle.visibility = show
+        binding.heart.visibility = show
+        if (summary == null) return
+
+        val group = InsetGroup(this)
+        group.row(heartFigures(summary))
+        val zones = summary.zones
+        if (zones != null) {
+            group.row(zoneBlock(zones, summary.coveredMs))
+        } else {
+            group.row(navRow("Heart-rate zones", "Add your birth year to see them") { askHeartRateDetails() })
+        }
+        summary.hardestRound?.let { r ->
+            group.row(heartRow("Hardest round", "Round ${r.number} · ${r.avgBpm} bpm avg").apply {
+                contentDescription = "Hardest round, round ${r.number}, ${r.avgBpm} beats per minute on average"
+            })
+        }
+        summary.verdict?.let { v ->
+            group.row(styledText(R.style.Cindy_Callout, v).apply {
+                setPadding(dp(18), dp(14), dp(18), dp(14))
+            })
+        }
+        val method = summary.estimatedMaxBpm?.let { max ->
+            "Zones are an estimate: shares of a maximum worked out from your age as 208 − 0.7 × age " +
+                "(Tanaka), $max bpm for you, not one measured. A reading above it counts as Maximum. "
+        }.orEmpty()
+        group.attach(styledText(
+            R.style.Cindy_Footnote,
+            method + "Average and maximum count only the time your watch covered, and a watch can " +
+                "lag your actual effort by a few seconds."
+        ).apply {
+            textSize = 11f
+            setPadding(dp(18), dp(4), dp(18), dp(14))
+        })
+        binding.heart.addView(
+            group,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+    }
+
+    /** A figure in tabular numerals, at a size a row can hold. */
+    private fun metricText(text: String, sizeSp: Float, colour: Int = R.color.label): TextView =
+        styledText(R.style.Cindy_MetricS, text).apply {
+            textSize = sizeSp
+            setTextColor(getColor(colour))
+        }
+
+    /** A label and a figure on one line, read as one sentence. */
+    private fun heartRow(label: String, value: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(52)
+        setPadding(dp(18), dp(14), dp(16), dp(14))
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        contentDescription = "$label, $value"
+        addView(styledText(R.style.Cindy_Body, label).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        })
+        addView(metricText(value, 16f).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        })
+    }
+
+    /** Average, maximum and how much of the clock the watch covered: three figures, one row. */
+    private fun heartFigures(s: HeartRateSummary): View {
+        fun column(label: String, value: String, unit: String, spoken: String) =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                contentDescription = spoken
+                addView(eyebrow(label).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO })
+                addView(metricText(value, 28f).apply {
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    setPadding(0, dp(4), 0, 0)
+                })
+                addView(styledText(R.style.Cindy_Footnote, unit).apply {
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                })
+            }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            addView(column("AVERAGE", "${s.avgBpm}", "bpm", "Average heart rate, ${s.avgBpm} beats per minute"))
+            addView(column("MAXIMUM", "${s.maxBpm}", "bpm", "Maximum heart rate, ${s.maxBpm} beats per minute"))
+            addView(column(
+                "COVERED", formatDuration(s.coveredMs), "of ${formatDuration(s.durationMs)}",
+                "Your watch covered ${SessionTimeline.spokenDuration(s.coveredMs)} of " +
+                    SessionTimeline.spokenDuration(s.durationMs)
+            ))
+        }
+    }
+
+    /**
+     * The zone bar and a row under it for every zone, so all five are named even when one has no
+     * time. Holding a zone on the bar lifts its row; the rows are not controls of their own, so
+     * TalkBack meets each zone once, on the bar.
+     */
+    private fun zoneBlock(zones: List<ZoneTime>, coveredMs: Long): View {
+        val rows = zones.map { z -> zoneRow(z) }
+        fun spoken(z: ZoneTime): String {
+            val share = if (coveredMs > 0L) (z.ms * 100.0 / coveredMs).roundToInt() else 0
+            val range = when {
+                z.fromBpm == null -> "under ${z.toBpm!! + 1}"
+                z.toBpm == null -> "${z.fromBpm} and over"
+                else -> "${z.fromBpm} to ${z.toBpm}"
+            }
+            return "${z.zone.short} ${z.zone.label}, ${SessionTimeline.spokenDuration(z.ms)}, " +
+                "$share percent of covered time, $range beats per minute"
+        }
+        val bar = ZoneBarView(this).apply {
+            contentDescription = "Time in each heart-rate zone, one stop for each zone with time in it"
+            setZones(zones, zones.map { spoken(it) })
+            onSelect = { held ->
+                rows.forEachIndexed { i, row ->
+                    row.setBackgroundColor(if (i == held) getColor(R.color.surface_glass_raised) else 0)
+                }
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(dp(18), dp(2), dp(18), dp(6)) }
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(10), 0, dp(8))
+            addView(eyebrow("TIME IN ZONE").withStartMargin(dp(18)))
+            addView(bar)
+            rows.forEach { addView(it) }
+        }
+    }
+
+    private fun zoneRow(z: ZoneTime): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(40)
+        setPadding(dp(18), dp(6), dp(18), dp(6))
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        addView(View(context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpf(3f)
+                setColor(getColor(R.color.heart).withAlpha(ZoneBarView.ALPHA[z.zone.ordinal]))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(10), dp(10))
+        })
+        addView(styledText(R.style.Cindy_Body, "${z.zone.short} ${z.zone.label}").apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = dp(12) }
+        })
+        addView(metricText(formatDuration(z.ms), 15f).apply {
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT)
+        })
+        val range = when {
+            z.fromBpm == null -> "under ${z.toBpm!! + 1}"
+            z.toBpm == null -> "${z.fromBpm}+"
+            else -> "${z.fromBpm}–${z.toBpm}"
+        }
+        addView(metricText("$range bpm", 13f, R.color.label_tertiary).apply {
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(dp(98), ViewGroup.LayoutParams.WRAP_CONTENT)
+        })
+    }
+
+    private fun Int.withAlpha(alpha: Float): Int = (this and 0x00FFFFFF) or ((alpha * 255f).roundToInt() shl 24)
 
     /** The reference session and the delta, as one tappable card that opens it in review. */
     private fun comparisonCardView(a: Attempt, reference: Attempt): View {

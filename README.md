@@ -333,11 +333,36 @@ where it was validated. Any minute the watch did not cover — no watch paired, 
 reading outside a plausible range — falls back to the MET model for exactly that stretch, and the
 results screen says which parts came from which.
 
+The session page shows the pulse itself, not only what it cost. A calories line joins the
+timeline once a body weight is on file: the running total of the same estimate as the Calories
+row, solid where the watch measured a stretch and dashed where the reps estimated it, with its
+legend saying so. Its last point is that row's figure by construction, because it walks the same
+loop in the same order rather than approximating it, and a session whose score is a lower bound
+reads "at least" wherever the figure leans on the reps. Below the round splits a heart-rate card
+gives the average and maximum, how much of the workout the watch covered, the time spent in each
+of five zones (a bar you can touch, and a row for each), the hardest round, and one line naming
+the zone that held the most time. Average, maximum and zone time are time-weighted over the same
+coverage rule as the calorie estimate: a reading holds until the next one, for at most five
+seconds, and a stretch no reading covers is left out rather than averaged in as zero or as the
+last reading carried on. The hardest round is the finished round with the highest average among
+those the watch saw for at least thirty seconds. The whole card is hidden without a trace, and an
+old session with none shows nothing rather than a guess.
+
+Zones are percentages of a maximum heart rate worked out from age with Tanaka et al.'s
+`208 - 0.7 x age` (2001), which fits across ages better than `220 - age`: under 60% is Warm-up,
+then Easy, Aerobic, Threshold, and 90% and over is Maximum, with each zone's bpm range printed
+beside it. That maximum is an estimate and the card says so, as it says that a watch can lag the
+effort by a few seconds. Zones need the age, so without one the card keeps its figures and offers
+the same sheet as the calories row instead of guessing. See
+[HeartRateStats.kt](app/src/main/java/com/cindy/tracker/HeartRateStats.kt) and
+[ZoneBarView.kt](app/src/main/java/com/cindy/tracker/ZoneBarView.kt).
+
 The formula needs a birth year and a sex beyond body weight, asked for separately in the same
 sheet: a birth year rather than an age, because an age goes stale the moment it is typed, and a
 third sex option that averages the other two rather than assuming one for someone who has not
 said. Both are asked only here, not beside body weight, because the MET model has no use for them
-and a setting nobody reads should not be asked for on that account alone.
+and a setting nobody reads should not be asked for on that account alone. The zones use the
+birth year too, and the sheet says so.
 
 Bluetooth needs a runtime permission either way; which one depends on the phone. Android 12 and
 newer ask for Bluetooth's own scan and connect permissions. Android 11 and older instead ask for
