@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
 
@@ -179,6 +180,34 @@ class ScreenSmokeTest {
         if (root is android.view.ViewGroup) {
             for (i in 0 until root.childCount) {
                 findByDescriptionPrefix(root.getChildAt(i), prefix)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** The first view under [root] whose contentDescription contains [substring]. */
+    private fun findByDescriptionContains(
+        root: android.view.View, substring: String
+    ): android.view.View? {
+        if (root.contentDescription?.toString()?.contains(substring) == true) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findByDescriptionContains(root.getChildAt(i), substring)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** The first view of type [T] under [root]; for a custom view with no id of its own. */
+    private inline fun <reified T : android.view.View> firstOfType(root: android.view.View): T? =
+        @Suppress("UNCHECKED_CAST") (firstOfClass(root, T::class.java) as? T)
+
+    /** [firstOfType]'s recursion, kept out of the inline function since that cannot call itself. */
+    private fun firstOfClass(root: android.view.View, cls: Class<*>): android.view.View? {
+        if (cls.isInstance(root)) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                firstOfClass(root.getChildAt(i), cls)?.let { return it }
             }
         }
         return null
@@ -747,5 +776,223 @@ class ScreenSmokeTest {
         profile.bodyWeightKg = 0.0
         profile.birthYear = 0
         profile.sex = null
+    }
+
+    // ── reopening a session from Progress ───────────────────────────────────
+
+    @Test
+    fun `reopening a saved session shows its date and time, and a single DONE`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 12,
+            reps = 3,
+            atMillis = System.currentTimeMillis() - 2L * 24 * 60 * 60 * 1000,
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, attempt.atMillis)
+        ).setup().get()
+
+        val headline = activity.findViewById<android.widget.TextView>(R.id.headline).text.toString()
+        assertTrue("headline was not a date: $headline", headline != "TIME" && headline != "STOPPED")
+        val actions = activity.findViewById<android.view.ViewGroup>(R.id.actions)
+        assertEquals("review mode should offer only DONE", 1, actions.childCount)
+        assertEquals("DONE", (actions.getChildAt(0) as android.widget.TextView).text.toString())
+        assertTrue(
+            "the streak row describes today, not the reviewed day",
+            findByText(activity.findViewById(R.id.stats), "Streak") == null
+        )
+
+        activity.finish()
+        store.clear()
+    }
+
+    @Test
+    fun `a review intent for a session no longer on the board finishes`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, 123_456_789L)
+        ).setup().get()
+        assertTrue("did not finish", activity.isFinishing)
+    }
+
+    @Test
+    fun `the compare card is hidden without an earlier session at the same movements`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 10,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.GONE,
+            activity.findViewById<android.view.View>(R.id.compareTitle).visibility
+        )
+        assertEquals(
+            android.view.View.GONE,
+            activity.findViewById<android.view.View>(R.id.compare).visibility
+        )
+
+        activity.finish()
+        store.clear()
+    }
+
+    /** The card appears with an earlier session at the same movements, and tapping it opens it. */
+    @Test
+    fun `the compare card shows an earlier session and opens it when tapped`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val earlier = Attempt(
+            rounds = 8,
+            reps = 0,
+            atMillis = System.currentTimeMillis() - 2L * 24 * 60 * 60 * 1000,
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(earlier)
+        val attempt = Attempt(
+            rounds = 10,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+
+        assertEquals(
+            android.view.View.VISIBLE,
+            activity.findViewById<android.view.View>(R.id.compareTitle).visibility
+        )
+        val compare = activity.findViewById<android.view.View>(R.id.compare)
+        assertEquals(android.view.View.VISIBLE, compare.visibility)
+
+        val card = findByDescriptionContains(compare, "${Progress.formatReps(earlier.totalReps)} reps")
+        assertTrue("no comparison card for the earlier session", card != null)
+        card!!.performClick()
+
+        val started = Shadows.shadowOf(activity).nextStartedActivity
+        assertEquals(ResultsActivity::class.java.name, started.component?.className)
+        val reopened = Robolectric.buildActivity(ResultsActivity::class.java, started).setup().get()
+        assertEquals("8", reopened.findViewById<android.widget.TextView>(R.id.score).text.toString())
+
+        reopened.finish()
+        activity.finish()
+        store.clear()
+    }
+
+    @Test
+    fun `tapping a leaderboard row opens that session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 9,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+
+        val row = findByDescriptionContains(root, "You, 9")
+        assertTrue("no leaderboard row for the session", row != null)
+        row!!.performClick()
+
+        val started = Shadows.shadowOf(activity).nextStartedActivity
+        assertEquals(ResultsActivity::class.java.name, started.component?.className)
+        val reopened = Robolectric.buildActivity(ResultsActivity::class.java, started).setup().get()
+        assertEquals("9", reopened.findViewById<android.widget.TextView>(R.id.score).text.toString())
+
+        reopened.finish()
+        store.clear()
+    }
+
+    @Test
+    fun `tapping a day-sheet row opens that session and dismisses the sheet`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val attempt = Attempt(
+            rounds = 11,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        store.add(attempt)
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        activity.openDay(java.time.LocalDate.now())
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+
+        val row = findByDescriptionContains(dialog!!.window!!.decorView, "11 ·")
+        assertTrue("no day-sheet row for the session", row != null)
+        row!!.performClick()
+
+        assertTrue("the sheet did not dismiss", !dialog.isShowing)
+        val started = Shadows.shadowOf(activity).nextStartedActivity
+        assertEquals(ResultsActivity::class.java.name, started.component?.className)
+        val reopened = Robolectric.buildActivity(ResultsActivity::class.java, started).setup().get()
+        assertEquals("11", reopened.findViewById<android.widget.TextView>(R.id.score).text.toString())
+
+        reopened.finish()
+        store.clear()
+    }
+
+    @Test
+    fun `the chart's OPEN button opens the selected session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        val older = Attempt(
+            rounds = 10, reps = 0, atMillis = now - day,
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        val newer = Attempt(
+            rounds = 12, reps = 0, atMillis = now,
+            durationMs = 20 * 60 * 1000L, profile = CindyProfile.STANDARD
+        )
+        store.add(older)
+        store.add(newer)
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        val chart = firstOfType<ProgressChartView>(root)
+        assertTrue("no progress chart", chart != null)
+
+        // The default metric (Score) sorts its points oldest first, so index 0 is `older`.
+        chart!!.select(0)
+        val openButton = findByText(root, "OPEN")
+        assertTrue("no OPEN button after selecting a point", openButton != null)
+        assertEquals(android.view.View.VISIBLE, openButton!!.visibility)
+        openButton.performClick()
+
+        val started = Shadows.shadowOf(activity).nextStartedActivity
+        assertEquals(ResultsActivity::class.java.name, started.component?.className)
+        val reopened = Robolectric.buildActivity(ResultsActivity::class.java, started).setup().get()
+        assertEquals("10", reopened.findViewById<android.widget.TextView>(R.id.score).text.toString())
+
+        reopened.finish()
+        store.clear()
     }
 }

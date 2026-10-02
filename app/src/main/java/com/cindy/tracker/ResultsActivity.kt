@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
@@ -19,9 +20,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.work.WorkManager
 import com.cindy.tracker.databinding.ActivityResultsBinding
+import java.text.SimpleDateFormat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -32,6 +37,7 @@ class ResultsActivity : AppCompatActivity() {
         private const val EXTRA_ATTEMPT = "attempt"
         private const val EXTRA_STOPPED = "stopped"
         private const val EXTRA_HEELS_FLAT = "heels_flat_spotted"
+        private const val EXTRA_REVIEW_AT = "review_at"
 
         /** The width of the icon at the start of a celebration row, so the text lines up. */
         private const val ICON_SLOT_DP = 36
@@ -67,6 +73,21 @@ class ResultsActivity : AppCompatActivity() {
                 putExtra(EXTRA_STOPPED, stoppedEarly)
                 putExtra(EXTRA_HEELS_FLAT, heelsFlatSpotted)
             }
+
+        /**
+         * Reopens a session already on the record board — from the leaderboard, a day in the
+         * calendar, or a selected point on the progress chart — rather than the one a workout
+         * just finished with.
+         *
+         * [atMillis] is the key [RecordStore] already files the attempt under, so there is
+         * nothing of its own to encode: the session is read back by it in [onCreate]. A
+         * timestamp nothing on the board matches — the board was cleared while this intent was
+         * already in flight — finishes rather than showing an empty page.
+         */
+        fun review(context: Context, atMillis: Long): Intent =
+            Intent(context, ResultsActivity::class.java).apply {
+                putExtra(EXTRA_REVIEW_AT, atMillis)
+            }
     }
 
     private lateinit var binding: ActivityResultsBinding
@@ -74,6 +95,11 @@ class ResultsActivity : AppCompatActivity() {
     private lateinit var attempt: Attempt
     private var stoppedEarly = false
     private var heelsFlatSpotted = false
+    /** True once this screen is reopening a saved session rather than ending a live one. */
+    private var reviewing = false
+    /** What this session is measured against; the one field later sections also hang off. */
+    private var comparison: Attempt? = null
+    private lateinit var compareCardHolder: FrameLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,26 +107,50 @@ class ResultsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         profile = Profile(this)
-        // Nothing to report on without one, and inventing an empty score to show instead would
-        // be the same lie in a different place.
-        attempt = Records.decode(intent.getStringExtra(EXTRA_ATTEMPT)).firstOrNull() ?: run {
-            finish()
-            return
+        reviewing = intent.hasExtra(EXTRA_REVIEW_AT)
+        attempt = if (reviewing) {
+            val atMillis = intent.getLongExtra(EXTRA_REVIEW_AT, -1L)
+            RecordStore(this).all().firstOrNull { it.atMillis == atMillis } ?: run {
+                finish()
+                return
+            }
+        } else {
+            // Nothing to report on without one, and inventing an empty score to show instead
+            // would be the same lie in a different place.
+            Records.decode(intent.getStringExtra(EXTRA_ATTEMPT)).firstOrNull() ?: run {
+                finish()
+                return
+            }
         }
-        stoppedEarly = intent.getBooleanExtra(EXTRA_STOPPED, false)
-        heelsFlatSpotted = intent.getBooleanExtra(EXTRA_HEELS_FLAT, false)
+        // Neither extra exists on a review intent; reading them without the guard would answer
+        // with their defaults anyway, but saying so here is the honest version of that accident.
+        stoppedEarly = !reviewing && intent.getBooleanExtra(EXTRA_STOPPED, false)
+        heelsFlatSpotted = !reviewing && intent.getBooleanExtra(EXTRA_HEELS_FLAT, false)
 
-        binding.actions.addView(glassButton("PROGRESS").apply {
-            setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
-        })
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
+        if (reviewing) {
+            // Reopened from Progress, which is where this came from — PROGRESS would be a way
+            // back to a page already behind this one.
+            binding.actions.addView(primaryButton("DONE").apply {
+                setOnClickListener { finish() }
+            })
+        } else {
+            binding.actions.addView(glassButton("PROGRESS").apply {
+                setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
+            })
+            binding.actions.addView(primaryButton("DONE").apply {
+                setOnClickListener { finish() }
+            })
+        }
         render(attempt, stoppedEarly)
     }
 
     private fun render(a: Attempt, stopped: Boolean) {
-        binding.headline.text = if (stopped) "STOPPED" else "TIME"
+        val zone = ZoneId.systemDefault()
+        binding.headline.text = when {
+            reviewing -> reviewHeadline(a, zone)
+            stopped -> "STOPPED"
+            else -> "TIME"
+        }
 
         // Rounds are the score; loose reps are a footnote on it, so they drop a weight and a
         // shade rather than sitting in the same 72sp as the number that matters.
@@ -108,11 +158,11 @@ class ResultsActivity : AppCompatActivity() {
         binding.scoreReps.visibility = if (a.reps > 0) View.VISIBLE else View.GONE
         if (a.reps > 0) binding.scoreReps.text = "+${a.reps}"
 
-        // The record this score was actually chasing: the best previous attempt at the same
-        // movements. Ranking it against a different prescription would flatter or insult it
-        // depending only on which way the difficulty happened to fall.
-        val all = RecordStore(this).all()
-        val previousBest = Records.personalRecord(all, a)
+        // Sessions this one could honestly be measured against: in review, only what had
+        // already happened — so reopening an old session cannot be credited with a celebration,
+        // a record or a comparison that later sessions, not this one, actually earned. After a
+        // workout [a] is always the latest attempt on the board, so this changes nothing there.
+        val all = RecordStore(this).all().filter { it.atMillis <= a.atMillis }
         binding.scoreDetail.text = buildString {
             append("${a.totalReps} reps in ${formatDuration(a.durationMs)} of clock")
             if (a.pausedMs > 0L) append(" · ${formatDuration(a.realTimeMs)} real")
@@ -121,6 +171,7 @@ class ResultsActivity : AppCompatActivity() {
 
         celebrate(a, all)
         renderLevel(a)
+        compareCard(a, all)
 
         binding.stats.removeAllViews()
         val group = InsetGroup(this)
@@ -141,17 +192,19 @@ class ResultsActivity : AppCompatActivity() {
         // Said beside the score it explains. The athlete did not choose this label, and a record
         // that reads "Adaptive Cindy" with no word about why would look like a fault.
         if (heelsFlatSpotted) stat("Squats", "Heels flat · Adaptive Cindy") { explainHeelsFlat() }
-        val zone = ZoneId.systemDefault()
-        val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        val today = LocalDate.now()
-        val days = Streak.daysTrained(all, zone)
-        val streakDays = Streak.current(days, today)
-        val streakWeeks = Streak.currentWeeks(Streak.weeksTrained(days, firstDay), today, firstDay)
-        stat(
-            "Streak",
-            "$streakDays day${if (streakDays == 1) "" else "s"} · " +
-                "$streakWeeks week${if (streakWeeks == 1) "" else "s"}"
-        )
+        // A streak describes today, which a session reopened from another day is not.
+        if (!reviewing) {
+            val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+            val today = LocalDate.now()
+            val days = Streak.daysTrained(all, zone)
+            val streakDays = Streak.current(days, today)
+            val streakWeeks = Streak.currentWeeks(Streak.weeksTrained(days, firstDay), today, firstDay)
+            stat(
+                "Streak",
+                "$streakDays day${if (streakDays == 1) "" else "s"} · " +
+                    "$streakWeeks week${if (streakWeeks == 1) "" else "s"}"
+            )
+        }
         // Said out loud rather than folded into the total: the app saw most of these and was
         // told about the rest, and those are different kinds of claim.
         if (a.manualReps > 0) stat("Added by hand", "${a.manualReps} of ${a.totalReps}")
@@ -164,10 +217,6 @@ class ResultsActivity : AppCompatActivity() {
         }
         energy(a, group)
         strava(a, group)
-        previousBest?.let {
-            val delta = a.totalReps - it.totalReps
-            stat("Against your best", deltaText(it.scoreLabel(), delta))
-        }
         binding.stats.addView(group)
 
         movementBreakdown(a)
@@ -313,16 +362,124 @@ class ResultsActivity : AppCompatActivity() {
         addView(icon, FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER))
     }
 
-    /** "17  +22", with the delta green when it is one. Green is the affirmative everywhere. */
-    private fun deltaText(score: String, delta: Int): CharSequence {
-        val sign = if (delta >= 0) "+" else "−"
-        val text = "$score  $sign${kotlin.math.abs(delta)}"
+    /** "TUE 29 SEP 2026 · 18:04", honouring the phone's 12/24-hour setting as [RecordsActivity.openDay] does. */
+    private fun reviewHeadline(a: Attempt, zone: ZoneId): String {
+        val at = Instant.ofEpochMilli(a.atMillis).atZone(zone)
+        val date = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US).format(at).uppercase(Locale.US)
+        val timePattern = if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm a"
+        val time = SimpleDateFormat(timePattern, Locale.US).format(Date(a.atMillis))
+        return "$date · $time"
+    }
+
+    /**
+     * What this session is measured against, replacing the old single "Against your best" row:
+     * an eyebrow, a chip per [Comparisons.options], and a card for whichever is chosen. Cleared
+     * first because [render] runs again when the body weight changes. Hidden entirely when there
+     * is no earlier session at the same movements — a session cannot be measured against a
+     * history it does not have.
+     */
+    private fun compareCard(a: Attempt, all: List<Attempt>) {
+        binding.compare.removeAllViews()
+        val options = Comparisons.options(all, a)
+        if (options.isEmpty()) {
+            binding.compareTitle.visibility = View.GONE
+            binding.compare.visibility = View.GONE
+            comparison = null
+            return
+        }
+        binding.compareTitle.visibility = View.VISIBLE
+        binding.compare.visibility = View.VISIBLE
+
+        // Keeps whichever chip the athlete already chose across a re-render, rather than
+        // snapping back to "Your best" every time the weight prompt redraws the page.
+        val kept = comparison?.atMillis?.let { prior -> options.firstOrNull { it.attempt.atMillis == prior } }
+        val initial = kept ?: options.first()
+        comparison = initial.attempt
+
+        binding.compare.addView(
+            chipRow(options.map { it.label }, options.indexOf(initial)) { i ->
+                comparison = options[i].attempt
+                onComparisonChanged()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+        )
+        compareCardHolder = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(10) }
+        }
+        binding.compare.addView(compareCardHolder)
+        onComparisonChanged()
+    }
+
+    /**
+     * Redraws whatever depends on [comparison]. Only the card itself for now; later sections of
+     * this page hang their own charts here rather than each keeping a selection of their own.
+     */
+    private fun onComparisonChanged() {
+        val reference = comparison ?: return
+        compareCardHolder.removeAllViews()
+        compareCardHolder.addView(comparisonCardView(attempt, reference))
+    }
+
+    /** The reference session and the delta, as one tappable card that opens it in review. */
+    private fun comparisonCardView(a: Attempt, reference: Attempt): View {
+        val dateFormat = SimpleDateFormat("d MMM", Locale.US)
+        val referenceLine = "${dateFormat.format(Date(reference.atMillis))} · " +
+            "${reference.scoreLabel()} · ${Progress.formatReps(reference.totalReps)} reps"
+        val deltaLine = compareDeltaText(a, reference)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.glass_card)
+            foreground = rowRipple()
+            clipToOutline = true
+            minimumHeight = dp(48)
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(styledText(R.style.Cindy_Headline, referenceLine))
+            addView(styledText(R.style.Cindy_Callout, deltaLine).apply {
+                setPadding(0, dp(4), 0, 0)
+            })
+            setOnClickListener { startActivity(review(this@ResultsActivity, reference.atMillis)) }
+            describeAsButton("$referenceLine, $deltaLine")
+        }
+    }
+
+    /**
+     * "+22 reps · 1 round more · 0:09 faster a round", green when [a] is ahead on reps,
+     * [R.color.label_tertiary] otherwise. "At least" when [a]'s own score is a lower bound: the
+     * true gap can only be larger than this, never smaller.
+     */
+    private fun compareDeltaText(a: Attempt, reference: Attempt): CharSequence {
+        val d = Comparisons.delta(a, reference)
+        val parts = mutableListOf<String>()
+        parts += when {
+            d.reps > 0 -> "+${d.reps} reps"
+            d.reps < 0 -> "${-d.reps} fewer reps"
+            else -> "level on reps"
+        }
+        if (d.rounds > 0) {
+            parts += "${d.rounds} round${if (d.rounds == 1) "" else "s"} more"
+        } else if (d.rounds < 0) {
+            parts += "${-d.rounds} round${if (d.rounds == -1) "" else "s"} fewer"
+        }
+        d.avgRoundMs?.let { ms ->
+            if (ms > 0) parts += "${formatDuration(ms)} faster a round"
+            else if (ms < 0) parts += "${formatDuration(-ms)} slower a round"
+        }
+        val text = parts.joinToString(" · ").let { if (a.scoreIsLowerBound) "At least $it" else it }
         return SpannableString(text).apply {
             setSpan(
                 ForegroundColorSpan(
-                    getColor(if (delta >= 0) R.color.state_ok else R.color.label_tertiary)
+                    getColor(if (d.reps > 0) R.color.state_ok else R.color.label_tertiary)
                 ),
-                score.length + 2, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
     }

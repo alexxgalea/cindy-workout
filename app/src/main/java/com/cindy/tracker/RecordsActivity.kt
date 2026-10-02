@@ -99,6 +99,11 @@ class RecordsActivity : AppCompatActivity() {
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
+    /** Reopens a saved attempt on the results screen, as it looked the day it happened. */
+    private fun openSession(atMillis: Long) {
+        startActivity(ResultsActivity.review(this, atMillis))
+    }
+
     private fun render() {
         binding.rows.removeAllViews()
         val attempts = store.all()
@@ -155,7 +160,7 @@ class RecordsActivity : AppCompatActivity() {
                     // "Best" means best at these movements. Across categories it would be
                     // comparing a band-assisted Cindy with a strict one and calling one better.
                     best = a == Records.bestIn(mine, a.profile)
-                ))
+                ) { openSession(a.atMillis) })
             }
         })
     }
@@ -498,20 +503,25 @@ class RecordsActivity : AppCompatActivity() {
         )
         val title = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.US).format(date)
         val subtitle = if (sessions.size == 1) "1 session" else "${sessions.size} sessions"
+        val sheet = CindySheet(this, title, subtitle)
+        // Each row opens its session and the sheet gets out of the way, rather than leaving the
+        // athlete to dismiss a day they are no longer looking at.
         val group = insetGroup {
             sessions.forEach { a ->
-                row(statRow(
+                row(navRow(
                     timeFormat.format(Date(a.atMillis)),
                     "${a.scoreLabel()} \u00b7 ${a.caption}"
-                ))
+                ) {
+                    sheet.dismiss()
+                    openSession(a.atMillis)
+                })
             }
         }
         group.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(16) }
 
-        CindySheet(this, title, subtitle)
-            .add(group)
+        sheet.add(group)
             .actions(primary = "DONE", onPrimary = {})
             .show()
     }
@@ -593,16 +603,30 @@ class RecordsActivity : AppCompatActivity() {
         })
 
         val headline = styledText(R.style.Cindy_Headline, overview.first).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        // Only a selected line point is one session; a bar is a week of them, and nothing
+        // selected is the whole range, so the button only ever appears beside a point.
+        val openButton = glassButton("OPEN").apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            visibility = View.GONE
+        }
+        card.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = dp(8) }
-        }
+            addView(headline)
+            addView(openButton)
+        })
         val detail = styledText(R.style.Cindy_Footnote, overview.second).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        card.addView(headline)
         card.addView(detail)
 
         if (points.isEmpty()) {
@@ -650,6 +674,10 @@ class RecordsActivity : AppCompatActivity() {
                 val text = if (i == null) overview else Progress.describe(metric, points, i, zone)
                 headline.text = text.first
                 detail.text = text.second
+                // A volume bar is a week, not a session, and series is null for exactly that mode.
+                val at = i?.let { points[it].attempt?.atMillis }
+                openButton.visibility = if (series != null && at != null) View.VISIBLE else View.GONE
+                if (at != null) openButton.setOnClickListener { openSession(at) }
             }
             chart.contentDescription = "${metric.label} chart, ${overview.first}" +
                 if (overview.second.isEmpty()) "" else ", ${overview.second}"
