@@ -666,6 +666,12 @@ it survives the app closing, waits for a network connection, and backs off betwe
 rather than hammering Strava's API. Workouts are sent as they finish; attempts already on the
 record board are not uploaded retroactively.
 
+**Heart rate needs one more step, on Strava's side.** Strava treats heart rate as health data and
+asks each athlete to opt in personally: on strava.com, Settings → Data Permissions → Allow Access.
+The app cannot do this for you, and no API permission covers it. Until it is done, Strava's
+consent page warns "Your activities will not contain heart rate data", and uploads still succeed
+but arrive without the heart-rate graph. The Strava sheet carries the same reminder.
+
 DISCONNECT clears the tokens from the phone immediately, and also asks Strava to revoke them on
 its side; that part is best-effort, so it still clears locally even if you are offline. If Strava
 still lists Cindy Tracker at [strava.com/settings/apps](https://strava.com/settings/apps)

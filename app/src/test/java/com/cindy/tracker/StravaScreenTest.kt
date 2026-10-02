@@ -104,6 +104,34 @@ class StravaScreenTest {
     }
 
     @Test
+    fun `the connected sheet says heart rate needs Strava's Data Permissions`() {
+        StravaConfig.availableForTest = true
+        StravaTokenStore(context()).grant = testGrant()
+        val activity = buildMenu()
+        val row = findByDescriptionPrefix(
+            activity.findViewById(android.R.id.content), "Strava, Connected"
+        )
+        row!!.performClick()
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        assertTrue(
+            "the sheet never mentions Data Permissions",
+            findTextContaining(dialog!!.window!!.decorView, "Data Permissions") != null
+        )
+        activity.finish()
+    }
+
+    private fun findTextContaining(root: android.view.View, part: String): android.view.View? {
+        if (root is android.widget.TextView && root.text.toString().contains(part)) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findTextContaining(root.getChildAt(i), part)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    @Test
     fun `tapping Strava when unavailable opens no sheet`() {
         StravaConfig.availableForTest = false
         val activity = buildMenu()

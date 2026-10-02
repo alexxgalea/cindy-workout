@@ -1146,6 +1146,15 @@ class MenuActivity : AppCompatActivity() {
             subtitle = stravaSheetSubtitle(grant, autoUpload)
         )
         sheet.toggle("Upload automatically", autoUpload) { autoUpload = it }
+        // Strava's own consent for health data is per athlete and cannot be granted through the
+        // API, so without this line a watch's heart rate silently never arrives.
+        sheet.add(
+            sheetNote(
+                "Heart rate reaches Strava only once you allow it there: on strava.com, open " +
+                    "Settings, then Data Permissions, then Allow Access. Until then Strava drops " +
+                    "it from every upload."
+            )
+        )
         sheet.actions(
             primary = "DONE",
             onPrimary = { tokens.autoUpload = autoUpload },
