@@ -48,10 +48,7 @@ class RecordingOverlay {
         val height: Int,
         /** Whether the analysis frame was mirrored, as it is for the selfie camera. */
         val mirrored: Boolean,
-        val clock: String,
-        val round: String,
-        val exercise: String,
-        val reps: String,
+        val hud: RecordedHudText,
         val debug: Boolean
     )
 
@@ -88,6 +85,18 @@ class RecordingOverlay {
         color = Color.argb(150, 255, 255, 255)
         textAlign = Paint.Align.RIGHT
     }
+    private val bannerText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    /** Debug-only outline; a stroke [Paint] whose colour and width [drawFrameBorder] sets per use. */
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
+
+    /** Scratch rect for every rounded panel and the banner, one at a time, never held across a call. */
+    private val panelRect = RectF()
 
     /** Called from the analysis thread with everything the next drawn frame should show. */
     fun update(
@@ -95,13 +104,10 @@ class RecordingOverlay {
         width: Int,
         height: Int,
         mirrored: Boolean,
-        clock: String,
-        round: String,
-        exercise: String,
-        reps: String,
+        hud: RecordedHudText,
         debug: Boolean = false
     ) {
-        state = State(keypoints, width, height, mirrored, clock, round, exercise, reps, debug)
+        state = State(keypoints, width, height, mirrored, hud, debug)
     }
 
     fun clear() {
@@ -139,6 +145,7 @@ class RecordingOverlay {
         canvas.save()
         canvas.concat(transform(frame, s, mirror = false))
         drawHud(canvas, s, safe)
+        s.hud.banner?.let { drawBanner(canvas, it, safe) }
         drawWatermark(canvas, safe)
         canvas.restore()
         return true
@@ -176,11 +183,8 @@ class RecordingOverlay {
      * the crop takes: whatever falls outside the inner one is not in the file.
      */
     private fun drawFrameBorder(canvas: Canvas, s: State, safe: SourceRect) {
-        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ACCENT
-            style = Paint.Style.STROKE
-            strokeWidth = s.height * 0.006f
-        }
+        edge.color = ACCENT
+        edge.strokeWidth = s.height * 0.006f
         canvas.drawRect(0f, 0f, s.width.toFloat(), s.height.toFloat(), edge)
         edge.color = Color.RED
         canvas.drawRect(safe.left, safe.top, safe.right, safe.bottom, edge)
@@ -188,8 +192,8 @@ class RecordingOverlay {
 
     private fun drawSkeleton(canvas: Canvas, s: State) {
         // Stroke widths are relative to the frame, so they survive the scale into the buffer.
-        bone.strokeWidth = s.height * 0.010f
-        val jointRadius = s.height * 0.008f
+        bone.strokeWidth = s.height * BONE_WIDTH_FRACTION
+        val jointRadius = s.height * JOINT_RADIUS_FRACTION
         for ((a, b) in KP.SKELETON) {
             val pa = s.keypoints[a]
             val pb = s.keypoints[b]
@@ -212,28 +216,28 @@ class RecordingOverlay {
         accentText.textSize = small
 
         // top-left: the clock
-        val clockWidth = text.measureText(s.clock)
+        val clockWidth = text.measureText(s.hud.clock)
         roundedPanel(
             canvas,
             safe.left + pad, safe.top + pad,
             safe.left + pad * 2 + clockWidth, safe.top + pad + big * 1.5f
         )
-        canvas.drawText(s.clock, safe.left + pad * 1.5f, safe.top + pad + big * 1.1f, text)
+        canvas.drawText(s.hud.clock, safe.left + pad * 1.5f, safe.top + pad + big * 1.1f, text)
 
         // top-right: the round
         accentText.textAlign = Paint.Align.RIGHT
-        val roundWidth = accentText.measureText(s.round)
+        val roundWidth = accentText.measureText(s.hud.round)
         roundedPanel(
             canvas,
             safe.right - pad * 2 - roundWidth, safe.top + pad,
             safe.right - pad, safe.top + pad + small * 2f
         )
-        canvas.drawText(s.round, safe.right - pad * 1.5f, safe.top + pad + small * 1.4f, accentText)
+        canvas.drawText(s.hud.round, safe.right - pad * 1.5f, safe.top + pad + small * 1.4f, accentText)
         accentText.textAlign = Paint.Align.LEFT
 
         // bottom-left: movement and rep count
-        val label = s.exercise
-        val count = s.reps
+        val label = s.hud.label
+        val count = s.hud.count
         text.textSize = big
         accentText.textSize = small
         val blockWidth = maxOf(text.measureText(count), accentText.measureText(label))
@@ -250,6 +254,25 @@ class RecordingOverlay {
         )
     }
 
+    /**
+     * The few seconds of banner after the setup check ends: "CALIBRATED · 2 REPS" once it
+     * passes, "CALIBRATION SKIPPED" when SKIP leaves it early. Centred in the safe area like
+     * every other piece of text here — the frame's own edges are what the crop takes.
+     */
+    private fun drawBanner(canvas: Canvas, label: String, safe: SourceRect) {
+        bannerText.textSize = safe.height * 0.034f
+        val pad = safe.height * 0.018f
+        val halfWidth = bannerText.measureText(label) / 2f
+        val cx = safe.left + safe.width / 2f
+        val cy = safe.top + safe.height / 2f
+        panelRect.set(
+            cx - halfWidth - pad * 2f, cy - bannerText.textSize * 0.9f,
+            cx + halfWidth + pad * 2f, cy + bannerText.textSize * 0.6f
+        )
+        canvas.drawRoundRect(panelRect, panelRect.height() * 0.28f, panelRect.height() * 0.28f, panel)
+        canvas.drawText(label, cx, cy + bannerText.textSize * 0.32f, bannerText)
+    }
+
     private fun drawWatermark(canvas: Canvas, safe: SourceRect) {
         val pad = safe.height * 0.018f
         mark.textSize = safe.height * 0.030f
@@ -261,12 +284,27 @@ class RecordingOverlay {
 
     private fun roundedPanel(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {
         val radius = (bottom - top) * 0.28f
-        canvas.drawRoundRect(RectF(left, top, right, bottom), radius, radius, panel)
+        panelRect.set(left, top, right, bottom)
+        canvas.drawRoundRect(panelRect, radius, radius, panel)
     }
 
     private companion object {
         const val MIN_SCORE = 0.30f
         /** The HUD's secondary label. Burned into the file, so it follows the app's palette. */
         val ACCENT = Color.argb(168, 255, 255, 255)
+
+        /**
+         * Bone stroke width, as a fraction of frame height.
+         *
+         * Matches the live overlay's own weight: [OverlayView] draws 7 px bones and 9 px joint
+         * radii in view pixels, which on its roughly 2.25x preview scale is about 3.1 and 4
+         * analysis-frame pixels. This file used to draw 0.010 and 0.008 of the frame height
+         * instead — about twice that — so the filmed skeleton read as heavier and less faithful
+         * to the body than the one the athlete actually watched while training.
+         */
+        const val BONE_WIDTH_FRACTION = 0.0045f
+
+        /** Joint radius, as a fraction of frame height. See [BONE_WIDTH_FRACTION]. */
+        const val JOINT_RADIUS_FRACTION = 0.0055f
     }
 }

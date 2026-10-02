@@ -174,6 +174,7 @@ class ResultsActivity : AppCompatActivity() {
         }
 
         celebrate(a, all)
+        sessionNumbers(a)
         renderLevel(a)
         compareCard(a, all)
 
@@ -182,17 +183,11 @@ class ResultsActivity : AppCompatActivity() {
         fun stat(label: String, value: CharSequence, onTap: (() -> Unit)? = null) =
             group.row(statRow(label, value, onTap))
 
-        stat("Rounds completed", "${a.rounds}")
-        stat("Workout time", formatDuration(a.durationMs))
         if (a.pausedMs > 0L) {
             // The clock stops when you pause; the day does not.
             stat("Paused", formatDuration(a.pausedMs))
             stat("Real time", formatDuration(a.realTimeMs))
         }
-        a.avgRoundMs?.let { stat("Average round", formatDuration(it)) }
-        a.fastestRoundMs?.let { stat("Fastest round", formatDuration(it)) }
-        a.slowestRoundMs?.let { stat("Slowest round", formatDuration(it)) }
-        stat("Total reps", "${a.totalReps}")
         // Said beside the score it explains. The athlete did not choose this label, and a record
         // that reads "Adaptive Cindy" with no word about why would look like a fault.
         if (heelsFlatSpotted) stat("Squats", "Heels flat · Adaptive Cindy") { explainHeelsFlat() }
@@ -223,8 +218,6 @@ class ResultsActivity : AppCompatActivity() {
         strava(a, group)
         binding.stats.addView(group)
 
-        movementBreakdown(a)
-
         val splits = a.roundSplitsMs
         if (splits.isEmpty()) {
             binding.splitsTitle.visibility = View.GONE
@@ -249,38 +242,92 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * Where the round's time went, per movement. Hidden unless every movement has a finished set,
-     * because a share of two movements would be a share of nothing. Cleared first because
-     * [render] runs again when the body weight changes.
+     * The session in numbers, right under the score: six tiles, a pill per round, and what each
+     * movement came to. Each part is hidden when the record cannot give it, rather than drawn
+     * empty: the tiles always have something to say from the attempt's own totals, but the round
+     * track and the movement card need the sets, which an older record never filed. Cleared first
+     * because [render] runs again when the body weight changes.
      */
-    private fun movementBreakdown(a: Attempt) {
-        binding.movements.removeAllViews()
-        val shares = Progress.movementBreakdown(a)
-        val show = if (shares.isEmpty()) View.GONE else View.VISIBLE
-        binding.movementsTitle.visibility = show
-        binding.movements.visibility = show
-        if (shares.isEmpty()) return
-        val group = InsetGroup(this)
-        shares.forEach { s ->
-            group.row(
-                statRow(
-                    s.label, "${formatDuration(s.avgMs)} · ${(s.share * 100).roundToInt()}%"
-                )
-            )
+    private fun sessionNumbers(a: Attempt) {
+        val stats = SessionStats.from(a)
+        binding.tiles.removeAllViews()
+        binding.tiles.addView(statTileGrid(SessionTiles.of(a, stats)))
+        roundTrack(a, stats)
+        renderMovements(a, stats)
+    }
+
+    private fun roundTrack(a: Attempt, stats: SessionStats?) {
+        binding.track.removeAllViews()
+        val rounds = stats?.rounds.orEmpty()
+        val show = if (rounds.isEmpty()) View.GONE else View.VISIBLE
+        binding.trackTitle.visibility = show
+        binding.track.visibility = show
+        if (rounds.isEmpty()) return
+
+        val plurals = SessionStats.plurals(a.profile)
+        val hint = "Tap a round to see what went into it."
+        val caption = styledText(R.style.Cindy_Callout, hint).apply {
+            setPadding(0, dp(8), 0, 0)
+            minHeight = dp(48)
         }
-        group.attach(styledText(
-            R.style.Cindy_Footnote,
-            "Average of each finished set. Set times include getting into position."
-        ).apply {
-            textSize = 11f
-            setPadding(dp(18), 0, dp(18), dp(14))
-        })
-        binding.movements.addView(
-            group,
+        fun say(i: Int) = rounds[i].caption(plurals, a.scoreIsLowerBound)
+        val track = RoundTrackView(this).apply {
+            show(rounds, ::say)
+            onSelect = { i -> caption.text = i?.let(::say) ?: hint }
+        }
+        val scheme = Exercise.entries.joinToString(", ") { "${it.target} ${plurals.getValue(it)}" }
+        binding.track.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.glass_card)
+                setPadding(dp(16), dp(10), dp(16), dp(14))
+                addView(track, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ))
+                addView(caption)
+                // Said once, in the session's own words, so the three segments of a pill can be
+                // read: knee push-ups are not "push-ups", and the order is the order they are done.
+                addView(styledText(
+                    R.style.Cindy_Footnote,
+                    "A round is $scheme, in that order, left to right. What was not done stays " +
+                        "hollow." + if (a.scoreIsLowerBound) {
+                        " The camera lost you for ${formatDuration(a.untrackedMs)}, so rounds " +
+                            "may hold more than shown."
+                    } else {
+                        ""
+                    }
+                ).apply {
+                    textSize = 11f
+                    setPadding(0, dp(4), 0, 0)
+                })
+            },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
+    }
+
+    private fun renderMovements(a: Attempt, stats: SessionStats?) {
+        binding.movements.removeAllViews()
+        val movements = stats?.movements.orEmpty()
+        val show = if (movements.isEmpty()) View.GONE else View.VISIBLE
+        binding.movementsTitle.visibility = show
+        binding.movements.visibility = show
+        if (movements.isEmpty()) return
+        binding.movements.addView(
+            movementCard(movements, a.scoreIsLowerBound),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        binding.movements.addView(styledText(
+            R.style.Cindy_Footnote,
+            "Times cover finished sets and include getting into position. The average is of " +
+                "the sets that reached their target."
+        ).apply {
+            textSize = 11f
+            setPadding(dp(4), dp(10), dp(4), 0)
+        })
     }
 
     /**

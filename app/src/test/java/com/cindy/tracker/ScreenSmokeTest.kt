@@ -612,12 +612,39 @@ class ScreenSmokeTest {
         store.clear()
     }
 
-    /** A round timed set by set fills the breakdown; the group is built in code. */
-    @Test
-    fun `the results screen builds with set splits and shows the movement breakdown`() {
+    /** Every text the given view tree shows, so a test can say what a built-in-code section says. */
+    private fun textsIn(root: android.view.View): List<String> {
+        val texts = mutableListOf<String>()
+        fun walk(v: android.view.View) {
+            if (v is android.widget.TextView) texts += v.text.toString()
+            if (v is android.view.ViewGroup) {
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+        }
+        walk(root)
+        return texts
+    }
+
+    private fun showResults(attempt: Attempt): ResultsActivity {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = RecordStore(context)
         store.clear()
+        store.add(attempt)
+        return Robolectric.buildActivity(
+            ResultsActivity::class.java,
+            ResultsActivity.intent(context, attempt, stoppedEarly = false)
+        ).setup().get()
+    }
+
+    private val timedRound = listOf(
+        SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
+        SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
+        SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
+    )
+
+    /** A round timed set by set fills the numbers, the round track and the movement card. */
+    @Test
+    fun `the results screen builds with set splits and shows the round numbers`() {
         val attempt = Attempt(
             rounds = 1,
             reps = 0,
@@ -625,22 +652,98 @@ class ScreenSmokeTest {
             durationMs = 20 * 60 * 1000L,
             roundSplitsMs = listOf(52_000L),
             profile = CindyProfile.STANDARD,
-            setSplits = listOf(
-                SetSplit(Exercise.PULLUP, 14_000L, 5, 0),
-                SetSplit(Exercise.PUSHUP, 17_000L, 10, 0),
-                SetSplit(Exercise.SQUAT, 21_000L, 15, 0)
-            )
+            countedReps = 30,
+            setSplits = timedRound
         )
-        store.add(attempt)
-        val intent = ResultsActivity.intent(context, attempt, stoppedEarly = false)
-        val activity = Robolectric.buildActivity(ResultsActivity::class.java, intent).setup().get()
+        val activity = showResults(attempt)
 
-        assertEquals(
-            android.view.View.VISIBLE,
-            activity.findViewById<android.view.View>(R.id.movements).visibility
-        )
+        fun visibility(id: Int) = activity.findViewById<android.view.View>(id).visibility
+        assertEquals(android.view.View.VISIBLE, visibility(R.id.trackTitle))
+        assertEquals(android.view.View.VISIBLE, visibility(R.id.track))
+        assertEquals(android.view.View.VISIBLE, visibility(R.id.movements))
+        val tiles = textsIn(activity.findViewById(R.id.tiles))
+        assertTrue(tiles.toString(), tiles.containsAll(listOf("ROUNDS", "REPS", "TIME", "FASTEST")))
+        val movements = textsIn(activity.findViewById(R.id.movements))
+        assertTrue(movements.toString(), movements.contains("pull-ups"))
+        assertTrue(movements.toString(), movements.contains("0:14 total"))
+        // The headline numbers moved up into the tiles; the details keep only what is left.
+        val details = textsIn(activity.findViewById(R.id.stats))
+        assertTrue(details.toString(), details.none { it == "Total reps" || it == "Rounds completed" })
         activity.finish()
-        store.clear()
+        RecordStore(activity).clear()
+    }
+
+    /** A session the camera lost you in says so over the round track and the movement card. */
+    @Test
+    fun `the results screen says at least over a lower bound session's rounds`() {
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = listOf(52_000L),
+            profile = CindyProfile.STANDARD,
+            countedReps = 30,
+            untrackedMs = 60_000L,
+            setSplits = timedRound
+        )
+        val activity = showResults(attempt)
+
+        val track = textsIn(activity.findViewById(R.id.track))
+        assertTrue(track.toString(), track.any { it.contains("The camera lost you for 1:00") })
+        val movements = textsIn(activity.findViewById(R.id.movements))
+        assertEquals(movements.toString(), 3, movements.count { it == "at least" })
+        activity.finish()
+        RecordStore(activity).clear()
+    }
+
+    /** A record from before sets were timed has its tiles and nothing drawn from sets it lacks. */
+    @Test
+    fun `the results screen hides the round track and movements without set times`() {
+        val attempt = Attempt(
+            rounds = 12,
+            reps = 3,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = List(12) { 100_000L },
+            profile = CindyProfile.STANDARD
+        )
+        val activity = showResults(attempt)
+
+        fun visibility(id: Int) = activity.findViewById<android.view.View>(id).visibility
+        assertEquals(android.view.View.GONE, visibility(R.id.trackTitle))
+        assertEquals(android.view.View.GONE, visibility(R.id.track))
+        assertEquals(android.view.View.GONE, visibility(R.id.movementsTitle))
+        assertEquals(android.view.View.GONE, visibility(R.id.movements))
+        val tiles = textsIn(activity.findViewById(R.id.tiles))
+        assertTrue(tiles.toString(), tiles.contains("12"))
+        assertTrue(tiles.toString(), tiles.contains("1:40"))
+        activity.finish()
+        RecordStore(activity).clear()
+    }
+
+    /** An adaptive session names its own movements everywhere the three are shown. */
+    @Test
+    fun `the results screen uses the adaptive session's own movement names`() {
+        val attempt = Attempt(
+            rounds = 1,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = 20 * 60 * 1000L,
+            roundSplitsMs = listOf(52_000L),
+            profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP),
+            countedReps = 30,
+            setSplits = timedRound
+        )
+        val activity = showResults(attempt)
+
+        val movements = textsIn(activity.findViewById(R.id.movements))
+        assertTrue(movements.toString(), movements.contains("knee push-ups"))
+        assertTrue(movements.toString(), movements.none { it.contains("standard push-ups") })
+        val track = textsIn(activity.findViewById(R.id.track))
+        assertTrue(track.toString(), track.any { it.contains("10 knee push-ups") })
+        activity.finish()
+        RecordStore(activity).clear()
     }
 
     /**
