@@ -353,6 +353,21 @@ Nothing about it leaves the phone.
 `REC` records the workout with the skeleton, clock, round, movement, rep count and a **CINDY**
 watermark burned into the file — not just drawn on screen.
 
+Filming through the setup check used to burn in `ROUND 1` and `0 / 5` over the two calibration
+pull-ups, because nothing told the recorder the clock had not started — so a film of the check
+read as a workout that had already lost its first two reps. It now reads as what it is: the clock
+panel says `SETUP`, the round panel says `CALIBRATION`, and the movement is labelled
+`PULL-UPS · NOT SCORED` with its own count against the two reps the check asks for. Once it
+passes, the clock starts under a `CALIBRATED · 2 REPS` banner burned in for three seconds; skipping
+the check instead shows `CALIBRATION SKIPPED` for the same three seconds.
+[RecordedHud](app/src/main/java/com/cindy/tracker/RecordedHud.kt) is the one place that decides
+what any of this says — [RecordingOverlay](app/src/main/java/com/cindy/tracker/RecordingOverlay.kt)
+only draws it.
+
+The filmed skeleton is drawn at the same weight the live overlay uses on screen — bones at 0.45%
+of the frame's height, joints at 0.55% — rather than the heavier line an earlier version burned in
+at roughly twice that.
+
 The preview's overlay is a view on top of the screen and never reaches the encoder, so the video
 gets its own renderer through CameraX's `OverlayEffect`, which hands back a canvas over the
 recorded buffer. The effect targets `VIDEO_CAPTURE` only; pointing it at the preview as well would
@@ -423,6 +438,32 @@ The maths lives in [Progress.kt](app/src/main/java/com/cindy/tracker/Progress.kt
 [Peaks.kt](app/src/main/java/com/cindy/tracker/Peaks.kt), the wording of the opening line and the
 celebrations in [Cheer.kt](app/src/main/java/com/cindy/tracker/Cheer.kt), and the chart is drawn
 by [ProgressChartView.kt](app/src/main/java/com/cindy/tracker/ProgressChartView.kt).
+
+#### Rounds, reps and time
+
+Under the score, the results screen says the session three ways. Six tiles read ROUNDS, REPS and
+TIME, then AVG ROUND, FASTEST and SLOWEST, each with a line saying what it is made of: the reps
+tile carries the pace in reps a minute, the rounds tile the reps into the round the clock ended
+on. A tile with nothing to say is a dash, never a zero.
+
+Below them is a pill for every round, ten to a row. Each pill is split into pull-ups, push-ups
+and squats in the 5:10:15 proportion of the scheme and filled by how much of each was done, in the
+same three brightnesses as the Help page, so a round with the pull-ups skipped is hollow at the
+front instead of looking whole. A round is not worth thirty by definition: skipping a set still
+moves the cycle on, so the pills and the tiles say what was banked. Tap a pill, or drag along
+them, for "Round 8 · 12 of 30 · 5 pull-ups, 7 push-ups"; a finished round says what it cost
+instead, and any reps tapped in are named as tapped. Under the pills, one card per movement gives
+its reps, its time, its average finished set and its share of the set time, in the session's own
+words ("knee push-ups", not "push-ups").
+
+All of it is read off the sets the record banked, through the same check the Strava upload uses,
+so a record that does not add up shows no pills rather than a guess. A session from before sets
+were timed keeps its tiles and hides the rest. A session the camera lost you in says "at least"
+on the reps tile and its pace, as the score line does. The reading is in
+[SessionStats.kt](app/src/main/java/com/cindy/tracker/SessionStats.kt) and the pills are drawn by
+[RoundTrackView.kt](app/src/main/java/com/cindy/tracker/RoundTrackView.kt). What is left of the
+old session block — pause time, reps added by hand, the calorie estimate and Strava — now sits
+at the bottom of the page as **Details**.
 
 #### Streaks
 
