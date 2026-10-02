@@ -500,6 +500,28 @@ still a session. Milestones are celebrated on the results screen: 3, 7, 14, 21, 
 150, 200 and 365 days, and 2, 4, 8, 12, 26 and 52 weeks. The rules are in
 [Streak.kt](app/src/main/java/com/cindy/tracker/Streak.kt).
 
+#### What you lifted
+
+Between the level and the comparison, the session page says what the session lifted and burned in
+things you can picture: **You lifted** about 12,940 kg, as heavy as 9 hippos; **You burned** 312
+kcal, enough to boil water for 16 cups of tea. Up to five of the animal are drawn, and a "×9"
+beyond that. Which animal turns on the day the session happened, so consecutive sessions tend to
+meet a different one, and a reopened session shows the animal it showed the first time. An animal
+the phone's emoji font cannot draw is never picked. The energy is compared with a cup of tea, a
+phone charge or an hour of an LED bulb, on purpose never with food.
+
+Both are estimates, and a footnote on the card says how. A rep lifts a share of your body weight,
+not all of it: 95% for a strict pull-up (the hands and forearms stay on the bar), 64% for a
+standard push-up and 49% from the knees (Ebben et al., 2011), 88% for an air, heels-flat or box
+squat (the body above the knees), all from a body-segment table. A variation with no share the app
+can stand behind is left out and named, rather than guessed: band-assisted, foot-assisted and
+negative pull-ups, inverted rows, incline push-ups and supported squats. Reps you tapped in count,
+and the card says so. A session the camera could not fully see says "at least". The reps come
+from the session's own banked sets, so a session from before sets were timed shows the energy but
+no weight lifted, and without a body weight on file the card is a single row asking for it. See
+[Lifted.kt](app/src/main/java/com/cindy/tracker/Lifted.kt) and
+[Equivalents.kt](app/src/main/java/com/cindy/tracker/Equivalents.kt).
+
 #### Reminders
 
 Off by default. Menu -> Daily reminder sets the time, and `TRY IT` sends one now. There is at most
@@ -541,7 +563,7 @@ to draw. See
 #### Set times
 
 The workout clock also times each set. Pauses are excluded and getting into position is
-included, as they are for round splits. The results screen shows where a round's time went, per movement. Peaks
+included, as they are for round splits. The results screen shows where a round's time went, per movement. Each round's bar is stacked by movement, and a tap or a drag across the bars reads one round out against the same round in your best or last time. Peaks
 include the fastest 5 pull-ups, 10 push-ups and 15 squats, taken only from sets where the camera
 saw every rep and the set reached its target.
 
