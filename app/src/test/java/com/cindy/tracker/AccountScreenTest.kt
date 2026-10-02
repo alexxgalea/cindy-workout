@@ -16,6 +16,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -41,6 +42,9 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class AccountScreenTest {
+
+    @get:Rule
+    val noStrava = NoStravaCredentials()
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
     private val zone: ZoneId get() = ZoneId.systemDefault()

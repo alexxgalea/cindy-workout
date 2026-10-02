@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -36,6 +37,9 @@ import org.robolectric.shadows.ShadowDialog
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ScreenSmokeTest {
+
+    @get:Rule
+    val noStrava = NoStravaCredentials()
 
     /** Through to RESUMED, then measured and laid out — styles resolve during measure. */
     private inline fun <reified T : android.app.Activity> smoke(intent: Intent? = null) {

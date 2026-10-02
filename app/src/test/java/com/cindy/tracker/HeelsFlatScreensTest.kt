@@ -10,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -30,6 +31,9 @@ import org.robolectric.shadows.ShadowToast
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HeelsFlatScreensTest {
+
+    @get:Rule
+    val noStrava = NoStravaCredentials()
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
