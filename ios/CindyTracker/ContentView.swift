@@ -131,6 +131,7 @@ struct ContentView: View {
                 Text("\(workout.reps) / \(workout.exercise.target)")
                     .font(.system(size: 60, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
+                    .accessibilityIdentifier("repCount")
             }
             .chip()
 

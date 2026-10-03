@@ -39,3 +39,26 @@ targets:
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+
+  # Drives the app in the simulator against a scripted body (see ReplayPoseSource).
+  CindyTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CindyTrackerUITests
+    dependencies:
+      - target: CindyTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker.uitests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  CindyTracker:
+    build:
+      targets:
+        CindyTracker: all
+    test:
+      targets:
+        - CindyTrackerUITests
