@@ -108,4 +108,6 @@ mention Strava in it.
    cannot do a workout, so noise on the camera screen is expected and a crash is not.
 4. Apply for production from the dashboard, then roll out in stages, watching Android vitals.
 
-Every upload needs a higher `versionCode` than the last.
+Every upload needs a higher `versionCode` than the last, and notes of its own in
+`play/listing/en-US/release-notes/<versionCode>.txt` (at most 500 characters; `PlayListingTest` fails
+until the file for the current `versionCode` exists).

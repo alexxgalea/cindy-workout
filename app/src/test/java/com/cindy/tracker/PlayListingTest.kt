@@ -36,7 +36,12 @@ class PlayListingTest {
         return out.trim()
     }
 
-    private val files = listOf("title.txt", "short-description.txt", "full-description.txt")
+    /** One file per version code, named for it, so each upload has notes of its own. */
+    private val releaseNotes: List<String> =
+        File(root, "play/listing/en-US/release-notes").listFiles { f -> f.extension == "txt" }
+            .orEmpty().map { "release-notes/${it.name}" }.sorted()
+
+    private val files = listOf("title.txt", "short-description.txt", "full-description.txt") + releaseNotes
     private val variants = listOf(false, true)
 
     @Test
@@ -62,6 +67,42 @@ class PlayListingTest {
             assertTrue("title is ${title.length} characters, the limit is 30", title.length in 1..30)
             assertTrue("short description is ${short.length}, the limit is 80", short.length in 1..80)
             assertTrue("full description is ${full.length}, the limit is 4000", full.length in 1..4000)
+        }
+    }
+
+    @Test
+    fun `every release note fits Google Play's 500 characters`() {
+        assertTrue("there are no release notes", releaseNotes.isNotEmpty())
+        for (name in releaseNotes) for (withStrava in variants) {
+            val note = render(listing(name), withStrava)
+            assertTrue("$name is ${note.length} characters, the limit is 500 (strava=$withStrava)",
+                note.length in 1..500)
+        }
+    }
+
+    @Test
+    fun `there are release notes for the version this build is`() {
+        val file = File(root, "play/listing/en-US/release-notes/${BuildConfig.VERSION_CODE}.txt")
+        assertTrue(
+            "versionCode is ${BuildConfig.VERSION_CODE}; write ${file.relativeTo(root)} before an upload",
+            file.isFile
+        )
+    }
+
+    @Test
+    fun `a language count anywhere in the listing is the number the app has`() {
+        for (name in files) {
+            Regex("""(\d+) languages""").findAll(listing(name)).forEach {
+                assertEquals("$name says ${it.value}", VoicePacks.all.size, it.groupValues[1].toInt())
+            }
+        }
+    }
+
+    @Test
+    fun `no listing text names Strava in a build that has none`() {
+        for (name in files) {
+            assertFalse("$name still names Strava without it",
+                render(listing(name), withStrava = false).contains("strava", ignoreCase = true))
         }
     }
 
