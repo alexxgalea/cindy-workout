@@ -207,3 +207,18 @@ public final class Rig {
         hold(PoseFixtures.squat(175))
     }
 }
+
+extension Array where Element == Keypoint {
+
+    /// Shifts a whole body, as if the athlete stepped off the bar or along it. Unseen joints stay
+    /// unseen. Mirrors the Kotlin tests' `Array<Keypoint>.moved`.
+    public func moved(dx: Float, dy: Float) -> [Keypoint] {
+        map { $0.score <= 0 ? $0 : Keypoint(x: $0.x + dx, y: $0.y + dy, score: $0.score) }
+    }
+
+    /// Shrinks a body about the origin, as if the athlete were much further from the camera.
+    /// Mirrors the Kotlin tests' `Array<Keypoint>.scaled`.
+    public func scaled(_ factor: Float) -> [Keypoint] {
+        map { $0.score <= 0 ? $0 : Keypoint(x: $0.x * factor, y: $0.y * factor, score: $0.score) }
+    }
+}
