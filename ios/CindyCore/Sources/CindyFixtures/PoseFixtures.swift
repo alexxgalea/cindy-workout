@@ -216,6 +216,14 @@ extension Array where Element == Keypoint {
         map { $0.score <= 0 ? $0 : Keypoint(x: $0.x + dx, y: $0.y + dy, score: $0.score) }
     }
 
+    /// Blanks one keypoint, the way the model reports a joint it cannot see. Mirrors the Kotlin
+    /// tests' `Array<Keypoint>.hiding`.
+    public func hiding(_ index: Int) -> [Keypoint] {
+        var copy = self
+        copy[index] = .missing
+        return copy
+    }
+
     /// Shrinks a body about the origin, as if the athlete were much further from the camera.
     /// Mirrors the Kotlin tests' `Array<Keypoint>.scaled`.
     public func scaled(_ factor: Float) -> [Keypoint] {
