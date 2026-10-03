@@ -73,6 +73,14 @@ android {
     }
 
     buildTypes {
+        // A debug build under the Play build's id could never update it or be updated by it: the
+        // Play build is signed with Google's key and this one with the debug key, so moving
+        // between them means uninstalling and losing the history on the phone. Its own id lets
+        // the two sit side by side, and "Cindy dev" (src/debug) tells them apart on the launcher.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             signingConfig = signingConfigs.findByName("upload")
             // Deliberately off. proguard-rules.pro is empty, and TFLite reaches for classes

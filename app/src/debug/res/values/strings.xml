@@ -1,0 +1,4 @@
+<resources>
+    <!-- Debug builds only: tells the dev build from the Play build on the launcher. -->
+    <string name="app_name">Cindy dev</string>
+</resources>
