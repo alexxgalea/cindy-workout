@@ -17,7 +17,7 @@ is left over.
     tools/play/render.py --no-strava --name "Your Name" --email you@example.com
 
 Writes play/dist/privacy-policy.html, which is the page to publish, and play/dist/listing/ with
-the rendered title, short description and full description, to paste into Play Console.
+the rendered title, short description, full description and release notes, to paste into Play Console.
 `--check` renders both builds with stand-in values and exits 1 on any problem, for CI.
 Standard library only.
 """
@@ -32,6 +32,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PLAY = ROOT / "play"
 LISTING = ["title.txt", "short-description.txt", "full-description.txt"]
+RELEASE_NOTES = PLAY / "listing" / "en-US" / "release-notes"
 
 # {{#strava}}...{{/strava}} is kept for a build with Strava, {{^strava}}...{{/strava}} for one
 # without. Blocks do not nest.
@@ -66,9 +67,10 @@ def render(with_strava: bool, name: str, email: str, date: str):
         resolve((PLAY / "privacy-policy.html").read_text(), with_strava),
         {"DEVELOPER_NAME": name.strip(), "CONTACT_EMAIL": email.strip(), "EFFECTIVE_DATE": date},
     )
+    names = LISTING + [f"release-notes/{p.name}" for p in sorted(RELEASE_NOTES.glob("*.txt"))]
     listing = {
         f: resolve((PLAY / "listing" / "en-US" / f).read_text(), with_strava).strip() + "\n"
-        for f in LISTING
+        for f in names
     }
 
     for where, text in [("privacy-policy.html", policy)] + list(listing.items()):
@@ -108,7 +110,7 @@ def main(argv) -> int:
         return 1
 
     out = pathlib.Path(args.out)
-    (out / "listing").mkdir(parents=True, exist_ok=True)
+    (out / "listing" / "release-notes").mkdir(parents=True, exist_ok=True)
     (out / "privacy-policy.html").write_text(policy)
     for f, text in listing.items():
         (out / "listing" / f).write_text(text)
@@ -117,6 +119,9 @@ def main(argv) -> int:
     print(f"  title             {len(listing['title.txt'].strip()):>4} / 30")
     print(f"  short description {len(listing['short-description.txt'].strip()):>4} / 80")
     print(f"  full description  {len(listing['full-description.txt'].strip()):>4} / 4000")
+    for f, text in listing.items():
+        if f.startswith("release-notes/"):
+            print(f"  {f:<17} {len(text.strip()):>4} / 500")
     print(f"Publish {out / 'privacy-policy.html'} as the policy page.")
     return 0
 

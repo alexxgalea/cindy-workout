@@ -39,8 +39,11 @@ android {
         // bump is due around August 2027, and it is the one that ends the portrait opt-out in
         // AndroidManifest.xml.
         targetSdk = 36
+        // versionCode is what Google Play orders uploads by, so it only ever goes up, and each
+        // value needs notes in play/listing/en-US/release-notes/<versionCode>.txt (PlayListingTest
+        // checks). versionName is what the athlete sees, at the foot of Help.
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["videoRegression"] = videoRegressionEnabled.toString()
         testInstrumentationRunnerArguments["recordGoldens"] = recordVideoGoldens.toString()

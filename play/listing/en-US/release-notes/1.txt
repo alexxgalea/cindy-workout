@@ -1,0 +1,7 @@
+First release. Cindy Tracker counts the Cindy workout from your phone's camera: 5 pull-ups, 10 push-ups and 15 air squats, for as many rounds as you can in 20 minutes.
+
+Counts out loud in 11 languages, with scaled versions of every movement, heart rate from a watch or chest strap, a timeline of every session, records, streaks and badges, and filming with the count drawn on. The picture never leaves your phone.
+{{#strava}}
+
+Connect Strava to upload each finished workout.
+{{/strava}}
