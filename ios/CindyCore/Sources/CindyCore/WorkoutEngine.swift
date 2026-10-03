@@ -83,6 +83,14 @@ public struct Setup {
     public let reps: Int
     public let range: Float
     public let needed: Float
+
+    public init(stage: SetupStage, missing: [String], reps: Int, range: Float, needed: Float) {
+        self.stage = stage
+        self.missing = missing
+        self.reps = reps
+        self.range = range
+        self.needed = needed
+    }
 }
 
 /// The gate decisions behind the most recently analysed frame.
