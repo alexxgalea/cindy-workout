@@ -1,5 +1,39 @@
 import Foundation
 
+/// What `WorkoutEngine` asks of whatever counts a movement.
+///
+/// `RepCounter` is the one that counts. The protocol exists because one movement is counted by two
+/// of them at once: `SmartSquatCounter` holds an air-squat counter and a heels-flat counter side by
+/// side and answers as whichever is in charge.
+public protocol RepCounting: AnyObject {
+    var phase: RepCounter.Phase { get }
+    var count: Int { get }
+    var smoothed: Float { get }
+    var learnedRange: Float { get }
+    var requiredRange: Float { get }
+    var calibrated: Bool { get }
+
+    /// Feeds one sample, and says whether it completed a rep.
+    @discardableResult
+    func update(_ raw: Float, now: Int64, mayCount: Bool) -> Bool
+
+    func forceIncrement()
+    func forceDecrement()
+    func setCount(_ n: Int)
+    func resetBand()
+    func requireFreshDown()
+    func reset()
+    func resetCount()
+}
+
+extension RepCounting {
+    /// The same, counting allowed: what callers holding any counter use for an ordinary frame.
+    @discardableResult
+    public func update(_ raw: Float, now: Int64) -> Bool {
+        update(raw, now: now, mayCount: true)
+    }
+}
+
 /// Counts oscillations of a scalar signal by measuring how far it climbs away from its trough.
 ///
 /// Callers must orient the signal so the *bottom* of the movement is the low value and the *top*
@@ -23,12 +57,13 @@ import Foundation
 /// so it never arms and every rep is silently discarded. Tracking the lowest value since the last
 /// rep removes the ordering problem — the range is allowed to still be unknown while the athlete
 /// is at the bottom of the movement.
-public final class RepCounter {
+public final class RepCounter: RepCounting {
 
     public enum Phase { case unknown, down, up }
 
-    /// Share of the observed travel held back as dead zone at each end.
-    private static let margin: Float = 0.30
+    /// Share of the observed travel held back as dead zone at each end. Public because it is the
+    /// default of `bottomMargin`, and a default argument can only name public things.
+    public static let margin: Float = 0.30
     /// How fast a stale extreme is forgotten, in signal units per frame.
     private static let decay: Float = 0.05
 
@@ -37,6 +72,8 @@ public final class RepCounter {
     private let minRepMs: Int64
     private let smoothing: Float
     private let minRange: Float
+    private let bottomMargin: Float
+    private let minTravel: Float
 
     public private(set) var phase: Phase = .unknown
     public private(set) var count = 0
@@ -56,13 +93,31 @@ public final class RepCounter {
         upAbove: Float,
         minRepMs: Int64 = 350,
         smoothing: Float = 0.4,
-        minRange: Float = 0
+        minRange: Float = 0,
+        // The share of the learned travel, measured up from the lowest value seen, that counts as
+        // the bottom of the movement: the zone a rep has to have visited to arm.
+        //
+        // Thirty percent for every movement but one. A squat done with the heels flat on the floor
+        // stops higher than one up on the toes, and both are correct, so a counter that learned
+        // its band from deep reps must still arm for the shallower kind. A wider zone is what lets
+        // it; `minTravel` is what stops it arming for a wobble.
+        bottomMargin: Float = RepCounter.margin,
+        // The least a rep must climb off its trough, in signal units, however wide the learned
+        // band.
+        //
+        // Zero for every movement but one, where the band's own share of travel is the whole rule.
+        // It is a floor under that share, and it exists because widening `bottomMargin` shrinks the
+        // share: at 60% the band asks for only a tenth of its travel, which on a wide band is a few
+        // degrees of jitter.
+        minTravel: Float = 0
     ) {
         self.downBelow = downBelow
         self.upAbove = upAbove
         self.minRepMs = minRepMs
         self.smoothing = smoothing
         self.minRange = minRange
+        self.bottomMargin = bottomMargin
+        self.minTravel = minTravel
     }
 
     /// Travel observed so far. Zero until samples arrive.
@@ -103,9 +158,13 @@ public final class RepCounter {
 
         let range = learnedRange
         let useBand = calibrated
-        let needed = useBand ? (1 - 2 * Self.margin) * range : upAbove - downBelow
+        // How far the signal must climb off its trough, and how close to the top it must finish.
+        // Written as Kotlin writes it, `1 - bottomMargin - margin`, and not as `1 - 2 * margin`:
+        // in Float they can differ in the last bit even when the two margins are equal.
+        let needed = useBand ? max((1 - bottomMargin - Self.margin) * range, minTravel)
+                             : upAbove - downBelow
         let topOfBand = useBand ? seenHigh - Self.margin * range : upAbove
-        let bottomOfBand = useBand ? seenLow + Self.margin * range : downBelow
+        let bottomOfBand = useBand ? seenLow + bottomMargin * range : downBelow
 
         if s <= bottomOfBand {
             phase = .down

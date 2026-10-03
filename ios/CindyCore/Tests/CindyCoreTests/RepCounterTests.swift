@@ -70,4 +70,27 @@ final class RepCounterTests: XCTestCase {
         XCTAssertEqual(c.count, 1, "recalibration keeps the score")
         XCTAssertEqual(c.calibrated, false, "recalibration forgets the band")
     }
+
+    /// A half rep that never reaches the bottom is not counted. (`RepCounterTest.kt`)
+    func testAHalfRepThatNeverReachesTheBottomIsNotCounted() {
+        let c = RepCounter(downBelow: 100, upAbove: 150)
+        // Starts high, dips only to 120, comes back up: no bottom, so no rep.
+        var t: Int64 = 0
+        _ = hold(c, 170, from: t); t += 1000
+        _ = hold(c, 120, from: t); t += 1000
+        _ = hold(c, 170, from: t)
+        XCTAssertEqual(c.count, 0)
+    }
+
+    /// Reset clears everything. (`RepCounterTest.kt`)
+    func testResetClearsEverything() {
+        let c = RepCounter(downBelow: 100, upAbove: 150)
+        var t: Int64 = 0
+        _ = hold(c, 80, from: t); t += 1000
+        _ = hold(c, 170, from: t)
+        XCTAssertEqual(c.count, 1)
+        c.reset()
+        XCTAssertEqual(c.count, 0)
+        XCTAssertEqual(c.phase, .unknown)
+    }
 }
