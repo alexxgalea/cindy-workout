@@ -1,0 +1,22 @@
+name: Test Cindy iOS
+
+# The part of the iOS app that is not tied to Apple's frameworks, tested on Linux. It is cheap, so
+# it runs on every push; the job that builds the app itself needs macOS and comes with the
+# phase that makes it compile.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: CindyCore tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.1.2-noble
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run CindyCore's tests
+        run: swift test --package-path ios/CindyCore
