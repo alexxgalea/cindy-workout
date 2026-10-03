@@ -1,0 +1,52 @@
+name: Build Cindy iOS
+
+# The app itself needs macOS and the iOS SDK, and macOS minutes count ten times against the
+# month's included minutes, so this runs only when something under ios/ changes, on pull requests
+# and on main, never on both for the same push, and a newer push cancels the run before it.
+# CindyCore's own tests run on Linux in ios.yml.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-app.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-app.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Build the app (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: cd ios && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/CindyTracker.xcodeproj \
+            -scheme CindyTracker \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+      # The log is long and the compiler's complaints are in the middle of it, so say them last.
+      - name: Compiler errors
+        if: failure()
+        run: grep -E 'error:' build.log | sort -u | head -100 || true
