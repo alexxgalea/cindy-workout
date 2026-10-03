@@ -195,6 +195,39 @@ public final class WorkoutEngine {
     /// Smoothing on the settling signal, so raw jitter does not read as still rising.
     private static let startSettleSmoothing: Float = 0.4
 
+    /// The least a heels-flat squat has to close the knee, in degrees, to be a rep.
+    ///
+    /// Heels flat on the floor stop the knees travelling forward, so the hips stop higher and the
+    /// knee closes less than it does up on the toes: seen from a phone on the floor a good one
+    /// travels 35 to 40 degrees where the air squat asks for about 58. Both are correct squats. A
+    /// quarter squat seen from chest height travels 30 to 35, so this is the line between them,
+    /// and the one number to retune after trying it on a phone: lowered to 33 it lets a good squat
+    /// from the floor count at 110 degrees, and a quarter squat from chest height count at 140.
+    private static let heelsFlatMinTravel: Float = 35
+
+    /// How much of the learned travel, from the bottom, counts as having gone down.
+    ///
+    /// Sixty percent where every other movement uses thirty, because the band of someone who mixes
+    /// both styles is as deep as their deepest squat, and a heels-flat rep after a deep one would
+    /// otherwise never reach its bottom zone. Measured: three deep squats and then ten heels-flat
+    /// ones to 125 degrees count 13 of 13 with this, and 8 of 13 at a margin of 50%.
+    private static let heelsFlatBottomMargin: Float = 0.6
+
+    /// Where an uncalibrated heels-flat squat has to have got to, in knee degrees.
+    ///
+    /// The climb from here to the lockout is 38 degrees, just over `heelsFlatMinTravel`, the same
+    /// relation the air squat has between its own two numbers (58 against 55). So a counter that
+    /// has not calibrated yet can never book a climb the calibrated one would refuse.
+    private static let heelsFlatDownBelow: Float = 120
+
+    /// How many reps only the heels-flat counter has to accept, in one block of squats, before
+    /// smart squat counting goes over to it.
+    ///
+    /// Three because one is a rep, and two is a coincidence a single half-hearted squat could
+    /// make; it is also few enough that the athlete has lost almost nothing by the time the count
+    /// catches up, which it does by crediting all three.
+    private static let smartSquatSpotReps = 3
+
     /// Keeps the engine on one movement for a labelled exercise clip. The application uses the
     /// default Cindy progression; the regression harness uses this mode so a ten-rep push-up
     /// video is not truncated at Cindy's five-pull-up transition.
@@ -207,15 +240,69 @@ public final class WorkoutEngine {
     /// session, which is also the only way the history line can stay true.
     public let profile: CindyProfile
 
+    /// Whether an air-squat session may notice heels-flat squats and start counting them as such.
+    ///
+    /// Off unless the athlete has switched it on: it is being tested, and a counter that changes
+    /// its own mind about a movement has to be wanted before it is trusted. Public so the screen
+    /// can tell whether the engine it holds was built for the setting as it stands now, and fixed
+    /// for the life of the engine like `profile`, for the same reason.
+    ///
+    /// It acts on the frames of a workout and nowhere else. The app never runs the setup check on
+    /// squats, because it calibrates on the pull-up, and it is not meant to: a switch made before
+    /// the clock starts would carry into the workout with nobody told.
+    public let smartSquats: Bool
+
+    private let counters: [Exercise: RepCounting]
+
     // minRange is the projected travel below which a swing is not believed to be a rep at all;
     // above it the counter calibrates to the athlete and the fixed numbers stop mattering.
-    private let counters: [Exercise: RepCounter] = [
-        // All three signals are joint angles in degrees. The pull-up one is negated because a
-        // dead hang is the *extended* end of its range, the opposite way round to the others.
-        .pullup: RepCounter(downBelow: -140, upAbove: -100, minRepMs: 400, minRange: 40),
-        .pushup: RepCounter(downBelow: 100, upAbove: 150, minRepMs: 350, minRange: 45),
-        .squat: RepCounter(downBelow: 100, upAbove: 158, minRepMs: 350, minRange: 55)
-    ]
+    private static func makeCounters(profile: CindyProfile, smartSquats: Bool,
+                                     fixedExercise: Exercise?) -> [Exercise: RepCounting] {
+        [
+            // All three signals are joint angles in degrees. The pull-up one is negated because a
+            // dead hang is the *extended* end of its range, the opposite way round to the others.
+            .pullup: RepCounter(downBelow: -140, upAbove: -100, minRepMs: 400, minRange: 40),
+            .pushup: RepCounter(downBelow: 100, upAbove: 150, minRepMs: 350, minRange: 45),
+            .squat: squatCounter(profile: profile, smartSquats: smartSquats, fixedExercise: fixedExercise)
+        ]
+    }
+
+    /// The counter for the chosen squat.
+    ///
+    /// Exhaustive over `SquatVariant` with no `default`, like the Strava mapping, so a new squat has
+    /// to be given a counter on purpose. Box and supported squats keep the air squat's. Only the
+    /// air squat is ever handed to `SmartSquatCounter`: someone who has chosen heels flat has
+    /// already said, and someone on a box has a depth of their own.
+    private static func squatCounter(profile: CindyProfile, smartSquats: Bool,
+                                     fixedExercise: Exercise?) -> RepCounting {
+        switch profile.squat {
+        case .heelsFlat:
+            return heelsFlatCounter()
+        case .airSquat:
+            if smartSquats {
+                return SmartSquatCounter(
+                    air: airSquatCounter(),
+                    heelsFlat: heelsFlatCounter(),
+                    spotAfter: smartSquatSpotReps,
+                    creditCap: fixedExercise == nil ? Exercise.squat.target : Int.max
+                )
+            }
+            return airSquatCounter()
+        case .boxSquat, .supportedSquat:
+            return airSquatCounter()
+        }
+    }
+
+    private static func airSquatCounter() -> RepCounter {
+        RepCounter(downBelow: 100, upAbove: 158, minRepMs: 350, minRange: 55)
+    }
+
+    private static func heelsFlatCounter() -> RepCounter {
+        RepCounter(downBelow: heelsFlatDownBelow, upAbove: 158, minRepMs: 350,
+                   minRange: heelsFlatMinTravel,
+                   bottomMargin: heelsFlatBottomMargin,
+                   minTravel: heelsFlatMinTravel)
+    }
 
     public private(set) var exercise: Exercise
     public private(set) var rounds = 0
@@ -289,13 +376,61 @@ public final class WorkoutEngine {
     /// engine's own geometry, not a second estimate of it, so what is drawn is what is tested.
     public private(set) var barGuide: BarGuide?
 
-    public init(fixedExercise: Exercise? = nil, profile: CindyProfile = .standard) {
+    public init(fixedExercise: Exercise? = nil, profile: CindyProfile = .standard,
+                smartSquats: Bool = false) {
         self.fixedExercise = fixedExercise
         self.profile = profile
+        self.smartSquats = smartSquats
         self.exercise = fixedExercise ?? .pullup
+        self.counters = Self.makeCounters(profile: profile, smartSquats: smartSquats,
+                                          fixedExercise: fixedExercise)
     }
 
-    private var counter: RepCounter { counters[exercise]! }
+    private var counter: RepCounting { counters[exercise]! }
+
+    /// True once smart squat counting has noticed heels-flat squats and taken over the count.
+    ///
+    /// Only ever true for an engine built with `smartSquats`, on an air-squat profile. Read by the
+    /// screen, which announces it once and tells the results screen.
+    public var heelsFlatSpotted: Bool {
+        (counters[.squat] as? SmartSquatCounter)?.switched == true
+    }
+
+    /// The movements this session was actually counted as.
+    ///
+    /// `profile` is what the athlete chose and never changes. This is that, unless smart squat
+    /// counting took over, in which case the squats were counted as heels-flat squats and the
+    /// record has to say so: a rep's meaning must not be different from the one it was scored
+    /// under. The whole session is filed that way, not only the squats after the switch, because a
+    /// squat on the toes also meets the heels-flat standard, so the label errs the honest way and
+    /// never claims more than was done.
+    public var countedProfile: CindyProfile {
+        guard heelsFlatSpotted else { return profile }
+        var counted = profile
+        counted.squat = .heelsFlat
+        return counted
+    }
+
+    /// The score the movement had actually reached when the last event fired.
+    ///
+    /// The count itself is cleared by `advance` on the way into the next movement, so by the time a
+    /// caller reads `reps` after an `.exerciseDone` it is looking at the new movement's zero. The
+    /// voice used to work around that by announcing the *target* instead, which was right only
+    /// because finishing was the only way to leave a movement. Skipping is the other way, and the
+    /// athlete who did three push-ups and skipped is owed "three", not "ten".
+    public private(set) var repsAtLastEvent = 0
+
+    /// What each movement of the round in progress actually scored, filled in as each is left.
+    ///
+    /// Reps used to be inferred from position — "past the push-ups" was taken to mean ten of them
+    /// — which is true only while the sole way past a movement is to finish it. SKIP means a round
+    /// can be completed with fewer reps in it than its targets, and a tally that keeps crediting
+    /// the targets is a tally that reports work nobody did.
+    private var bankedThisRound: [Exercise: Int] = [:]
+
+    /// The same, for every round already finished — kept per round rather than summed so that
+    /// `undoRep` can step back over a round boundary into the score that was really there.
+    private var bankedRounds: [[Exercise: Int]] = []
 
     public var reps: Int { counter.count }
     public var phase: RepCounter.Phase { counter.phase }
@@ -304,11 +439,15 @@ public final class WorkoutEngine {
     public var calibrated: Bool { counter.calibrated }
 
     /// Reps completed since the start of the current round, across all three movements.
-    public var repsThisRound: Int {
-        Exercise.allCases.prefix(exercise.rawValue).reduce(0) { $0 + $1.target } + reps
-    }
+    ///
+    /// The movements already left contribute what they actually scored, not what they were asked
+    /// for. Those two only differ when something was skipped, which is exactly the case this
+    /// figure used to get wrong.
+    public var repsThisRound: Int { bankedThisRound.values.reduce(0, +) + reps }
 
-    public var totalReps: Int { rounds * 30 + repsThisRound }
+    public var totalReps: Int {
+        bankedRounds.reduce(0) { $0 + $1.values.reduce(0, +) } + repsThisRound
+    }
 
     public func reset() {
         counters.values.forEach { $0.reset() }
@@ -332,6 +471,9 @@ public final class WorkoutEngine {
         blocked = false
         manualReps = 0
         lastRepSource = .auto
+        repsAtLastEvent = 0
+        bankedThisRound.removeAll()
+        bankedRounds.removeAll()
         diagnostics = FrameDiagnostics()
         bar.reset()
         barGuide = nil
@@ -365,21 +507,36 @@ public final class WorkoutEngine {
             manualReps -= 1
             lastRepSource = .auto
         }
+        let counter = self.counter
         if counter.count > 0 {
             counter.forceDecrement()
+            repsAtLastEvent = counter.count
             return .undo
         }
         if exercise != .pullup {
-            let previous = exercise.previous
-            exercise = previous
-            counter.setCount(previous.target - 1)
+            exercise = exercise.previous
+            stepBackInto(exercise)
             return .undo
         }
         guard rounds > 0 else { return .none }
         rounds -= 1
+        // The round being stepped back into is the one whose banked counts were just filed away.
+        bankedThisRound.removeAll()
+        if let last = bankedRounds.popLast() { bankedThisRound = last }
         exercise = .squat
-        counter.setCount(Exercise.squat.target - 1)
+        stepBackInto(.squat)
         return .undo
+    }
+
+    /// Re-enters a movement already left, at one rep below what it actually scored.
+    ///
+    /// "One below its target" was the old answer, and it silently handed back reps that were never
+    /// done to anyone who had skipped the movement — undo would have been a way to invent a score.
+    /// What it scored is banked, so that is what it returns to.
+    private func stepBackInto(_ movement: Exercise) {
+        let banked = bankedThisRound.removeValue(forKey: movement) ?? movement.target
+        counters[movement]!.setCount(max(banked - 1, 0))
+        repsAtLastEvent = counters[movement]!.count
     }
 
     /// Forgets every learned band, keeping the score.
@@ -469,7 +626,7 @@ public final class WorkoutEngine {
     /// still on the floor. And the joint that scores the movement has to have stopped opening,
     /// which is what rules out arriving halfway up. Getting off the floor satisfies the first for
     /// most of a second before it satisfies the second.
-    private func takeUpPosition(_ k: [Keypoint], s: Float, now: Int64, counter: RepCounter) {
+    private func takeUpPosition(_ k: [Keypoint], s: Float, now: Int64, counter: RepCounting) {
         guard inStartPosition(k) else {
             startPositionSince = 0
             startSmoothed = .nan
@@ -508,10 +665,16 @@ public final class WorkoutEngine {
 
     /// Advances to the next movement if the current one just hit its target.
     private func settle() -> RepEvent {
-        (fixedExercise == nil && reps >= exercise.target) ? advance() : .rep
+        if fixedExercise == nil && reps >= exercise.target { return advance() }
+        repsAtLastEvent = reps
+        return .rep
     }
 
     private func advance() -> RepEvent {
+        // Read before the counter is cleared: this is the number the movement really reached, and
+        // after a skip it is the only record that it was not the target.
+        repsAtLastEvent = reps
+        bankedThisRound[exercise] = reps
         counter.resetCount()
         let wasLast = exercise == .squat
         exercise = exercise.next
@@ -523,6 +686,8 @@ public final class WorkoutEngine {
         startReference = .nan
         if wasLast {
             rounds += 1
+            bankedRounds.append(bankedThisRound)
+            bankedThisRound.removeAll()
             return .roundDone
         }
         return .exerciseDone
@@ -912,9 +1077,16 @@ public final class WorkoutEngine {
     /// argument as `takeUpPosition`: a dwell on a position that has stopped changing, rather than
     /// a threshold on an angle that the camera's viewpoint can flatten.
     private func settleBar(_ hands: Keypoint, halfGrip: Float, torso: Float, now: Int64) {
-        guard let reference = barSettleHands,
-              hypotf(hands.x - reference.x, hands.y - reference.y) <= Self.barSettleDriftTorsos * torso
-        else {
+        // Tested as the Kotlin tests it, `distance > limit`, not `distance <= limit` negated: the
+        // two read the same for any distance but NaN, and a NaN must not be taken for drift.
+        let drifted: Bool
+        if let reference = barSettleHands {
+            drifted = PoseGeometry.hypot32(hands.x - reference.x, hands.y - reference.y)
+                > Self.barSettleDriftTorsos * torso
+        } else {
+            drifted = true
+        }
+        if drifted {
             barSettleSince = now
             barSettleHands = hands
             return

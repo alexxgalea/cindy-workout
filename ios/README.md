@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, records, levels | **43 tests, 143 assertions, passing** (`tools/ios/swift.sh test`), on Linux and in CI. Behind the Android app: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records, levels | **226 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Records, progress, voice, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
 The logic is a real, running, tested port. The app layer compiled on its first macOS build with

@@ -16,13 +16,21 @@ public enum PoseFixtures {
         k[right] = Keypoint(x: x + 10, y: y, score: 0.9)
     }
 
-    private static func rad(_ deg: Float) -> Float { deg * .pi / 180 }
+    /// Kotlin's `Math.toRadians(deg.toDouble())`: Java's constant, in `Double`.
+    private static func rad(_ deg: Float) -> Double { Double(deg) * 0.017453292519943295 }
+
+    /// Kotlin's `(LIMB * sin(rad(x))).toFloat()`: the product and the sine are `Double`, and the
+    /// result is rounded to `Float` once. Working them in `Float` moves a coordinate by a bit,
+    /// which the parity trace's `kpSum` column exists to catch.
+    private static func swing(_ length: Float, _ trig: (Double) -> Double, _ deg: Float) -> Float {
+        Float(Double(length) * trig(rad(deg)))
+    }
 
     /// A body squatting with the given knee angle. 180 is standing, 90 is below parallel.
     public static func squat(_ kneeDeg: Float) -> [Keypoint] {
         var k = blank()
-        let hipX = limb * sinf(rad(kneeDeg))
-        let hipY = limb * cosf(rad(kneeDeg))
+        let hipX = swing(limb, sin, kneeDeg)
+        let hipY = swing(limb, cos, kneeDeg)
         putPair(&k, KP.leftKnee, KP.rightKnee, 0, 0)
         putPair(&k, KP.leftAnkle, KP.rightAnkle, 0, limb)
         putPair(&k, KP.leftHip, KP.rightHip, hipX, hipY)
@@ -31,11 +39,29 @@ public enum PoseFixtures {
         return k
     }
 
+    /// A body face down on the floor at the end of a set of push-ups, legs straight.
+    ///
+    /// The knee angle here is a full 180 degrees, the same reading a standing body gives, so this
+    /// is the pose that proves a squat cannot be gated on leg extension alone. What separates it
+    /// from standing is the torso, which lies along the floor instead of pointing up.
+    public static func onTheFloor() -> [Keypoint] {
+        var k = blank()
+        putPair(&k, KP.leftShoulder, KP.rightShoulder, 0, 0)
+        putPair(&k, KP.leftHip, KP.rightHip, -torso, 0)
+        // Hip, knee and ankle collinear along the floor: the legs are locked out.
+        putPair(&k, KP.leftKnee, KP.rightKnee, -torso - 80, 0)
+        putPair(&k, KP.leftAnkle, KP.rightAnkle, -torso - 160, 0)
+        putPair(&k, KP.leftElbow, KP.rightElbow, 0, limb)
+        putPair(&k, KP.leftWrist, KP.rightWrist, 0, 2 * limb)
+        k[KP.nose] = Keypoint(x: 60, y: 0, score: 0.9)
+        return k
+    }
+
     /// A body mid push-up with the given elbow angle. 180 is lockout, 90 is chest down.
     public static func pushup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
-        let shX = limb * sinf(rad(elbowDeg))
-        let shY = limb * cosf(rad(elbowDeg))
+        let shX = swing(limb, sin, elbowDeg)
+        let shY = swing(limb, cos, elbowDeg)
         putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
         putPair(&k, KP.leftWrist, KP.rightWrist, 0, limb)
         putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
@@ -53,8 +79,8 @@ public enum PoseFixtures {
     /// fixture geometry exactly, since the head-over-bar gate is sensitive to it.
     public static func pullup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
-        let shX = limb * sinf(rad(elbowDeg))
-        let shY = -limb * cosf(rad(elbowDeg))
+        let shX = swing(limb, sin, elbowDeg)
+        let shY = swing(-limb, cos, elbowDeg)
         putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
         putPair(&k, KP.leftWrist, KP.rightWrist, 0, -limb)
         putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
@@ -73,8 +99,8 @@ public enum PoseFixtures {
     /// Mirrors Kotlin's `PoseFixtures.kneePushup`.
     public static func kneePushup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
-        let shX = limb * sinf(rad(elbowDeg))
-        let shY = limb * cosf(rad(elbowDeg))
+        let shX = swing(limb, sin, elbowDeg)
+        let shY = swing(limb, cos, elbowDeg)
         // The floor is the line the planted hands sit on.
         let floorY = limb
         putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
@@ -96,8 +122,8 @@ public enum PoseFixtures {
     /// `PoseFixtures.invertedRow`.
     public static func invertedRow(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
-        let shX = limb * sinf(rad(elbowDeg))
-        let shY = -limb * cosf(rad(elbowDeg))
+        let shX = swing(limb, sin, elbowDeg)
+        let shY = swing(-limb, cos, elbowDeg)
         putPair(&k, KP.leftElbow, KP.rightElbow, 0, 0)
         putPair(&k, KP.leftWrist, KP.rightWrist, 0, -limb)
         putPair(&k, KP.leftShoulder, KP.rightShoulder, shX, shY)
@@ -179,5 +205,28 @@ public final class Rig {
         hold(PoseFixtures.squat(175))
         hold(PoseFixtures.squat(80))
         hold(PoseFixtures.squat(175))
+    }
+}
+
+extension Array where Element == Keypoint {
+
+    /// Shifts a whole body, as if the athlete stepped off the bar or along it. Unseen joints stay
+    /// unseen. Mirrors the Kotlin tests' `Array<Keypoint>.moved`.
+    public func moved(dx: Float, dy: Float) -> [Keypoint] {
+        map { $0.score <= 0 ? $0 : Keypoint(x: $0.x + dx, y: $0.y + dy, score: $0.score) }
+    }
+
+    /// Blanks one keypoint, the way the model reports a joint it cannot see. Mirrors the Kotlin
+    /// tests' `Array<Keypoint>.hiding`.
+    public func hiding(_ index: Int) -> [Keypoint] {
+        var copy = self
+        copy[index] = .missing
+        return copy
+    }
+
+    /// Shrinks a body about the origin, as if the athlete were much further from the camera.
+    /// Mirrors the Kotlin tests' `Array<Keypoint>.scaled`.
+    public func scaled(_ factor: Float) -> [Keypoint] {
+        map { $0.score <= 0 ? $0 : Keypoint(x: $0.x * factor, y: $0.y * factor, score: $0.score) }
     }
 }

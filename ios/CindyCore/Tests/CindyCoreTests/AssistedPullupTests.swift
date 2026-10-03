@@ -2,134 +2,294 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-/// A relaxed bottom, and nothing else relaxed: the head still has to clear the bar, the hands
-/// still have to be on it, and RepCounter still wants the athlete's whole learned travel.
+/// The band-assisted pull-up: a relaxed bottom, and nothing else relaxed.
 ///
-/// Carried over from the `CindyCoreChecks` executable: Assisted pull-up. Every check keeps its original wording as
-/// its assertion message.
+/// The band takes enough weight that the arms may never straighten, so requiring a dead hang means
+/// the reset never arms and the session scores zero with the counter working perfectly behind a
+/// gate the athlete cannot open. What replaces it is the head dropping back below the reset line —
+/// a torso-scaled offset the camera's viewpoint cannot flatten, and a position you cannot be in at
+/// the top of a rep.
+///
+/// Everything else still applies, and these tests say so: the head still has to clear the bar, the
+/// hands still have to be on it, and `RepCounter` still wants the athlete's whole learned travel. A
+/// relaxed bottom buys a shallow rep nothing.
+///
+/// Mirrors `AssistedPullupTest.kt`; it replaces the old checks' "Assisted pull-up" class.
 final class AssistedPullupTests: XCTestCase {
 
-    func testAssistedPullUp() {
-        let bottom: Float = 120
-        let top: Float = 60
+    /// As straight as this athlete gets, hanging in a band. Well under a dead hang.
+    private let bottom: Float = 120
+    private let top: Float = 60
 
-        func engineFor(_ pull: PullVariant) -> Rig {
-            Rig(fixedExercise: .pullup, profile: CindyProfile(pull: pull))
-        }
+    /// Long enough for the settle fallback to find the bar without a dead hang.
+    private func findBar(_ d: Rig, _ angle: Float) {
+        d.hold(PoseFixtures.pullup(angle), frames: 35)
+    }
 
-        var r = engineFor(.bandAssistedPullUp)
-        r.hold(PoseFixtures.pullup(bottom), frames: 35)
-        for _ in 0..<6 {
-            r.hold(PoseFixtures.pullup(top), frames: 8)
-            r.hold(PoseFixtures.pullup(bottom), frames: 8)
+    private func cycles(_ d: Rig, _ n: Int, _ bottom: Float, _ top: Float) {
+        for _ in 0..<n {
+            d.hold(PoseFixtures.pullup(top), frames: 8)
+            d.hold(PoseFixtures.pullup(bottom), frames: 8)
         }
+    }
+
+    private func engineFor(_ pull: PullVariant) -> Rig {
+        Rig(fixedExercise: .pullup, profile: CindyProfile(pull: pull))
+    }
+
+    /// a band-assisted pull-up counts without a dead hang
+    func testABandAssistedPullUpCountsWithoutADeadHang() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
+        XCTAssertTrue(d.engine.barKnown)
+        cycles(d, 6, bottom, top)
+
         // The first cycle teaches the counter the athlete's range; the rest score.
-        XCTAssertEqual(r.engine.reps, 5, "a band-assisted pull-up counts without a dead hang")
+        XCTAssertEqual(d.engine.reps, 5)
+    }
 
-        // The same movement, in the mode that says it is a strict pull-up. Unchanged.
-        r = engineFor(.strictPullUp)
-        r.hold(PoseFixtures.pullup(bottom), frames: 35)
-        for _ in 0..<6 {
-            r.hold(PoseFixtures.pullup(top), frames: 8)
-            r.hold(PoseFixtures.pullup(bottom), frames: 8)
-        }
-        XCTAssertEqual(r.engine.reps, 0, "the same reps score nothing in strict mode")
+    /// The same movement, in the mode that says it is a strict pull-up. Unchanged.
+    ///
+    /// the same reps score nothing in strict mode
+    func testTheSameRepsScoreNothingInStrictMode() {
+        let d = engineFor(.strictPullUp)
 
-        // The gate that is not relaxed: pulling only partway is not a rep in either mode.
-        r = engineFor(.bandAssistedPullUp)
-        r.hold(PoseFixtures.pullup(bottom), frames: 35)
-        for _ in 0..<6 {
-            r.hold(PoseFixtures.pullup(95), frames: 8)
-            r.hold(PoseFixtures.pullup(bottom), frames: 8)
-        }
-        XCTAssertEqual(r.engine.reps, 0, "a band-assisted pull-up still requires the head over the bar")
+        findBar(d, bottom)
+        cycles(d, 6, bottom, top)
 
-        // And the bar itself is still a gate: arms overhead a long way from where the bar was
-        // learned do not score, assisted or not.
-        r = engineFor(.bandAssistedPullUp)
-        r.hold(PoseFixtures.pullup(bottom), frames: 35)
-        let before = r.engine.reps
+        XCTAssertEqual(d.engine.reps, 0)
+    }
+
+    /// The gate that is *not* relaxed.
+    ///
+    /// Pulling only partway, so the head never clears the bar, is not a rep in either mode. This is
+    /// the check that the relaxed bottom did not quietly become a relaxed rep.
+    ///
+    /// a band-assisted pull-up still requires the head over the bar
+    func testABandAssistedPullUpStillRequiresTheHeadOverTheBar() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
+        // 95 degrees leaves the head below the bar line: a genuine partial.
+        cycles(d, 6, bottom, 95)
+
+        XCTAssertEqual(d.engine.reps, 0)
+    }
+
+    /// And the bar itself is still a gate: arms waving overhead away from where the bar was learned
+    /// do not score, assisted or not.
+    ///
+    /// overhead movement away from the bar does not count
+    func testOverheadMovementAwayFromTheBarDoesNotCount() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
+        let before = d.engine.reps
         for _ in 0..<6 {
             for angle in [top, bottom] {
-                var offBar = PoseFixtures.pullup(angle)
-                for i in offBar.indices where offBar[i].score > 0 {
-                    offBar[i] = Keypoint(x: offBar[i].x + 900, y: offBar[i].y, score: offBar[i].score)
+                // Same movement, done a long way to the side of the learned bar.
+                let offBar = PoseFixtures.pullup(angle).map {
+                    Keypoint(x: $0.x + 900, y: $0.y, score: $0.score)
                 }
-                r.hold(offBar, frames: 8)
+                d.hold(offBar, frames: 8)
             }
         }
-        XCTAssertEqual(r.engine.reps, before, "overhead movement away from the bar does not count")
 
-        // An inverted row satisfies every pull-up gate but one: the wrists are above the hips, the
-        // bar can be learned from the hands, the head reaches the bar line and the elbow swings a
-        // full range. Only the torso's direction separates the families.
-        for variant in [PullVariant.strictPullUp, .bandAssistedPullUp] {
-            let rows = engineFor(variant)
-            rows.hold(PoseFixtures.pullup(bottom), frames: 35)
-            for _ in 0..<6 {
-                rows.hold(PoseFixtures.invertedRow(top), frames: 8)
-                rows.hold(PoseFixtures.invertedRow(bottom), frames: 8)
-            }
-            XCTAssertEqual(rows.engine.reps, 0, "inverted rows never count as \(variant.label)")
-        }
-        let rowBar = engineFor(.strictPullUp)
+        XCTAssertEqual(d.engine.reps, before)
+    }
+
+    /// Setting the band up must not teach a bar.
+    ///
+    /// Found on real footage: standing on a box holding the band at chest height satisfies every
+    /// other condition the bar used to be learned from — hands above the hips, elbows extended — so
+    /// the bar was fixed at the athlete's chest, and every real rep afterwards was refused with
+    /// "Get on the bar" with no way back, because refinement requires already passing the gate.
+    ///
+    /// holding a band at chest height does not teach a bar
+    func testHoldingABandAtChestHeightDoesNotTeachABar() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        d.hold(PoseFixtures.bandSetup(), frames: 60)
+
+        XCTAssertFalse(d.engine.barKnown, "the hands are below the head, so this is not a hang")
+    }
+
+    /// And a single frame of the head going missing must not teach one either.
+    ///
+    /// The guard that stops the band setup teaching a bar asks whether the hands are above the nose,
+    /// and deliberately answers *yes* when the nose is not confidently seen — otherwise rear-view
+    /// and occluded footage, which already counts, would be locked out. That turns a missing
+    /// keypoint into permission, and one dropped frame is all it takes: found on the band fixture at
+    /// one light level, where the nose fell below confidence on a single frame in sixty, a false bar
+    /// was taught at the chest, and the whole clip then scored zero with 401 of 532 frames refused
+    /// for "Get on the bar".
+    ///
+    /// one dropped head keypoint during the band setup does not teach a bar
+    func testOneDroppedHeadKeypointDuringTheBandSetupDoesNotTeachABar() {
+        let d = engineFor(.bandAssistedPullUp)
+        var blind = PoseFixtures.bandSetup()
+        blind[KP.nose] = Keypoint(x: blind[KP.nose].x, y: blind[KP.nose].y, score: 0.1)
+
+        d.hold(PoseFixtures.bandSetup(), frames: 30)
+        d.hold(blind, frames: 1)
+        d.hold(PoseFixtures.bandSetup(), frames: 30)
+
+        XCTAssertFalse(d.engine.barKnown, "one unseen nose is not evidence of a hang")
+    }
+
+    /// A rear view, where the head is never seen at all, still finds its bar — just not instantly.
+    ///
+    /// The counterweight to the test above: the relaxation exists for footage filmed from behind,
+    /// and tightening it must not cost that. So the permission is still granted, it merely has to be
+    /// *held* rather than taken from a single frame. A real dead hang lasts seconds and clears this
+    /// without trying; the stray frame that taught a false bar never could.
+    ///
+    /// a hang filmed from behind still teaches the bar once it is held
+    func testAHangFilmedFromBehindStillTeachesTheBarOnceItIsHeld() {
+        var headless = PoseFixtures.pullup(175)
+        headless[KP.nose] = Keypoint(x: headless[KP.nose].x, y: headless[KP.nose].y, score: 0.1)
+
+        let brief = engineFor(.strictPullUp)
+        brief.hold(headless, frames: 2)
+        XCTAssertFalse(brief.engine.barKnown, "two frames is a dropout, not a hang")
+
+        let held = engineFor(.strictPullUp)
+        held.hold(headless, frames: 6)
+        XCTAssertTrue(held.engine.barKnown, "a sustained hang with no visible head is still a hang")
+    }
+
+    /// A hang with the head plainly visible is believed at once, as it always was.
+    ///
+    /// a dead hang with the head in shot still teaches the bar on the first frame
+    func testADeadHangWithTheHeadInShotStillTeachesTheBarOnTheFirstFrame() {
+        let d = engineFor(.strictPullUp)
+
+        d.hold(PoseFixtures.pullup(175), frames: 1)
+
+        XCTAssertTrue(d.engine.barKnown, "seeing the head below the hands is evidence, not an absence")
+    }
+
+    /// And the bar the athlete then actually hangs from is still found normally.
+    ///
+    /// a hang after the band setup still finds the bar
+    func testAHangAfterTheBandSetupStillFindsTheBar() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        d.hold(PoseFixtures.bandSetup(), frames: 60)
+        findBar(d, bottom)
+
+        XCTAssertTrue(d.engine.barKnown, "the real hang teaches it")
+        cycles(d, 6, bottom, top)
+        XCTAssertEqual(d.engine.reps, 5, "and the reps score")
+    }
+
+    // ── the row is a different movement ───────────────────────────────────────
+    //
+    // An inverted row satisfies every pull-up gate but one: the wrists are above the hips, the bar
+    // can be learned from the hands, the head reaches the bar line and the elbow swings a full
+    // range. Only the torso's direction separates the families.
+
+    /// inverted rows never count as strict pull-ups
+    func testInvertedRowsNeverCountAsStrictPullUps() {
+        let d = engineFor(.strictPullUp)
+
+        findBar(d, bottom)
         for _ in 0..<6 {
-            rowBar.hold(PoseFixtures.invertedRow(top), frames: 8)
-            rowBar.hold(PoseFixtures.invertedRow(bottom), frames: 8)
+            d.hold(PoseFixtures.invertedRow(top), frames: 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames: 8)
         }
-        XCTAssertEqual(rowBar.engine.barKnown, false, "and an inverted row teaches no bar")
 
-        // The gate is on orientation, not stillness: a wobble mid-rep is absorbed by the same
-        // dropout window that already rides out an occlusion.
-        let wobble = engineFor(.bandAssistedPullUp)
-        wobble.hold(PoseFixtures.pullup(bottom), frames: 35)
-        for _ in 0..<2 {
-            wobble.hold(PoseFixtures.pullup(top), frames: 8)
-            wobble.hold(PoseFixtures.pullup(bottom), frames: 8)
-        }
-        let beforeWobble = wobble.engine.reps
-        wobble.hold(PoseFixtures.pullup(bottom), frames: 8)
-        wobble.hold(PoseFixtures.invertedRow(bottom), frames: 4)
-        wobble.hold(PoseFixtures.pullup(top), frames: 8)
-        XCTAssertEqual(wobble.engine.reps, beforeWobble + 1, "a brief wobble does not throw away a rep")
+        XCTAssertEqual(d.engine.reps, 0)
+        XCTAssertEqual(d.engine.hint, "Hang vertically from the bar", "and says which way to hang")
+    }
 
-        // Setting the band up must not teach a bar. Found on real footage: standing holding the
-        // band at chest height satisfies every other condition the bar was learned from, so the bar
-        // was fixed at the athlete's chest and every real rep afterwards was refused with "Get on
-        // the bar" with no way back, since refinement requires already passing the gate.
-        let bandSetup = engineFor(.bandAssistedPullUp)
-        bandSetup.hold(PoseFixtures.bandSetup(), frames: 60)
-        XCTAssertEqual(bandSetup.engine.barKnown, false, "holding a band at chest height teaches no bar")
-        bandSetup.hold(PoseFixtures.pullup(bottom), frames: 35)
-        XCTAssertEqual(bandSetup.engine.barKnown, true, "the real hang afterwards still finds it")
+    /// inverted rows never count as band-assisted pull-ups either
+    func testInvertedRowsNeverCountAsBandAssistedPullUpsEither() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
         for _ in 0..<6 {
-            bandSetup.hold(PoseFixtures.pullup(top), frames: 8)
-            bandSetup.hold(PoseFixtures.pullup(bottom), frames: 8)
+            d.hold(PoseFixtures.invertedRow(top), frames: 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames: 8)
         }
-        XCTAssertEqual(bandSetup.engine.reps, 5, "and the reps score normally after it")
 
-        // Rep provenance: a tapped rep counts, and is remembered as tapped.
-        let manual = engineFor(.footAssistedPullUp)
-        manual.engine.manualRep()
-        XCTAssertEqual(manual.engine.reps, 1, "a manual rep is recorded: reps")
-        XCTAssertEqual(manual.engine.manualReps, 1, "a manual rep is recorded: manualReps")
-        XCTAssertEqual(manual.engine.lastRepSource == .manual, true, "a manual rep is recorded: source")
+        XCTAssertEqual(d.engine.reps, 0, "relaxing the bottom does not relax which movement it is")
+    }
 
-        let undoRig = engineFor(.footAssistedPullUp)
-        undoRig.engine.manualRep()
-        undoRig.engine.manualRep()
-        _ = undoRig.engine.undoRep()
-        XCTAssertEqual(undoRig.engine.reps, 1, "undoing a tapped rep takes the rep back")
-        XCTAssertEqual(undoRig.engine.manualReps, 1, "and takes the tap back too")
+    /// A row must not teach a bar either, or it would poison the next real hang.
+    ///
+    /// an inverted row does not establish a bar
+    func testAnInvertedRowDoesNotEstablishABar() {
+        let d = engineFor(.strictPullUp)
 
-        let camera = engineFor(.bandAssistedPullUp)
-        camera.hold(PoseFixtures.pullup(bottom), frames: 35)
-        for _ in 0..<3 {
-            camera.hold(PoseFixtures.pullup(top), frames: 8)
-            camera.hold(PoseFixtures.pullup(bottom), frames: 8)
+        for _ in 0..<6 {
+            d.hold(PoseFixtures.invertedRow(top), frames: 8)
+            d.hold(PoseFixtures.invertedRow(bottom), frames: 8)
         }
-        XCTAssertTrue(camera.engine.reps > 0, "the camera scored at least one")
-        XCTAssertEqual(camera.engine.manualReps, 0, "a rep the camera scored is not counted as manual")
-        XCTAssertEqual(camera.engine.lastRepSource == .auto, true, "and the source says so")
+
+        XCTAssertFalse(d.engine.barKnown)
+    }
+
+    /// The gate is on orientation, not on stillness: a wobble mid-rep is absorbed by the same
+    /// dropout window that already rides out an occlusion, so a real pull-up survives it.
+    ///
+    /// a brief non-vertical wobble does not throw away a valid pull-up
+    func testABriefNonVerticalWobbleDoesNotThrowAwayAValidPullUp() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
+        cycles(d, 2, bottom, top)
+        let before = d.engine.reps
+
+        // Armed at the bottom, then four unusable frames — well inside the dropout limit — before
+        // driving to the top. The cycle is in flight across the wobble.
+        d.hold(PoseFixtures.pullup(bottom), frames: 8)
+        d.hold(PoseFixtures.invertedRow(bottom), frames: 4)
+        d.hold(PoseFixtures.pullup(top), frames: 8)
+
+        XCTAssertEqual(d.engine.reps, before + 1, "the cycle across the wobble still scores")
+    }
+
+    // ── rep provenance ────────────────────────────────────────────────────────
+
+    /// A tapped rep counts, and is remembered as tapped.
+    ///
+    /// The score is the athlete's either way; the *claim* about how it was arrived at is the app's,
+    /// and it is not entitled to the stronger one.
+    ///
+    /// a manual rep is recorded as manual
+    func testAManualRepIsRecordedAsManual() {
+        let engine = engineFor(.footAssistedPullUp).engine
+
+        _ = engine.manualRep()
+
+        XCTAssertEqual(engine.reps, 1)
+        XCTAssertEqual(engine.manualReps, 1)
+        XCTAssertEqual(engine.lastRepSource, .manual)
+    }
+
+    /// undoing a tapped rep takes the tap back too
+    func testUndoingATappedRepTakesTheTapBackToo() {
+        let engine = engineFor(.footAssistedPullUp).engine
+
+        _ = engine.manualRep()
+        _ = engine.manualRep()
+        _ = engine.undoRep()
+
+        XCTAssertEqual(engine.reps, 1)
+        XCTAssertEqual(engine.manualReps, 1)
+    }
+
+    /// a rep the camera scored is not counted as manual
+    func testARepTheCameraScoredIsNotCountedAsManual() {
+        let d = engineFor(.bandAssistedPullUp)
+
+        findBar(d, bottom)
+        cycles(d, 3, bottom, top)
+
+        XCTAssertGreaterThan(d.engine.reps, 0, "the camera scored at least one")
+        XCTAssertEqual(d.engine.manualReps, 0)
+        XCTAssertEqual(d.engine.lastRepSource, .auto)
     }
 }

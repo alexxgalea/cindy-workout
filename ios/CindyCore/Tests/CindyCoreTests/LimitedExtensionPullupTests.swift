@@ -2,59 +2,92 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-/// An athlete whose arms never straighten into a dead hang — limited extension, or a band taking
-/// enough weight — used to never establish the bar at all, since establishing it required a dead
-/// hang. Every frame was then refused under "Hang from the bar" and the workout scored zero
-/// without ever explaining why. `settleBar` locates the bar from hands simply held still overhead.
+/// The athlete whose arms never straighten, and the difference between a standard and a lockout.
 ///
-/// Carried over from the `CindyCoreChecks` executable: Limited extension (bar settle). Every check keeps its original wording as
-/// its assertion message.
+/// Someone hanging in a band, or with limited elbow extension, may never reach the dead-hang
+/// floor. Two separate things used to follow from that, and only one of them was a movement
+/// standard:
+///
+///  - The bar was never established. An unknown bar has no line, so every pull-up frame was
+///    refused before any gate was consulted, and the whole workout scored zero under "Hang from
+///    the bar" — with no overlay drawn, because the overlay is the bar. That was a lockout.
+///  - The dead-hang reset never armed, so nothing counted. That one *is* the strict standard: a
+///    strict pull-up starts from a dead hang, and an athlete who cannot reach one is not doing
+///    the strict movement. The answer to it is a variation, not a looser strict mode.
+///
+/// These tests hold that line: the bar is now findable without a dead hang, and strict counting
+/// is exactly as strict as it was.
+///
+/// Mirrors `LimitedExtensionPullupTest.kt`; it replaces the old checks' class of the same subject.
 final class LimitedExtensionPullupTests: XCTestCase {
 
-    let bottom: Float = 120  // as straight as this athlete's arms get, well under a dead hang
-    let top: Float = 60
+    /// As straight as this athlete's arms get — well under the floor a dead hang needs.
+    private let straightest: Float = 120
 
-    func testTwoSecondsIsNotYetSustainedStillness() {
-        let r = Rig(fixedExercise: .pullup)
-        r.hold(PoseFixtures.pullup(bottom), frames: 20)
-        XCTAssertEqual(r.engine.barKnown, false, "two seconds is not yet sustained stillness")
-        r.hold(PoseFixtures.pullup(bottom), frames: 15)
-        XCTAssertEqual(r.engine.barKnown, true, "a still overhead hang eventually locates the bar")
+    /// hands held still overhead locate the bar when no dead hang ever comes
+    func testHandsHeldStillOverheadLocateTheBarWhenNoDeadHangEverComes() {
+        let d = Rig(fixedExercise: .pullup)
+        let hang = PoseFixtures.pullup(straightest)
+
+        d.hold(hang, frames: 20)
+        XCTAssertFalse(d.engine.barKnown, "two seconds is not yet sustained stillness")
+
+        d.hold(hang, frames: 15)
+        XCTAssertTrue(d.engine.barKnown, "a still overhead hang eventually locates the bar")
     }
 
+    /// The fallback is a fallback: a real dead hang still establishes the bar immediately, so a
+    /// strict athlete never waits three seconds for an overlay.
+    ///
+    /// a dead hang still locates the bar at once
     func testADeadHangStillLocatesTheBarAtOnce() {
-        // The fallback is a fallback: a real dead hang still establishes the bar immediately.
-        let r = Rig(fixedExercise: .pullup)
-        r.hold(PoseFixtures.pullup(170), frames: 1)
-        XCTAssertEqual(r.engine.barKnown, true, "a dead hang still locates the bar at once")
+        let d = Rig(fixedExercise: .pullup)
+
+        d.hold(PoseFixtures.pullup(170), frames: 1)
+
+        XCTAssertTrue(d.engine.barKnown, "one straight-armed frame is enough")
     }
 
-    func testAWalkUpNeverSettlesSoItTeachesNothing() {
-        // The case the dead-hang requirement was really guarding: a walk-up with arms overhead must
-        // not teach a bar in the wrong place. Drift restarts the dwell, so it never settles.
-        let r = Rig(fixedExercise: .pullup)
+    /// Moving hands are not a hang.
+    ///
+    /// This is the case the dead-hang requirement was really guarding: someone walking up to the
+    /// bar with their arms overhead taught a bar in the wrong place and then spent the rest of the
+    /// clip being refused by it. Drift restarts the dwell, so the walk-up never settles.
+    ///
+    /// hands drifting across the frame do not locate a bar
+    func testHandsDriftingAcrossTheFrameDoNotLocateABar() {
+        let d = Rig(fixedExercise: .pullup)
+
         for step in 0..<12 {
+            var walking = PoseFixtures.pullup(straightest)
             let shift = Float(step) * 30
-            var walking = PoseFixtures.pullup(bottom)
             for i in [KP.nose, KP.leftShoulder, KP.rightShoulder, KP.leftElbow, KP.rightElbow,
                       KP.leftWrist, KP.rightWrist, KP.leftHip, KP.rightHip] {
                 walking[i] = Keypoint(x: walking[i].x + shift, y: walking[i].y, score: walking[i].score)
             }
-            r.hold(walking, frames: 5)
+            d.hold(walking, frames: 5)
         }
-        XCTAssertEqual(r.engine.barKnown, false, "a walk-up never settles, so it teaches nothing")
+
+        XCTAssertFalse(d.engine.barKnown, "a walk-up never settles, so it teaches nothing")
     }
 
-    func testTheBarIsKnownSoTheRefusalBelowIsTheGateNotTheGeometry() {
-        // The standard, unchanged: full range of motion but never a straight arm is not a strict
-        // pull-up, and the bar being findable does not relax that.
-        let r = Rig(fixedExercise: .pullup)
-        r.hold(PoseFixtures.pullup(bottom), frames: 35)
-        XCTAssertEqual(r.engine.barKnown, true, "the bar is known, so the refusal below is the gate, not the geometry")
+    /// The standard, unchanged.
+    ///
+    /// Full range of motion — sixty degrees of elbow travel, head over the bar and back below the
+    /// reset line — but never a straight arm, so a strict pull-up is not what happened.
+    ///
+    /// strict mode still refuses to score an athlete who never dead hangs
+    func testStrictModeStillRefusesToScoreAnAthleteWhoNeverDeadHangs() {
+        let d = Rig(fixedExercise: .pullup)
+
+        d.hold(PoseFixtures.pullup(straightest), frames: 35)
+        XCTAssertTrue(d.engine.barKnown, "the bar is known, so the refusal is the gate and not the geometry")
+
         for _ in 0..<5 {
-            r.hold(PoseFixtures.pullup(top), frames: 8)
-            r.hold(PoseFixtures.pullup(bottom), frames: 8)
+            d.hold(PoseFixtures.pullup(60), frames: 8)
+            d.hold(PoseFixtures.pullup(straightest), frames: 8)
         }
-        XCTAssertEqual(r.engine.reps, 0, "strict mode still refuses to score an athlete who never dead hangs")
+
+        XCTAssertEqual(d.engine.reps, 0, "a strict pull-up starts from a dead hang")
     }
 }

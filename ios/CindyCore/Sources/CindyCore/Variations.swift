@@ -136,12 +136,21 @@ public enum PushVariant: String, CaseIterable, Sendable {
 /// What happened on the legs.
 public enum SquatVariant: String, CaseIterable, Sendable {
     case airSquat = "AIR_SQUAT"
+    /// Counted, at whatever depth the heels allow, and at full depth too.
+    ///
+    /// Heels flat on the floor limit how far the knees travel forward, so the hips stop higher and
+    /// the knee closes less than it does up on the toes. Both are correct squats. `WorkoutEngine`
+    /// counts this choice with a shallower minimum travel and a deeper bottom zone, so a session
+    /// that mixes the two styles counts every rep, while quarter squats and partials are still
+    /// refused.
+    case heelsFlat = "HEELS_FLAT"
     case boxSquat = "BOX_SQUAT"
     case supportedSquat = "SUPPORTED_SQUAT"
 
     public var label: String {
         switch self {
         case .airSquat: return "Air squat"
+        case .heelsFlat: return "Heels flat"
         case .boxSquat: return "To a box"
         case .supportedSquat: return "Supported"
         }
@@ -150,6 +159,7 @@ public enum SquatVariant: String, CaseIterable, Sendable {
     public var plural: String {
         switch self {
         case .airSquat: return "air squats"
+        case .heelsFlat: return "heels-flat squats"
         case .boxSquat: return "box squats"
         case .supportedSquat: return "supported squats"
         }
@@ -157,7 +167,7 @@ public enum SquatVariant: String, CaseIterable, Sendable {
 
     public var tracking: Tracking {
         switch self {
-        case .airSquat, .boxSquat: return .auto
+        case .airSquat, .heelsFlat, .boxSquat: return .auto
         case .supportedSquat: return .manual
         }
     }
@@ -166,6 +176,8 @@ public enum SquatVariant: String, CaseIterable, Sendable {
         switch self {
         case .airSquat:
             return "Stand tall, sit down to depth, stand all the way back up."
+        case .heelsFlat:
+            return "Keep your heels on the floor, sit as low as they let you, and stand all the way up."
         case .boxSquat:
             // RepCounter already learns the range the athlete actually produces and judges reps
             // against that, so a box caps the descent and the band settles around it — no
