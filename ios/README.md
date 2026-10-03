@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels | **385 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Progress, voice, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching | **618 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Progress, speech output, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
 The logic is a real, running, tested port. The app layer compiled on its first macOS build with
@@ -42,6 +42,10 @@ ios/
 │   │   ├── RoundSplits.swift     what the round chart draws and says
 │   │   ├── SessionStats.swift    a session as rounds and movements
 │   │   ├── Comparisons.swift     best and last earlier attempt
+│   │   ├── VoiceLine.swift       what the voice says, as facts
+│   │   ├── Phrasebook*.swift     the same facts as words, in eleven languages
+│   │   ├── VoiceDirector.swift   which voice speaks, and keeping words and voice in agreement
+│   │   ├── Coach.swift           when to speak about position and the clock
 │   │   └── Levels.swift          the rank ladder
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
 │   └── Tests/CindyCoreTests/     XCTest: every check, one class per area

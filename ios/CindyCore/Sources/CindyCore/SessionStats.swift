@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Kotlin returns an insertion-ordered map; a Swift dictionary has no order, and the order is part
 /// of what callers read ("pull-ups, push-ups, squats"), so this keeps it.
-public struct Plurals: Equatable, Sendable {
+public struct MovementPlurals: Equatable, Sendable {
     public let pullup: String
     public let pushup: String
     public let squat: String
@@ -79,7 +79,7 @@ public struct RoundStat: Equatable, Sendable {
     /// rather than folded in. `plurals` is the session's own movement words, so a knee push-up
     /// session never reads "push-ups". `atLeast` is for a session the camera lost the athlete in:
     /// what was banked is a floor, so the round says "at least" before its reps.
-    public func caption(_ plurals: Plurals, atLeast: Bool = false) -> String {
+    public func caption(_ plurals: MovementPlurals, atLeast: Bool = false) -> String {
         let target = parts.reduce(0) { $0 + $1.movement.target }
         var text = "Round \(number) · \(atLeast ? "at least " : "")\(reps) of \(target)"
         if !complete {
@@ -215,9 +215,9 @@ public struct SessionStats: Equatable, Sendable {
     /// session-page sections speak the same way, so a standard session never reads "strict
     /// pull-ups" in one place and "pull-ups" in the next. A nil profile is a record written before
     /// profiles existed, which was the standard movements.
-    public static func plurals(_ profile: CindyProfile?) -> Plurals {
+    public static func plurals(_ profile: CindyProfile?) -> MovementPlurals {
         let standard = CindyProfile.standard
-        return Plurals(
+        return MovementPlurals(
             pullup: profile.flatMap { $0.pull != standard.pull ? $0.pull.plural : nil } ?? "pull-ups",
             pushup: profile.flatMap { $0.push != standard.push ? $0.push.plural : nil } ?? "push-ups",
             squat: profile.flatMap { $0.squat != standard.squat ? $0.squat.plural : nil } ?? "squats")
