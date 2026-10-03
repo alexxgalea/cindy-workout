@@ -30,12 +30,15 @@ fun String.asBuildConfigLiteral() = "\"" + replace("\\", "\\\\").replace("\"", "
 
 android {
     namespace = "com.cindy.tracker"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.cindy.tracker"
         minSdk = 26
-        targetSdk = 35
+        // Google Play has required API 36 for new apps and updates since 2026-08-31. The next
+        // bump is due around August 2027, and it is the one that ends the portrait opt-out in
+        // AndroidManifest.xml.
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
