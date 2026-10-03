@@ -655,10 +655,25 @@ the arithmetic behind the name and the photo in
 
 ### Strava
 
-Menu → Strava connects a Strava account, opening Strava's own consent page (in the Strava app
-when it is installed, otherwise your browser). It asks for `read`, so the app can greet you by
-name, and `activity:write`, the one permission an upload needs. Nothing reaches Strava before
-you connect.
+Menu → Strava connects a Strava account. A sheet comes first and says what each workout will
+send (the score and every set with its reps, when it started and how long it took, calories when
+a body weight is set, the heart-rate trace when a watch recorded one, and a title and short
+description), that the camera picture, video and pose are never sent, and where Strava's heart-rate
+permission is. Its action is Strava's own **Connect with Strava** button, and only that opens
+Strava's consent page (in the Strava app when it is installed, otherwise your browser). NOT NOW,
+the back gesture and a tap outside leave without starting anything. The results screen's
+"Connect to upload" and "Reconnect to upload" ask the same way. The consent page asks for `read`,
+so the app can greet you by name, and `activity:write`, the one permission an upload needs.
+Nothing reaches Strava before you connect. The sheet is in
+[StravaConsent.kt](app/src/main/java/com/cindy/tracker/StravaConsent.kt), and its list is
+`StravaPayload` and `StravaActivityText` in words: change one and change the other.
+
+The button, and the "Compatible with Strava" mark on the connected sheet, are Strava's own
+artwork under [res/drawable](app/src/main/res/drawable/), as supplied from
+[developers.strava.com/guidelines](https://developers.strava.com/guidelines/); a finished upload's
+link reads "View on Strava", as those guidelines ask. Strava treats a new API application as
+single-athlete until it is raised to 10 on its settings page and, past that, reviewed; see Strava's
+developer documentation before shipping this to anyone but yourself.
 
 **Once connected, every finished workout uploads on its own** — a Crossfit activity carrying the
 score, every movement as a set with the reps actually banked, clock time, paused time and real
@@ -696,9 +711,11 @@ clientId=...
 clientSecret=...
 ```
 
-Without that file — true for CI and a fresh clone — the feature quietly turns itself off rather
-than failing the build: `BuildConfig` bakes in empty strings, and the menu row reads "Not
-available in this build".
+Without that file — true for CI and a fresh clone — the feature turns itself off rather than
+failing the build: `BuildConfig` bakes in empty strings, and the build then has no Strava at all.
+There is no menu row, Help and the first-launch pages do not mention it, and nothing is uploaded
+or asked for. Which kind of build you are making is therefore decided by whether
+`strava.properties` exists when you run Gradle.
 
 ## Build
 

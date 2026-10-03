@@ -99,6 +99,10 @@ class HelpScreenTest {
         val with = helpText()
         assertTrue(with.contains("STRAVA"))
         assertTrue(with.contains("the calorie estimate and the Strava upload."))
+        // The flow Help describes is the one the app has: a sheet first, then Strava's button.
+        assertTrue(with.contains("A sheet first says what each workout will send"))
+        assertTrue(with.contains("tap Connect with Strava there"))
+        assertTrue(with.contains("a View on Strava link to the activity"))
 
         StravaConfig.availableForTest = false
         val without = helpText()

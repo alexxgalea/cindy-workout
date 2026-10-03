@@ -527,9 +527,10 @@ class HelpActivity : AppCompatActivity() {
     private fun strava() {
         heading("STRAVA")
         paragraph(
-            "Strava, in the menu, connects your Strava account on Strava's own page, in the " +
-                "Strava app if you have it. Nothing is sent before you connect, and no video " +
-                "or pose data is ever sent."
+            "Strava, in the menu, connects your Strava account. A sheet first says what each " +
+                "workout will send; tap Connect with Strava there and Strava's own page opens, " +
+                "in the Strava app if you have it. Nothing is sent before you connect, and no " +
+                "video or pose data is ever sent."
         )
         bullets(
             "Once connected, each finished workout uploads by itself as a Crossfit activity: " +
@@ -540,8 +541,8 @@ class HelpActivity : AppCompatActivity() {
                 "the Strava row under Details offers \"Upload\" instead. Finish a workout before " +
                 "connecting and it offers \"Connect to upload\", which links the account and then " +
                 "sends that workout.",
-            "That row shows where the upload has got to: uploading, then a link to the " +
-                "activity. If it fails it says so and you tap to retry, and if Strava needs " +
+            "That row shows where the upload has got to: uploading, then a View on Strava " +
+                "link to the activity. If it fails it says so and you tap to retry, and if Strava needs " +
                 "you to connect again it says that. The upload carries on in the background, " +
                 "waits for a connection and retries by itself.",
             "Sessions from before you connected are not sent on their own; open one and use " +
