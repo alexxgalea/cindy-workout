@@ -866,7 +866,11 @@ class MenuActivity : AppCompatActivity() {
             return
         }
         if (!HeartRatePermissions.granted(this)) {
-            requestBluetoothPermissions.launch(HeartRatePermissions.required())
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                explainLocationThenRequest()
+            } else {
+                requestBluetoothPermissions.launch(HeartRatePermissions.required())
+            }
             return
         }
         if (bluetoothAdapter()?.isEnabled != true) {
@@ -882,6 +886,25 @@ class MenuActivity : AppCompatActivity() {
         } else {
             openScanSheet()
         }
+    }
+
+    /**
+     * Android 11 and older tie a Bluetooth scan to the location permission, so the prompt that
+     * follows reads "allow Cindy to access this device's location" — to someone who asked to find
+     * a watch. Said first, so the athlete is not left to wonder, and so a NOT NOW costs nothing.
+     */
+    private fun explainLocationThenRequest() {
+        CindySheet(
+            this,
+            title = "Android asks for location to find a watch",
+            subtitle = "On this version of Android a Bluetooth scan needs the location " +
+                "permission. Cindy never reads your location."
+        ).actions(
+            primary = "CONTINUE",
+            onPrimary = { requestBluetoothPermissions.launch(HeartRatePermissions.required()) },
+            secondary = "NOT NOW",
+            onSecondary = {}
+        ).show()
     }
 
     private fun showLocationNeeded() {
