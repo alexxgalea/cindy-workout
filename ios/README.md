@@ -6,16 +6,24 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, records, levels | **83 checks passing** (`swift run CindyCoreChecks`) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, records, levels | **43 tests, 143 assertions, passing** (`tools/ios/swift.sh test`), on Linux and in CI. Behind the Android app: see [PARITY.md](PARITY.md) |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Never compiled.** No Xcode on the build machine, so no iOS SDK |
 
-Only Command Line Tools were available, which ship `swiftc` but no iOS SDK, no simulator and no
-XCTest. So the logic is a real, running, tested port; the app layer around it is written but
-unproven. Expect to fix compile errors in `CindyTracker/` on first build — treat those files as a
-careful draft, not working code.
+The logic is a real, running, tested port; the app layer around it is written but unproven.
+Expect to fix compile errors in `CindyTracker/` on first build — treat those files as a careful
+draft, not working code.
 
-That split is also why the checks are an executable rather than an XCTest target: `swift run
-CindyCoreChecks` exits non-zero on failure and needs nothing but the command line tools.
+`CindyCore` imports only Foundation, so it builds and tests on Linux with no Xcode. That is why the
+checks are XCTest and run anywhere:
+
+```sh
+tools/ios/swift.sh test                          # Linux: fetches a pinned toolchain once (~880 MB)
+tools/ios/swift.sh test --filter BarGateTests    # a single class
+swift test --package-path ios/CindyCore          # on a Mac, with Xcode's swift
+```
+
+[PLAN.md](PLAN.md) sets out how the app catches up with Android, and [PARITY.md](PARITY.md) tracks
+which Kotlin file each Swift file mirrors.
 
 ## Layout
 
@@ -28,7 +36,8 @@ ios/
 │   │   ├── BarZone.swift         where the bar is, learned from dead hangs
 │   │   ├── Records.swift         attempts, splits, persistence
 │   │   └── Levels.swift          the rank ladder
-│   └── Sources/CindyCoreChecks/  the harness and every check
+│   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
+│   └── Tests/CindyCoreTests/     XCTest: every check, one class per area
 └── CindyTracker/         the app — unproven
     ├── VisionPose.swift          Vision → the shared 17-point layout
     ├── CameraModel.swift         capture, pose, filming
