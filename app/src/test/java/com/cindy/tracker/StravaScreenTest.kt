@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -309,7 +310,15 @@ class StravaScreenTest {
         val atMillis = 105L
         StravaUploads.write(context(), atMillis, StravaUploadStatus(StravaUploadState.DONE, activityId = 42L))
         val activity = buildResults(stravaAttempt(atMillis))
-        assertTrue(findText(activity.findViewById(android.R.id.content), "View activity ↗") != null)
+        val link = findText(activity.findViewById(android.R.id.content), "View on Strava")
+        assertNotNull("Strava asks for the link to read 'View on Strava'", link)
+        // Strava's guidelines want the link bold, underlined or orange.
+        val text = (link as android.widget.TextView).text as android.text.Spanned
+        assertTrue(
+            "the link is not bold",
+            text.getSpans(0, text.length, android.text.style.StyleSpan::class.java)
+                .any { it.style == android.graphics.Typeface.BOLD }
+        )
         activity.finish()
     }
 
