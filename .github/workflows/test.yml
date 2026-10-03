@@ -9,12 +9,12 @@ on:
     paths-ignore:
       - 'ios/**'
       - 'tools/ios/**'
-      - '.github/workflows/ios.yml'
+      - '.github/workflows/ios*.yml'
   pull_request:
     paths-ignore:
       - 'ios/**'
       - 'tools/ios/**'
-      - '.github/workflows/ios.yml'
+      - '.github/workflows/ios*.yml'
   workflow_dispatch:
     inputs:
       run_video_regression:
