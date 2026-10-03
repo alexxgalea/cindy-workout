@@ -1,0 +1,35 @@
+import AVFoundation
+import CindyCore
+
+/// One analysed frame: where the joints are, in the pixels of the frame they came from.
+struct PoseFrame {
+    let keypoints: [Keypoint]
+    let frameSize: CGSize
+    let inferenceMs: Int
+    /// Whether a crop around the body is being followed rather than the whole frame searched.
+    let tracking: Bool
+}
+
+/// Where the skeleton comes from. The app does not care whether it is Vision looking at a
+/// camera or a script playing a body back: everything downstream sees `PoseFrame`s.
+///
+/// That is what lets the simulator, which has no camera, run a whole workout.
+///
+/// Every callback is delivered on the main queue.
+protocol PoseSource: AnyObject {
+    var onFrame: ((PoseFrame) -> Void)? { get set }
+    var onRecordingChanged: ((Bool) -> Void)? { get set }
+    /// Called with the saved file's URL, or nil if filming failed.
+    var onRecordingFinished: ((URL?) -> Void)? { get set }
+
+    /// What the preview layer shows, or nil when there is no camera to show.
+    var previewSession: AVCaptureSession? { get }
+
+    func start()
+    func stop()
+    /// Switches between the rear and the selfie camera. Nothing to do without a camera.
+    func flip()
+    /// Forgets the tracked crop: call when the camera changes or a workout restarts.
+    func resetRoi()
+    func toggleRecording()
+}
