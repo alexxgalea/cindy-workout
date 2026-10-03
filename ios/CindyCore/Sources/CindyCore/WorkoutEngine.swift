@@ -913,7 +913,7 @@ public final class WorkoutEngine {
     /// a threshold on an angle that the camera's viewpoint can flatten.
     private func settleBar(_ hands: Keypoint, halfGrip: Float, torso: Float, now: Int64) {
         guard let reference = barSettleHands,
-              hypotf(hands.x - reference.x, hands.y - reference.y) <= Self.barSettleDriftTorsos * torso
+              PoseGeometry.hypot32(hands.x - reference.x, hands.y - reference.y) <= Self.barSettleDriftTorsos * torso
         else {
             barSettleSince = now
             barSettleHands = hands

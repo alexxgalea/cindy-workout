@@ -35,6 +35,14 @@ enum PoseGeometry {
 
     static func ok(_ p: Keypoint) -> Bool { p.score >= minScore }
 
+    /// Kotlin's `hypot(Float, Float)`: worked out in `Double` and rounded to `Float` once.
+    ///
+    /// `hypotf` is correctly rounded in `Float`, which is not the same thing: the two can differ
+    /// in the last bit, and the engine's thresholds are exact comparisons.
+    static func hypot32(_ x: Float, _ y: Float) -> Float {
+        Float(hypot(Double(x), Double(y)))
+    }
+
     static func midpoint(_ k: [Keypoint], _ a: Int, _ b: Int) -> Keypoint? {
         let pa = k[a], pb = k[b]
         if ok(pa) && ok(pb) {
@@ -48,7 +56,7 @@ enum PoseGeometry {
     static func torsoLength(_ k: [Keypoint]) -> Float? {
         guard let sh = midpoint(k, KP.leftShoulder, KP.rightShoulder),
               let hip = midpoint(k, KP.leftHip, KP.rightHip) else { return nil }
-        return hypotf(sh.x - hip.x, sh.y - hip.y)
+        return hypot32(sh.x - hip.x, sh.y - hip.y)
     }
 
     /// Averages the same joint angle on both sides, using whichever sides are confidently seen.
@@ -68,17 +76,20 @@ enum PoseGeometry {
         guard ok(a), ok(b), ok(c) else { return .nan }
         let abx = a.x - b.x, aby = a.y - b.y
         let cbx = c.x - b.x, cby = c.y - b.y
-        let mag = hypotf(abx, aby) * hypotf(cbx, cby)
+        let mag = hypot32(abx, aby) * hypot32(cbx, cby)
         guard mag >= 1e-4 else { return .nan }
         let cosine = max(-1, min(1, (abx * cbx + aby * cby) / mag))
-        return acosf(cosine) * 180 / .pi
+        // Kotlin: Math.toDegrees(acos(cos).toDouble()).toFloat(). `acos` of a Float is worked out in
+        // Double and rounded to Float, which is then widened and scaled by Java's constant.
+        let radians = Float(acos(Double(cosine)))
+        return Float(Double(radians) * 57.29577951308232)
     }
 
     /// True when the shoulders sit well above the hips: torso vertical, not lying down.
     static func upright(_ k: [Keypoint]) -> Bool {
         guard let sh = midpoint(k, KP.leftShoulder, KP.rightShoulder),
               let hp = midpoint(k, KP.leftHip, KP.rightHip) else { return false }
-        let torso = hypotf(sh.x - hp.x, sh.y - hp.y)
+        let torso = hypot32(sh.x - hp.x, sh.y - hp.y)
         guard torso >= 1 else { return false }
         return (hp.y - sh.y) >= uprightTorsos * torso
     }
