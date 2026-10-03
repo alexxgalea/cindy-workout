@@ -269,6 +269,10 @@ class HelpActivity : AppCompatActivity() {
         quiet(SOURCE)
         quiet("Everything from HOW THIS APP COUNTS to this credit is this app's own, " +
             "not CrossFit's.")
+
+        // Last, so it is the line a tester reads out when they report a problem. The debug build
+        // carries its -debug suffix here, which is how the two builds are told apart on a phone.
+        quiet("Cindy ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 
     // ── this app's own sections ───────────────────────────────────────────────

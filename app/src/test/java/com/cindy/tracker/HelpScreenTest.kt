@@ -63,6 +63,18 @@ class HelpScreenTest {
     }
 
     @Test
+    fun `Help ends with the version the build was made as`() {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+        // The scrolling content, not the buttons pinned under it.
+        val last = texts(help.findViewById<View>(R.id.sections)).filter { it.isNotBlank() }.last()
+        help.finish()
+        assertTrue(
+            "the last line of the page should be the version, not '$last'",
+            last == "Cindy ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+        )
+    }
+
+    @Test
     fun `CrossFit's words are still quoted as they were`() {
         val text = helpText()
         for (quote in listOf(
