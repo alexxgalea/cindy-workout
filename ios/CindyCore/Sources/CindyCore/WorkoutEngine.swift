@@ -1077,9 +1077,16 @@ public final class WorkoutEngine {
     /// argument as `takeUpPosition`: a dwell on a position that has stopped changing, rather than
     /// a threshold on an angle that the camera's viewpoint can flatten.
     private func settleBar(_ hands: Keypoint, halfGrip: Float, torso: Float, now: Int64) {
-        guard let reference = barSettleHands,
-              PoseGeometry.hypot32(hands.x - reference.x, hands.y - reference.y) <= Self.barSettleDriftTorsos * torso
-        else {
+        // Tested as the Kotlin tests it, `distance > limit`, not `distance <= limit` negated: the
+        // two read the same for any distance but NaN, and a NaN must not be taken for drift.
+        let drifted: Bool
+        if let reference = barSettleHands {
+            drifted = PoseGeometry.hypot32(hands.x - reference.x, hands.y - reference.y)
+                > Self.barSettleDriftTorsos * torso
+        } else {
+            drifted = true
+        }
+        if drifted {
             barSettleSince = now
             barSettleHands = hands
             return
