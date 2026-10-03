@@ -68,6 +68,17 @@
         android:theme="@style/Theme.Cindy">
 
         <!--
+          From API 36 Android ignores screenOrientation on screens 600dp wide and up (tablets,
+          unfolded foldables), and lets the app rotate and resize. Every screen here, and the
+          camera overlay's transform, is laid out for portrait only, so this keeps them
+          letterboxed as before. It is temporary: the platform stops honouring it at targetSdk 37,
+          and landscape and tablet layouts have to exist before that bump.
+        -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
+
+        <!--
           The launch window is the splash theme; installSplashScreen() in onCreate hands over to
           Theme.Cindy. Both paint the same black, so nothing flashes between them.
         -->
