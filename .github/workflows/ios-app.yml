@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   app:
-    name: Build the app (macOS)
+    name: Build and test the app (macOS)
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -38,15 +38,23 @@ jobs:
         run: brew install xcodegen
       - name: Generate the Xcode project
         run: cd ios && xcodegen generate
-      - name: Build for the simulator
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available | grep -m1 'iPhone' | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "Using $(xcrun simctl list devices available | grep -m1 'iPhone')"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      # Builds the app and runs the UI tests against it, which replay a scripted body because the
+      # simulator has no camera. A compile error shows up here too, in the same log.
+      - name: Build and test on the simulator
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild test \
             -project ios/CindyTracker.xcodeproj \
             -scheme CindyTracker \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
-      # The log is long and the compiler's complaints are in the middle of it, so say them last.
-      - name: Compiler errors
-        if: failure()
-        run: grep -E 'error:' build.log | sort -u | head -100 || true
+      # The log is long and what matters is in the middle of it, so say it last.
+      - name: Errors and test results
+        if: always()
+        run: grep -E 'error:|Test Case .*(failed|passed)|Executed [0-9]+ test' build.log | sort -u | head -100 || true
