@@ -12,6 +12,13 @@ each finished workout — score, sets and times, plus heart rate and its calorie
 watch recorded one — uploads there on its own. Nothing is sent before you connect, and no video
 or pose data is ever sent.
 
+What stays on the phone, what Android's own backup may copy, and how to delete it are in Help under
+PRIVACY, and in the [privacy policy](https://alexxgalea.github.io/cindy-privacy/) Google Play
+links to. The licences of what Cindy is built on (MoveNet, LiteRT, AndroidX and the rest, and the
+Manrope typeface) are credited under LICENCES in Help, with their full texts in
+[app/src/main/assets/licences/](app/src/main/assets/licences/). The address lives in
+[AppLinks.kt](app/src/main/java/com/cindy/tracker/AppLinks.kt).
+
 ## How it works
 
 ```
