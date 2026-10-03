@@ -58,11 +58,13 @@ class HelpActivity : AppCompatActivity() {
         render()
     }
 
-    private fun openSource() {
+    private fun openSource() = openLink(SOURCE)
+
+    private fun openLink(url: String) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE)))
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "No browser to open $SOURCE", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No browser to open $url", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -260,6 +262,7 @@ class HelpActivity : AppCompatActivity() {
         profileAndBadges()
         reminders()
         strava()
+        privacy()
 
         heading("SOURCE")
         paragraph(
@@ -535,6 +538,61 @@ class HelpActivity : AppCompatActivity() {
             "DISCONNECT clears the connection from the phone at once and asks Strava to end " +
                 "it. If Strava still lists Cindy Tracker at strava.com/settings/apps " +
                 "afterwards, remove it there too."
+        )
+    }
+
+    /**
+     * What stays on the phone and what does not. Every line here is a claim about the code, and
+     * Google Play holds the app to it: the store's Data safety answers and the published policy
+     * say the same things, so a line is changed in all three or in none.
+     */
+    private fun privacy() {
+        heading("PRIVACY")
+        paragraph(
+            "Cindy counts from the camera on your phone, and nearly everything it knows stays " +
+                "there."
+        )
+        bullets(
+            "The camera picture is read on the phone and thrown away. It is never saved or sent. " +
+                "Video exists only if you tap REC, and it is saved to Movies/Cindy on the phone " +
+                "like any other video.",
+            "Your sessions, rep times, heart-rate traces, name, photo, body weight, birth year, " +
+                "sex and settings are kept on the phone. Android's own backup may copy them to " +
+                "your Google account, and to a new phone when you switch; that is Android's " +
+                "backup, and you control it in Android's settings.",
+            "Bluetooth is used only to find and read a heart-rate strap or watch. Android 11 and " +
+                "older ask for the location permission for that scan; Cindy never reads your " +
+                "location.",
+            "Music is a track you pick. Cindy plays it and does not copy or send it. The voice " +
+                "is your phone's speech engine: Cindy asks it for a voice installed on the " +
+                "phone and gives it nothing but the words to say.",
+            "There are no ads, no analytics, no account and no server of Cindy's."
+        )
+        if (StravaConfig.available) {
+            bullets(
+                "Strava is the one thing that leaves the phone, and only after you connect it. " +
+                    "Each finished workout then sends Strava its score and sets with their reps, " +
+                    "when it started, how long it took on the clock, paused and in real time, " +
+                    "calories if a body weight is set, and the heart-rate trace if a watch " +
+                    "recorded one. Never video, never the pose. Strava keeps what it receives " +
+                    "under its own privacy policy."
+            )
+        }
+        bullets(
+            "To delete: CLEAR on the Progress screen removes your sessions with their rep times " +
+                "and heart-rate traces; REMOVE on the Account screen removes the photo; " +
+                "Android's Clear storage in the app's settings removes everything else, and so " +
+                "does uninstalling. Videos in Movies/Cindy are yours to delete."
+        )
+        binding.sections.addView(
+            insetGroup {
+                row(navRow("Privacy policy", "Opens in your browser") {
+                    openLink(AppLinks.PRIVACY_POLICY)
+                })
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
         )
     }
 

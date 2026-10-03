@@ -1,14 +1,19 @@
 package com.cindy.tracker
 
+import android.content.Intent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -25,6 +30,20 @@ class HelpScreenTest {
         val text = texts(help.findViewById<View>(android.R.id.content)).joinToString("\n")
         help.finish()
         return text
+    }
+
+    /** [StravaConfig.availableForTest] is a static that outlives the activity under test. */
+    @After
+    fun resetStravaSeam() {
+        StravaConfig.availableForTest = null
+    }
+
+    private fun byDescriptionPrefix(root: View, prefix: String): View? {
+        if (root.contentDescription?.toString()?.startsWith(prefix) == true) return root
+        if (root is ViewGroup) for (i in 0 until root.childCount) {
+            byDescriptionPrefix(root.getChildAt(i), prefix)?.let { return it }
+        }
+        return null
     }
 
     private fun texts(root: View): List<String> = buildList {
@@ -72,6 +91,48 @@ class HelpScreenTest {
             "the last line of the page should be the version, not '$last'",
             last == "Cindy ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
         )
+    }
+
+    @Test
+    fun `Help says what stays on the phone, and how to delete it`() {
+        val text = helpText()
+        for (phrase in listOf(
+            "PRIVACY",
+            "The camera picture is read on the phone and thrown away. It is never saved or sent.",
+            "There are no ads, no analytics, no account and no server of Cindy's.",
+            "CLEAR on the Progress screen",
+            "REMOVE on the Account screen"
+        )) {
+            assertTrue("the PRIVACY section lost: $phrase", text.contains(phrase))
+        }
+    }
+
+    @Test
+    fun `the privacy policy row opens the policy in a browser`() {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+        val row = byDescriptionPrefix(help.findViewById(android.R.id.content), "Privacy policy")
+        assertNotNull("no Privacy policy row", row)
+        row!!.performClick()
+
+        val started = shadowOf(help).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, started.action)
+        assertEquals(AppLinks.PRIVACY_POLICY, started.dataString)
+        help.finish()
+    }
+
+    @Test
+    fun `the Strava paragraph of the privacy section is there when the build has Strava, and not otherwise`() {
+        val marker = "Strava is the one thing that leaves the phone"
+
+        StravaConfig.availableForTest = false
+        assertFalse(helpText().contains(marker))
+
+        StravaConfig.availableForTest = true
+        val text = helpText()
+        assertTrue(text.contains(marker))
+        // What an upload carries, in the words the policy uses.
+        assertTrue(text.contains("the heart-rate trace if a watch recorded one"))
+        assertTrue(text.contains("Never video, never the pose."))
     }
 
     @Test
