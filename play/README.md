@@ -8,9 +8,9 @@ the app does not do is the kind of mismatch Play's review looks for.
 play/
 ├── listing/en-US/        title, short description and full description (plain text)
 ├── privacy-policy.html   the policy page, as a template
-├── data-safety.md        the Data safety form, answer by answer  (added with the answers)
-├── console-answers.md    the rest of Play Console's questionnaires (added with the answers)
-├── graphics/             the 512 px icon and the 1024 x 500 feature graphic (added with the art)
+├── data-safety.md        the Data safety form, answer by answer
+├── console-answers.md    the rest of Play Console's questionnaires
+├── graphics/             the 512 px icon and the 1024 x 500 feature graphic
 └── dist/                 what the renderer writes; gitignored
 ```
 
@@ -40,6 +40,13 @@ the developer name exactly as it appears on the store listing, because Play chec
 The script refuses to write anything while a placeholder or marker is left over, or if the build
 without Strava mentions Strava anywhere. `python3 tools/play/render.py --check` renders both builds
 with stand-in values and is what CI runs.
+
+## The graphics
+
+`play/graphics/` holds the SVG sources and the PNGs Play Console takes. `tools/play/render_graphics.py`
+draws the SVGs with the headless Chromium on the machine (so that the app's own Manrope font is
+used), fixes the pixel format with ImageMagick, and then checks size, bit depth, transparency and
+that the edges are black. Run it again after editing an SVG and commit the PNGs.
 
 ## What keeps it honest
 

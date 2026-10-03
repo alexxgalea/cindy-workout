@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Google Play store icon, 512 x 512: the launcher mark on the launcher's black.
+
+  The three arcs are the ones in app/src/main/res/drawable/ic_launcher_foreground.xml, with the
+  same path data, widths, round caps and opacities (#4D, #94 and full white), so the store icon and
+  the icon on the phone are the same picture. Fifteen squats, ten push-ups and five pull-ups, at
+  270, 180 and 90 degrees of a circle. The viewBox is that 108-unit canvas cropped to the middle
+  84 units: the mark fills about two thirds of the square, well inside the margin Play's own corner
+  mask leaves. A full-bleed square with no corners or shadow of its own, because Play applies them.
+
+  Rendered to icon.png by tools/play/render_graphics.py.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="12 12 84 84">
+  <rect x="12" y="12" width="84" height="84" fill="#000000"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round">
+    <path d="M54,27 A27,27 0 1 1 27,54" stroke-opacity="0.302"/>
+    <path d="M54,34 A20,20 0 0 1 74,54 A20,20 0 0 1 54,74" stroke-opacity="0.580"/>
+    <path d="M54,41 A13,13 0 0 1 67,54" stroke-opacity="1"/>
+  </g>
+</svg>
