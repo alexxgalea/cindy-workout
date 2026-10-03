@@ -368,12 +368,30 @@ class TutorialScreenTest {
 
         assertTrue(contains(root, "The picture is never uploaded"))
         assertTrue(contains(root, "REC films only when you tap it"))
-        assertTrue(contains(root, "Strava stays off until you connect it in the menu"))
         assertNotNull(findByText(root, "Next, Android asks to use the camera."))
         activity.finish()
     }
 
     // ── a replay ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `the last page mentions Strava only in a build that has it`() {
+        try {
+            StravaConfig.availableForTest = true
+            val withStrava = open()
+            toLastPage(withStrava)
+            assertTrue(contains(content(withStrava), "Strava stays off until you connect it in the menu"))
+            withStrava.finish()
+
+            StravaConfig.availableForTest = false
+            val without = open()
+            toLastPage(without)
+            assertFalse("a build without Strava talks about it", contains(content(without), "Strava"))
+            without.finish()
+        } finally {
+            StravaConfig.availableForTest = null
+        }
+    }
 
     @Test
     fun `a replay ends on DONE, without the camera footnote`() {

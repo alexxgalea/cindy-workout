@@ -63,13 +63,11 @@ class StravaScreenTest {
     }
 
     @Test
-    fun `the menu builds with Strava unavailable`() {
+    fun `the menu builds with Strava unavailable, and has no Strava row`() {
         StravaConfig.availableForTest = false
         val activity = buildMenu()
-        val row = findByDescriptionPrefix(
-            activity.findViewById(android.R.id.content), "Strava, Not available in this build"
-        )
-        assertTrue("no unavailable Strava row", row != null)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        assertTrue("an unavailable build still has a Strava row", findByDescriptionPrefix(root, "Strava") == null)
         activity.finish()
     }
 
@@ -132,15 +130,11 @@ class StravaScreenTest {
     }
 
     @Test
-    fun `tapping Strava when unavailable opens no sheet`() {
+    fun `an unavailable build mentions Strava nowhere on the menu`() {
         StravaConfig.availableForTest = false
         val activity = buildMenu()
-        val row = findByDescriptionPrefix(
-            activity.findViewById(android.R.id.content), "Strava, Not available in this build"
-        )
-        row!!.performClick()
-        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        assertTrue("an unavailable build must not open a sheet", dialog == null || !dialog.isShowing)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        assertTrue("some menu text still says Strava", findTextContaining(root, "Strava") == null)
         activity.finish()
     }
 

@@ -284,7 +284,7 @@ class TutorialActivity : AppCompatActivity() {
         title(titles[4])
         bullet("Counting happens on this phone. The picture is never uploaded.")
         bullet("REC films only when you tap it, and saves to your phone.")
-        bullet("Strava stays off until you connect it in the menu.")
+        if (StravaConfig.available) bullet("Strava stays off until you connect it in the menu.")
         // Only the first run is about to be asked; someone replaying the pages has answered.
         if (!replay) footnote("Next, Android asks to use the camera.")
     }

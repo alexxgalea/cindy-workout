@@ -8,8 +8,8 @@ package com.cindy.tracker
  * `strava.properties` held at build time (see `app/build.gradle.kts`) — empty strings when the
  * file was absent, which is true for CI and for a fresh clone. [available] turns that fact into
  * the one the rest of the app should act on: a build with no credentials does not have the
- * feature, so the menu says "Not available in this build" instead of the app reaching for a
- * client secret that was never there.
+ * feature, so the menu has no Strava row, Help and the tutorial do not mention it, and the app
+ * never reaches for a client secret that was never there.
  */
 object StravaConfig {
 

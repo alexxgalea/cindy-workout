@@ -75,7 +75,7 @@ class HelpScreenTest {
         val text = helpText()
         for (heading in listOf(
             "VOICE AND MUSIC", "FILMING", "THE SESSION PAGE", "COMPARING SESSIONS",
-            "WHAT YOU LIFTED", "HEART RATE", "YOU AND YOUR BADGES", "REMINDERS", "STRAVA"
+            "WHAT YOU LIFTED", "HEART RATE", "YOU AND YOUR BADGES", "REMINDERS", "PRIVACY"
         )) {
             assertTrue("Help has no $heading section", text.contains(heading))
         }
@@ -91,6 +91,21 @@ class HelpScreenTest {
             "the last line of the page should be the version, not '$last'",
             last == "Cindy ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
         )
+    }
+
+    @Test
+    fun `Help talks about Strava only in a build that has it`() {
+        StravaConfig.availableForTest = true
+        val with = helpText()
+        assertTrue(with.contains("STRAVA"))
+        assertTrue(with.contains("the calorie estimate and the Strava upload."))
+
+        StravaConfig.availableForTest = false
+        val without = helpText()
+        assertFalse("a build without Strava still has a STRAVA section", without.contains("STRAVA"))
+        assertFalse("a build without Strava still mentions it", without.contains("Strava"))
+        // The sentence it replaces still reads as one.
+        assertTrue(without.contains("how long the camera lost you and the calorie estimate."))
     }
 
     @Test

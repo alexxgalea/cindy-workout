@@ -261,7 +261,7 @@ class HelpActivity : AppCompatActivity() {
 
         profileAndBadges()
         reminders()
-        strava()
+        if (StravaConfig.available) strava()
         privacy()
         licences()
 
@@ -360,8 +360,13 @@ class HelpActivity : AppCompatActivity() {
                 "Tap or drag across the bars to read one, with a tick over each bar marking " +
                 "the same round in the session you are comparing with. An outlined bar is a " +
                 "round still under way when the clock stopped.",
-            "DETAILS, at the foot, holds paused and real time, reps added by hand, how long " +
-                "the camera lost you, the calorie estimate and the Strava upload."
+            if (StravaConfig.available) {
+                "DETAILS, at the foot, holds paused and real time, reps added by hand, how " +
+                    "long the camera lost you, the calorie estimate and the Strava upload."
+            } else {
+                "DETAILS, at the foot, holds paused and real time, reps added by hand, how " +
+                    "long the camera lost you and the calorie estimate."
+            }
         )
         paragraph(
             "Only what was recorded is shown, and nothing is worked out from the round count " +
