@@ -1285,7 +1285,7 @@ class ResultsActivity : AppCompatActivity() {
 
     /** The Strava row's value and tap action, for whichever state applies right now. */
     private fun stravaRowContent(a: Attempt, tokens: StravaTokenStore): Pair<String, (() -> Unit)?> {
-        if (!tokens.connected) return "Connect to upload" to { connectFromResults(a.atMillis) }
+        if (!tokens.connected) return "Connect to upload" to { askThenConnect(a.atMillis) }
         val status = StravaUploads.status(this, a.atMillis)
         return when (status?.state) {
             null -> "Upload" to { StravaUploads.enqueue(this, a.atMillis) }
@@ -1296,7 +1296,7 @@ class ResultsActivity : AppCompatActivity() {
             }
             StravaUploadState.FAILED ->
                 "Couldn't upload — tap to retry" to { StravaUploads.enqueue(this, a.atMillis) }
-            StravaUploadState.NEEDS_RECONNECT -> "Reconnect to upload" to { connectFromResults(a.atMillis) }
+            StravaUploadState.NEEDS_RECONNECT -> "Reconnect to upload" to { askThenConnect(a.atMillis) }
             StravaUploadState.UNAVAILABLE -> "Not available for this attempt" to null
         }
     }
@@ -1308,6 +1308,10 @@ class ResultsActivity : AppCompatActivity() {
             toast("Opening the activity needs the Strava app or a web browser")
         }
     }
+
+    /** Says what will be sent first; [connectFromResults] runs only if the athlete goes ahead. */
+    private fun askThenConnect(atMillis: Long) =
+        StravaConsent.show(this) { connectFromResults(atMillis) }
 
     /**
      * Starts OAuth for one particular attempt, rather than the menu's general connect.
