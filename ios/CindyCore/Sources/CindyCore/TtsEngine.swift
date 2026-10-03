@@ -9,7 +9,7 @@ public enum SpeakQueue: Sendable {
 }
 
 /// Why an utterance could not be spoken, as far as anyone can do anything about it.
-public enum SpeechFailure: Sendable {
+public enum SpeechFailure: CaseIterable, Sendable {
     /// A voice that runs on the engine's servers could not reach them.
     case network
     /// The voice's data is still being fetched.

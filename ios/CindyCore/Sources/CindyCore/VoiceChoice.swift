@@ -51,7 +51,7 @@ public enum LanguageAvailability: Sendable {
 }
 
 /// Where a language stands on this phone.
-public enum PackState: Sendable {
+public enum PackState: CaseIterable, Sendable {
     /// A voice for it is on the phone and can count a workout.
     case ready
     /// Its voice data has been asked for and has not arrived.
