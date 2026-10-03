@@ -47,28 +47,28 @@ Kotlin table and compare every number.
 | P3 | `SessionStats.kt` | CindyCore | tests ported |
 | P3 | `SplitBook.kt` | CindyCore | tests ported |
 | P3 | `StravaSets.kt` (with `WorkoutSet`, from `StravaPayload.kt`) | CindyCore | ported |
-| P4 | `Coach.kt` | CindyCore | not started |
-| P4 | `Phrasebook.kt` | CindyCore | not started |
-| P4 | `PhrasebookDe.kt` | CindyCore | not started |
-| P4 | `PhrasebookEn.kt` | CindyCore | not started |
-| P4 | `PhrasebookEs.kt` | CindyCore | not started |
-| P4 | `PhrasebookFr.kt` | CindyCore | not started |
-| P4 | `PhrasebookIt.kt` | CindyCore | not started |
-| P4 | `PhrasebookNl.kt` | CindyCore | not started |
-| P4 | `PhrasebookPl.kt` | CindyCore | not started |
-| P4 | `PhrasebookPt.kt` | CindyCore | not started |
-| P4 | `PhrasebookRo.kt` | CindyCore | not started |
-| P4 | `PhrasebookRu.kt` | CindyCore | not started |
-| P4 | `PhrasebookTr.kt` | CindyCore | not started |
-| P4 | `Plurals.kt` | CindyCore | not started |
-| P4 | `RecordedHud.kt` | CindyCore | not started |
-| P4 | `TtsEngine.kt` | CindyCore (protocol) | not started |
-| P4 | `VoiceChoice.kt` | CindyCore | not started |
-| P4 | `VoiceDirector.kt` | CindyCore | not started |
-| P4 | `VoiceHints.kt` | CindyCore | not started |
-| P4 | `VoiceLanguageText.kt` | CindyCore | not started |
-| P4 | `VoiceLine.kt` | CindyCore | not started |
-| P4 | `VoicePacks.kt` | CindyCore | not started |
+| P4 | `Coach.kt` | CindyCore | tests ported |
+| P4 | `Phrasebook.kt` | CindyCore | ported |
+| P4 | `PhrasebookDe.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookEn.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookEs.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookFr.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookIt.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookNl.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookPl.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookPt.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookRo.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookRu.kt` | CindyCore | tests ported |
+| P4 | `PhrasebookTr.kt` | CindyCore | tests ported |
+| P4 | `Plurals.kt` | CindyCore | tests ported |
+| P4 | `RecordedHud.kt` | CindyCore | tests ported |
+| P4 | `TtsEngine.kt` | CindyCore (protocol) | ported |
+| P4 | `VoiceChoice.kt` | CindyCore | tests ported |
+| P4 | `VoiceDirector.kt` | CindyCore | tests ported |
+| P4 | `VoiceHints.kt` | CindyCore | tests ported |
+| P4 | `VoiceLanguageText.kt` | CindyCore | tests ported |
+| P4 | `VoiceLine.kt` | CindyCore | ported |
+| P4 | `VoicePacks.kt` | CindyCore | tests ported |
 | P5 | `FrameHandoff.kt` | CindyCore | not started |
 | P5 | `FrameLatency.kt` | split: `Rolling`/`RateMeter`/probe maths → CindyCore, camera timestamps → CindyTracker | not started |
 | P5 | `OverlayTransform.kt` | CindyCore (pure maths, ported with its tests) | not started |
