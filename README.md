@@ -703,6 +703,20 @@ Requires JDK 17 and the Android SDK (platform 36, build-tools 35.0.0).
 ./gradlew installDebug           # to an attached device
 ```
 
+The release build is checked the same way CI checks it. Without a `keystore.properties` it comes
+out unsigned, which is fine for checking:
+
+```sh
+./gradlew bundleRelease assembleRelease    # → app/build/outputs/bundle/release/app-release.aab
+python3 tools/check_16kb_alignment.py \
+  app/build/outputs/bundle/release/app-release.aab \
+  app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+The script fails if a 64-bit native library is linked for 4 KB memory pages, which Google Play
+stops accepting on 2027-02-01 and a 16 KB phone may refuse to load. `zipalign -P 16` does not
+catch this: it checks where a file sits in the zip, not how the library inside was linked.
+
 `local.properties` must point at your SDK (`sdk.dir=...`); it is deliberately gitignored.
 
 ## Tests
@@ -751,3 +765,9 @@ it needs are not being seen.
 [Kaggle Models](https://www.kaggle.com/models/google/movenet): Thunder 256×256 (6.8 MB, the
 default) and Lightning 192×192 (2.9 MB). `PoseDetector` reads the input size and dtype from the
 model at runtime, so switching between them — or to a float build — needs no code change.
+
+The models run on [LiteRT](https://ai.google.dev/edge/litert), TensorFlow Lite under its new name,
+through the same `org.tensorflow.lite` API. The `.tflite` files are unchanged. The runtime was
+changed because TensorFlow Lite 2.16.1's arm64 library is linked for 4 KB memory pages and may
+not load on a 16 KB phone; LiteRT 1.4.x is linked for 16 KB. Stay on 1.4.x: LiteRT 2.x is a
+different runtime and API.
