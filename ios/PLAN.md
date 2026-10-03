@@ -79,6 +79,20 @@ Done means:
 
 ## Ground rules for every phase
 
+### Where the plans live
+
+Android's plans are kept in `/docs/`, which `.gitignore` keeps out of git. iOS is an agreed
+exception for two files, because the sessions that execute this plan start from a fresh clone and
+would otherwise lose them:
+
+- **This plan**, `ios/PLAN.md`, committed. It changes only when the owner agrees a change; a
+  phase that finds the plan wrong says so in its PR and asks, rather than editing it.
+- **The parity table**, `ios/PARITY.md`, committed, and updated in the pull request of every
+  phase that moves a row.
+
+**Each phase's own working plan stays local**, in `docs/ios-pN-<slug>.md`, as on Android. Never
+commit it or `git add -f` it; the PR body says what it needs to on its own.
+
 ### Identity, commits and pull requests
 
 Set once per clone, before the first commit:
@@ -119,9 +133,9 @@ git config core.hooksPath .githooks
 Every phase runs the same four steps, in order.
 
 1. **Plan.** Read every Kotlin file and test the phase lists, in full, and the Swift files they
-   touch. Write a short phase plan in the session before any code: the files to create, the
-   commits in order, the Kotlin test count to match, and the iOS deviations, each with its reason.
-   If it touches a **decision** (below) that is not settled, stop and ask.
+   touch. Write a short phase plan to `docs/ios-pN-<slug>.md` before any code: the files to
+   create, the commits in order, the Kotlin test count to match, and the iOS deviations, each with
+   its reason. If it touches a **decision** (below) that is not settled, stop and ask.
 2. **Execute.** Commit by commit. Port tests alongside the code they cover, in the same commit or
    the next, never in a batch at the end.
 3. **Test.**
@@ -356,7 +370,7 @@ tests fail; put the degrees conversion back to Float and show the parity failure
 
 **Worth knowing for later:** once this lands, any Android PR that changes a file in P2's list
 changes `trace_jvm.csv`, and `core` will fail until the Swift side follows. That is the point.
-P0's `ios/PARITY.md` should say so.
+`ios/PARITY.md` should say so.
 
 ---
 
