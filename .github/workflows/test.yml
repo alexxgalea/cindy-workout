@@ -31,6 +31,31 @@ jobs:
       - name: Run synthetic-pose regression tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
+  # The release bundle is what Google Play receives, and nothing else in CI builds it. Without
+  # this job a fatal lintVitalRelease finding, or a library linked for 4 KB memory pages, would
+  # first show up on release day. It needs no secrets: with no keystore.properties the bundle is
+  # unsigned, and with no strava.properties it is built without Strava, as CI always has been.
+  release:
+    name: Release build and 16 KB page-size check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+      - name: Install the project's Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Build the release bundle and APK
+        run: ./gradlew --no-daemon bundleRelease assembleRelease
+      - name: Check that every native library is 16 KB aligned
+        run: >-
+          python3 tools/check_16kb_alignment.py
+          app/build/outputs/bundle/release/app-release.aab
+          app/build/outputs/apk/release/app-release-unsigned.apk
+
   video-regression:
     name: Video regression (provisioned fixtures)
     needs: unit
