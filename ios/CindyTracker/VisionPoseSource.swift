@@ -21,8 +21,13 @@ final class VisionPoseSource: NSObject, PoseSource {
     private let request = VNDetectHumanBodyPoseRequest()
 
     private var position: AVCaptureDevice.Position = .back
-    private var roi: CGRect?
-    private var misses = 0
+
+    /// Where to look next. Touched only on `queue`, which is where frames arrive.
+    private let tracker = RoiTracker()
+    private let probe = LatencyProbe()
+    /// Analysed frames wait here for the main thread: events would queue, but every frame is
+    /// state, so only the newest is kept and a slow main thread costs frames, not freshness.
+    private let handoff = FrameHandoff<PoseFrame>()
 
     func start() {
         queue.async { [weak self] in
@@ -47,12 +52,25 @@ final class VisionPoseSource: NSObject, PoseSource {
             self.session.inputs.forEach { self.session.removeInput($0) }
             self.addInput()
             self.session.commitConfiguration()
+            self.orientConnection()
+            self.probe.reset()
         }
     }
 
     func resetRoi() {
-        roi = nil
-        misses = 0
+        queue.async { [weak self] in self?.tracker.reset() }
+    }
+
+    /// Frames arrive upright, in portrait, and mirrored for the selfie camera so that they match
+    /// what the preview shows. Without this they arrive in the sensor's landscape orientation and
+    /// every joint is a quarter turn from where the body is.
+    private func orientConnection() {
+        guard let connection = videoOutput.connection(with: .video) else { return }
+        if connection.isVideoRotationAngleSupported(90) { connection.videoRotationAngle = 90 }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = position == .front
+        }
     }
 
     private func configure() {
@@ -66,6 +84,9 @@ final class VisionPoseSource: NSObject, PoseSource {
         if session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
         if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
         session.commitConfiguration()
+        orientConnection()
+        // One host clock stamps every frame on an iPhone, so there is nothing to look up.
+        probe.clock.resolve()
     }
 
     private func addInput() {
@@ -95,41 +116,48 @@ extension VisionPoseSource: AVCaptureVideoDataOutputSampleBufferDelegate {
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let size = CGSize(
-            width: CVPixelBufferGetWidth(buffer),
-            height: CVPixelBufferGetHeight(buffer)
-        )
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let size = CGSize(width: width, height: height)
 
-        let region = roi
-        request.regionOfInterest = region ?? CGRect(x: 0, y: 0, width: 1, height: 1)
+        // The crop this frame is analysed in, and whether it is a tracked one, are settled before
+        // detection and read after it for this same frame.
+        let region = tracker.beginFrame(frameWidth: width, frameHeight: height)
+        let tracking = tracker.tracking
+        let roi = VisionGeometry.regionOfInterest(for: tracking ? region : nil,
+                                                  frameWidth: width, frameHeight: height)
+        request.regionOfInterest = CGRect(x: roi.x, y: roi.y, width: roi.width, height: roi.height)
 
-        let started = CFAbsoluteTimeGetCurrent()
+        let started = monotonicNanos()
+        // The buffer is already upright (see `orientConnection`), so no orientation is applied.
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
         try? handler.perform([request])
-        let elapsed = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        let inferMs = (monotonicNanos() - started) / 1_000_000
 
         let points: [Keypoint]
         if let observation = request.results?.first {
-            points = VisionPose.keypoints(
-                from: observation,
-                size: size,
-                roi: region ?? CGRect(x: 0, y: 0, width: 1, height: 1)
-            )
+            points = VisionPose.keypoints(from: observation, size: size, roi: roi)
         } else {
             points = Array(repeating: .missing, count: KP.count)
         }
 
         // Follow the body, and give up on the crop if it is lost for a few frames running.
-        if let next = VisionPose.regionOfInterest(around: points, size: size) {
-            roi = next
-            misses = 0
-        } else {
-            misses += 1
-            if misses >= 5 { roi = nil }
-        }
+        tracker.update(points, frameWidth: width, frameHeight: height)
 
-        let frame = PoseFrame(keypoints: points, frameSize: size, inferenceMs: elapsed, tracking: roi != nil)
-        DispatchQueue.main.async { self.onFrame?(frame) }
+        let stamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let age = probe.clock.sinceCapture(Int64(CMTimeGetSeconds(stamp) * 1_000_000_000))
+        probe.analysed(captureAgeMs: age, convertMs: 0, prepMs: 0, inferMs: inferMs)
+
+        var frame = PoseFrame(keypoints: points, frameSize: size, inferenceMs: Int(inferMs), tracking: tracking)
+        frame.captureAgeMs = age.map(Int.init)
+        frame.latencyLine = probe.line(model: "vision", drawnPerSecond: nil)
+        let outcome = handoff.submit(frame, isEvent: false)
+        probe.posted(replacedUnrendered: outcome == .replacedPending)
+        if outcome == .schedule {
+            DispatchQueue.main.async { [weak self] in
+                self?.handoff.drain { self?.onFrame?($0) }
+            }
+        }
     }
 }
 
