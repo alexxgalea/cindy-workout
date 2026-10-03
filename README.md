@@ -703,6 +703,20 @@ Requires JDK 17 and the Android SDK (platform 36, build-tools 35.0.0).
 ./gradlew installDebug           # to an attached device
 ```
 
+The release build is checked the same way CI checks it. Without a `keystore.properties` it comes
+out unsigned, which is fine for checking:
+
+```sh
+./gradlew bundleRelease assembleRelease    # → app/build/outputs/bundle/release/app-release.aab
+python3 tools/check_16kb_alignment.py \
+  app/build/outputs/bundle/release/app-release.aab \
+  app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+The script fails if a 64-bit native library is linked for 4 KB memory pages, which Google Play
+stops accepting on 2027-02-01 and a 16 KB phone may refuse to load. `zipalign -P 16` does not
+catch this: it checks where a file sits in the zip, not how the library inside was linked.
+
 `local.properties` must point at your SDK (`sdk.dir=...`); it is deliberately gitignored.
 
 ## Tests
