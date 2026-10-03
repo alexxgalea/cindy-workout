@@ -13,7 +13,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONException
 
 /**
- * The redirect target for Strava's OAuth flow: `com.cindy.tracker://localhost/strava`.
+ * The redirect target for Strava's OAuth flow: [StravaConfig.REDIRECT_URI], which is
+ * `com.cindy.tracker://localhost/strava` in the Play build and carries the `.debug` id in the dev
+ * build.
  *
  * There is no real screen — just a footnote over the app's own black background, up for the
  * second or two the code exchange takes. Everything else about this class exists to protect that
