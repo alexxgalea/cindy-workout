@@ -3,10 +3,10 @@ import CindyCore
 
 /// Synthetic keypoint bodies, so the rep logic can be exercised without a camera.
 /// Coordinates are in "pixels" with y growing downward, matching what the detector emits.
-enum PoseFixtures {
+public enum PoseFixtures {
 
-    static let limb: Float = 100
-    static let torso: Float = 100
+    public static let limb: Float = 100
+    public static let torso: Float = 100
 
     private static func blank() -> [Keypoint] { Array(repeating: .missing, count: KP.count) }
 
@@ -19,7 +19,7 @@ enum PoseFixtures {
     private static func rad(_ deg: Float) -> Float { deg * .pi / 180 }
 
     /// A body squatting with the given knee angle. 180 is standing, 90 is below parallel.
-    static func squat(_ kneeDeg: Float) -> [Keypoint] {
+    public static func squat(_ kneeDeg: Float) -> [Keypoint] {
         var k = blank()
         let hipX = limb * sinf(rad(kneeDeg))
         let hipY = limb * cosf(rad(kneeDeg))
@@ -32,7 +32,7 @@ enum PoseFixtures {
     }
 
     /// A body mid push-up with the given elbow angle. 180 is lockout, 90 is chest down.
-    static func pushup(_ elbowDeg: Float) -> [Keypoint] {
+    public static func pushup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
         let shX = limb * sinf(rad(elbowDeg))
         let shY = limb * cosf(rad(elbowDeg))
@@ -51,7 +51,7 @@ enum PoseFixtures {
     /// a dead hang it is below the reset line. Keeping that distinction in the shared fixture
     /// lets the production head gate be exercised without a camera — matches the Kotlin/Python
     /// fixture geometry exactly, since the head-over-bar gate is sensitive to it.
-    static func pullup(_ elbowDeg: Float) -> [Keypoint] {
+    public static func pullup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
         let shX = limb * sinf(rad(elbowDeg))
         let shY = -limb * cosf(rad(elbowDeg))
@@ -71,7 +71,7 @@ enum PoseFixtures {
     /// to pin down. The knees and shins are placed honestly so the fixture describes the real
     /// movement, not so the engine can read them: nothing in the push-up path consults them.
     /// Mirrors Kotlin's `PoseFixtures.kneePushup`.
-    static func kneePushup(_ elbowDeg: Float) -> [Keypoint] {
+    public static func kneePushup(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
         let shX = limb * sinf(rad(elbowDeg))
         let shY = limb * cosf(rad(elbowDeg))
@@ -94,7 +94,7 @@ enum PoseFixtures {
     /// same range, the wrists sit above the hips and the head reaches the bar line. Every
     /// pull-up gate except the torso's direction is satisfied by a row. Mirrors Kotlin's
     /// `PoseFixtures.invertedRow`.
-    static func invertedRow(_ elbowDeg: Float) -> [Keypoint] {
+    public static func invertedRow(_ elbowDeg: Float) -> [Keypoint] {
         var k = blank()
         let shX = limb * sinf(rad(elbowDeg))
         let shY = -limb * cosf(rad(elbowDeg))
@@ -115,7 +115,7 @@ enum PoseFixtures {
     /// hips with the elbows extended, so every test the bar used to be learned from passes — but
     /// the hands are below the head, because the band is held in front of the chest rather than
     /// gripped overhead. Mirrors Kotlin's `PoseFixtures.bandSetup`.
-    static func bandSetup() -> [Keypoint] {
+    public static func bandSetup() -> [Keypoint] {
         var k = blank()
         putPair(&k, KP.leftShoulder, KP.rightShoulder, 0, 0)
         putPair(&k, KP.leftHip, KP.rightHip, 0, torso)
@@ -128,19 +128,19 @@ enum PoseFixtures {
     }
 
     /// Nothing confidently detected — the "step into frame" case.
-    static func empty() -> [Keypoint] { blank() }
+    public static func empty() -> [Keypoint] { blank() }
 }
 
 /// Drives an engine the way a camera would.
-final class Rig {
-    let engine: WorkoutEngine
-    var clock: Int64 = 0
+public final class Rig {
+    public let engine: WorkoutEngine
+    public var clock: Int64 = 0
 
-    init(fixedExercise: Exercise? = nil, profile: CindyProfile = .standard) {
+    public init(fixedExercise: Exercise? = nil, profile: CindyProfile = .standard) {
         engine = WorkoutEngine(fixedExercise: fixedExercise, profile: profile)
     }
 
-    func hold(_ pose: [Keypoint], frames: Int = 10) {
+    public func hold(_ pose: [Keypoint], frames: Int = 10) {
         for _ in 0..<frames {
             _ = engine.onFrame(pose, now: clock)
             clock += 100
@@ -148,7 +148,7 @@ final class Rig {
     }
 
     @discardableResult
-    func setupHold(_ pose: [Keypoint], frames: Int = 10) -> Setup {
+    public func setupHold(_ pose: [Keypoint], frames: Int = 10) -> Setup {
         var last = engine.onSetupFrame(pose, now: clock)
         for _ in 0..<frames {
             last = engine.onSetupFrame(pose, now: clock)
@@ -157,7 +157,7 @@ final class Rig {
         return last
     }
 
-    func pullup(hang: Float = 170, top: Float = 60) {
+    public func pullup(hang: Float = 170, top: Float = 60) {
         hold(PoseFixtures.pullup(hang))
         hold(PoseFixtures.pullup(top))
     }
@@ -168,14 +168,14 @@ final class Rig {
     /// until it has seen the athlete get there. Starting at the bottom instead described an
     /// athlete who materialises mid-rep, and let the climb up out of the previous movement count
     /// as the first rep of this one. Mirrors Kotlin's `doPushup()`.
-    func pushup() {
+    public func pushup() {
         hold(PoseFixtures.pushup(175))
         hold(PoseFixtures.pushup(80))
         hold(PoseFixtures.pushup(175))
     }
 
     /// Mirrors Kotlin's `doSquat()` — see `pushup()`.
-    func squat() {
+    public func squat() {
         hold(PoseFixtures.squat(175))
         hold(PoseFixtures.squat(80))
         hold(PoseFixtures.squat(175))

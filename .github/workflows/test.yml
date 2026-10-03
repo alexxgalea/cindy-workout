@@ -1,8 +1,20 @@
 name: Test Cindy
 
+# A change that touches only the iOS port cannot affect the Android build, and this workflow is
+# about ten minutes of runner time per push. ios.yml covers those changes. A push that also
+# touches anything else still runs everything: paths-ignore skips a run only when every changed
+# file matches.
 on:
   push:
+    paths-ignore:
+      - 'ios/**'
+      - 'tools/ios/**'
+      - '.github/workflows/ios.yml'
   pull_request:
+    paths-ignore:
+      - 'ios/**'
+      - 'tools/ios/**'
+      - '.github/workflows/ios.yml'
   workflow_dispatch:
     inputs:
       run_video_regression:
