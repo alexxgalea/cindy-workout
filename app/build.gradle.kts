@@ -177,6 +177,13 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 
+// PlayListingTest reads the store listing from play/, outside this module. Gradle only re-runs a
+// test when its declared inputs change, so without this an edit to the listing alone would be
+// reported as "up to date" and never checked against Google Play's limits.
+tasks.withType<Test>().configureEach {
+    inputs.files(rootProject.fileTree("play")).withPropertyName("storeListing")
+}
+
 tasks.register("videoRegressionTest") {
     group = "verification"
     description = "Runs offline MoveNet video regression scenarios on a connected emulator/device."
