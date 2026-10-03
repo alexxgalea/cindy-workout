@@ -32,7 +32,7 @@ final class ReplayPoseSource: PoseSource {
         case "pullups":
             return Script(
                 lead: held(PoseFixtures.pullup(170), 10),
-                cycle: held(PoseFixtures.pullup(60), 10) + held(PoseFixtures.pullup(170), 10)
+                cycle: held(PoseFixtures.pullup(170), 20)
             )
         default:
             return nil
