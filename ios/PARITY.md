@@ -22,7 +22,7 @@ Kotlin table and compare every number.
 
 | Kotlin test | Moved to | Because |
 |---|---|---|
-| `SkippedRepsTest`, the last two (`an attempt reports the reps it counted…`, `the counted total survives a round trip…`) | P3 | They build an `Attempt` with `countedReps`, a column of the saved record line |
+| `StravaSetsTest`, all but the last (`the adaptive profile on the attempt reaches StravaPayload's mapping`) | P3 (from P19) | `RoundSplits` and `SessionStats` read `StravaSets.from`, so it cannot wait for the Strava phase. The last test feeds the result to `StravaPayload`, and stays with it |
 | `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak` |
 
 | Phase | Kotlin file | Lands in | Status |
@@ -37,15 +37,16 @@ Kotlin table and compare every number.
 | P2 | `TrackingHealth.kt` | CindyCore | tests ported |
 | P2 | `Variations.kt` | CindyCore | tests ported |
 | P2 | `WorkoutEngine.kt` | CindyCore | tests ported |
-| P3 | `Comparisons.kt` | CindyCore | not started |
-| P3 | `Levels.kt` | CindyCore | behind |
-| P3 | `LiveWorkout.kt` | CindyCore | not started |
-| P3 | `RecordStore.kt` | CindyCore (`Records`, format v1 to v7) and a `RecordStore` over `UserDefaults` | behind |
-| P3 | `RepLog.kt` | CindyCore | not started |
-| P3 | `RepTimesStore.kt` | CindyCore (format + file store) | not started |
-| P3 | `RoundSplits.kt` | CindyCore | not started |
-| P3 | `SessionStats.kt` | CindyCore | not started |
-| P3 | `SplitBook.kt` | CindyCore | not started |
+| P3 | `Comparisons.kt` | CindyCore | tests ported |
+| P3 | `Levels.kt` | CindyCore | tests ported |
+| P3 | `LiveWorkout.kt` | CindyCore | ported |
+| P3 | `RecordStore.kt` | CindyCore (`Records`, format v1 to v7) and a `RecordStore` over `UserDefaults` | tests ported |
+| P3 | `RepLog.kt` | CindyCore | tests ported |
+| P3 | `RepTimesStore.kt` | CindyCore (format + file store) | tests ported |
+| P3 | `RoundSplits.kt` | CindyCore | tests ported |
+| P3 | `SessionStats.kt` | CindyCore | tests ported |
+| P3 | `SplitBook.kt` | CindyCore | tests ported |
+| P3 | `StravaSets.kt` (with `WorkoutSet`, from `StravaPayload.kt`) | CindyCore | ported |
 | P4 | `Coach.kt` | CindyCore | not started |
 | P4 | `Phrasebook.kt` | CindyCore | not started |
 | P4 | `PhrasebookDe.kt` | CindyCore | not started |
@@ -143,7 +144,6 @@ Kotlin table and compare every number.
 | P19 | `StravaHeartRate.kt` | CindyCore | not started |
 | P19 | `StravaHttp.kt` | CindyCore (`URLSession` behind a transport protocol) | not started |
 | P19 | `StravaPayload.kt` | CindyCore | not started |
-| P19 | `StravaSets.kt` | CindyCore | not started |
 | P19 | `StravaTokens.kt` | CindyCore (logic) + Keychain store in CindyTracker | not started |
 | P19 | `StravaUploads.kt` | CindyCore (state machine) + CindyTracker (scheduling) | not started |
 | P20 | `StravaAuthActivity.kt` | CindyTracker (iOS rewrite) | not started |
