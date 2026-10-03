@@ -695,7 +695,7 @@ available in this build".
 
 ## Build
 
-Requires JDK 17 and the Android SDK (platform 35, build-tools 35.0.0).
+Requires JDK 17 and the Android SDK (platform 36, build-tools 35.0.0).
 
 ```sh
 ./gradlew assembleDebug          # → app/build/outputs/apk/debug/app-debug.apk
