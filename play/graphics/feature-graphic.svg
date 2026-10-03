@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Google Play feature graphic, 1024 x 500: the mark, the name and the scheme, on black.
+
+  The mark is the launcher icon's three arcs (see icon.svg) scaled up, and "Cindy" is Manrope
+  ExtraBold, the app's own typeface, loaded from the font file in the app's resources. Nothing
+  important sits near the edges, which Play crops on some screens, and there is no transparency:
+  Play rejects a feature graphic that has any. The line under the name is the workout's scheme,
+  5 pull-ups, 10 push-ups, 15 squats, and says nothing else about the app.
+
+  Rendered to feature-graphic.png by tools/play/render_graphics.py, which also checks it. Open the
+  SVG from inside the repository so the font path below resolves.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <style>
+    @font-face { font-family: "Manrope"; font-weight: 800; src: url("../../app/src/main/res/font/manrope_extrabold.ttf"); }
+    @font-face { font-family: "Manrope"; font-weight: 500; src: url("../../app/src/main/res/font/manrope_medium.ttf"); }
+    .name   { font: 800 150px "Manrope", sans-serif; fill: #FFFFFF; letter-spacing: -2px; }
+    .scheme { font: 500 44px "Manrope", sans-serif; fill: #FFFFFF; fill-opacity: 0.58; letter-spacing: 3px; }
+  </style>
+  <rect width="1024" height="500" fill="#000000"/>
+
+  <!-- The mark: the launcher's 108-unit canvas, centred on (54,54), drawn at 5x -->
+  <g transform="translate(-20,-20) scale(5)">
+    <g fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round">
+      <path d="M54,27 A27,27 0 1 1 27,54" stroke-opacity="0.302"/>
+      <path d="M54,34 A20,20 0 0 1 74,54 A20,20 0 0 1 54,74" stroke-opacity="0.580"/>
+      <path d="M54,41 A13,13 0 0 1 67,54" stroke-opacity="1"/>
+    </g>
+  </g>
+
+  <text class="name" x="440" y="272">Cindy</text>
+  <text class="scheme" x="446" y="342">5 · 10 · 15</text>
+</svg>

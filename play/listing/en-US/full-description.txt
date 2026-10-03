@@ -1,0 +1,33 @@
+Cindy Tracker counts the Cindy workout for you, using your phone's camera.
+
+Cindy is an AMRAP of 20 minutes: 5 pull-ups, 10 push-ups and 15 air squats, repeated for as many rounds as you can. Prop your phone two or three metres away, step into the frame and start. The app counts every rep, moves you on to the next movement and keeps the score, so there is no one to count for you and nothing to wear.
+
+Counting from the camera
+- The pose is read on your phone and the picture is thrown away. It is never saved or sent.
+- It counts a rep only when the movement is complete, and tells you when it cannot see the joints it needs.
+- Counts out loud in 11 languages, using your phone's own speech engine.
+- Plays a track of your own during the workout.
+- Scaled versions of every movement: band-assisted pull-ups, knee push-ups, heels-flat and box squats are counted by the camera, and inverted rows, foot-assisted and negative pull-ups, incline push-ups and supported squats by a tap.
+- A +1 and a -1 for the times the angle defeats the camera.
+
+Your sessions
+- Rounds, reps and time, with the split of every round broken down by movement.
+- A timeline of the whole workout that you can scrub through, with your heart rate on it.
+- Compare any session with an earlier one.
+- Records, daily and weekly streaks, levels and badges, and a daily reminder if you want one.
+- REC films the workout with the skeleton and the count drawn on it, and saves the video to Movies/Cindy on your phone.
+
+Heart rate
+- Pairs with a watch or chest strap that broadcasts a standard Bluetooth heart rate, such as Garmin with broadcast turned on, Polar and chest straps.
+- Used for the calorie estimate and for time in each zone on the session page.
+{{#strava}}
+
+Strava
+- Connect your Strava account and each finished workout uploads by itself: the score, the sets and, with a watch, the heart rate. Nothing is sent until you connect, and never the camera picture or the video.
+{{/strava}}
+
+Private by design
+- Everything runs on your phone.
+- No ads, no analytics and no account.
+
+Cindy Tracker is an independent app. It is not affiliated with or endorsed by CrossFit, LLC. CrossFit is a registered trademark of CrossFit, LLC. Heart rate, zones and calories are training estimates, and Cindy is not a medical device.

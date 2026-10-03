@@ -30,6 +30,8 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Run synthetic-pose regression tests
         run: ./gradlew --no-daemon testDebugUnitTest
+      - name: Check that the store listing and privacy policy render for both builds
+        run: python3 tools/play/render.py --check
 
   # The release bundle is what Google Play receives, and nothing else in CI builds it. Without
   # this job a fatal lintVitalRelease finding, or a library linked for 4 KB memory pages, would
