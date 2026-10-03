@@ -751,3 +751,9 @@ it needs are not being seen.
 [Kaggle Models](https://www.kaggle.com/models/google/movenet): Thunder 256×256 (6.8 MB, the
 default) and Lightning 192×192 (2.9 MB). `PoseDetector` reads the input size and dtype from the
 model at runtime, so switching between them — or to a float build — needs no code change.
+
+The models run on [LiteRT](https://ai.google.dev/edge/litert), TensorFlow Lite under its new name,
+through the same `org.tensorflow.lite` API. The `.tflite` files are unchanged. The runtime was
+changed because TensorFlow Lite 2.16.1's arm64 library is linked for 4 KB memory pages and may
+not load on a 16 KB phone; LiteRT 1.4.x is linked for 16 KB. Stay on 1.4.x: LiteRT 2.x is a
+different runtime and API.

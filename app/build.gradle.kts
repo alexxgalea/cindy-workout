@@ -144,7 +144,11 @@ dependencies {
     // OverlayEffect: draws into the recorded stream, not just the preview.
     implementation("androidx.camera:camera-effects:$cameraX")
 
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    // LiteRT is TensorFlow Lite under its new name, with the same org.tensorflow.lite API, so
+    // PoseDetector is unchanged. It replaces tensorflow-lite 2.16.1, whose arm64 library is
+    // linked for 4 KB pages, which a 16 KB phone may refuse to load. Stay on 1.4.x: 2.x brings a
+    // different native runtime and API, which is its own decision with its own benchmarks.
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
 
     // Drives the Strava upload after a workout is saved: survives process death, waits for a
     // network, and backs off between retries on its own.
