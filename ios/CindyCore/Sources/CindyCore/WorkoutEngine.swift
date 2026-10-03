@@ -411,6 +411,27 @@ public final class WorkoutEngine {
         return counted
     }
 
+    /// The score the movement had actually reached when the last event fired.
+    ///
+    /// The count itself is cleared by `advance` on the way into the next movement, so by the time a
+    /// caller reads `reps` after an `.exerciseDone` it is looking at the new movement's zero. The
+    /// voice used to work around that by announcing the *target* instead, which was right only
+    /// because finishing was the only way to leave a movement. Skipping is the other way, and the
+    /// athlete who did three push-ups and skipped is owed "three", not "ten".
+    public private(set) var repsAtLastEvent = 0
+
+    /// What each movement of the round in progress actually scored, filled in as each is left.
+    ///
+    /// Reps used to be inferred from position — "past the push-ups" was taken to mean ten of them
+    /// — which is true only while the sole way past a movement is to finish it. SKIP means a round
+    /// can be completed with fewer reps in it than its targets, and a tally that keeps crediting
+    /// the targets is a tally that reports work nobody did.
+    private var bankedThisRound: [Exercise: Int] = [:]
+
+    /// The same, for every round already finished — kept per round rather than summed so that
+    /// `undoRep` can step back over a round boundary into the score that was really there.
+    private var bankedRounds: [[Exercise: Int]] = []
+
     public var reps: Int { counter.count }
     public var phase: RepCounter.Phase { counter.phase }
     public var signal: Float { counter.smoothed }
@@ -418,11 +439,15 @@ public final class WorkoutEngine {
     public var calibrated: Bool { counter.calibrated }
 
     /// Reps completed since the start of the current round, across all three movements.
-    public var repsThisRound: Int {
-        Exercise.allCases.prefix(exercise.rawValue).reduce(0) { $0 + $1.target } + reps
-    }
+    ///
+    /// The movements already left contribute what they actually scored, not what they were asked
+    /// for. Those two only differ when something was skipped, which is exactly the case this
+    /// figure used to get wrong.
+    public var repsThisRound: Int { bankedThisRound.values.reduce(0, +) + reps }
 
-    public var totalReps: Int { rounds * 30 + repsThisRound }
+    public var totalReps: Int {
+        bankedRounds.reduce(0) { $0 + $1.values.reduce(0, +) } + repsThisRound
+    }
 
     public func reset() {
         counters.values.forEach { $0.reset() }
@@ -446,6 +471,9 @@ public final class WorkoutEngine {
         blocked = false
         manualReps = 0
         lastRepSource = .auto
+        repsAtLastEvent = 0
+        bankedThisRound.removeAll()
+        bankedRounds.removeAll()
         diagnostics = FrameDiagnostics()
         bar.reset()
         barGuide = nil
@@ -479,21 +507,36 @@ public final class WorkoutEngine {
             manualReps -= 1
             lastRepSource = .auto
         }
+        let counter = self.counter
         if counter.count > 0 {
             counter.forceDecrement()
+            repsAtLastEvent = counter.count
             return .undo
         }
         if exercise != .pullup {
-            let previous = exercise.previous
-            exercise = previous
-            counter.setCount(previous.target - 1)
+            exercise = exercise.previous
+            stepBackInto(exercise)
             return .undo
         }
         guard rounds > 0 else { return .none }
         rounds -= 1
+        // The round being stepped back into is the one whose banked counts were just filed away.
+        bankedThisRound.removeAll()
+        if let last = bankedRounds.popLast() { bankedThisRound = last }
         exercise = .squat
-        counter.setCount(Exercise.squat.target - 1)
+        stepBackInto(.squat)
         return .undo
+    }
+
+    /// Re-enters a movement already left, at one rep below what it actually scored.
+    ///
+    /// "One below its target" was the old answer, and it silently handed back reps that were never
+    /// done to anyone who had skipped the movement — undo would have been a way to invent a score.
+    /// What it scored is banked, so that is what it returns to.
+    private func stepBackInto(_ movement: Exercise) {
+        let banked = bankedThisRound.removeValue(forKey: movement) ?? movement.target
+        counters[movement]!.setCount(max(banked - 1, 0))
+        repsAtLastEvent = counters[movement]!.count
     }
 
     /// Forgets every learned band, keeping the score.
@@ -622,10 +665,16 @@ public final class WorkoutEngine {
 
     /// Advances to the next movement if the current one just hit its target.
     private func settle() -> RepEvent {
-        (fixedExercise == nil && reps >= exercise.target) ? advance() : .rep
+        if fixedExercise == nil && reps >= exercise.target { return advance() }
+        repsAtLastEvent = reps
+        return .rep
     }
 
     private func advance() -> RepEvent {
+        // Read before the counter is cleared: this is the number the movement really reached, and
+        // after a skip it is the only record that it was not the target.
+        repsAtLastEvent = reps
+        bankedThisRound[exercise] = reps
         counter.resetCount()
         let wasLast = exercise == .squat
         exercise = exercise.next
@@ -637,6 +686,8 @@ public final class WorkoutEngine {
         startReference = .nan
         if wasLast {
             rounds += 1
+            bankedRounds.append(bankedThisRound)
+            bankedThisRound.removeAll()
             return .roundDone
         }
         return .exerciseDone
