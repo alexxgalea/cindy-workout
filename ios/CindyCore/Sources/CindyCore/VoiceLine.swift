@@ -111,7 +111,7 @@ public enum VoiceLine: Equatable, Sendable {
 /// The marks `Coach` speaks the clock at, named by what the athlete needs to hear.
 ///
 /// Declared in the order they arrive in a workout.
-public enum ClockMark: CaseIterable, Sendable {
+public enum ClockMark: CaseIterable, Hashable, Sendable {
     /// Fifteen minutes to go.
     case fiveMinutesIn
     /// Ten minutes to go.
