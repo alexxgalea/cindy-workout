@@ -177,7 +177,7 @@ struct ContentView: View {
     /// following the body, the counter's signal, range and phase, and the latency probe's lines.
     private var debugReadout: some View {
         VStack(spacing: 2) {
-            Text("\(camera.source) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
+            Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
             Text(workout.counterReadout)
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }

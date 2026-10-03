@@ -13,7 +13,7 @@ final class CameraModel: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var tracking = false
     @Published private(set) var lastInferenceMs: Int = 0
-    @Published private(set) var source = "Vision"
+    @Published private(set) var sourceName = "Vision"
     @Published private(set) var captureAgeMs: Int?
     @Published private(set) var latencyLine = ""
 
@@ -37,7 +37,7 @@ final class CameraModel: ObservableObject {
             frameSize = frame.frameSize
             lastInferenceMs = frame.inferenceMs
             tracking = frame.tracking
-            source = frame.source
+            sourceName = frame.source
             captureAgeMs = frame.captureAgeMs
             latencyLine = frame.latencyLine
         }
