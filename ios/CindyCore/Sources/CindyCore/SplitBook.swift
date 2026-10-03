@@ -38,3 +38,42 @@ public struct SetSplit: Equatable, Sendable {
     /// Complete, and every rep in it seen by the camera: a time the app can stand behind.
     public var measured: Bool { complete && manualReps == 0 }
 }
+
+/// Times each set on the workout clock, pauses excluded, and unwinds across an undo.
+///
+/// A set runs from the end of the one before to the end of its own, so it includes getting into
+/// position — as a round split does.
+public final class SplitBook {
+    private var done: [SetSplit] = []
+    private var starts: [Int64] = []
+    private var manualStarts: [Int] = []
+    private var setStartMs: Int64 = 0
+    private var manualAtStart = 0
+
+    public init() {}
+
+    public var sets: [SetSplit] { done }
+
+    public func start(atMs: Int64 = 0) {
+        done.removeAll(); starts.removeAll(); manualStarts.removeAll()
+        setStartMs = atMs
+        manualAtStart = 0
+    }
+
+    public func movementDone(_ movement: Exercise, atMs: Int64, reps: Int, manualTotal: Int) {
+        starts.append(setStartMs)
+        manualStarts.append(manualAtStart)
+        done.append(SetSplit(movement, max(atMs - setStartMs, 0), reps,
+                             max(manualTotal - manualAtStart, 0)))
+        setStartMs = atMs
+        manualAtStart = manualTotal
+    }
+
+    /// An undo stepped back into the previous movement: reopen its set from where it began.
+    public func stepBack() {
+        guard !done.isEmpty else { return }
+        done.removeLast()
+        setStartMs = starts.removeLast()
+        manualAtStart = manualStarts.removeLast()
+    }
+}
