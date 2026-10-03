@@ -273,6 +273,8 @@ class HelpActivity : AppCompatActivity() {
         quiet(SOURCE)
         quiet("Everything from HOW THIS APP COUNTS to this credit is this app's own, " +
             "not CrossFit's.")
+        quiet("Cindy Tracker is an independent app. It is not affiliated with or endorsed by " +
+            "CrossFit, LLC. CrossFit is a registered trademark of CrossFit, LLC.")
 
         // Last, so it is the line a tester reads out when they report a problem. The debug build
         // carries its -debug suffix here, which is how the two builds are told apart on a phone.
@@ -468,6 +470,10 @@ class HelpActivity : AppCompatActivity() {
             "A watch can lag your effort by a few seconds.",
             "A session with no heart rate shows no card at all, and an older one shows " +
                 "nothing rather than a guess."
+        )
+        paragraph(
+            "Heart rate, zones and calories here are training estimates. Cindy is not a " +
+                "medical device."
         )
     }
 

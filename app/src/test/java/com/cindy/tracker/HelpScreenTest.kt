@@ -156,6 +156,19 @@ class HelpScreenTest {
     }
 
     @Test
+    fun `Help says Cindy is independent of CrossFit and is not a medical device`() {
+        val text = helpText()
+        assertTrue(text.contains(
+            "Cindy Tracker is an independent app. It is not affiliated with or endorsed by " +
+                "CrossFit, LLC. CrossFit is a registered trademark of CrossFit, LLC."
+        ))
+        assertTrue(text.contains(
+            "Heart rate, zones and calories here are training estimates. Cindy is not a " +
+                "medical device."
+        ))
+    }
+
+    @Test
     fun `CrossFit's words are still quoted as they were`() {
         val text = helpText()
         for (quote in listOf(
