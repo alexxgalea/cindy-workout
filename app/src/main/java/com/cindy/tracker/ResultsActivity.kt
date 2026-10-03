@@ -15,6 +15,7 @@ import android.text.Spanned
 import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -1284,22 +1285,32 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /** The Strava row's value and tap action, for whichever state applies right now. */
-    private fun stravaRowContent(a: Attempt, tokens: StravaTokenStore): Pair<String, (() -> Unit)?> {
-        if (!tokens.connected) return "Connect to upload" to { connectFromResults(a.atMillis) }
+    private fun stravaRowContent(a: Attempt, tokens: StravaTokenStore): Pair<CharSequence, (() -> Unit)?> {
+        if (!tokens.connected) return "Connect to upload" to { askThenConnect(a.atMillis) }
         val status = StravaUploads.status(this, a.atMillis)
         return when (status?.state) {
             null -> "Upload" to { StravaUploads.enqueue(this, a.atMillis) }
             StravaUploadState.QUEUED, StravaUploadState.PROCESSING -> "Uploading…" to null
             StravaUploadState.DONE -> {
                 val id = status.activityId
-                if (id != null) "View activity ↗" to { openStravaActivity(id) } else "Uploaded" to null
+                if (id != null) viewOnStrava() to { openStravaActivity(id) } else "Uploaded" to null
             }
             StravaUploadState.FAILED ->
                 "Couldn't upload — tap to retry" to { StravaUploads.enqueue(this, a.atMillis) }
-            StravaUploadState.NEEDS_RECONNECT -> "Reconnect to upload" to { connectFromResults(a.atMillis) }
+            StravaUploadState.NEEDS_RECONNECT -> "Reconnect to upload" to { askThenConnect(a.atMillis) }
             StravaUploadState.UNAVAILABLE -> "Not available for this attempt" to null
         }
     }
+
+    /**
+     * Strava's wording for a link to an activity, and the emphasis its guidelines ask for: bold,
+     * underlined or Strava orange. Bold, because the orange is next to the app's own achievement
+     * orange, which means only that the athlete earned something.
+     */
+    private fun viewOnStrava(): CharSequence =
+        SpannableString("View on Strava").apply {
+            setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
 
     private fun openStravaActivity(activityId: Long) {
         try {
@@ -1308,6 +1319,10 @@ class ResultsActivity : AppCompatActivity() {
             toast("Opening the activity needs the Strava app or a web browser")
         }
     }
+
+    /** Says what will be sent first; [connectFromResults] runs only if the athlete goes ahead. */
+    private fun askThenConnect(atMillis: Long) =
+        StravaConsent.show(this) { connectFromResults(atMillis) }
 
     /**
      * Starts OAuth for one particular attempt, rather than the menu's general connect.

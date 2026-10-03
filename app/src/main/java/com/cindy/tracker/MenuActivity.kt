@@ -217,9 +217,14 @@ class MenuActivity : AppCompatActivity() {
                 }
             ) { askBodyWeight(profile) { render() } })
             row(navRow("Heart rate", heartRateSubtitle()) { chooseHeartRate() })
-            row(navRow("Strava", stravaSubtitle(StravaConfig.available, stravaGrant)) {
-                tapStrava(stravaTokens, stravaGrant)
-            })
+            // Absent, not greyed out, in a build that has no Strava credentials: there is nothing
+            // the athlete could do with it, and a public build should not talk about a feature
+            // it does not have.
+            if (StravaConfig.available) {
+                row(navRow("Strava", stravaSubtitle(stravaGrant)) {
+                    tapStrava(stravaTokens, stravaGrant)
+                })
+            }
             row(navRow("Voice", voiceSubtitle()) { chooseVoice() })
             row(navRow("Music", musicSubtitle()) { chooseMusic() })
             row(navRow(
@@ -866,7 +871,11 @@ class MenuActivity : AppCompatActivity() {
             return
         }
         if (!HeartRatePermissions.granted(this)) {
-            requestBluetoothPermissions.launch(HeartRatePermissions.required())
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                explainLocationThenRequest()
+            } else {
+                requestBluetoothPermissions.launch(HeartRatePermissions.required())
+            }
             return
         }
         if (bluetoothAdapter()?.isEnabled != true) {
@@ -882,6 +891,25 @@ class MenuActivity : AppCompatActivity() {
         } else {
             openScanSheet()
         }
+    }
+
+    /**
+     * Android 11 and older tie a Bluetooth scan to the location permission, so the prompt that
+     * follows reads "allow Cindy to access this device's location" — to someone who asked to find
+     * a watch. Said first, so the athlete is not left to wonder, and so a NOT NOW costs nothing.
+     */
+    private fun explainLocationThenRequest() {
+        CindySheet(
+            this,
+            title = "Android asks for location to find a watch",
+            subtitle = "On this version of Android a Bluetooth scan needs the location " +
+                "permission. Cindy never reads your location."
+        ).actions(
+            primary = "CONTINUE",
+            onPrimary = { requestBluetoothPermissions.launch(HeartRatePermissions.required()) },
+            secondary = "NOT NOW",
+            onSecondary = {}
+        ).show()
     }
 
     private fun showLocationNeeded() {
@@ -1079,24 +1107,18 @@ class MenuActivity : AppCompatActivity() {
 
     // ── Strava ────────────────────────────────────────────────────────────────
 
-    /**
-     * Pure, so [StravaScreenTest] can check every subtitle without building the activity.
-     *
-     * `available` is passed in rather than read here, so a test can drive every state through
-     * [StravaConfig.availableForTest].
-     */
-    private fun stravaSubtitle(available: Boolean, grant: StravaGrant?): String = when {
-        !available -> "Not available in this build"
+    /** Only built in a build that has Strava; see the row's condition in [render]. */
+    private fun stravaSubtitle(grant: StravaGrant?): String = when {
         grant == null -> "Not connected — upload workouts"
         else -> "Connected · ${grant.athleteName ?: "Strava"}"
     }
 
     private fun tapStrava(tokens: StravaTokenStore, grant: StravaGrant?) {
-        if (!StravaConfig.available) {
-            toast("This build has no Strava credentials, so the feature is switched off")
-            return
+        if (grant == null) {
+            StravaConsent.show(this) { connectStrava(tokens) }
+        } else {
+            openStravaSheet(tokens, grant)
         }
-        if (grant == null) connectStrava(tokens) else openStravaSheet(tokens, grant)
     }
 
     /**
@@ -1148,13 +1170,8 @@ class MenuActivity : AppCompatActivity() {
         sheet.toggle("Upload automatically", autoUpload) { autoUpload = it }
         // Strava's own consent for health data is per athlete and cannot be granted through the
         // API, so without this line a watch's heart rate silently never arrives.
-        sheet.add(
-            sheetNote(
-                "Heart rate reaches Strava only once you allow it there: on strava.com, open " +
-                    "Settings, then Data Permissions, then Allow Access. Until then Strava drops " +
-                    "it from every upload."
-            )
-        )
+        sheet.add(sheetNote(StravaConsent.DATA_PERMISSIONS))
+        sheet.add(StravaConsent.compatibleLogo(this))
         sheet.actions(
             primary = "DONE",
             onPrimary = { tokens.autoUpload = autoUpload },

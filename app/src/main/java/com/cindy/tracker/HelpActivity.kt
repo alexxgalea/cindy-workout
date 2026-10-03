@@ -58,11 +58,13 @@ class HelpActivity : AppCompatActivity() {
         render()
     }
 
-    private fun openSource() {
+    private fun openSource() = openLink(SOURCE)
+
+    private fun openLink(url: String) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE)))
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "No browser to open $SOURCE", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No browser to open $url", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -259,7 +261,9 @@ class HelpActivity : AppCompatActivity() {
 
         profileAndBadges()
         reminders()
-        strava()
+        if (StravaConfig.available) strava()
+        privacy()
+        licences()
 
         heading("SOURCE")
         paragraph(
@@ -269,6 +273,12 @@ class HelpActivity : AppCompatActivity() {
         quiet(SOURCE)
         quiet("Everything from HOW THIS APP COUNTS to this credit is this app's own, " +
             "not CrossFit's.")
+        quiet("Cindy Tracker is an independent app. It is not affiliated with or endorsed by " +
+            "CrossFit, LLC. CrossFit is a registered trademark of CrossFit, LLC.")
+
+        // Last, so it is the line a tester reads out when they report a problem. The debug build
+        // carries its -debug suffix here, which is how the two builds are told apart on a phone.
+        quiet("Cindy ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 
     // ── this app's own sections ───────────────────────────────────────────────
@@ -350,8 +360,13 @@ class HelpActivity : AppCompatActivity() {
                 "Tap or drag across the bars to read one, with a tick over each bar marking " +
                 "the same round in the session you are comparing with. An outlined bar is a " +
                 "round still under way when the clock stopped.",
-            "DETAILS, at the foot, holds paused and real time, reps added by hand, how long " +
-                "the camera lost you, the calorie estimate and the Strava upload."
+            if (StravaConfig.available) {
+                "DETAILS, at the foot, holds paused and real time, reps added by hand, how " +
+                    "long the camera lost you, the calorie estimate and the Strava upload."
+            } else {
+                "DETAILS, at the foot, holds paused and real time, reps added by hand, how " +
+                    "long the camera lost you and the calorie estimate."
+            }
         )
         paragraph(
             "Only what was recorded is shown, and nothing is worked out from the round count " +
@@ -461,6 +476,10 @@ class HelpActivity : AppCompatActivity() {
             "A session with no heart rate shows no card at all, and an older one shows " +
                 "nothing rather than a guess."
         )
+        paragraph(
+            "Heart rate, zones and calories here are training estimates. Cindy is not a " +
+                "medical device."
+        )
     }
 
     private fun profileAndBadges() {
@@ -508,9 +527,10 @@ class HelpActivity : AppCompatActivity() {
     private fun strava() {
         heading("STRAVA")
         paragraph(
-            "Strava, in the menu, connects your Strava account on Strava's own page, in the " +
-                "Strava app if you have it. Nothing is sent before you connect, and no video " +
-                "or pose data is ever sent."
+            "Strava, in the menu, connects your Strava account. A sheet first says what each " +
+                "workout will send; tap Connect with Strava there and Strava's own page opens, " +
+                "in the Strava app if you have it. Nothing is sent before you connect, and no " +
+                "video or pose data is ever sent."
         )
         bullets(
             "Once connected, each finished workout uploads by itself as a Crossfit activity: " +
@@ -521,8 +541,8 @@ class HelpActivity : AppCompatActivity() {
                 "the Strava row under Details offers \"Upload\" instead. Finish a workout before " +
                 "connecting and it offers \"Connect to upload\", which links the account and then " +
                 "sends that workout.",
-            "That row shows where the upload has got to: uploading, then a link to the " +
-                "activity. If it fails it says so and you tap to retry, and if Strava needs " +
+            "That row shows where the upload has got to: uploading, then a View on Strava " +
+                "link to the activity. If it fails it says so and you tap to retry, and if Strava needs " +
                 "you to connect again it says that. The upload carries on in the background, " +
                 "waits for a connection and retries by itself.",
             "Sessions from before you connected are not sent on their own; open one and use " +
@@ -532,6 +552,88 @@ class HelpActivity : AppCompatActivity() {
                 "it. If Strava still lists Cindy Tracker at strava.com/settings/apps " +
                 "afterwards, remove it there too."
         )
+    }
+
+    /**
+     * What stays on the phone and what does not. Every line here is a claim about the code, and
+     * Google Play holds the app to it: the store's Data safety answers and the published policy
+     * say the same things, so a line is changed in all three or in none.
+     */
+    private fun privacy() {
+        heading("PRIVACY")
+        paragraph(
+            "Cindy counts from the camera on your phone, and nearly everything it knows stays " +
+                "there."
+        )
+        bullets(
+            "The camera picture is read on the phone and thrown away. It is never saved or sent. " +
+                "Video exists only if you tap REC, and it is saved to Movies/Cindy on the phone " +
+                "like any other video.",
+            "Your sessions, rep times, heart-rate traces, name, photo, body weight, birth year, " +
+                "sex and settings are kept on the phone. Android's own backup may copy them to " +
+                "your Google account, and to a new phone when you switch; that is Android's " +
+                "backup, and you control it in Android's settings.",
+            "Bluetooth is used only to find and read a heart-rate strap or watch. Android 11 and " +
+                "older ask for the location permission for that scan; Cindy never reads your " +
+                "location.",
+            "Music is a track you pick. Cindy plays it and does not copy or send it. The voice " +
+                "is your phone's speech engine: Cindy asks it for a voice installed on the " +
+                "phone and gives it nothing but the words to say.",
+            "There are no ads, no analytics, no account and no server of Cindy's."
+        )
+        if (StravaConfig.available) {
+            bullets(
+                "Strava is the one thing that leaves the phone, and only after you connect it. " +
+                    "Each finished workout then sends Strava its score and sets with their reps, " +
+                    "when it started, how long it took on the clock, paused and in real time, " +
+                    "calories if a body weight is set, and the heart-rate trace if a watch " +
+                    "recorded one. Never video, never the pose. Strava keeps what it receives " +
+                    "under its own privacy policy."
+            )
+        }
+        bullets(
+            "To delete: CLEAR on the Progress screen removes your sessions with their rep times " +
+                "and heart-rate traces; REMOVE on the Account screen removes the photo; " +
+                "Android's Clear storage in the app's settings removes everything else, and so " +
+                "does uninstalling. Videos in Movies/Cindy are yours to delete."
+        )
+        binding.sections.addView(
+            insetGroup {
+                row(navRow("Privacy policy", "Opens in your browser") {
+                    openLink(AppLinks.PRIVACY_POLICY)
+                })
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        )
+    }
+
+    /**
+     * Credit where it is owed, and the licence texts the licences ask to travel with the app. The
+     * credits are in [Licences], beside the texts they point at.
+     */
+    private fun licences() {
+        heading("LICENCES")
+        paragraph("Cindy is built on other people's work, shared under these licences.")
+        bullets(*Licences.credits.map { "${it.what}. ${it.by}. ${it.licence.name}." }.toTypedArray())
+        binding.sections.addView(
+            insetGroup {
+                Licences.all.forEach { licence ->
+                    row(navRow(licence.name, "Full text") { showLicence(licence) })
+                }
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        )
+    }
+
+    private fun showLicence(licence: Licences.Licence) {
+        CindySheet(this, licence.name)
+            .add(styledText(R.style.Cindy_Footnote, Licences.text(this, licence)))
+            .actions(primary = "DONE", onPrimary = {})
+            .show()
     }
 
     // ── building blocks ───────────────────────────────────────────────────────

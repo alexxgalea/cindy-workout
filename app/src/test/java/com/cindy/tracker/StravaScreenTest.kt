@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,13 +64,11 @@ class StravaScreenTest {
     }
 
     @Test
-    fun `the menu builds with Strava unavailable`() {
+    fun `the menu builds with Strava unavailable, and has no Strava row`() {
         StravaConfig.availableForTest = false
         val activity = buildMenu()
-        val row = findByDescriptionPrefix(
-            activity.findViewById(android.R.id.content), "Strava, Not available in this build"
-        )
-        assertTrue("no unavailable Strava row", row != null)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        assertTrue("an unavailable build still has a Strava row", findByDescriptionPrefix(root, "Strava") == null)
         activity.finish()
     }
 
@@ -132,15 +131,11 @@ class StravaScreenTest {
     }
 
     @Test
-    fun `tapping Strava when unavailable opens no sheet`() {
+    fun `an unavailable build mentions Strava nowhere on the menu`() {
         StravaConfig.availableForTest = false
         val activity = buildMenu()
-        val row = findByDescriptionPrefix(
-            activity.findViewById(android.R.id.content), "Strava, Not available in this build"
-        )
-        row!!.performClick()
-        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
-        assertTrue("an unavailable build must not open a sheet", dialog == null || !dialog.isShowing)
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        assertTrue("some menu text still says Strava", findTextContaining(root, "Strava") == null)
         activity.finish()
     }
 
@@ -315,7 +310,15 @@ class StravaScreenTest {
         val atMillis = 105L
         StravaUploads.write(context(), atMillis, StravaUploadStatus(StravaUploadState.DONE, activityId = 42L))
         val activity = buildResults(stravaAttempt(atMillis))
-        assertTrue(findText(activity.findViewById(android.R.id.content), "View activity ↗") != null)
+        val link = findText(activity.findViewById(android.R.id.content), "View on Strava")
+        assertNotNull("Strava asks for the link to read 'View on Strava'", link)
+        // Strava's guidelines want the link bold, underlined or orange.
+        val text = (link as android.widget.TextView).text as android.text.Spanned
+        assertTrue(
+            "the link is not bold",
+            text.getSpans(0, text.length, android.text.style.StyleSpan::class.java)
+                .any { it.style == android.graphics.Typeface.BOLD }
+        )
         activity.finish()
     }
 
