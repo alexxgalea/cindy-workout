@@ -126,8 +126,13 @@ git config core.hooksPath .githooks
 - **One pull request per phase**, from a branch named `ios-pN-<slug>` (the slugs are below) off
   `main`, titled the same way as a commit subject. When a phase has to build on one that is not
   merged yet, branch from it and open the body with a **Merge #N first** section, as #63 did.
-- **If the session forces a branch name** such as `ccr-…`, ask the owner before pushing elsewhere;
-  #58 → #59 is the precedent for re-pushing the same commits under the descriptive name.
+- **Branches are always named for what they do**, `ios-pN-<slug>`, never `ccr-…`. The owner has
+  said so, which is the permission the session's default branch name otherwise asks for. A PR's
+  head branch cannot be renamed, so create the descriptive branch before opening the PR; if a PR
+  was opened first, push the same commits under the right name, open a new PR, and close the old
+  one with a note saying it is superseded (#58 → #59, #67 → #68).
+- **Open the PR as a draft early when CI is the only way to see a result**, as the macOS build is,
+  and stop pushing while a run is in progress: a newer push cancels it.
 - **The PR body follows the house template** (Appendix C): What changes, Tested, Verified by
   hand, Needs you, Not in this PR, Still owed. Numbers, not adjectives: test counts from the
   output, frames matched, mutation checks run.

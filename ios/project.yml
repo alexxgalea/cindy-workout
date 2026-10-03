@@ -4,7 +4,7 @@ name: CindyTracker
 options:
   bundleIdPrefix: com.cindy
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   createIntermediateGroups: true
 
 packages:
@@ -20,13 +20,17 @@ targets:
     dependencies:
       - package: CindyCore
         product: CindyCore
+      # Only debug builds use it (ReplayPoseSource is behind #if DEBUG). xcodegen has no
+      # per-configuration dependency, so release builds link the unused library too.
+      - package: CindyCore
+        product: CindyFixtures
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
-        SWIFT_VERSION: "5.9"
+        SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
         # The camera is the whole app; without this string iOS kills it on first frame.
         INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
@@ -35,3 +39,26 @@ targets:
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+
+  # Drives the app in the simulator against a scripted body (see ReplayPoseSource).
+  CindyTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CindyTrackerUITests
+    dependencies:
+      - target: CindyTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker.uitests
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  CindyTracker:
+    build:
+      targets:
+        CindyTracker: all
+    test:
+      targets:
+        - CindyTrackerUITests

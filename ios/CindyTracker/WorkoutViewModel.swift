@@ -18,7 +18,9 @@ final class WorkoutViewModel: ObservableObject {
     @Published private(set) var rounds = 0
     @Published private(set) var status = "Press START to set up"
     @Published private(set) var statusIsWarning = false
-    @Published private(set) var finished: Attempt?
+    /// The attempt the results sheet is showing. Settable because `.sheet(item:)` clears it when
+    /// the sheet is dismissed.
+    @Published var finished: Attempt?
     @Published var voiceEnabled = true
 
     private static let profileKey = "cindy.movementProfile"

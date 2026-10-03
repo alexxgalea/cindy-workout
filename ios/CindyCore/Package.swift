@@ -9,9 +9,11 @@ import PackageDescription
 /// ios/CindyCore` anywhere Swift is installed. They are XCTest, so Xcode runs them unchanged.
 let package = Package(
     name: "CindyCore",
-    platforms: [.iOS(.v16), .macOS(.v13)],
+    platforms: [.iOS(.v17), .macOS(.v13)],
     products: [
-        .library(name: "CindyCore", targets: ["CindyCore"])
+        .library(name: "CindyCore", targets: ["CindyCore"]),
+        // For the app's debug builds, which replay a scripted body in the simulator.
+        .library(name: "CindyFixtures", targets: ["CindyFixtures"])
     ],
     targets: [
         .target(name: "CindyCore"),

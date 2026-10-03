@@ -1,0 +1,78 @@
+name: Build Cindy iOS
+
+# The app itself needs macOS and the iOS SDK, and macOS minutes count ten times against the
+# month's included minutes, so this runs only when something under ios/ changes, on pull requests
+# and on main, never on both for the same push, and a newer push cancels the run before it.
+# CindyCore's own tests run on Linux in ios.yml.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-app.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-app.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Build and test the app (macOS)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: cd ios && xcodegen generate
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available | grep -m1 'iPhone' | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "Using $(xcrun simctl list devices available | grep -m1 'iPhone')"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      # Builds the app and runs the UI tests against it, which replay a scripted body because the
+      # simulator has no camera. A compile error shows up here too, in the same log.
+      - name: Build and test on the simulator
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ios/CindyTracker.xcodeproj \
+            -scheme CindyTracker \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+      # The replay source exists only in debug builds. Build the release configuration, and fail
+      # if the app that comes out has any trace of it, so a release build can never be told to
+      # ignore its camera.
+      - name: Build the release configuration, without the replay source
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/CindyTracker.xcodeproj \
+            -scheme CindyTracker \
+            -configuration Release \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build.log
+          app=$(find ~/Library/Developer/Xcode/DerivedData -path '*Release-iphonesimulator/CindyTracker.app' -type d | head -1)
+          test -n "$app" || { echo "no release app found"; exit 1; }
+          if grep -rqa -e ReplayPoseSource -e CindyReplay "$app"; then
+            echo "the release app contains the replay source"; exit 1
+          fi
+          echo "the release app has no replay source: $app"
+      # The log is long and what matters is in the middle of it, so say it last.
+      - name: Errors and test results
+        if: always()
+        run: grep -E 'error:|Test Case .*(failed|passed)|Executed [0-9]+ test' build.log | sort -u | head -100 || true

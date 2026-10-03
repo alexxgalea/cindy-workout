@@ -7,11 +7,11 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 | | Status |
 |---|---|
 | `CindyCore` — counting, Cindy progression, setup check, bar gate, records, levels | **43 tests, 143 assertions, passing** (`tools/ios/swift.sh test`), on Linux and in CI. Behind the Android app: see [PARITY.md](PARITY.md) |
-| `CindyTracker` — camera, Vision, SwiftUI screens | **Never compiled.** No Xcode on the build machine, so no iOS SDK |
+| `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
-The logic is a real, running, tested port; the app layer around it is written but unproven.
-Expect to fix compile errors in `CindyTracker/` on first build — treat those files as a careful
-draft, not working code.
+The logic is a real, running, tested port. The app layer compiled on its first macOS build with
+one error, and counts a replayed workout in the simulator, but nothing has pointed a real camera at
+a real person yet, so what Vision makes of one is unknown.
 
 `CindyCore` imports only Foundation, so it builds and tests on Linux with no Xcode. That is why the
 checks are XCTest and run anywhere:
@@ -38,12 +38,16 @@ ios/
 │   │   └── Levels.swift          the rank ladder
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
 │   └── Tests/CindyCoreTests/     XCTest: every check, one class per area
-└── CindyTracker/         the app — unproven
+└── CindyTracker/         the app — builds, never run on a device
+    ├── PoseSource.swift          where the skeleton can come from
+    ├── VisionPoseSource.swift    capture, Vision, filming: the real source
+    ├── ReplayPoseSource.swift    a scripted body for the simulator (debug builds only)
     ├── VisionPose.swift          Vision → the shared 17-point layout
-    ├── CameraModel.swift         capture, pose, filming
+    ├── CameraModel.swift         what the screens watch, fed by a PoseSource
     ├── WorkoutViewModel.swift    clock, setup, score, voice
     ├── ContentView.swift         camera, skeleton, HUD
     └── ResultsView.swift         score, level, splits
+└── CindyTrackerUITests/  drives the app in the simulator against the scripted body
 ```
 
 ## No model file
@@ -65,8 +69,23 @@ cd ios && xcodegen generate    # writes CindyTracker.xcodeproj
 open CindyTracker.xcodeproj
 ```
 
-Then set a signing team in Signing & Capabilities and run **on a device** — the simulator has no
-camera, so there is nothing for the pose detector to look at.
+Then set a signing team in Signing & Capabilities and run **on a device** to use the camera.
+
+### In the simulator
+
+The simulator has no camera, so a debug build launched with `-CindyReplay pullups` takes its
+skeleton from a scripted body instead (`ReplayPoseSource`): hanging, then pull-ups for ever. In
+Xcode, add it under Product → Scheme → Edit Scheme → Run → Arguments. A release build has no such
+branch. The UI test launches the app this way and counts a workout through to the results screen:
+
+```sh
+cd ios && xcodegen generate
+xcodebuild test -project CindyTracker.xcodeproj -scheme CindyTracker \
+  -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
+```
+
+CI runs the same, in `.github/workflows/ios-app.yml`, but only for changes under `ios/`: macOS
+minutes count ten times against the month's included minutes.
 
 Re-run `xcodegen generate` after adding or moving files.
 
