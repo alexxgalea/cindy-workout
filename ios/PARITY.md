@@ -14,18 +14,29 @@ A phase updates the rows it moves, in its own pull request.
 The Swift engine reproduces `tests/parity/trace_jvm.csv` from P2 onward, so any Android change to a
 file marked `CindyCore` below changes that trace and fails `core` until the Swift side follows.
 
+`PoseGeometry` and `StartPoses` have no Kotlin test of their own: the first is covered through the
+engine tests and the parity trace, and the second has tests written for the port, which read the
+Kotlin table and compare every number.
+
+### Kotlin tests that moved to the phase that owns what they test
+
+| Kotlin test | Moved to | Because |
+|---|---|---|
+| `SkippedRepsTest`, the last two (`an attempt reports the reps it counted…`, `the counted total survives a round trip…`) | P3 | They build an `Attempt` with `countedReps`, a column of the saved record line |
+| `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak` |
+
 | Phase | Kotlin file | Lands in | Status |
 |---|---|---|---|
-| P2 | `BarZone.kt` | CindyCore | behind |
-| P2 | `CameraStability.kt` | CindyCore | not started |
-| P2 | `PoseGeometry.kt` | CindyCore | behind |
-| P2 | `PosePrediction.kt` | CindyCore | not started |
-| P2 | `RepCounter.kt` | CindyCore | behind |
-| P2 | `SmartSquatCounter.kt` | CindyCore | not started |
-| P2 | `StartPoses.kt` | CindyCore | not started |
-| P2 | `TrackingHealth.kt` | CindyCore | behind |
-| P2 | `Variations.kt` | CindyCore | behind |
-| P2 | `WorkoutEngine.kt` | CindyCore | behind |
+| P2 | `BarZone.kt` | CindyCore | tests ported |
+| P2 | `CameraStability.kt` | CindyCore | tests ported |
+| P2 | `PoseGeometry.kt` | CindyCore | ported |
+| P2 | `PosePrediction.kt` | CindyCore | tests ported |
+| P2 | `RepCounter.kt` | CindyCore | tests ported |
+| P2 | `SmartSquatCounter.kt` | CindyCore | tests ported |
+| P2 | `StartPoses.kt` | CindyCore | ported |
+| P2 | `TrackingHealth.kt` | CindyCore | tests ported |
+| P2 | `Variations.kt` | CindyCore | tests ported |
+| P2 | `WorkoutEngine.kt` | CindyCore | tests ported |
 | P3 | `Comparisons.kt` | CindyCore | not started |
 | P3 | `Levels.kt` | CindyCore | behind |
 | P3 | `LiveWorkout.kt` | CindyCore | not started |
