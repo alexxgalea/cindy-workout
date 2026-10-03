@@ -64,6 +64,12 @@ final class WorkoutViewModel: ObservableObject {
 
     var inWorkout: Bool { phase == .running || phase == .paused }
 
+    /// What the debug readout says about the counter: the signal it is following, the range it
+    /// has learned, and where it is in the movement.
+    var counterReadout: String {
+        String(format: "signal %.1f · range %.1f · %@", engine.signal, engine.learnedRange, engine.countingState)
+    }
+
     /// Feeds a frame in. Returns whether the camera's crop should be reset.
     func onFrame(_ keypoints: [Keypoint]) {
         let now = Int64(Date().timeIntervalSince1970 * 1000)

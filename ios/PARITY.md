@@ -69,11 +69,11 @@ Kotlin table and compare every number.
 | P4 | `VoiceLanguageText.kt` | CindyCore | tests ported |
 | P4 | `VoiceLine.kt` | CindyCore | ported |
 | P4 | `VoicePacks.kt` | CindyCore | tests ported |
-| P5 | `FrameHandoff.kt` | CindyCore | not started |
-| P5 | `FrameLatency.kt` | split: `Rolling`/`RateMeter`/probe maths → CindyCore, camera timestamps → CindyTracker | not started |
-| P5 | `OverlayTransform.kt` | CindyCore (pure maths, ported with its tests) | not started |
-| P5 | `OverlayView.kt` | CindyTracker (iOS rewrite) | not started |
-| P5 | `PoseDetector.kt` | CindyTracker (iOS rewrite) | not started |
+| P5 | `FrameHandoff.kt` | CindyCore | tests ported |
+| P5 | `FrameLatency.kt` | split: `Rolling`/`RateMeter`/probe maths → CindyCore, camera timestamps → CindyTracker (one host clock on iOS) | tests ported |
+| P5 | `OverlayTransform.kt` | CindyCore (pure maths, ported with its tests) | tests ported |
+| P5 | `OverlayView.kt` | CindyTracker (iOS rewrite: `SkeletonOverlay`) | ported |
+| P5 | `PoseDetector.kt` | CindyCore `RoiTracker` (crop decisions) and CindyTracker `VisionPoseSource`; the model, the model-input fill and the brightness lift (`softGain`) are not ported | ported |
 | P5 | `YuvCrop.kt` | not ported — Android YUV path; Vision's `regionOfInterest` replaces it | not ported |
 | P6 | `CindySheet.kt` | CindyTracker (iOS rewrite) | not started |
 | P6 | `CindyViews.kt` | CindyTracker (iOS rewrite) | not started |

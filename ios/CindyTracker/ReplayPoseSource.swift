@@ -85,7 +85,9 @@ final class ReplayPoseSource: PoseSource {
             keypoints = script.cycle[(index - script.lead.count) % script.cycle.count]
         }
         index += 1
-        onFrame?(PoseFrame(keypoints: keypoints, frameSize: Self.frameSize, inferenceMs: 0, tracking: true))
+        var frame = PoseFrame(keypoints: keypoints, frameSize: Self.frameSize, inferenceMs: 0, tracking: true)
+        frame.source = "Replay"
+        onFrame?(frame)
     }
 }
 #endif

@@ -6,8 +6,14 @@ struct PoseFrame {
     let keypoints: [Keypoint]
     let frameSize: CGSize
     let inferenceMs: Int
-    /// Whether a crop around the body is being followed rather than the whole frame searched.
+    /// Whether the crop this frame was analysed in was a tracked one rather than the whole frame.
     let tracking: Bool
+    /// Where the skeleton came from, for the debug readout.
+    var source = "Vision"
+    /// How old the frame was when the skeleton was ready, or nil when the clock cannot say.
+    var captureAgeMs: Int?
+    /// The latency probe's two-line summary, for the debug readout.
+    var latencyLine = ""
 }
 
 /// Where the skeleton comes from. The app does not care whether it is Vision looking at a

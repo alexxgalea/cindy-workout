@@ -23,22 +23,30 @@ struct CameraPreview: UIViewRepresentable {
 }
 
 /// The detected skeleton, mapped the same way the preview fills the screen.
+///
+/// The map is `OverlayTransform.build`, the one the recording uses and the tests pin, with the
+/// preview's `resizeAspectFill` as its fit. Bones are 0.45% of the frame's height thick and joints
+/// 0.55% in radius, so they keep their proportions whatever the screen.
 struct SkeletonOverlay: View {
     let keypoints: [Keypoint]
     let frameSize: CGSize
 
     private static let minScore: Float = 0.3
+    private static let boneWidth: CGFloat = 0.0045
+    private static let jointRadius: CGFloat = 0.0055
 
     var body: some View {
         GeometryReader { geo in
             Canvas { context, size in
                 guard frameSize.width > 0, frameSize.height > 0, keypoints.count == KP.count else { return }
-                // resizeAspectFill: scale until both axes are covered, then centre the overflow.
-                let scale = max(size.width / frameSize.width, size.height / frameSize.height)
-                let dx = (size.width - frameSize.width * scale) / 2
-                let dy = (size.height - frameSize.height * scale) / 2
+                let map = OverlayTransform.build(
+                    srcWidth: Int(frameSize.width), srcHeight: Int(frameSize.height),
+                    bufferWidth: Int(size.width.rounded()), bufferHeight: Int(size.height.rounded()),
+                    rotationDegrees: 0, mirror: false)
+                // The fit is a uniform scale, so one number carries the frame's units to points.
+                let unit = CGFloat(map.a) * frameSize.height
                 func point(_ k: Keypoint) -> CGPoint {
-                    CGPoint(x: CGFloat(k.x) * scale + dx, y: CGFloat(k.y) * scale + dy)
+                    CGPoint(x: CGFloat(map.mapX(k.x, k.y)), y: CGFloat(map.mapY(k.x, k.y)))
                 }
 
                 for (a, b) in KP.skeleton {
@@ -47,14 +55,13 @@ struct SkeletonOverlay: View {
                     var path = Path()
                     path.move(to: point(pa))
                     path.addLine(to: point(pb))
-                    context.stroke(path, with: .color(.accent), lineWidth: 4)
+                    context.stroke(path, with: .color(.accent), lineWidth: unit * Self.boneWidth)
                 }
+                let r = unit * Self.jointRadius
                 for k in keypoints where k.score >= Self.minScore {
                     let p = point(k)
-                    context.fill(
-                        Path(ellipseIn: CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10)),
-                        with: .color(.white)
-                    )
+                    context.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                                 with: .color(.white))
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -67,6 +74,7 @@ struct ContentView: View {
     @StateObject private var camera = CameraModel()
     @StateObject private var workout = WorkoutViewModel()
     @State private var showStopConfirm = false
+    @State private var showDebug = false
 
     var body: some View {
         ZStack {
@@ -121,6 +129,10 @@ struct ContentView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(workout.statusIsWarning ? Color.warn : Color.dim)
                 .chip()
+                // A long press on the status line is the way to the debug readout, as on Android.
+                .onLongPressGesture { showDebug.toggle() }
+
+            if showDebug { debugReadout }
 
             Spacer()
 
@@ -159,6 +171,21 @@ struct ContentView: View {
             .padding(.bottom, 8)
         }
         .padding(16)
+    }
+
+    /// Where the skeleton comes from and what it cost: source, inference time, whether the crop is
+    /// following the body, the counter's signal, range and phase, and the latency probe's lines.
+    private var debugReadout: some View {
+        VStack(spacing: 2) {
+            Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
+            Text(workout.counterReadout)
+            if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
+        }
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(Color.dim)
+        .multilineTextAlignment(.center)
+        .chip()
+        .accessibilityIdentifier("debugReadout")
     }
 
     private func chipButton(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
