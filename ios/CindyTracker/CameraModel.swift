@@ -22,6 +22,11 @@ final class CameraModel: ObservableObject {
 
     private let source: PoseSource
 
+    /// Called with every analysed frame, whole: the skeleton, whether its crop was a tracked one,
+    /// and how it was timed. The workout reads this rather than watching `keypoints`, because a
+    /// separate watch on each published value would see them one at a time and out of step.
+    var onPoseFrame: ((PoseFrame) -> Void)?
+
     /// Called with the saved file's URL, or nil if filming failed.
     var onRecordingFinished: ((URL?) -> Void)? {
         get { source.onRecordingFinished }
@@ -40,6 +45,7 @@ final class CameraModel: ObservableObject {
             sourceName = frame.source
             captureAgeMs = frame.captureAgeMs
             latencyLine = frame.latencyLine
+            onPoseFrame?(frame)
         }
         source.onRecordingChanged = { [weak self] recording in self?.isRecording = recording }
     }

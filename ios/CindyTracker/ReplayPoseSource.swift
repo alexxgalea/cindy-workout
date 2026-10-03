@@ -34,6 +34,16 @@ final class ReplayPoseSource: PoseSource {
                 lead: held(PoseFixtures.pullup(170), 10),
                 cycle: held(PoseFixtures.pullup(60), 10) + held(PoseFixtures.pullup(170), 10)
             )
+        case "nohands":
+            // Hanging with both hands out of shot: the setup check cannot frame it.
+            var noHands = PoseFixtures.pullup(170)
+            noHands[KP.leftWrist] = .missing
+            noHands[KP.rightWrist] = .missing
+            return Script(lead: held(noHands, 10), cycle: held(noHands, 10))
+        case "barely":
+            // A swing too small to calibrate on: framing is fine, placement is not.
+            return Script(lead: held(PoseFixtures.pullup(170), 10),
+                          cycle: held(PoseFixtures.pullup(150), 10) + held(PoseFixtures.pullup(170), 10))
         default:
             return nil
         }

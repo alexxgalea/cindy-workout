@@ -74,7 +74,11 @@ struct ContentView: View {
     @StateObject private var camera = CameraModel()
     @StateObject private var workout = WorkoutViewModel()
     @State private var showStopConfirm = false
+    @State private var showSkipConfirm = false
+    @State private var showPlacement = false
     @State private var showDebug = false
+    /// Kept across launches: "Don't show this again" on the placement guide.
+    @AppStorage("placementGuideSeen") private var placementSeen = false
 
     var body: some View {
         ZStack {
@@ -85,6 +89,8 @@ struct ContentView: View {
         }
         .background(Color.appBackground)
         .onAppear {
+            camera.onPoseFrame = { workout.onFrame($0) }
+            workout.onResetCrop = { camera.resetRoi() }
             camera.start()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
@@ -95,13 +101,27 @@ struct ContentView: View {
             camera.stop()
             UIApplication.shared.isIdleTimerDisabled = false
         }
-        .onReceive(camera.$keypoints) { workout.onFrame($0) }
+        .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { ResultsView(attempt: $0) }
+        .sheet(isPresented: $showPlacement) {
+            PlacementGuideView(dontShowAgain: $placementSeen) {
+                showPlacement = false
+                workout.enterSetup()
+            }
+        }
         .confirmationDialog("End the workout?", isPresented: $showStopConfirm) {
             Button("End", role: .destructive) { workout.stopEarly() }
-            Button("Keep going", role: .cancel) {}
+            Button("Keep going", role: .cancel) { workout.cancelStop() }
         } message: {
             Text("Your score so far will be saved.")
+        }
+        // Dismissing the question any other way is also "keep going", with the clock let go again.
+        .onChange(of: showStopConfirm) { _, shown in if !shown { workout.cancelStop() } }
+        .confirmationDialog("Skip the setup check?", isPresented: $showSkipConfirm) {
+            Button("SKIP", role: .destructive) { workout.skipSetup() }
+            Button("KEEP CHECKING", role: .cancel) {}
+        } message: {
+            Text("Cindy will start counting straight away, without calibrating to your bar. Reps may be missed or counted twice.")
         }
     }
 
@@ -125,25 +145,39 @@ struct ContentView: View {
                 }
             }
 
-            Text(workout.status)
-                .font(.system(size: 13))
-                .foregroundStyle(workout.statusIsWarning ? Color.warn : Color.dim)
-                .chip()
-                // A long press on the status line is the way to the debug readout, as on Android.
-                .onLongPressGesture { showDebug.toggle() }
+            HStack(spacing: 8) {
+                Circle().fill(dotColour).frame(width: 9, height: 9).accessibilityHidden(true)
+                Text(workout.status)
+                    .font(.system(size: 13))
+                    .foregroundStyle(workout.statusIsWarning ? Color.warn : Color.dim)
+                    .accessibilityIdentifier("status")
+            }
+            .chip()
+            // A long press on the status line is the way to the debug readout, as on Android.
+            .onLongPressGesture { showDebug.toggle() }
 
             if showDebug { debugReadout }
+            if let coaching = workout.coachShowing { CoachCard(exercise: coaching) }
+            if let toast = workout.toast {
+                Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip()
+                    .accessibilityIdentifier("toast")
+            }
 
             Spacer()
 
             VStack(spacing: 2) {
-                Text(workout.exercise.label)
+                Text(workout.exerciseText)
                     .font(.system(size: 19, weight: .bold))
                     .foregroundStyle(Color.accent)
-                Text("\(workout.reps) / \(workout.exercise.target)")
+                    .accessibilityIdentifier("exerciseLabel")
+                Text(repCountLabel)
                     .font(.system(size: 60, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("repCount")
+                ProgressView(value: Double(workout.repProgress), total: 100)
+                    .tint(.accent)
+                    .frame(width: 160)
+                    .accessibilityHidden(true)
             }
             .chip()
 
@@ -152,6 +186,7 @@ struct ContentView: View {
                 // camera mid-Cindy is not a thing anyone does; ending early is.
                 Button(workout.inWorkout ? "STOP" : "FLIP") {
                     if workout.inWorkout {
+                        workout.requestStop()
                         showStopConfirm = true
                     } else {
                         camera.flip()
@@ -160,8 +195,17 @@ struct ContentView: View {
                 }
                 .buttonStyle(GhostButton(tint: workout.inWorkout ? .warn : .white))
 
-                Button(workout.startButtonTitle) { workout.primaryAction() }
-                    .buttonStyle(PrimaryButton())
+                Button(workout.startButtonTitle) {
+                    switch workout.phase {
+                    case .idle:
+                        if placementSeen { workout.enterSetup() } else { showPlacement = true }
+                    case .setup:
+                        showSkipConfirm = true
+                    default:
+                        workout.primaryAction()
+                    }
+                }
+                .buttonStyle(PrimaryButton())
 
                 Button("−1") { workout.undoRep() }.buttonStyle(GhostButton(tint: .white))
                 Button("+1") { workout.manualRep() }
@@ -171,6 +215,19 @@ struct ContentView: View {
             .padding(.bottom, 8)
         }
         .padding(16)
+    }
+
+    /// "3 / 5", "1 / 2" during the setup check, or just "—" where nothing counts against a target.
+    private var repCountLabel: String {
+        workout.targetText.isEmpty ? workout.repsText : "\(workout.repsText) / \(workout.targetText.dropFirst())"
+    }
+
+    private var dotColour: Color {
+        switch workout.dot {
+        case .ok: return .accent
+        case .neutral: return .dim
+        case .alert: return .warn
+        }
     }
 
     /// Where the skeleton comes from and what it cost: source, inference time, whether the crop is

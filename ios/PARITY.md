@@ -75,14 +75,14 @@ Kotlin table and compare every number.
 | P5 | `OverlayView.kt` | CindyTracker (iOS rewrite: `SkeletonOverlay`) | ported |
 | P5 | `PoseDetector.kt` | CindyCore `RoiTracker` (crop decisions) and CindyTracker `VisionPoseSource`; the model, the model-input fill and the brightness lift (`softGain`) are not ported | ported |
 | P5 | `YuvCrop.kt` | not ported — Android YUV path; Vision's `regionOfInterest` replaces it | not ported |
-| P6 | `CindySheet.kt` | CindyTracker (iOS rewrite) | not started |
+| P6 | `CindySheet.kt` | CindyTracker (iOS rewrite): native `confirmationDialog`s for skip and stop; the styled sheet lands with P13's menu | behind |
 | P6 | `CindyViews.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `CountdownView.kt` | CindyTracker (iOS rewrite) | not started |
+| P6 | `CountdownView.kt` | CindyCore `Countdown` (the timing, ported with its tests); the ring and digit are drawn with filming | tests ported |
 | P6 | `Dialogs.kt` | CindyTracker (iOS rewrite) | not started |
 | P6 | `LaunchView.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `MainActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `PlacementFacts.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `PlacementGuideView.kt` | CindyTracker (iOS rewrite) | not started |
+| P6 | `MainActivity.kt` | CindyCore `WorkoutSession` (the decisions) and CindyTracker `WorkoutViewModel`/`ContentView` (the plumbing); music, heart rate, filming, the tour, and camera-moved detection land in later phases | behind |
+| P6 | `PlacementFacts.kt` | CindyCore (the three facts) | ported |
+| P6 | `PlacementGuideView.kt` | CindyTracker (iOS rewrite): `PlacementGuideView` | ported |
 | P6 | `StartPoseView.kt` | CindyTracker (iOS rewrite) | not started |
 | P8 | `Avatar.kt` | CindyCore | not started |
 | P8 | `Badges.kt` | CindyCore | not started |
