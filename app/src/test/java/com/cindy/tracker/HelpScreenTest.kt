@@ -136,6 +136,26 @@ class HelpScreenTest {
     }
 
     @Test
+    fun `Help credits what it is built on, and a licence row shows the full text`() {
+        val help = Robolectric.buildActivity(HelpActivity::class.java).setup().get()
+        val text = texts(help.findViewById<View>(android.R.id.content)).joinToString("\n")
+        assertTrue(text.contains("LICENCES"))
+        for (credit in Licences.credits) {
+            assertTrue("no credit for ${credit.what}", text.contains("${credit.what}. ${credit.by}. ${credit.licence.name}."))
+        }
+
+        val row = byDescriptionPrefix(help.findViewById(android.R.id.content), "Apache License 2.0")
+        assertNotNull("no Apache License 2.0 row", row)
+        row!!.performClick()
+
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertTrue("the licence did not open a sheet", dialog != null && dialog.isShowing)
+        val sheet = texts(dialog.window!!.decorView).joinToString("\n")
+        assertTrue(sheet.contains("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"))
+        help.finish()
+    }
+
+    @Test
     fun `CrossFit's words are still quoted as they were`() {
         val text = helpText()
         for (quote in listOf(

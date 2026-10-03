@@ -263,6 +263,7 @@ class HelpActivity : AppCompatActivity() {
         reminders()
         strava()
         privacy()
+        licences()
 
         heading("SOURCE")
         paragraph(
@@ -594,6 +595,33 @@ class HelpActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = dp(4) }
         )
+    }
+
+    /**
+     * Credit where it is owed, and the licence texts the licences ask to travel with the app. The
+     * credits are in [Licences], beside the texts they point at.
+     */
+    private fun licences() {
+        heading("LICENCES")
+        paragraph("Cindy is built on other people's work, shared under these licences.")
+        bullets(*Licences.credits.map { "${it.what}. ${it.by}. ${it.licence.name}." }.toTypedArray())
+        binding.sections.addView(
+            insetGroup {
+                Licences.all.forEach { licence ->
+                    row(navRow(licence.name, "Full text") { showLicence(licence) })
+                }
+            },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        )
+    }
+
+    private fun showLicence(licence: Licences.Licence) {
+        CindySheet(this, licence.name)
+            .add(styledText(R.style.Cindy_Footnote, Licences.text(this, licence)))
+            .actions(primary = "DONE", onPrimary = {})
+            .show()
     }
 
     // ── building blocks ───────────────────────────────────────────────────────
