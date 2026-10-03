@@ -81,7 +81,7 @@ jobs:
         if: always()
         run: >-
           adb pull
-          /sdcard/Android/data/com.cindy.tracker/files/video-regression/reports/.
+          /sdcard/Android/data/com.cindy.tracker.debug/files/video-regression/reports/.
           tests/reports/
       - name: Upload video-regression reports
         if: always()

@@ -65,13 +65,13 @@ were tested.
 Reports are emitted on the test device at:
 
 ```text
-/sdcard/Android/data/com.cindy.tracker/files/video-regression/reports/
+/sdcard/Android/data/com.cindy.tracker.debug/files/video-regression/reports/
 ```
 
 Pull them into the ignored `tests/reports/` directory with:
 
 ```sh
-adb pull /sdcard/Android/data/com.cindy.tracker/files/video-regression/reports/. tests/reports/
+adb pull /sdcard/Android/data/com.cindy.tracker.debug/files/video-regression/reports/. tests/reports/
 ```
 
 To capture inferred pose goldens, append `-PcindyVideoGolden=true`, then pull
