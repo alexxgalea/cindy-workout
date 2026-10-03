@@ -54,6 +54,24 @@ jobs:
             -scheme CindyTracker \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+      # The replay source exists only in debug builds. Build the release configuration, and fail
+      # if the app that comes out has any trace of it, so a release build can never be told to
+      # ignore its camera.
+      - name: Build the release configuration, without the replay source
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/CindyTracker.xcodeproj \
+            -scheme CindyTracker \
+            -configuration Release \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build.log
+          app=$(find ~/Library/Developer/Xcode/DerivedData -path '*Release-iphonesimulator/CindyTracker.app' -type d | head -1)
+          test -n "$app" || { echo "no release app found"; exit 1; }
+          if grep -rqa -e ReplayPoseSource -e CindyReplay "$app"; then
+            echo "the release app contains the replay source"; exit 1
+          fi
+          echo "the release app has no replay source: $app"
       # The log is long and what matters is in the middle of it, so say it last.
       - name: Errors and test results
         if: always()
