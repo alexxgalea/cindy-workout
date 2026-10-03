@@ -328,10 +328,11 @@ public enum Records {
     }
 }
 
-/// UserDefaults-backed record board — the iOS counterpart to Android's SharedPreferences store.
+/// `UserDefaults`-backed record board — the iOS counterpart to Android's `SharedPreferences` one,
+/// holding the same string under the same key.
 public final class RecordStore {
 
-    private static let key = "cindy.attempts"
+    private static let key = "attempts"
     private let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) {
@@ -343,10 +344,17 @@ public final class RecordStore {
     /// Attempts oldest first, for charting progress over time.
     public func chronological() -> [Attempt] { all().sorted { $0.atMillis < $1.atMillis } }
 
-    public func add(_ attempt: Attempt) {
-        // A zero-rep attempt is someone opening the app and letting the clock run out.
-        guard attempt.totalReps > 0 else { return }
+    /// Stores `attempt`, and says whether it actually was.
+    ///
+    /// A zero-rep attempt is someone opening the app and letting the clock run out, so it is
+    /// dropped rather than filed. The caller needs to know which happened: a heart-rate trace
+    /// belongs beside a saved attempt, and there is nothing for it to belong beside when nothing
+    /// was stored.
+    @discardableResult
+    public func add(_ attempt: Attempt) -> Bool {
+        guard attempt.totalReps > 0 else { return false }
         defaults.set(Records.encode(all() + [attempt]), forKey: Self.key)
+        return true
     }
 
     public func clear() { defaults.removeObject(forKey: Self.key) }
