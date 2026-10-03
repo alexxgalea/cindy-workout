@@ -8,8 +8,7 @@ import CindyCore
 /// way to leave a movement. SKIP is the other way, and these hold the line that it books what was
 /// actually done.
 ///
-/// Mirrors `SkippedRepsTest.kt`, except its last two tests, which build an `Attempt` with the
-/// `countedReps` the record format carries. That is the records phase's: they port with it.
+/// Mirrors `SkippedRepsTest.kt`.
 final class SkippedRepsTests: XCTestCase {
 
     /// Books `n` reps by hand, which is the same booking path the camera uses.
@@ -129,5 +128,23 @@ final class SkippedRepsTests: XCTestCase {
 
         XCTAssertEqual(engine.rounds, 1)
         XCTAssertEqual(engine.totalReps, 30)
+    }
+
+    /// an attempt reports the reps it counted rather than its round tally
+    func testAnAttemptReportsTheRepsItCountedRatherThanItsRoundTally() {
+        let skipped = Attempt(rounds: 2, reps: 4, atMillis: 0, countedReps: 47)
+        XCTAssertEqual(skipped.totalReps, 47)
+
+        let old = Attempt(rounds: 2, reps: 4, atMillis: 0)
+        XCTAssertEqual(old.totalReps, 64, "an old record keeps saying what it always said")
+    }
+
+    /// the counted total survives a round trip through the record store
+    func testTheCountedTotalSurvivesARoundTripThroughTheRecordStore() {
+        let attempt = Attempt(rounds: 3, reps: 7, atMillis: 1_700_000_000_000,
+                              durationMs: 1_200_000, countedReps: 82)
+        let back = Records.decode(Records.encode([attempt]))[0]
+        XCTAssertEqual(back.countedReps, 82)
+        XCTAssertEqual(back.totalReps, 82)
     }
 }
