@@ -17,6 +17,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "CindyCore"),
-        .executableTarget(name: "CindyCoreChecks", dependencies: ["CindyCore"])
+        // Synthetic bodies and a rig that drives an engine with them: shared by the tests and,
+        // later, by the app's replay source, so neither needs a camera.
+        .target(name: "CindyFixtures", dependencies: ["CindyCore"]),
+        .executableTarget(name: "CindyCoreChecks", dependencies: ["CindyCore", "CindyFixtures"])
     ]
 )
