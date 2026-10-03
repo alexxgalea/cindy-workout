@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cindy Tracker: Privacy Policy</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  h1 { font-size: 1.75rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.25rem; }
+  .meta { opacity: .7; margin-top: 0; }
+  li { margin: .35rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Cindy Tracker: Privacy Policy</h1>
+<p class="meta">Effective {{EFFECTIVE_DATE}}. Published by {{DEVELOPER_NAME}}. Contact: <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></p>
+
+<p>Cindy Tracker counts the Cindy workout from your phone's camera. This policy says what the app does with your information. In short: it stays on your phone.{{#strava}} The one exception is Strava, and only after you connect it.{{/strava}}</p>
+
+<h2>What the app uses, and where it goes</h2>
+<ul>
+  <li><strong>The camera.</strong> Each picture is read on your phone to find where your joints are, and is thrown away. It is never saved or sent.</li>
+  <li><strong>Video you record.</strong> Only when you tap REC. It is saved to Movies/Cindy on your phone, like any other video, and the app never sends it anywhere.</li>
+  <li><strong>Your details and workouts.</strong> The name, photo, body weight, birth year and sex you choose to enter, and your sessions, the time of each rep, heart-rate traces and settings. They are kept in the app's private storage on your phone. The app has no account and no server.</li>
+  <li><strong>Heart rate.</strong> If you pair a watch or chest strap, the app reads the heart rate it broadcasts over Bluetooth and keeps it with that session on your phone.</li>
+  <li><strong>Bluetooth and location.</strong> Bluetooth is used only to find and read a heart-rate device. On Android 11 and older, Android requires the location permission for that scan. The app never reads your location.</li>
+  <li><strong>Notifications.</strong> If you set a daily reminder, the app stores the time you chose and shows a notification then.</li>
+  <li><strong>Music.</strong> A track you pick. The app remembers its address on your phone so it can play it, and does not copy or send it.</li>
+  <li><strong>Speech.</strong> The count is spoken by your phone's own speech engine. The app gives it the words to say.</li>
+</ul>
+
+{{#strava}}
+<h2>Strava</h2>
+<p>If you connect your Strava account, each finished workout is sent to Strava, and only to Strava. The app asks first, and nothing is sent until you tap Strava's own Connect button. What each workout sends:</p>
+<ul>
+  <li>the score, and every set with its reps;</li>
+  <li>when it started, and how long it took on the clock, paused and in real time;</li>
+  <li>calories, if you have set a body weight;</li>
+  <li>your heart-rate trace, if a watch recorded one;</li>
+  <li>a title and a short description, such as the score and the pace.</li>
+</ul>
+<p>Never the camera picture, the video or your pose. The app also receives your name from Strava, to say who is connected, and keeps it on your phone.</p>
+<p>Uploads are sent over HTTPS. The connection to Strava is stored in the app's private storage, and is excluded from Android's backup and device transfer. Automatic upload can be turned off in the app, and DISCONNECT removes the connection from your phone and asks Strava to end it. What Strava does with an upload is governed by <a href="https://www.strava.com/legal/privacy">Strava's own privacy policy</a>. To remove an activity, delete it on Strava.</p>
+{{/strava}}
+
+<h2>What the app does not do</h2>
+<p>It has no ads, no analytics, no tracking and no account. It does not use an advertising ID.{{#strava}} Apart from what it says to Strava, as described above, it sends nothing off your phone.{{/strava}}{{^strava}} It sends nothing off your phone.{{/strava}} It does not sell or share your information.</p>
+
+<h2>Backup</h2>
+<p>Android's own backup may copy the app's data{{#strava}}, but not the connection to Strava,{{/strava}} to your Google account, and to a new phone when you switch. That is a feature of Android and of your Google account, and you control it in Android's settings. Videos in Movies/Cindy are not part of the app's backup.</p>
+
+<h2>Keeping and deleting your information</h2>
+<ul>
+  <li>Everything stays on your phone until you delete it.</li>
+  <li><strong>CLEAR</strong> on the Progress screen deletes your sessions, with their rep times and heart-rate traces.</li>
+  <li><strong>REMOVE</strong> on the Account screen deletes your photo.</li>
+  <li>Android's <strong>Clear storage</strong> for the app, or uninstalling it, deletes everything else.</li>
+  <li>Videos in Movies/Cindy are yours to delete, like any other video.</li>
+  <li>Anything Android has backed up to your Google account is managed in your Google account.</li>
+</ul>
+
+<h2>Security</h2>
+<p>Your information is held in the app's private storage, which Android keeps from other apps.{{#strava}} Uploads to Strava are sent over HTTPS.{{/strava}} The app does not add encryption of its own to the files it stores.</p>
+
+<h2>Children</h2>
+<p>Cindy Tracker is meant for adults. It is not directed at children, and it collects no information from anyone.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be published at this address with a new effective date, and the app's Help will say the same.</p>
+
+<h2>Contact</h2>
+<p>{{DEVELOPER_NAME}}, <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>.</p>
+
+</body>
+</html>

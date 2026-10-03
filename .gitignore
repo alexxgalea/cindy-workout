@@ -63,3 +63,6 @@ __pycache__/
 
 # Design notes, research briefs and release runbook. Kept locally, never committed.
 /docs/
+
+# Rendered store listing and privacy policy, with the publisher's own details filled in.
+/play/dist/
