@@ -2,10 +2,10 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-///
 /// An adapted session is recorded as what it was, and ranked against its own kind: never quietly
 /// filed as strict, never taking the strict record, never earning a rung on a ladder calibrated
 /// against a workout it did not attempt — while still counting as a session the athlete did.
+///
 /// Carried over from the `CindyCoreChecks` executable: Variations. Every check keeps its original wording as
 /// its assertion message.
 final class VariationsTests: XCTestCase {

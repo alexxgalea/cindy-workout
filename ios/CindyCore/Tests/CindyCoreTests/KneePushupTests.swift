@@ -2,11 +2,11 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-///
 /// Characterisation, not a spec of what ought to happen: the push-up signal is the elbow angle
 /// alone and the gate in front of it asks only which way the torso points, so a kneeling athlete
 /// already passes both. No ankle, knee or shoulder-hip-ankle line is consulted anywhere in the
 /// movement, so there is no strictness rule here to relax for an adaptive mode.
+///
 /// Carried over from the `CindyCoreChecks` executable: Knee push-up. Every check keeps its original wording as
 /// its assertion message.
 final class KneePushupTests: XCTestCase {

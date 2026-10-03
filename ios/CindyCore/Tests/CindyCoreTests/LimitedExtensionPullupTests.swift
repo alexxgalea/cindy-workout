@@ -2,11 +2,11 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-///
 /// An athlete whose arms never straighten into a dead hang — limited extension, or a band taking
 /// enough weight — used to never establish the bar at all, since establishing it required a dead
 /// hang. Every frame was then refused under "Hang from the bar" and the workout scored zero
 /// without ever explaining why. `settleBar` locates the bar from hands simply held still overhead.
+///
 /// Carried over from the `CindyCoreChecks` executable: Limited extension (bar settle). Every check keeps its original wording as
 /// its assertion message.
 final class LimitedExtensionPullupTests: XCTestCase {

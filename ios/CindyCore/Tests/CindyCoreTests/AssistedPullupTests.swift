@@ -2,9 +2,9 @@ import XCTest
 import CindyCore
 import CindyFixtures
 
-///
 /// A relaxed bottom, and nothing else relaxed: the head still has to clear the bar, the hands
 /// still have to be on it, and RepCounter still wants the athlete's whole learned travel.
+///
 /// Carried over from the `CindyCoreChecks` executable: Assisted pull-up. Every check keeps its original wording as
 /// its assertion message.
 final class AssistedPullupTests: XCTestCase {
