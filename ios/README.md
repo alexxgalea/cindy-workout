@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records, levels | **226 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Records, progress, voice, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels | **385 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Progress, voice, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
 The logic is a real, running, tested port. The app layer compiled on its first macOS build with
@@ -34,7 +34,14 @@ ios/
 │   │   ├── RepCounter.swift      trough tracking + self-calibrating band
 │   │   ├── WorkoutEngine.swift   signals, Cindy progression, setup check
 │   │   ├── BarZone.swift         where the bar is, learned from dead hangs
-│   │   ├── Records.swift         attempts, splits, persistence
+│   │   ├── Records.swift         attempts and the saved line format (v1 to v7)
+│   │   ├── SplitBook.swift       each set's time, undone with the workout
+│   │   ├── RepLog.swift          where each rep landed on the clock
+│   │   ├── RepTimes.swift        the rep-times file format and its store
+│   │   ├── StravaSets.swift      a session's sets, rebuilt from its record
+│   │   ├── RoundSplits.swift     what the round chart draws and says
+│   │   ├── SessionStats.swift    a session as rounds and movements
+│   │   ├── Comparisons.swift     best and last earlier attempt
 │   │   └── Levels.swift          the rank ladder
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
 │   └── Tests/CindyCoreTests/     XCTest: every check, one class per area
@@ -105,7 +112,9 @@ For one phone, Xcode wireless is enough. For sending builds to anyone else, it i
 ## Still to port
 
 The record board (history list and progress chart) and the music picker. `RecordStore` and
-`Records.ranked` are already there and tested, so the screen is the only missing piece.
+`Records.ranked` are already there and tested, so the screen is the only missing piece. The
+workout does not yet file set times or rep times as it runs, so a session saved from the phone has
+neither: the engine-to-record wiring comes with the app phases.
 
 Filming currently writes the raw camera stream to the app's temporary directory. Two gaps against
 Android:

@@ -389,9 +389,11 @@ changes `trace_jvm.csv`, and `core` will fail until the Swift side follows. That
 
 **Port:** `RecordStore.kt`'s `Attempt` and `Records` (format **v1 to v7**, from Swift's v4),
 `RepLog`, `RepTimesStore` (format and store), `SplitBook`, `RoundSplits`, `SessionStats`,
-`Comparisons`, `Levels` (resync), `LiveWorkout`.
+`Comparisons`, `Levels` (resync), `LiveWorkout`, and `StravaSets` with `WorkoutSet`, which
+`RoundSplits` and `SessionStats` read and which therefore cannot wait for P19.
 
-**Kotlin tests: 134 pure + 5 store tests.** `RecordsTest`, `RoundSplitsTest`, `SessionStatsTest`,
+**Kotlin tests: 143 pure + 5 store tests**, the 134 first counted plus the nine pure `StravaSetsTest`
+tests that moved here from P19. `RecordsTest`, `RoundSplitsTest`, `SessionStatsTest`,
 `ComparisonsTest`, `LevelsTest`, `RepLogTest`, `RepTimesTest`, `SplitBookTest`; the
 Robolectric `RecordStoreTest` and `RepTimesStoreTest` become XCTest against a throwaway
 `UserDefaults(suiteName:)` and a temporary directory, both of which work on Linux.
@@ -738,9 +740,9 @@ delivers on time, so the "more than two hours late" rule has nothing to do. Duri
 
 ### P19 · `ios-p19-strava-core` · Build the same Strava uploads
 
-**Depends on:** P3, P9. **Port:** `StravaPayload`, `StravaActivityText`, `StravaSets`,
+**Depends on:** P3, P9. **Port:** `StravaPayload`, `StravaActivityText`,
 `StravaHeartRate`, `StravaApi`, `StravaHttp`, `StravaAuth`, `StravaTokens`, `StravaUploads`,
-`StravaComposer`, `StravaConfig`.
+`StravaComposer`, `StravaConfig`. (`StravaSets` and `WorkoutSet` landed in P3.)
 
 **Kotlin tests: 125 pure**, with `FakeTransport`.
 
@@ -929,7 +931,7 @@ it is current.
 | P19 | `StravaHeartRate.kt` | 28 | CindyCore |  |
 | P19 | `StravaHttp.kt` | 173 | CindyCore (`URLSession` behind a transport protocol) |  |
 | P19 | `StravaPayload.kt` | 167 | CindyCore |  |
-| P19 | `StravaSets.kt` | 67 | CindyCore |  |
+| P3 | `StravaSets.kt` | 67 | CindyCore | moved here from P19 |
 | P19 | `StravaTokens.kt` | 170 | CindyCore (logic) + Keychain store in CindyTracker |  |
 | P19 | `StravaUploads.kt` | 154 | CindyCore (state machine) + CindyTracker (scheduling) |  |
 | P20 | `StravaAuthActivity.kt` | 119 | CindyTracker (iOS rewrite) |  |
@@ -1052,7 +1054,7 @@ phases that build them.
 | P19 | `StravaHeartRateTest` | 6 | pure |
 | P19 | `StravaHttpTest` | 16 | pure |
 | P19 | `StravaPayloadTest` | 15 | pure |
-| P19 | `StravaSetsTest` | 10 | pure |
+| P3 | `StravaSetsTest` | 9 of 10 | pure; the tenth feeds `StravaPayload` and stays in P19 |
 | P19 | `StravaUploadsTest` | 7 | pure |
 | P20 | `StravaConsentTest` | 7 | screen (Robolectric) |
 | P20 | `StravaScreenTest` | 18 | screen (Robolectric) |

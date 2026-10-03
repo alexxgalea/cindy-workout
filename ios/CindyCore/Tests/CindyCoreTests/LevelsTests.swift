@@ -1,26 +1,55 @@
 import XCTest
 import CindyCore
-import CindyFixtures
 
-/// Carried over from the `CindyCoreChecks` executable: Levels. Every check keeps its original wording as
-/// its assertion message.
+/// Mirrors `LevelsTest.kt`.
 final class LevelsTests: XCTestCase {
 
-    func testLevels() {
-        XCTAssertEqual(Level.of(10), .intermediate, "a complete Cindy lands at intermediate")
-        XCTAssertEqual(Level.of(0), .firstSteps, "the ladder starts at first steps")
-        XCTAssertEqual(Level.of(5), .novice, "climbs to novice")
-        XCTAssertEqual(Level.of(16), .advanced, "then advanced")
-        XCTAssertEqual(Level.of(21), .elite, "then elite")
-        XCTAssertEqual(Level.of(27), .legend, "then legend")
-        XCTAssertEqual(Level.legend.minRounds, Records.benchmark.rounds, "legend is level with the benchmark")
-        XCTAssertEqual(Level.next(after: .legend) == nil, true, "nothing above legend")
-        XCTAssertEqual(Level.roundsToNext(9), 1, "one round short of intermediate")
-        XCTAssertEqual(Level.progress(10), 0, accuracy: 0.001, "progress starts at zero in a level")
-        XCTAssertEqual(Level.progress(27), 1, accuracy: 0.001, "and is full at the top")
+    /// a complete Cindy lands at intermediate
+    func testACompleteCindyLandsAtIntermediate() {
+        XCTAssertEqual(Level.of(10), .intermediate)
+        XCTAssertEqual(Level.of(15), .intermediate)
+    }
 
-        let mins = Level.allCases.map(\.minRounds)
-        XCTAssertEqual(mins, mins.sorted(), "thresholds are increasing")
-        XCTAssertEqual(mins.count, Set(mins).count, "and distinct")
+    /// the ladder climbs in order
+    func testTheLadderClimbsInOrder() {
+        XCTAssertEqual(Level.of(0), .firstSteps)
+        XCTAssertEqual(Level.of(5), .novice)
+        XCTAssertEqual(Level.of(16), .advanced)
+        XCTAssertEqual(Level.of(21), .elite)
+        XCTAssertEqual(Level.of(27), .legend)
+    }
+
+    /// the top of the ladder is level with the benchmark
+    func testTheTopOfTheLadderIsLevelWithTheBenchmark() {
+        XCTAssertEqual(Level.legend.minRounds, Records.benchmark.rounds)
+        XCTAssertNil(Level.next(after: .legend))
+        XCTAssertNil(Level.roundsToNext(30))
+    }
+
+    /// thresholds are strictly increasing
+    func testThresholdsAreStrictlyIncreasing() {
+        let mins = Level.allCases.map { $0.minRounds }
+        XCTAssertEqual(mins, mins.sorted())
+        XCTAssertEqual(mins.count, Set(mins).count)
+    }
+
+    /// rounds to next counts down to the boundary
+    func testRoundsToNextCountsDownToTheBoundary() {
+        XCTAssertEqual(Level.roundsToNext(0), 5)
+        XCTAssertEqual(Level.roundsToNext(9), 1)
+        XCTAssertEqual(Level.roundsToNext(10), 6)
+    }
+
+    /// progress runs zero to one inside a level
+    func testProgressRunsZeroToOneInsideALevel() {
+        XCTAssertEqual(Level.progress(10), 0, accuracy: 0.001)
+        XCTAssertEqual(Level.progress(27), 1, accuracy: 0.001)
+        XCTAssertTrue((0.4...0.6).contains(Level.progress(13)))
+    }
+
+    /// a negative score does not fall off the bottom
+    func testANegativeScoreDoesNotFallOffTheBottom() {
+        XCTAssertEqual(Level.of(0), .firstSteps)
+        XCTAssertTrue((0...1).contains(Level.progress(0)))
     }
 }
