@@ -15,20 +15,6 @@ import CindyFixtures
 /// follows. That is the point.
 final class EngineParityTests: XCTestCase {
 
-    /// Traces that need something the Swift engine does not have yet, so they cannot be run at
-    /// all. Each phase that adds a feature deletes its traces from here; the list is empty when
-    /// the port is complete.
-    private static let pendingTraces: Set<String> = [
-        "squat_heels_flat_counts",
-        "squat_heels_flat_after_deep",
-        "squat_heels_flat_quarter_never_counts",
-        "squat_smart_spots_heels_flat",
-        "squat_smart_floor_phone_spots",
-        "squat_smart_alternating",
-        "squat_smart_full_depth_never_spots",
-        "squat_smart_quarter_never_spots"
-    ]
-
     private static let columns = [
         "traceId", "step", "tMs", "angle", "kpSum", "event", "count", "state", "signal",
         "learnedRange", "calibrated", "hint", "minConfidence", "confidenceAdequate", "poseLegible",
@@ -56,7 +42,7 @@ final class EngineParityTests: XCTestCase {
 
         var compared = 0
         var failures: [String] = []
-        for id in order where !Self.pendingTraces.contains(id) {
+        for id in order {
             let actual = try trace(id, steps[id]!)
             guard let want = expectedByTrace[id] else {
                 failures.append("\(id): no rows in trace_jvm.csv")
@@ -79,8 +65,8 @@ final class EngineParityTests: XCTestCase {
 
         XCTAssertEqual(failures, [], "every frame of every runnable trace must match the Kotlin")
         XCTAssertGreaterThan(compared, 0, "something was compared")
-        let skipped = Self.pendingTraces.sorted().joined(separator: ", ")
-        print("Parity: \(compared) frames compared; not yet runnable: \(skipped.isEmpty ? "none" : skipped)")
+        XCTAssertEqual(order.count, 20, "all twenty traces in the plan ran")
+        print("Parity: \(compared) frames compared across \(order.count) traces")
     }
 
     // MARK: - one trace
@@ -98,8 +84,12 @@ final class EngineParityTests: XCTestCase {
               let squat = SquatVariant(rawValue: first[7]) else {
             throw ParityError.unknown("movement variant in \(id)")
         }
+        // The two columns the plan grew for the heels-flat squat. A plan without them is the
+        // standard air squat with smart counting off, which is what every older row means.
+        let smart = first.count > 8 && first[8] == "true"
         let engine = WorkoutEngine(fixedExercise: exercise,
-                                   profile: CindyProfile(pull: pull, squat: squat))
+                                   profile: CindyProfile(pull: pull, squat: squat),
+                                   smartSquats: smart)
 
         return try rows.map { row in
             let angle = Float(row[5])!
