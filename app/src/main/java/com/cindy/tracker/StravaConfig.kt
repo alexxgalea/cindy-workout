@@ -48,8 +48,15 @@ object StravaConfig {
      * A reverse-DNS scheme (RFC 8252) with host `localhost`, which Strava whitelists as an
      * Authorization Callback Domain without our own web server to receive it. Handled by
      * `StravaAuthActivity`.
+     *
+     * The scheme is the build's own application id, and the manifest's intent filter reads the
+     * same id through `${applicationId}`. That is what lets the dev build (`.debug`) and the
+     * Play build sit on one phone: each catches only its own redirect, instead of the phone
+     * offering a chooser between two apps that both claim the scheme. Strava stores only the
+     * callback *domain*, `localhost`, so nothing changes on its dashboard. For the Play build
+     * this is `com.cindy.tracker://localhost/strava`, exactly as before.
      */
-    const val REDIRECT_URI = "com.cindy.tracker://localhost/strava"
+    val REDIRECT_URI = "${BuildConfig.APPLICATION_ID}://localhost/strava"
 
     /** `activity:write` is what the upload needs; `read` is what shows the athlete's name back. */
     const val SCOPE = "read,activity:write"

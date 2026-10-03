@@ -146,7 +146,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="com.cindy.tracker"
+                    android:scheme="${applicationId}"
                     android:host="localhost"
                     android:path="/strava" />
             </intent-filter>

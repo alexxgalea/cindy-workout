@@ -185,6 +185,25 @@ class StravaScreenTest {
         assertNull(StravaTokenStore(context()).pendingState)
     }
 
+    @Test
+    fun `the redirect URI resolves to the redirect activity, and only for this build's own scheme`() {
+        val pm = context().packageManager
+        fun resolving(uri: String): List<String> = pm.queryIntentActivities(
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)), 0
+        ).map { it.activityInfo.name }
+
+        // The manifest's scheme is `${applicationId}` and the constant is built from
+        // BuildConfig.APPLICATION_ID. If either is edited alone, Strava's redirect would stop
+        // reaching the app, and nothing else in the suite would notice.
+        assertEquals(
+            listOf(StravaAuthActivity::class.java.name),
+            resolving("${StravaConfig.REDIRECT_URI}?state=s&code=c")
+        )
+        // Not a wildcard: another build's id, which is what the dev and Play builds are to each
+        // other, must not land here.
+        assertTrue(resolving("com.cindy.tracker.elsewhere://localhost/strava?state=s&code=c").isEmpty())
+    }
+
     // ---- the results screen's Strava row -----------------------------------------------------
 
     private fun testGrant() = StravaGrant(

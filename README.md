@@ -719,6 +719,50 @@ catch this: it checks where a file sits in the zip, not how the library inside w
 
 `local.properties` must point at your SDK (`sdk.dir=...`); it is deliberately gitignored.
 
+## Release
+
+Google Play takes a signed Android App Bundle. Signing is local: the keys are never committed, and
+CI builds the same bundle unsigned.
+
+**Once: make an upload key.** Keep the file and its passwords somewhere safe, in a password manager
+and one offline copy. With Play App Signing, Google holds the key that signs what phones install
+and this one only proves an upload is yours. A lost upload key can be reset, but only through
+Google support, and slowly.
+
+```sh
+keytool -genkeypair -v -keystore cindy-upload.jks -alias upload \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+**Tell the build about it** in a gitignored `keystore.properties` at the repo root, next to
+`strava.properties`. `storeFile` is read from the repo root, or can be an absolute path:
+
+```
+storeFile=cindy-upload.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+**Build, then check:**
+
+```sh
+./gradlew bundleRelease     # → app/build/outputs/bundle/release/app-release.aab
+python3 tools/check_16kb_alignment.py app/build/outputs/bundle/release/app-release.aab
+keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
+```
+
+`keytool` must print your upload certificate. "Not a signed jar file" means the build ran without
+a `keystore.properties`.
+
+- **Strava is in the bundle exactly when `strava.properties` is present at build time.** Check
+  which one you are shipping before you upload.
+- **Every upload needs a higher `versionCode`** in `app/build.gradle.kts`. Play refuses a
+  version it has already seen.
+- **The dev build and the Play build are different apps.** Debug is `com.cindy.tracker.debug`,
+  labelled "Cindy dev", and installs beside the Play build; release is `com.cindy.tracker`,
+  "Cindy". Each catches its own Strava redirect.
+
 ## Tests
 
 The JVM suite covers the logic below. **JDK 17 is required** for Android Gradle test runs. The rep logic runs against synthetic skeletons
