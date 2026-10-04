@@ -8,8 +8,8 @@ import CindyCore
 /// strict record, and never earns a rung on a ladder calibrated against a workout it did not
 /// attempt — while still being a session the athlete did, on a day they trained.
 ///
-/// Mirrors `VariationsTest.kt`, except `adaptive sessions count toward the streak`, which needs
-/// `Streak` and ports with it. It replaces the old checks' "Variations" class.
+/// Mirrors `VariationsTest.kt`, all of it: `adaptive sessions count toward the streak` came with
+/// `Streak` in P8. It replaces the old checks' "Variations" class.
 final class VariationsTests: XCTestCase {
 
     private let adaptive = CindyProfile(pull: .bandAssistedPullUp, push: .kneePushUp, squat: .boxSquat)
@@ -132,6 +132,26 @@ final class VariationsTests: XCTestCase {
         XCTAssertTrue(Records.beatsBenchmark(attempt(28)))
         XCTAssertFalse(Records.beatsBenchmark(attempt(28, profile: adaptive)))
         XCTAssertFalse(Records.beatsBenchmark(attempt(28, profile: nil)))
+    }
+
+    // ── what adaptive sessions still count for ────────────────────────────────
+
+    /// The streak measures showing up, and an adaptive athlete showed up.
+    ///
+    /// Deliberate: separating the *scores* is honesty, but withholding the streak would make the
+    /// separation a punishment, which is the opposite of the point.
+    ///
+    /// adaptive sessions count toward the streak
+    func testAdaptiveSessionsCountTowardTheStreak() {
+        let zone = Zone.utc
+        let today = LocalDate(2026, 3, 10)
+        func onDay(_ day: Int, _ profile: CindyProfile?) -> Attempt {
+            attempt(5, at: zone.epochMs(LocalDate(2026, 3, day)), profile: profile)
+        }
+
+        let days = Streak.daysTrained([onDay(8, .standard), onDay(9, adaptive), onDay(10, adaptive)], zone: zone)
+
+        XCTAssertEqual(Streak.current(days, today: today), 3)
     }
 
     // ── the picker's own memory ───────────────────────────────────────────────

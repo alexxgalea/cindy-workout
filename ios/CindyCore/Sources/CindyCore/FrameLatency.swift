@@ -213,24 +213,5 @@ public final class LatencyProbe: @unchecked Sendable {
     }
 }
 
-/// `String.format("%.Nf", value)` as Java writes it: the exact value rounded half up, where C's
-/// printf rounds an exact tie to even ("0.5" is "1" in Java and "0" in C).
-func javaFixed(_ value: Double, _ decimals: Int) -> String {
-    if value.isNaN { return "NaN" }
-    if value.isInfinite { return value < 0 ? "-Infinity" : "Infinity" }
-    let negative = value.sign == .minus
-    let long = String(format: "%.40f", abs(value))
-    let parts = long.split(separator: ".", omittingEmptySubsequences: false)
-    var digits = Array(String(parts[0]) + String(parts[1].prefix(decimals))).map { Int(String($0))! }
-    if let next = parts[1].dropFirst(decimals).first, Int(String(next))! >= 5 {
-        var i = digits.count - 1
-        while i >= 0 {
-            if digits[i] == 9 { digits[i] = 0; i -= 1 } else { digits[i] += 1; break }
-        }
-        if i < 0 { digits.insert(1, at: 0) }
-    }
-    let text = digits.map(String.init).joined()
-    let whole = decimals == 0 ? text : String(text.dropLast(decimals))
-    let fraction = decimals == 0 ? "" : "." + text.suffix(decimals)
-    return (negative ? "-" : "") + whole + fraction
-}
+/// `String.format(Locale.US, "%.Nf", value)`, as Java writes it. See `JavaText.fixed`.
+func javaFixed(_ value: Double, _ decimals: Int) -> String { JavaText.fixed(value, decimals) }
