@@ -25,6 +25,13 @@ Kotlin table and compare every number.
 | `StravaSetsTest`, all but the last (`the adaptive profile on the attempt reaches StravaPayload's mapping`) | P3 (from P19) | `RoundSplits` and `SessionStats` read `StravaSets.from`, so it cannot wait for the Strava phase. The last test feeds the result to `StravaPayload`, and stays with it |
 | `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak` |
 
+### Not a Kotlin file
+
+| Phase | Python | Lands in | Status |
+|---|---|---|---|
+| P7 | `tools/video_regression/run_batch.py` (the scoring: setup engine, scoring engine, `cindy` mode with `setup` and `skipTo`, the report) | `ios/CindyClips` `ClipScoring`, which `ReportTests` hold to `run_batch.py`'s keys and which was run against `run_batch.py` itself on the same frames | tests ported |
+| P7 | `tools/video_regression/cindy_sim/pose_detector.py` (MoveNet and its crop) | not ported: Vision is the model, through `CindyVision`; `run_batch.py`'s `dim` (the low-light model) is ported as `LightModel` | not ported |
+
 | Phase | Kotlin file | Lands in | Status |
 |---|---|---|---|
 | P2 | `BarZone.kt` | CindyCore | tests ported |
@@ -73,7 +80,7 @@ Kotlin table and compare every number.
 | P5 | `FrameLatency.kt` | split: `Rolling`/`RateMeter`/probe maths → CindyCore, camera timestamps → CindyTracker (one host clock on iOS) | tests ported |
 | P5 | `OverlayTransform.kt` | CindyCore (pure maths, ported with its tests) | tests ported |
 | P5 | `OverlayView.kt` | CindyTracker (iOS rewrite: `SkeletonOverlay`) | ported |
-| P5 | `PoseDetector.kt` | CindyCore `RoiTracker` (crop decisions) and CindyTracker `VisionPoseSource`; the model, the model-input fill and the brightness lift (`softGain`) are not ported | ported |
+| P5 | `PoseDetector.kt` | CindyCore `RoiTracker` (crop decisions), CindyVision `VisionFrameAnalyser` (the crop, Vision, following the body) and CindyTracker `VisionPoseSource`; the model, the model-input fill and the brightness lift (`softGain`) are not ported | ported |
 | P5 | `YuvCrop.kt` | not ported — Android YUV path; Vision's `regionOfInterest` replaces it | not ported |
 | P6 | `CindySheet.kt` | CindyTracker (iOS rewrite): native `confirmationDialog`s for skip and stop; the styled sheet lands with P13's menu | behind |
 | P6 | `CindyViews.kt` | CindyTracker (iOS rewrite) | not started |

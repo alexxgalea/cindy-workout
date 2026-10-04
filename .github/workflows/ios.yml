@@ -1,8 +1,7 @@
 name: Test Cindy iOS
 
 # The part of the iOS app that is not tied to Apple's frameworks, tested on Linux. It is cheap, so
-# it runs on every push; the job that builds the app itself needs macOS and comes with the
-# phase that makes it compile.
+# it runs on every push; the job that builds the app itself needs macOS and is in ios-app.yml.
 on:
   push:
   pull_request:
@@ -20,3 +19,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Run CindyCore's tests
         run: swift test --package-path ios/CindyCore
+      # What scores a recorded clip: the scenario files, the engine's calls, the report. Decoding
+      # a video and running Vision need macOS, so this is everything about it that does not.
+      - name: Run CindyClips' tests
+        run: swift test --package-path ios/CindyClips

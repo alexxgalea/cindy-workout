@@ -519,9 +519,11 @@ The count against a count by eye. This is the first real measure of D1.
 The Python harness in `tools/video_regression/` scores clips with MoveNet; this scores the same
 clips with Vision, so D1 is decided on numbers.
 
-- `ios/CindyClips/`, a macOS-only Swift package (Vision and AVFoundation exist on macOS): decode
-  each clip at the harness's analysed rate (every second frame of a 30 fps source), run Vision
-  with P5's `RoiTracker`, feed `WorkoutEngine` exactly as `run_batch.py` does (a setup engine and a
+- `ios/CindyClips/`, a Swift package whose decoding and Vision run only on macOS (Vision and
+  AVFoundation exist there): decode each clip at the harness's analysed rate (every frame, at the
+  file's own rate, as `run_batch.py` and the Android job both do; an earlier draft of this plan said
+  every second frame, which they do not), run Vision with P5's `RoiTracker`, feed `WorkoutEngine`
+  exactly as `run_batch.py` does (a setup engine and a
   fixed-exercise scoring engine; `cindy` mode with `setup` and `skipTo`), and write reports in
   `run_batch.py`'s JSON schema to `tests/reports/ios/`.
 - `tools/video_regression/compare_reports.py`: per clip, MoveNet's count, Vision's count, and the

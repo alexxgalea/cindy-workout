@@ -20,6 +20,8 @@ targets:
     dependencies:
       - package: CindyCore
         product: CindyCore
+      - package: CindyCore
+        product: CindyVision
       # Only debug builds use it (ReplayPoseSource is behind #if DEBUG). xcodegen has no
       # per-configuration dependency, so release builds link the unused library too.
       - package: CindyCore

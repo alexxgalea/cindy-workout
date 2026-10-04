@@ -13,13 +13,18 @@ let package = Package(
     products: [
         .library(name: "CindyCore", targets: ["CindyCore"]),
         // For the app's debug builds, which replay a scripted body in the simulator.
-        .library(name: "CindyFixtures", targets: ["CindyFixtures"])
+        .library(name: "CindyFixtures", targets: ["CindyFixtures"]),
+        // Apple's Vision, turned into the 17 keypoints the engine reads. The app and the clip tool
+        // share it, so the clips are scored by the code the camera runs.
+        .library(name: "CindyVision", targets: ["CindyVision"])
     ],
     targets: [
         .target(name: "CindyCore"),
         // Synthetic bodies and a rig that drives an engine with them: shared by the tests and,
         // later, by the app's replay source, so neither needs a camera.
         .target(name: "CindyFixtures", dependencies: ["CindyCore"]),
+        // Empty where there is no Vision (Linux), so the package still builds there.
+        .target(name: "CindyVision", dependencies: ["CindyCore"]),
         .testTarget(name: "CindyCoreTests", dependencies: ["CindyCore", "CindyFixtures"])
     ]
 )
