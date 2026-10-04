@@ -585,6 +585,7 @@ def main() -> int:
          "withinTolerance": r.within_tolerance, "setup": r.setup,
          "countTimestampsMs": r.count_times, "firstCountMs": r.first_count_ms,
          "rejectionsByGate": r.rejections_by_gate,
+         "perMovement": r.per_movement,
          "tags": r.tags, "failures": r.failures, "frames": r.frames}
         for r in reports
     ]}, indent=2))
