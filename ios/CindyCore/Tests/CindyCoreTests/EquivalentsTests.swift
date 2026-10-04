@@ -104,6 +104,16 @@ final class EquivalentsTests: XCTestCase {
         XCTAssertEqual(Equivalents.countText(1.02, hippo), "1 hippo")
     }
 
+    /// counts are rounded the way Java rounds them, on the shortest digits, not on the binary value
+    func testCountsAreRoundedTheWayJavaRoundsThem() {
+        let hippo = Equivalents.animals.first { $0.name == "hippo" }!
+        // Each read off the Kotlin on a JVM. C would say "0.9 hippos", "1.9 hippos" and "2.0 hippos".
+        XCTAssertEqual(Equivalents.countText(0.95, hippo), "1 hippo")
+        XCTAssertEqual(Equivalents.countText(1.95, hippo), "2.0 hippos")
+        XCTAssertEqual(Equivalents.countText(2.05, hippo), "2.1 hippos")
+        XCTAssertEqual(Equivalents.countText(1.45, hippo), "1.5 hippos")
+    }
+
     /// the sentence says at least for a lower bound
     func testTheSentenceSaysAtLeastForALowerBound() {
         let match = Equivalents.animalFor(12_940.0, rotation: 0, font: everything)!

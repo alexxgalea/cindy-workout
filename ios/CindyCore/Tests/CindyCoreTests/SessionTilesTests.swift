@@ -77,6 +77,13 @@ final class SessionTilesTests: XCTestCase {
         XCTAssertEqual(t["REPS"]!.footnote, "at least 11.1 reps/min · 12 tapped")
     }
 
+    /// the pace is rounded the way Java rounds it: 29 reps in twenty minutes is 1.45, which Java writes 1.5
+    func testThePaceIsRoundedTheWayJavaRoundsIt() {
+        let t = byLabel(attempt(rounds: 0, reps: 29, splits: [], countedReps: 29))
+        XCTAssertEqual(t["REPS"]!.footnote, "1.5 reps/min")   // C would say 1.4
+        XCTAssertEqual(t["REPS"]!.speech, "Reps: 29, 1.5 reps a minute")
+    }
+
     /// paused time is said beside the clock
     func testPausedTimeIsSaidBesideTheClock() {
         let t = byLabel(attempt(pausedMs: 65_000))
