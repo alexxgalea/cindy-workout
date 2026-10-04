@@ -1,55 +1,68 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
 import CindyCore
 
-/// Drives a Cindy attempt: the clock, the setup check, the score and the voice.
+/// What the screen shows of a workout, and what it does about what `WorkoutSession` decides.
+///
+/// The session owns every decision (the clock, the setup check, what is said and when, what an undo
+/// unwinds, what is saved); this owns the plumbing: a timer, a speaker, a vibration motor, the
+/// record store and the crop of the camera. It copies what the session shows into published
+/// properties after every call, and performs the effects the call returned.
 @MainActor
 final class WorkoutViewModel: ObservableObject {
 
     enum Phase { case idle, setup, running, paused, finished }
 
-    private static let workoutMs: Int64 = 20 * 60 * 1000
-
     @Published private(set) var phase: Phase = .idle
-    @Published private(set) var remainingMs: Int64 = workoutMs
-    @Published private(set) var exercise: Exercise = .pullup
-    @Published private(set) var reps = 0
+    @Published private(set) var clockText = "20:00"
+    @Published private(set) var exerciseText = Exercise.pullup.label
+    @Published private(set) var repsText = "0"
+    @Published private(set) var targetText = "/5"
     @Published private(set) var rounds = 0
-    @Published private(set) var status = "Press START to set up"
-    @Published private(set) var statusIsWarning = false
+    @Published private(set) var status = "Tap to set up"
+    @Published private(set) var dot: StatusDot = .neutral
+    @Published private(set) var repProgress = 0
+    @Published private(set) var coachShowing: Exercise?
+    /// A line shown briefly: a round's time, or why the count is in English.
+    @Published private(set) var toast: String?
     /// The attempt the results sheet is showing. Settable because `.sheet(item:)` clears it when
     /// the sheet is dismissed.
     @Published var finished: Attempt?
-    @Published var voiceEnabled = true
+    @Published var voiceEnabled = true {
+        didSet { if !voiceEnabled { engine.stop() } }
+    }
+
+    /// Asks the camera to forget the crop that was following the athlete.
+    var onResetCrop: (() -> Void)?
 
     private static let profileKey = "cindy.movementProfile"
+    private static let languageKey = "voice_language"
     private let defaults = UserDefaults.standard
 
-    /// Rebuilt rather than mutated when the movements change.
-    ///
-    /// `WorkoutEngine.profile` is immutable for the life of an engine on purpose: a rep's meaning
-    /// must not change halfway through the score it contributes to. There is no UI yet to choose
-    /// anything but the standard movements — this only makes sure the choice, once there is a way
-    /// to make it, is saved, scored and reported honestly rather than silently defaulting.
-    private var engine = WorkoutEngine(
-        profile: Variations.decode(UserDefaults.standard.string(forKey: WorkoutViewModel.profileKey))
-    )
+    /// Rebuilt rather than mutated when the movements change: a session's profile is immutable for
+    /// its life on purpose, because a rep's meaning must not change halfway through the score it
+    /// contributes to.
+    private var session: WorkoutSession
     private let records = RecordStore()
-    private let speech = AVSpeechSynthesizer()
+    private let repTimes = RepTimesStore(directory: FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("rep_times", isDirectory: true))
+    private let engine = AVSpeechTtsEngine()
+    private let director: VoiceDirector
 
     private var timer: Timer?
-    private var elapsedMs: Int64 = 0
-    private var pausedMs: Int64 = 0
-    private var pauseStartedAt: Date?
-    private var roundStartedAtElapsed: Int64 = 0
-    private var splits: [Int64] = []
-    private var lastTick = Date()
-    private var lastAnnouncedSecond: Int64 = -1
+    private var stopWasRunning = false
+    /// A stop that is waiting for the athlete's answer, with the clock parked behind it.
+    private(set) var stopPending = false
 
-    var clockText: String {
-        let total = (remainingMs + 999) / 1000
-        return String(format: "%02d:%02d", total / 60, total % 60)
+    init() {
+        session = WorkoutSession(
+            profile: Variations.decode(UserDefaults.standard.string(forKey: WorkoutViewModel.profileKey)))
+        director = VoiceDirector(engine: engine)
+        director.choose(VoicePacks.of(defaults.string(forKey: Self.languageKey)))
+        sync()
     }
 
     var startButtonTitle: String {
@@ -62,67 +75,101 @@ final class WorkoutViewModel: ObservableObject {
         }
     }
 
+    var statusIsWarning: Bool { dot == .alert }
     var inWorkout: Bool { phase == .running || phase == .paused }
 
-    /// What the debug readout says about the counter: the signal it is following, the range it
-    /// has learned, and where it is in the movement.
-    var counterReadout: String {
-        String(format: "signal %.1f · range %.1f · %@", engine.signal, engine.learnedRange, engine.countingState)
+    /// What the debug readout says about the counter.
+    var counterReadout: String { session.counterReadout }
+
+    /// Whether a readout is on the screen, so the demonstrator card stands down.
+    var debugReadout: Bool {
+        get { session.debugReadout }
+        set { session.debugReadout = newValue }
     }
 
-    /// Feeds a frame in. Returns whether the camera's crop should be reset.
-    func onFrame(_ keypoints: [Keypoint]) {
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+    /// The movements this session is counting.
+    var profile: CindyProfile { session.profile }
+
+    // MARK: - time
+
+    /// Monotonic milliseconds: what every duration here is measured on.
+    private var now: Int64 { Int64(ProcessInfo.processInfo.systemUptime * 1000) }
+    private var wallClockMs: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    // MARK: - frames
+
+    /// Feeds one analysed frame in. `tracking` is for this same frame: whether the crop it was
+    /// analysed in was a tracked one.
+    func onFrame(_ frame: PoseFrame) {
+        let effects: [SessionEffect]
         switch phase {
-        case .setup:
-            applySetup(engine.onSetupFrame(keypoints, now: now))
-        case .running:
-            apply(engine.onFrame(keypoints, now: now))
-        default:
-            break
+        case .setup: effects = session.onSetupFrame(frame.keypoints, now: now, tracking: frame.tracking)
+        case .running: effects = session.onFrame(frame.keypoints, now: now, tracking: frame.tracking)
+        default: return
         }
+        perform(effects)
     }
 
     // MARK: - controls
 
+    /// START, PAUSE, RESUME or RESET. The setup check's SKIP goes through `skipSetup` once the
+    /// athlete has been told what it costs.
     func primaryAction() {
         switch phase {
         case .idle: enterSetup()
-        case .setup: begin(calibrated: false)
-        case .running: pause()
-        case .paused: resume()
+        case .setup: break
+        case .running, .paused: perform(session.togglePause(now: now)); stopTimerIfParked()
         case .finished: reset()
         }
+        if phase == .running { startTimer() }
     }
 
-    func manualRep() {
-        guard phase == .running else { return }
-        apply(engine.manualRep())
-    }
-
-    func undoRep() {
-        guard phase == .running else { return }
-        let before = engine.rounds
-        let event = engine.undoRep()
-        // Stepping back over a round boundary un-books that round's split too.
-        if engine.rounds < before, let last = splits.popLast() {
-            roundStartedAtElapsed = elapsedMs - last
+    func enterSetup() {
+        // A voice fetched since the screen last resumed is picked up here, before the first thing
+        // is said; if the athlete's language is still not on the phone they are told why the count
+        // is in English rather than left to wonder whether the setting took.
+        director.refresh()
+        if voiceEnabled && director.fallingBack {
+            show("The \(director.wanted.englishName) voice isn't on this phone yet. Counting in English.")
         }
-        apply(event)
+        perform(session.enterSetup())
     }
 
-    func skipExercise() {
-        guard phase == .running else { return }
-        apply(engine.skipExercise())
+    func skipSetup() {
+        perform(session.skipSetup(now: now))
+        startTimer()
     }
 
-    /// The camera's view of the athlete changed, so the learned bands no longer describe it.
-    func recalibrate() {
-        engine.recalibrate()
+    func manualRep() { perform(session.manualRep(now: now)) }
+    func undoRep() { perform(session.undoRep(now: now)) }
+    func skipExercise() { perform(session.skipExercise(now: now)) }
+
+    /// The camera's view of the athlete changed (a flip), so the learned band is stale.
+    func recalibrate() { session.recalibrate() }
+
+    /// STOP: parks the clock while the question is up, as the Android screen does.
+    func requestStop() {
+        stopPending = true
+        stopWasRunning = phase == .running
+        if stopWasRunning { primaryAction() }
     }
 
-    /// The movements this session is counting, for a future "make Cindy yours" screen to read.
-    var profile: CindyProfile { engine.profile }
+    /// The athlete said KEEP GOING, or dismissed the question: the clock carries on.
+    func cancelStop() {
+        guard stopPending else { return }
+        stopPending = false
+        if stopWasRunning { primaryAction() }
+    }
+
+    func stopEarly() {
+        stopPending = false
+        finish(session.finish(stoppedEarly: true, now: now, wallClockMs: wallClockMs))
+    }
+
+    private func reset() {
+        finished = nil
+        perform(session.reset())
+    }
 
     /// Changes the movements for the next workout. Refused mid-session: a rep's meaning cannot
     /// change halfway through the score it contributes to.
@@ -130,185 +177,102 @@ final class WorkoutViewModel: ObservableObject {
     func setMovementProfile(_ chosen: CindyProfile) -> Bool {
         guard phase == .idle || phase == .finished else { return false }
         defaults.set(Variations.encode(chosen), forKey: Self.profileKey)
-        engine = WorkoutEngine(profile: chosen)
-        render()
+        session = WorkoutSession(profile: chosen)
+        sync()
         return true
     }
 
-    private func enterSetup() {
-        phase = .setup
-        engine.beginSetup()
-        status = "Get in frame"
-        say("Get in frame, then do two slow pull ups")
-    }
-
-    private func begin(calibrated: Bool) {
-        engine.finishSetup()
-        phase = .running
-        elapsedMs = 0
-        pausedMs = 0
-        splits = []
-        roundStartedAtElapsed = 0
-        lastAnnouncedSecond = -1
-        lastTick = Date()
-        status = "Counting…"
-        say(calibrated ? "Calibrated. Go." : "Go. Pull ups")
-        startTimer()
-    }
-
-    private func pause() {
-        phase = .paused
-        pauseStartedAt = Date()
-        timer?.invalidate()
-        status = "Paused"
-    }
-
-    private func resume() {
-        if let started = pauseStartedAt {
-            pausedMs += Int64(Date().timeIntervalSince(started) * 1000)
-            pauseStartedAt = nil
-        }
-        phase = .running
-        lastTick = Date()
-        // The phone or the athlete may have moved while the clock was stopped.
-        engine.recalibrate()
-        status = "Recalibrating…"
-        say("Resume")
-        startTimer()
-    }
-
-    func stopEarly() {
-        finish(stoppedEarly: true)
-    }
-
-    private func reset() {
-        phase = .idle
-        remainingMs = Self.workoutMs
-        elapsedMs = 0
-        pausedMs = 0
-        splits = []
-        engine.reset()
-        finished = nil
-        status = "Press START to set up"
-        render()
-    }
-
-    // MARK: - clock
+    // MARK: - the clock
 
     private func startTimer() {
-        timer?.invalidate()
+        guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
     }
 
+    private func stopTimerIfParked() {
+        if phase != .running { timer?.invalidate(); timer = nil }
+    }
+
     private func tick() {
-        guard phase == .running else { return }
-        let now = Date()
-        let step = Int64(now.timeIntervalSince(lastTick) * 1000)
-        lastTick = now
-        remainingMs -= step
-        elapsedMs += step
-        if remainingMs <= 0 {
-            remainingMs = 0
-            finish(stoppedEarly: false)
-        } else {
-            announceTime()
-        }
+        let result = session.tick(now: now, wallClockMs: wallClockMs)
+        perform(result.effects)
+        if let done = result.finished { finish(done) }
+        stopTimerIfParked()
     }
 
-    private func announceTime() {
-        let second = remainingMs / 1000
-        guard second != lastAnnouncedSecond else { return }
-        lastAnnouncedSecond = second
-        switch second {
-        case 600: say("Ten minutes remaining")
-        case 300: say("Five minutes remaining")
-        case 60: say("One minute")
-        case 10: say("Ten seconds")
-        default: break
-        }
-    }
-
-    private func finish(stoppedEarly: Bool) {
-        if let started = pauseStartedAt {
-            pausedMs += Int64(Date().timeIntervalSince(started) * 1000)
-            pauseStartedAt = nil
-        }
-        phase = .finished
+    private func finish(_ done: FinishedWorkout) {
         timer?.invalidate()
-
-        let attempt = Attempt(
-            rounds: engine.rounds,
-            reps: engine.repsThisRound,
-            atMillis: Int64(Date().timeIntervalSince1970 * 1000),
-            durationMs: elapsedMs,
-            pausedMs: pausedMs,
-            roundSplitsMs: splits,
-            profile: engine.profile,
-            manualReps: engine.manualReps
-        )
-        records.add(attempt)
-        finished = attempt
-
-        say(stoppedEarly ? "Stopped." : "Time.")
-        say("\(attempt.rounds) rounds and \(attempt.reps) reps")
+        timer = nil
+        // A workout with nothing counted is someone opening the app and letting the clock run out,
+        // so the store drops it; the rep times belong beside a saved attempt and only one.
+        if records.add(done.attempt) {
+            try? repTimes.save(atMillis: done.attempt.atMillis, done.marks)
+        }
+        finished = done.attempt
+        perform(done.effects)
     }
 
-    // MARK: - engine plumbing
+    // MARK: - effects
 
-    private func applySetup(_ setup: Setup) {
-        switch setup.stage {
-        case .framing:
-            statusIsWarning = true
-            status = "Can't see your " + setup.missing.joined(separator: ", ")
-        case .moving:
-            statusIsWarning = false
-            status = "Do 2 slow pull-ups to calibrate"
-            reps = setup.reps
-        case .poor:
-            statusIsWarning = true
-            status = "Movement barely registers — raise the phone or step back"
-        case .ready:
-            statusIsWarning = false
-            begin(calibrated: true)
+    private func perform(_ effects: [SessionEffect]) {
+        for effect in effects {
+            switch effect {
+            case .say(let line): speak(line, queue: .replace)
+            case .queue(let line): speak(line, queue: .append)
+            case .stopSpeaking: engine.stop()
+            case .buzz(let ms): buzz(ms)
+            case .toast(let text): show(text)
+            case .resetCrop: onResetCrop?()
+            case .liveWorkout(let live): LiveWorkout.active = live
+            case .calibratedBanner: break   // the recording's banner: filming is a later phase
+            }
+        }
+        sync()
+    }
+
+    private func speak(_ line: VoiceLine, queue: SpeakQueue) {
+        // Silent while VoiceOver runs, as the Android screen is under TalkBack: two voices at once
+        // is worse than one.
+        guard voiceEnabled, !UIAccessibility.isVoiceOverRunning else { return }
+        director.speak(line, queue: queue, volume: 1)
+    }
+
+    /// Short per rep, longer per movement, longest per round.
+    private func buzz(_ ms: Int) {
+        switch ms {
+        case ..<40: UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case ..<100: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        case ..<300: UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        default: UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }
 
-    private func apply(_ event: RepEvent) {
-        switch event {
-        case .none:
-            break
-        case .rep:
-            say("\(engine.reps)")
-        case .undo:
-            say("\(engine.reps)")
-        case .exerciseDone:
-            say(engine.exercise.spoken)
-        case .roundDone:
-            let split = elapsedMs - roundStartedAtElapsed
-            splits.append(split)
-            roundStartedAtElapsed = elapsedMs
-            say("Round \(engine.rounds + 1)")
-        }
-        render()
-        if phase == .running {
-            statusIsWarning = !engine.bodyVisible
-            status = engine.calibrated ? engine.hint : "Recalibrating…"
+    private func show(_ text: String) {
+        toast = text
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if self?.toast == text { self?.toast = nil }
         }
     }
 
-    private func render() {
-        exercise = engine.exercise
-        reps = engine.reps
-        rounds = engine.rounds
-    }
-
-    private func say(_ text: String) {
-        guard voiceEnabled else { return }
-        speech.stopSpeaking(at: .immediate)
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        speech.speak(utterance)
+    private func sync() {
+        switch session.state {
+        case .idle: phase = .idle
+        case .setup: phase = .setup
+        case .running: phase = .running
+        case .paused: phase = .paused
+        case .finished: phase = .finished
+        }
+        clockText = session.clockText
+        exerciseText = session.exerciseText
+        repsText = session.repsText
+        targetText = session.targetText
+        rounds = session.rounds
+        status = session.status
+        dot = session.dot
+        repProgress = session.repProgress
+        coachShowing = session.coachShowing
     }
 }
