@@ -1,3 +1,4 @@
+#if canImport(Vision)
 import Foundation
 import Vision
 import CindyCore
@@ -35,3 +36,4 @@ enum VisionPose {
         }
     }
 }
+#endif

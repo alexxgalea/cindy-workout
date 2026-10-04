@@ -1,6 +1,6 @@
 import AVFoundation
-import Vision
 import CindyCore
+import CindyVision
 
 /// Camera capture, Vision, and optional filming: the real source of the skeleton.
 ///
@@ -18,12 +18,12 @@ final class VisionPoseSource: NSObject, PoseSource {
     private let videoOutput = AVCaptureVideoDataOutput()
     private let movieOutput = AVCaptureMovieFileOutput()
     private let queue = DispatchQueue(label: "cindy.camera")
-    private let request = VNDetectHumanBodyPoseRequest()
 
     private var position: AVCaptureDevice.Position = .back
 
-    /// Where to look next. Touched only on `queue`, which is where frames arrive.
-    private let tracker = RoiTracker()
+    /// The crop to look in and the skeleton in it, shared with the clip tool. Touched only on
+    /// `queue`, which is where frames arrive.
+    private let analyser = VisionFrameAnalyser()
     private let probe = LatencyProbe()
     /// Analysed frames wait here for the main thread: events would queue, but every frame is
     /// state, so only the newest is kept and a slow main thread costs frames, not freshness.
@@ -58,7 +58,7 @@ final class VisionPoseSource: NSObject, PoseSource {
     }
 
     func resetRoi() {
-        queue.async { [weak self] in self?.tracker.reset() }
+        queue.async { [weak self] in self?.analyser.reset() }
     }
 
     /// Frames arrive upright, in portrait, and mirrored for the selfie camera so that they match
@@ -120,35 +120,16 @@ extension VisionPoseSource: AVCaptureVideoDataOutputSampleBufferDelegate {
         let height = CVPixelBufferGetHeight(buffer)
         let size = CGSize(width: width, height: height)
 
-        // The crop this frame is analysed in, and whether it is a tracked one, are settled before
-        // detection and read after it for this same frame.
-        let region = tracker.beginFrame(frameWidth: width, frameHeight: height)
-        let tracking = tracker.tracking
-        let roi = VisionGeometry.regionOfInterest(for: tracking ? region : nil,
-                                                  frameWidth: width, frameHeight: height)
-        request.regionOfInterest = CGRect(x: roi.x, y: roi.y, width: roi.width, height: roi.height)
-
-        let started = monotonicNanos()
-        // The buffer is already upright (see `orientConnection`), so no orientation is applied.
-        let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
-        try? handler.perform([request])
-        let inferMs = (monotonicNanos() - started) / 1_000_000
-
-        let points: [Keypoint]
-        if let observation = request.results?.first {
-            points = VisionPose.keypoints(from: observation, size: size, roi: roi)
-        } else {
-            points = Array(repeating: .missing, count: KP.count)
-        }
-
-        // Follow the body, and give up on the crop if it is lost for a few frames running.
-        tracker.update(points, frameWidth: width, frameHeight: height)
+        // The buffer is already upright (see `orientConnection`), so nothing turns it here.
+        let result = analyser.analyse(buffer)
+        let points = result.keypoints
+        let inferMs = result.inferMs
 
         let stamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let age = probe.clock.sinceCapture(Int64(CMTimeGetSeconds(stamp) * 1_000_000_000))
         probe.analysed(captureAgeMs: age, convertMs: 0, prepMs: 0, inferMs: inferMs)
 
-        var frame = PoseFrame(keypoints: points, frameSize: size, inferenceMs: Int(inferMs), tracking: tracking)
+        var frame = PoseFrame(keypoints: points, frameSize: size, inferenceMs: Int(inferMs), tracking: result.tracking)
         frame.captureAgeMs = age.map(Int.init)
         frame.latencyLine = probe.line(model: "vision", drawnPerSecond: nil)
         let outcome = handoff.submit(frame, isEvent: false)
