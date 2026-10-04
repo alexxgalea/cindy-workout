@@ -37,4 +37,13 @@ final class CalendarGridTests: XCTestCase {
         XCTAssertNil(CalendarGrid.dateAt(september, firstDayOfWeek: .monday, col: 7, row: 1))
         XCTAssertNil(CalendarGrid.dateAt(september, firstDayOfWeek: .monday, col: -1, row: 1))
     }
+
+    /// the first column is a column: a month that starts on the first day of the week fills it
+    func testTheFirstColumnIsAColumn() {
+        // June 2026 starts on a Monday.
+        let june = YearMonth(2026, 6)
+        XCTAssertEqual(CalendarGrid.lead(june, firstDayOfWeek: .monday), 0)
+        XCTAssertEqual(CalendarGrid.dateAt(june, firstDayOfWeek: .monday, col: 0, row: 1), LocalDate(2026, 6, 1))
+        XCTAssertEqual(CalendarGrid.dateAt(june, firstDayOfWeek: .monday, col: 6, row: 1), LocalDate(2026, 6, 7))
+    }
 }

@@ -186,4 +186,24 @@ final class EquivalentsTests: XCTestCase {
             XCTAssertNotEqual(match.reference.emoji, "🔋")
         }
     }
+
+    /// exactly one animal's weight is one of them
+    func testExactlyOneAnimalsWeightIsOneOfThem() {
+        let match = Equivalents.animalFor(100.0, rotation: 0, font: everything)!
+        XCTAssertEqual(match.animal.name, "giant panda")
+        XCTAssertEqual(match.text, "1 giant panda")
+        XCTAssertEqual(Equivalents.animalFor(8000.0 * 12.0, rotation: 0, font: everything)?.animal.name, "T. rex")
+    }
+
+    /// a negative rotation wraps round to the same animal as the positive one it is congruent to
+    func testANegativeRotationWrapsRoundToTheSameAnimalAsTheCongruentPositiveOne() {
+        for rotation in Int64(-7)...(-1) {
+            let pool = 3   // 12,940 kg has three preferred animals
+            let wrapped = ((rotation % Int64(pool)) + Int64(pool)) % Int64(pool)
+            XCTAssertEqual(Equivalents.animalFor(12_940.0, rotation: rotation, font: everything),
+                           Equivalents.animalFor(12_940.0, rotation: wrapped, font: everything), "\(rotation)")
+            XCTAssertEqual(Equivalents.energyFor(312.0, rotation: rotation, font: everything)?.reference.emoji,
+                           Equivalents.energyFor(312.0, rotation: ((rotation % 3) + 3) % 3, font: everything)?.reference.emoji, "\(rotation)")
+        }
+    }
 }

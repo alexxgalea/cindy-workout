@@ -193,4 +193,21 @@ final class StreakTests: XCTestCase {
         XCTAssertFalse(Streak.isMilestone(8, Streak.dailyMilestones))
         XCTAssertEqual(Streak.nextMilestone(1, Streak.weeklyMilestones), 2)
     }
+
+    // MARK: boundaries the Kotlin tests leave open (written for the port)
+
+    /// a tie between weekly runs goes to the most recent, as it does between daily ones
+    func testATieBetweenWeeklyRunsGoesToTheMostRecent() {
+        let w = weeks("2026-07-06", "2026-07-13", "2026-08-10", "2026-08-17")
+        XCTAssertEqual(Streak.longestWeeksRun(w), LocalDate(2026, 8, 10)...LocalDate(2026, 8, 17))
+    }
+
+    /// the milestones are the ones the app celebrates
+    func testTheMilestonesAreTheOnesTheAppCelebrates() {
+        XCTAssertEqual(Streak.dailyMilestones, [3, 7, 14, 21, 30, 50, 75, 100, 150, 200, 365])
+        XCTAssertEqual(Streak.weeklyMilestones, [2, 4, 8, 12, 26, 52])
+        XCTAssertEqual(Streak.nextMilestone(13, Streak.dailyMilestones), 14)
+        XCTAssertEqual(Streak.nextMilestone(14, Streak.dailyMilestones), 21)
+        XCTAssertNil(Streak.nextMilestone(52, Streak.weeklyMilestones))
+    }
 }

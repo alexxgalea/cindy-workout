@@ -277,4 +277,51 @@ final class ProgressTests: XCTestCase {
                                          from: LocalDate(2026, 8, 31), today: today, zone: zone, firstDayOfWeek: monday)
         XCTAssertEqual(Progress.overview(.volume, bars), Readout("1,300 reps", "2 sessions in this range"))
     }
+
+    // MARK: boundaries the Kotlin tests leave open (written for the port)
+
+    /// a second short of the whole clock is not a full session, and the whole clock less the slack is
+    func testASecondShortOfTheWholeClockIsNotAFullSession() {
+        XCTAssertTrue(Progress.isFullSession(attempt("2026-08-01", rounds: 1, durationMs: 1_199_000)))
+        XCTAssertFalse(Progress.isFullSession(attempt("2026-08-01", rounds: 1, durationMs: 1_198_999)))
+        XCTAssertEqual(Progress.fullSessionMs, 1_199_000)
+    }
+
+    /// a session that counted nothing is never a record
+    func testASessionThatCountedNothingIsNeverARecord() {
+        let list = [attempt("2026-08-01", rounds: 0, reps: 0), scored("2026-08-02", 10)]
+        let s = Progress.scoreSeries(list, category: standard, from: nil, zone: zone)
+        XCTAssertEqual(s.points.map { $0.record }, [false, true])
+    }
+
+    /// ticks at exactly twice the magnitude still step by two
+    func testTicksAtExactlyTwiceTheMagnitudeStillStepByTwo() {
+        XCTAssertEqual(Progress.niceTicks(0, 8), [0.0, 2.0, 4.0, 6.0, 8.0])
+        XCTAssertEqual(Progress.niceTicks(0, 4), [0.0, 1.0, 2.0, 3.0, 4.0])
+        XCTAssertEqual(Progress.niceTicks(0, 20), [0.0, 5.0, 10.0, 15.0, 20.0])
+    }
+
+    /// an hour on the clock is "1 h 00 min", not "60 min"
+    func testAnHourOnTheClockIsOneHour() {
+        XCTAssertEqual(Progress.formatClock(60 * 60_000), "1 h 00 min")
+        XCTAssertEqual(Progress.formatClock(59 * 60_000 + 59_999), "59 min")
+        XCTAssertEqual(Progress.formatClock(125 * 60_000), "2 h 05 min")
+    }
+
+    /// categories are listed by the latest use of each, whichever was used first
+    func testCategoriesAreListedByTheLatestUseOfEachWhicheverWasUsedFirst() {
+        let list = [scored("2026-08-01", 400), scored("2026-08-10", 300, profile: knee)]
+        XCTAssertEqual(Progress.categories(list), [knee, CindyProfile.standard])
+        XCTAssertEqual(Progress.defaultCategory(list), knee)
+    }
+
+    /// each range starts where its label says
+    func testEachRangeStartsWhereItsLabelSays() {
+        XCTAssertEqual(ProgressRange.month.start(today), LocalDate(2026, 8, 9))
+        XCTAssertEqual(ProgressRange.quarter.start(today), LocalDate(2026, 6, 9))
+        XCTAssertEqual(ProgressRange.year.start(today), LocalDate(2025, 9, 9))
+        XCTAssertNil(ProgressRange.all.start(today))
+        XCTAssertEqual(ProgressRange.allCases.map { $0.label }, ["1M", "3M", "1Y", "All"])
+        XCTAssertEqual(ProgressMetric.allCases.map { $0.label }, ["Score", "Pace", "Volume"])
+    }
 }

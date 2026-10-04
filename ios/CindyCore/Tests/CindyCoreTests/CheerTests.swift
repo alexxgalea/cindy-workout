@@ -155,4 +155,12 @@ final class CheerTests: XCTestCase {
         let stored = attempt("2026-09-08")
         XCTAssertTrue(forResult([stored], attempt("2026-09-09")).isEmpty)
     }
+
+    /// matching the longest streak on a result is not called the longest yet
+    func testMatchingTheLongestStreakOnAResultIsNotCalledTheLongestYet() {
+        // Two days before, and two days now: a tie.
+        let last = attempt("2026-09-09", 12, 0)
+        let all = [attempt("2026-08-01", 15, 0), attempt("2026-08-02", 15, 0), attempt("2026-09-08", 14, 0), last]
+        XCTAssertTrue(forResult(all, last).isEmpty)
+    }
 }

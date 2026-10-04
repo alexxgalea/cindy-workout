@@ -278,4 +278,17 @@ final class AvatarTests: XCTestCase {
         XCTAssertEqual(markAfter(7), [3, 2, 2, 1])
         XCTAssertEqual(markAfter(8), [3, 2, 0, 1])
     }
+
+    /// a line or paragraph separator is a space between words, and at the ends
+    func testALineOrParagraphSeparatorIsASpaceBetweenWordsAndAtTheEnds() {
+        same(Avatar.cleanName("abc\u{2028}def"), "abc def")
+        same(Avatar.cleanName("abc\u{2029}def"), "abc def")
+        same(Avatar.cleanName("\u{2028}abc\u{2029}"), "abc")
+        XCTAssertNil(Avatar.cleanName("\u{2028}\u{2029}"))
+    }
+
+    /// an enclosing mark stays with its letter, like an accent
+    func testAnEnclosingMarkStaysWithItsLetter() {
+        same(Avatar.initials("a\u{20DD} b"), "A\u{20DD}B")
+    }
 }

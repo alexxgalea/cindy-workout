@@ -23,7 +23,22 @@ Kotlin table and compare every number.
 | Kotlin test | Moved to | Because |
 |---|---|---|
 | `StravaSetsTest`, all but the last (`the adaptive profile on the attempt reaches StravaPayload's mapping`) | P3 (from P19) | `RoundSplits` and `SessionStats` read `StravaSets.from`, so it cannot wait for the Strava phase. The last test feeds the result to `StravaPayload`, and stays with it |
-| `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak` |
+| `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak`. Ported in P8, in `VariationsTests` |
+
+### Kotlin tests that stay with their view or their phase
+
+| Kotlin test | Stays with | Because |
+|---|---|---|
+| `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
+| `ProgressChartViewTest` (4) | P11 | Taps and drags on the chart's `View` |
+| `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
+
+### What the Kotlin leans on, which Swift has no counterpart for
+
+| Phase | Kotlin / JDK | Lands in | Status |
+|---|---|---|---|
+| P8 | `java.time` (`LocalDate`, `YearMonth`, `DayOfWeek`, `ZoneId`, `ZonedDateTime`) | CindyCore `LocalCalendar`: a day count, no `Calendar` and no locale data, with `java.time`'s rule for a local time the clock skips or repeats. Checked against `java.time` on 8 zones through 2025 and 2026 | tests written for the port |
+| P8 | `String.format(Locale.US, "%,d" / "%.Nf")`, `Math.round`, `roundToInt`, `sortedBy`, `maxByOrNull` | CindyCore `JavaText`. `%.Nf` rounds the shortest digits half up, which is not what C does (this corrected P5's `javaFixed`), and was checked against a JVM on 326,044 values at five precisions | tests written for the port |
 
 ### Not a Kotlin file
 
@@ -91,21 +106,21 @@ Kotlin table and compare every number.
 | P6 | `PlacementFacts.kt` | CindyCore (the three facts) | ported |
 | P6 | `PlacementGuideView.kt` | CindyTracker (iOS rewrite): `PlacementGuideView` | ported |
 | P6 | `StartPoseView.kt` | CindyTracker (iOS rewrite) | not started |
-| P8 | `Avatar.kt` | CindyCore | not started |
-| P8 | `Badges.kt` | CindyCore | not started |
-| P8 | `CalendarGrid.kt` | CindyCore | not started |
-| P8 | `Cheer.kt` | CindyCore | not started |
-| P8 | `Equivalents.kt` | CindyCore | not started |
-| P8 | `FirstRun.kt` | CindyCore (the flags) over `UserDefaults` | not started |
-| P8 | `HudTour.kt` | CindyCore | not started |
-| P8 | `Lifted.kt` | CindyCore | not started |
-| P8 | `Onboarding.kt` | CindyCore | not started |
-| P8 | `Peaks.kt` | CindyCore | not started |
-| P8 | `Progress.kt` | CindyCore | not started |
-| P8 | `Reminder.kt` | CindyCore | not started |
-| P8 | `SpotlightMath.kt` | CindyCore | not started |
-| P8 | `StatTiles.kt` | split: `SessionTiles` → CindyCore (P8), the tile views → CindyTracker (P11) | not started |
-| P8 | `Streak.kt` | CindyCore | not started |
+| P8 | `Avatar.kt` | CindyCore | tests ported |
+| P8 | `Badges.kt` | CindyCore | tests ported |
+| P8 | `CalendarGrid.kt` | CindyCore | tests ported |
+| P8 | `Cheer.kt` | CindyCore | tests ported |
+| P8 | `Equivalents.kt` | CindyCore; whether an emoji can be drawn is the `EmojiFont` protocol | tests ported |
+| P8 | `FirstRun.kt` | CindyCore (the flags) over `UserDefaults`; the Kotlin has no test, so the Swift ones are new | ported |
+| P8 | `HudTour.kt` | CindyCore (the list of seven steps: control, title, words); the spotlight that draws it is P14. `HudTourTest` inflates the Android layout, so what is held to the Kotlin is the list, read from `HudTour.kt` | ported |
+| P8 | `Lifted.kt` | CindyCore | tests ported |
+| P8 | `Onboarding.kt` | CindyCore | tests ported |
+| P8 | `Peaks.kt` | CindyCore | tests ported |
+| P8 | `Progress.kt` | CindyCore | tests ported |
+| P8 | `Reminder.kt` | CindyCore | tests ported |
+| P8 | `SpotlightMath.kt` | CindyCore | tests ported |
+| P8 | `StatTiles.kt` | split: `SessionTiles` → CindyCore (P8, tests ported), the tile views → CindyTracker (P11) | tests ported |
+| P8 | `Streak.kt` | CindyCore | tests ported |
 | P9 | `Calories.kt` | CindyCore | not started |
 | P9 | `HeartRate.kt` | CindyCore (types, measurement parsing) | not started |
 | P9 | `HeartRateRecorder.kt` | CindyCore | not started |
