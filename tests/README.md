@@ -257,6 +257,23 @@ so a clip can be counted by eye:
 much it is trusted. Clips whose count is not yet verified stay `status: "candidate"` and assert
 nothing.
 
+## Scoring the same clips with Vision
+
+The iOS app does not use MoveNet; it uses Apple's Vision. `ios/CindyClips` scores the catalogues
+here with Vision and writes a report in `run_batch.py`'s schema to `tests/reports/ios/` (ignored
+with the rest of `tests/reports/`), and `compare_reports.py` lays the two beside each other by
+evaluation category:
+
+```sh
+.venv/bin/python tools/video_regression/run_batch.py
+swift run --package-path ios/CindyClips cindy-clips        # on a Mac
+.venv/bin/python tools/video_regression/compare_reports.py
+```
+
+Both read the same `tests/scenarios/*.json` and drive the same engine, so a difference between the
+two columns is the pose model and the crop that fed it. See `ios/README.md` for what the tool does
+and does not do (a clip it cannot find is skipped with the reason, never passed).
+
 ## Cindy mode
 
 A scenario with `"exercise": "cindy"` (or `--exercise cindy` ad hoc) scores the real progression

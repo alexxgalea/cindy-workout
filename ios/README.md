@@ -7,6 +7,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 | | Status |
 |---|---|
 | `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching | **725 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Progress, speech output, heart rate and Strava are not ported yet: see [PARITY.md](PARITY.md) |
+| `CindyClips` — scores the recorded clips with Vision, in the shape the Python harness scores them with MoveNet | **65 tests, passing** on Linux and in CI: the scoring is run through the real `run_batch.py` on the same frames and the reports are identical (see [Vision on the clips](#vision-on-the-clips)). **Not yet run on a clip**: it needs a Mac with the clips provisioned, which is yours to do |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
 The logic is a real, running, tested port. The app layer compiled on its first macOS build with
@@ -53,13 +54,17 @@ ios/
 │   │   ├── Countdown.swift       the countdown to REC, timed without a view
 │   │   ├── Coach.swift           when to speak about position and the clock
 │   │   └── Levels.swift          the rank ladder
+│   ├── Sources/CindyVision/      Vision → the 17 keypoints; the camera and the clip tool share it
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
 │   └── Tests/CindyCoreTests/     XCTest: every check, one class per area
+├── CindyClips/           Swift package — scores recorded clips with Vision (`cindy-clips`)
+│   ├── Sources/ClipScoring/      scenarios, the engine's calls, the report; no Apple frameworks
+│   ├── Sources/cindy-clips/      decodes a clip and runs Vision (macOS); elsewhere skips everything
+│   └── Tests/ClipScoringTests/   XCTest, on Linux
 └── CindyTracker/         the app — builds, never run on a device
     ├── PoseSource.swift          where the skeleton can come from
     ├── VisionPoseSource.swift    capture, Vision, filming: the real source
     ├── ReplayPoseSource.swift    a scripted body for the simulator (debug builds only)
-    ├── VisionPose.swift          Vision → the shared 17-point layout
     ├── CameraModel.swift         what the screens watch, fed by a PoseSource
     ├── WorkoutViewModel.swift    clock, setup, score, voice
     ├── ContentView.swift         camera, skeleton, HUD
@@ -71,9 +76,30 @@ ios/
 
 The one real difference from Android. iOS has `VNDetectHumanBodyPoseRequest` built into Vision,
 and its joints map one-for-one onto COCO-17 — so there is no `.tflite` to ship, nothing to
-download, and no 22 MB of model in the bundle. `VisionPose.swift` is the whole adapter.
+download, and no 22 MB of model in the bundle. `CindyVision` (`VisionFrameAnalyser` and
+`VisionPose`) is the whole adapter.
 
 Everything downstream of that file is the same logic as Android, arrived at the same way.
+
+## Vision on the clips
+
+The engine's thresholds were tuned on MoveNet's keypoints, and the app uses Vision's, so whether
+Vision counts as well on the angles this app exists for is a question for the clips, not for
+reasoning (decision D1 in [PLAN.md](PLAN.md)). `cindy-clips` scores the catalogues in
+`tests/scenarios/` with Vision, in the shape `tools/video_regression/run_batch.py` scores them with
+MoveNet, and `compare_reports.py` lays the two beside each other:
+
+```sh
+python3 tools/video_regression/fetch_youtube.py                    # the clips; they are not in git
+python3 tools/video_regression/run_batch.py                        # MoveNet  -> tests/reports/python-regression.json
+swift run --package-path ios/CindyClips cindy-clips                # Vision   -> tests/reports/ios/vision-regression.json
+python3 tools/video_regression/compare_reports.py --markdown table.md
+```
+
+A scenario whose clip is missing is **skipped, with the reason**, and counts as neither a pass nor a
+fail; `--require-fixtures` makes a run with any skip exit 3. On a machine that is not a Mac every
+scenario is skipped. The clip tool runs Vision through the same `VisionFrameAnalyser` the camera
+does, on every frame at the file's own rate, upright, as `run_batch.py` does.
 
 ## Building it
 

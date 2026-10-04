@@ -9,10 +9,14 @@ on:
     branches: [main]
     paths:
       - 'ios/**'
+      - 'tools/video_regression/compare_reports.py'
+      - 'tools/video_regression/test_compare_reports.py'
       - '.github/workflows/ios-app.yml'
   pull_request:
     paths:
       - 'ios/**'
+      - 'tools/video_regression/compare_reports.py'
+      - 'tools/video_regression/test_compare_reports.py'
       - '.github/workflows/ios-app.yml'
   workflow_dispatch:
 
@@ -72,6 +76,34 @@ jobs:
             echo "the release app contains the replay source"; exit 1
           fi
           echo "the release app has no replay source: $app"
+      # The tool that scores recorded clips with Vision. The runner has no clips, so this checks
+      # that it builds with the real Vision and AVFoundation, and that with nothing to score it
+      # says every scenario was skipped, with a reason, and none passed.
+      - name: Build the clip tool and run it with no clips
+        run: |
+          set -o pipefail
+          swift build --package-path ios/CindyClips
+          report="$RUNNER_TEMP/clips.json"
+          swift run --package-path ios/CindyClips cindy-clips --report "$report" | tee clips.log
+          grep -Eq '^0 passed, 0 failed, [1-9][0-9]* skipped of' clips.log
+          python3 - "$report" <<'PY'
+          import json, sys
+          scenarios = json.load(open(sys.argv[1]))["scenarios"]
+          assert scenarios, "no scenarios were reported"
+          for s in scenarios:
+              assert s["status"] == "skipped", f'{s["id"]} was {s["status"]}'
+              assert s["skipReason"], f'{s["id"]} was skipped without a reason'
+              assert s["observedReps"] == 0 and not s["frames"], f'{s["id"]} has results'
+          print(f"{len(scenarios)} scenarios, every one skipped with a reason")
+          PY
+          # A run that scored nothing must not be able to pass for one that did.
+          set +e
+          swift run --package-path ios/CindyClips cindy-clips --report "$report" --require-fixtures > /dev/null
+          code=$?
+          set -e
+          test "$code" -eq 3 || { echo "--require-fixtures exited $code, not 3"; exit 1; }
+      - name: Test the report comparison
+        run: python3 -m unittest tools/video_regression/test_compare_reports.py
       # The log is long and what matters is in the middle of it, so say it last.
       - name: Errors and test results
         if: always()
