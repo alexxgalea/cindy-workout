@@ -31,11 +31,28 @@ final class WorkoutViewModel: ObservableObject {
     /// the sheet is dismissed.
     @Published var finished: Attempt?
     @Published var voiceEnabled = true {
-        didSet { if !voiceEnabled { engine.stop() } }
+        didSet {
+            speaker.enabled = voiceEnabled
+            if !voiceEnabled { speaker.stop() }
+        }
     }
 
     /// Asks the camera to forget the crop that was following the athlete.
     var onResetCrop: (() -> Void)?
+
+    /// The language saved for the count, as a `VoicePacks` tag.
+    var voiceLanguage: String { VoicePacks.of(defaults.string(forKey: Self.languageKey)).tag }
+
+    /// Saves the language chosen in the sheet. Until it is saved, choosing only changes what the
+    /// speaker previews in, so a sheet dismissed without saving is put back with `restoreLanguage`.
+    func saveLanguage(_ tag: String) {
+        let pack = VoicePacks.of(tag)
+        defaults.set(pack.tag, forKey: Self.languageKey)
+        speaker.language = pack.tag
+    }
+
+    /// Puts the speaker back on the saved language.
+    func restoreLanguage() { speaker.language = voiceLanguage }
 
     private static let profileKey = "cindy.movementProfile"
     private static let languageKey = "voice_language"
@@ -49,8 +66,8 @@ final class WorkoutViewModel: ObservableObject {
     private let repTimes = RepTimesStore(directory: FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("rep_times", isDirectory: true))
-    private let engine = AVSpeechTtsEngine()
-    private let director: VoiceDirector
+    /// The voice. Held for the sheet that chooses its language too: both talk to the same engine.
+    let speaker = Speaker(engine: AVSpeechTtsEngine())
 
     private var timer: Timer?
     private var stopWasRunning = false
@@ -60,8 +77,7 @@ final class WorkoutViewModel: ObservableObject {
     init() {
         session = WorkoutSession(
             profile: Variations.decode(UserDefaults.standard.string(forKey: WorkoutViewModel.profileKey)))
-        director = VoiceDirector(engine: engine)
-        director.choose(VoicePacks.of(defaults.string(forKey: Self.languageKey)))
+        speaker.language = VoicePacks.of(defaults.string(forKey: Self.languageKey)).tag
         sync()
     }
 
@@ -128,9 +144,9 @@ final class WorkoutViewModel: ObservableObject {
         // A voice fetched since the screen last resumed is picked up here, before the first thing
         // is said; if the athlete's language is still not on the phone they are told why the count
         // is in English rather than left to wonder whether the setting took.
-        director.refresh()
-        if voiceEnabled && director.fallingBack {
-            show("The \(director.wanted.englishName) voice isn't on this phone yet. Counting in English.")
+        speaker.refresh()
+        if voiceEnabled && speaker.fallingBack {
+            show("The \(speaker.wanted.englishName) voice isn't on this phone yet. Counting in English.")
         }
         perform(session.enterSetup())
     }
@@ -221,7 +237,7 @@ final class WorkoutViewModel: ObservableObject {
             switch effect {
             case .say(let line): speak(line, queue: .replace)
             case .queue(let line): speak(line, queue: .append)
-            case .stopSpeaking: engine.stop()
+            case .stopSpeaking: speaker.stop()
             case .buzz(let ms): buzz(ms)
             case .toast(let text): show(text)
             case .resetCrop: onResetCrop?()
@@ -236,7 +252,10 @@ final class WorkoutViewModel: ObservableObject {
         // Silent while VoiceOver runs, as the Android screen is under TalkBack: two voices at once
         // is worse than one.
         guard voiceEnabled, !UIAccessibility.isVoiceOverRunning else { return }
-        director.speak(line, queue: queue, volume: 1)
+        switch queue {
+        case .replace: speaker.say(line)
+        case .append: speaker.queue(line)
+        }
     }
 
     /// Short per rep, longer per movement, longest per round.
