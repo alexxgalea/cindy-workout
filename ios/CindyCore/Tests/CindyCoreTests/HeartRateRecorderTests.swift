@@ -201,4 +201,15 @@ final class HeartRateRecorderTests: XCTestCase {
         XCTAssertEqual(second.startedAtMillis, 5)
         XCTAssertEqual(second.samples.last, HeartRateSample(1_000, 110))
     }
+
+    /// a reading after the trace is finished is not remembered for the next one
+    func testAReadingAfterTheTraceIsFinishedIsNotRememberedForTheNextOne() {
+        let rec = HeartRateRecorder()
+        rec.start(atElapsedMs: 0, wallMillis: 0)
+        rec.offer(bpm: 100, atElapsedMs: 1_000)
+        XCTAssertNotNil(rec.finish(atElapsedMs: 2_000))
+        rec.offer(bpm: 200, atElapsedMs: 3_000)  // ignored outright, as before the next start it would seed
+        rec.start(atElapsedMs: 4_000, wallMillis: 0)
+        XCTAssertEqual(rec.finish(atElapsedMs: 4_000)?.samples, [HeartRateSample(0, 100)])
+    }
 }
