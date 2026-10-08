@@ -89,6 +89,14 @@ final class ResultsDetailTests: XCTestCase {
         XCTAssertEqual(top.next, "Top of the ladder.")
     }
 
+    /// A session with nothing timed draws neither the round track nor the movement card.
+    func testNothingTimedDrawsNeitherTheTrackNorTheMovementCard() {
+        let nothing = Attempt(rounds: 0, reps: 0, atMillis: now, durationMs: 0, profile: .standard)
+        let p = page(nothing)
+        XCTAssertNil(p.track)
+        XCTAssertNil(p.movements)
+    }
+
     // MARK: the movement card
 
     /// Each movement's lines, in order: its time, the average of its complete sets and its share.
