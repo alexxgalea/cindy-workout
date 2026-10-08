@@ -158,6 +158,7 @@ Kotlin table and compare every number.
 | P11 | `RoundTrackView.kt` | CindyCore `RoundTrackModel` and CindyTracker `RoundTrackView` (`Canvas`) | tests ported |
 | P11 | `SessionTimelineView.kt` | CindyCore `SessionTimelineChartModel` and CindyTracker `SessionTimelineView` (`Canvas`) | tests ported |
 | P11 | `BodyProfile` (new; the Kotlin keeps these in `Profile`) | CindyCore `BodyProfile`: body weight, birth year and sex over `UserDefaults`, under the Android keys, so the results page can read them before P13 builds the profile | tests written for the port |
+| P11 | `SessionTimelineView.kt`, `snapPoints` | **Deliberate difference.** The Kotlin starts `lastKept` at `Long.MIN_VALUE`, and `clockMs - Long.MIN_VALUE` overflows, so on a lane that is not stepped (a heart rate with no reps) it keeps no point and the scrub never ticks. Swift keeps the first point, as the Kotlin comment says it should. Found by the P11 mutation check; the Android app still has it | tested in `ChartDetailTests` |
 | P11 | `ZoneBarView.kt` | CindyCore `ZoneBarModel` and CindyTracker `ZoneBarView` (`Canvas`) | tests ported |
 | P12 | `CalendarView.kt` | CindyTracker (iOS rewrite) | not started |
 | P12 | `ProgressChartView.kt` | CindyTracker (iOS rewrite) | not started |

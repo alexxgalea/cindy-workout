@@ -173,10 +173,13 @@ public final class SessionTimelineChartModel {
         var clocks: [Int64] = []
         // A line of samples a second apart would tick on every one of them, which is a buzz and
         // not a texture; a stepped lane's points are events, and each of those is worth a tick.
-        var lastKept = Int64.min
+        // The Kotlin starts `lastKept` at Long.MIN_VALUE, and `clockMs - Long.MIN_VALUE` overflows to
+        // a negative number, so on a line that is not stepped (a heart rate alone) it kept no point
+        // at all and the scrub never ticked. Here the first point is kept, as the comment says.
+        var lastKept: Int64?
         if let first {
             for run in first.runs {
-                for p in run.points where first.stepped || p.clockMs &- lastKept >= snapGapMs {
+                for p in run.points where first.stepped || lastKept.map({ p.clockMs - $0 >= snapGapMs }) ?? true {
                     clocks.append(p.clockMs)
                     lastKept = p.clockMs
                 }
