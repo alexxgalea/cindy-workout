@@ -30,12 +30,21 @@ Kotlin table and compare every number.
 | Kotlin test | Stays with | Because |
 |---|---|---|
 | `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
-| `ProgressChartViewTest` (4) | P11 | Taps and drags on the chart's `View` |
+| `ProgressChartViewTest` (4) | P12 | Taps and drags on the progress chart's `View`; the progress screen is P12, not the results page |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
 | `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
-| `SessionTimelineViewTest` (13) | P11 | The chart's `View` and its accessibility; the numbers it draws are `SessionTimelineTest`, ported here |
 | `ProfileHeartRateTest` (8) | P13 | The profile screen's heart-rate card |
 | `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
+
+### Kotlin tests that were ported in P11, and the ones that were not
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `RoundTrackViewTest` (7), `ZoneBarViewTest` (9), `RoundSplitsViewTest` (10), `SessionTimelineViewTest` (13) | CindyCore `RoundTrackModelTests`, `ZoneBarModelTests`, `RoundSplitsChartModelTests`, `SessionTimelineChartModelTests` | Robolectric drives each chart as a `View` with `MotionEvent`s. Each chart's touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 39 tests run on Linux against the same numbers. The drawing itself is not under test |
+| `ScreenSmokeTest`, the results parts | CindyCore `ResultsPageTests` (30) and `ResultsChartsTests` (23) | The assertions read facts off the inflated screen (which cards exist, what each says). `ResultsPageBuilder` decides those facts and the tests read them off the `ResultsPage` it returns |
+| `ScreenSmokeTest`, the leaderboard row, the day sheet's row and the chart OPEN tests | P12 | They open the results page from Progress |
+| `ScreenSmokeTest`, the body-weight and heart-rate details sheets | P13 | They are the profile's sheets; P11 has a minimal `BodyDetailsSheet` so the results page's two invitations work |
+| `ScreenSmokeTest`, the Strava row | P19 | Strava |
 
 ### Kotlin tests with no Swift counterpart
 
@@ -144,11 +153,12 @@ Kotlin table and compare every number.
 | P10 | `AndroidTtsEngine.kt` | CindyTracker `AVSpeechTtsEngine` over CindyCore `AppleVoiceMapping` (what a system voice is called to the director). iOS lists only installed voices, so a voice is never "not fetched" and none is online; the engine itself needs a device and is built by the macOS job | ported |
 | P10 | `LanguageGroup.kt` | CindyCore `LanguageGroupModel` (every decision: rows, taps, settling, downloads, previews, polling) and CindyTracker `LanguageSheet` (the SwiftUI list over it). "Manage voices" explains Settings → Accessibility → Spoken Content → Voices instead of opening an engine's screen | tests ported |
 | P10 | `Speaker.kt` | CindyCore `Speaker`, with its main-thread and background dispatchers injected; the workout now speaks through it | tests ported |
-| P11 | `ResultsActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P11 | `RoundSplitsView.kt` | CindyTracker (iOS rewrite) | not started |
-| P11 | `RoundTrackView.kt` | CindyTracker (iOS rewrite) | not started |
-| P11 | `SessionTimelineView.kt` | CindyTracker (iOS rewrite) | not started |
-| P11 | `ZoneBarView.kt` | CindyTracker (iOS rewrite) | not started |
+| P11 | `ResultsActivity.kt` | CindyCore `ResultsPageBuilder` / `ResultsModel` (which cards show, what each says, the comparison chosen, the lines that follow the fingers) and CindyTracker `ResultsView` over `ResultsViewModel` (the SwiftUI page). The Strava row (P19) and the PROGRESS button (P12) are not drawn; a reopened session offers DONE only, as on Android | tests ported; the screen is built by the macOS job and still wants a real session on an iPhone at the smallest and largest text sizes |
+| P11 | `RoundSplitsView.kt` | CindyCore `RoundSplitsChartModel` and CindyTracker `RoundSplitsView` (`Canvas`) | tests ported |
+| P11 | `RoundTrackView.kt` | CindyCore `RoundTrackModel` and CindyTracker `RoundTrackView` (`Canvas`) | tests ported |
+| P11 | `SessionTimelineView.kt` | CindyCore `SessionTimelineChartModel` and CindyTracker `SessionTimelineView` (`Canvas`) | tests ported |
+| P11 | `BodyProfile` (new; the Kotlin keeps these in `Profile`) | CindyCore `BodyProfile`: body weight, birth year and sex over `UserDefaults`, under the Android keys, so the results page can read them before P13 builds the profile | tests written for the port |
+| P11 | `ZoneBarView.kt` | CindyCore `ZoneBarModel` and CindyTracker `ZoneBarView` (`Canvas`) | tests ported |
 | P12 | `CalendarView.kt` | CindyTracker (iOS rewrite) | not started |
 | P12 | `ProgressChartView.kt` | CindyTracker (iOS rewrite) | not started |
 | P12 | `RecordsActivity.kt` | CindyTracker (iOS rewrite) | not started |
