@@ -77,6 +77,7 @@ struct ContentView: View {
     @State private var showSkipConfirm = false
     @State private var showPlacement = false
     @State private var showDebug = false
+    @State private var showLanguage = false
     /// Kept across launches: "Don't show this again" on the placement guide.
     @AppStorage("placementGuideSeen") private var placementSeen = false
 
@@ -103,6 +104,11 @@ struct ContentView: View {
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { ResultsView(attempt: $0) }
+        .sheet(isPresented: $showLanguage) {
+            LanguageSheet(speaker: workout.speaker, saved: workout.voiceLanguage,
+                          save: { workout.saveLanguage($0) },
+                          cancel: { workout.restoreLanguage() })
+        }
         .sheet(isPresented: $showPlacement) {
             PlacementGuideView(dontShowAgain: $placementSeen) {
                 showPlacement = false
@@ -138,6 +144,7 @@ struct ContentView: View {
                         .chip()
                     HStack(spacing: 6) {
                         chipButton("VOICE", on: workout.voiceEnabled) { workout.voiceEnabled.toggle() }
+                        chipButton("LANG", on: false) { showLanguage = true }
                         chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
                             camera.toggleRecording()
                         }
