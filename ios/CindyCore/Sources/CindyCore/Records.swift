@@ -274,9 +274,33 @@ public enum Records {
         text.unicodeScalars.allSatisfy { $0.properties.isWhitespace }
     }
 
-    /// Kotlin's `Int` is 32 bits, so a number that does not fit is not an `Int` there either.
-    static func toInt(_ text: String) -> Int? { Int32(text).map(Int.init) }
-    static func toLong(_ text: String) -> Int64? { Int64(text) }
+    /// Kotlin's `toIntOrNull` and `toLongOrNull`.
+    ///
+    /// Two things Swift's own parsers do differently. Kotlin reads any Unicode decimal digit
+    /// (`Character.digit`), so "١٢٣" is 123 there and nothing here; and an `Int` is 32 bits, so a
+    /// number that does not fit is not an `Int` in Kotlin either. Only the digits of the Basic
+    /// Multilingual Plane count, because Kotlin reads UTF-16 units one at a time.
+    static func toInt(_ text: String) -> Int? { asciiNumber(text).flatMap { Int32($0) }.map(Int.init) }
+    static func toLong(_ text: String) -> Int64? { asciiNumber(text).flatMap { Int64($0) } }
+
+    /// `text` with every decimal digit written as ASCII, or nil when it is not a sign and digits.
+    private static func asciiNumber(_ text: String) -> String? {
+        var out = ""
+        var first = true
+        for scalar in text.unicodeScalars {
+            defer { first = false }
+            if first && (scalar == "-" || scalar == "+") {
+                out.unicodeScalars.append(scalar)
+            } else if scalar.value <= 0xFFFF, scalar.properties.generalCategory == .decimalNumber,
+                      let digit = scalar.properties.numericValue {
+                out += String(Int(digit))
+            } else {
+                return nil
+            }
+        }
+        // A sign alone, or nothing at all, is not a number.
+        return out.isEmpty || out == "-" || out == "+" ? nil : out
+    }
 
     /// Best score first; ties broken by the more recent attempt.
     public static func ranked(_ attempts: [Attempt]) -> [Attempt] {

@@ -32,6 +32,10 @@ Kotlin table and compare every number.
 | `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
 | `ProgressChartViewTest` (4) | P11 | Taps and drags on the chart's `View` |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
+| `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
+| `SessionTimelineViewTest` (13) | P11 | The chart's `View` and its accessibility; the numbers it draws are `SessionTimelineTest`, ported here |
+| `ProfileHeartRateTest` (8) | P13 | The profile screen's heart-rate card |
+| `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
 
 ### What the Kotlin leans on, which Swift has no counterpart for
 
@@ -39,6 +43,8 @@ Kotlin table and compare every number.
 |---|---|---|---|
 | P8 | `java.time` (`LocalDate`, `YearMonth`, `DayOfWeek`, `ZoneId`, `ZonedDateTime`) | CindyCore `LocalCalendar`: a day count, no `Calendar` and no locale data, with `java.time`'s rule for a local time the clock skips or repeats. Checked against `java.time` on 8 zones through 2025 and 2026 | tests written for the port |
 | P8 | `String.format(Locale.US, "%,d" / "%.Nf")`, `Math.round`, `roundToInt`, `sortedBy`, `maxByOrNull` | CindyCore `JavaText`. `%.Nf` rounds the shortest digits half up, which is not what C does (this corrected P5's `javaFixed`), and was checked against a JVM on 326,044 values at five precisions | tests written for the port |
+| P9 | `kotlin.random.Random(seed)`, which `CaloriesTimelineTest` draws its 250 generated traces from | CindyFixtures `KotlinRandom`: xorwow, and Kotlin's own rejection loops for `nextInt(from, until)` and `nextLong(from, until)`, so the Swift test sees the traces the Kotlin one did. Checked against a JVM for both seeds the tests use, and for powers of two | tests written for the port |
+| P9 | `String.toIntOrNull` / `toLongOrNull` | `Records.toInt` / `toLong`, which now read any Unicode decimal digit, as Kotlin does (`Character.digit`). Swift's parsers read ASCII only, so a saved file with an Arabic-Indic number decoded on Android and not here. Found by the P9 cross-check; fixed for every codec at once | tests written for the port |
 
 ### Not a Kotlin file
 
@@ -121,12 +127,12 @@ Kotlin table and compare every number.
 | P8 | `SpotlightMath.kt` | CindyCore | tests ported |
 | P8 | `StatTiles.kt` | split: `SessionTiles` → CindyCore (P8, tests ported), the tile views → CindyTracker (P11) | tests ported |
 | P8 | `Streak.kt` | CindyCore | tests ported |
-| P9 | `Calories.kt` | CindyCore | not started |
-| P9 | `HeartRate.kt` | CindyCore (types, measurement parsing) | not started |
-| P9 | `HeartRateRecorder.kt` | CindyCore | not started |
-| P9 | `HeartRateStats.kt` | CindyCore | not started |
-| P9 | `HeartRateStore.kt` | CindyCore (trace format) + CindyTracker (file I/O) | not started |
-| P9 | `SessionTimeline.kt` | CindyCore | not started |
+| P9 | `Calories.kt` | CindyCore | tests ported |
+| P9 | `HeartRate.kt` | CindyCore (the types, the Bluetooth profile's UUIDs, measurement parsing, the `HeartRateSource` protocol). `HeartRateSources.forProfile` builds the Android Bluetooth source, so it comes with the Core Bluetooth one in P15 | tests ported |
+| P9 | `HeartRateRecorder.kt` | CindyCore | tests ported |
+| P9 | `HeartRateStats.kt` | CindyCore | tests ported |
+| P9 | `HeartRateStore.kt` | CindyCore: the trace format (`HeartRateTraces`) and the file store over a folder, as `RepTimesStore` is (nothing here needs the app target) | tests ported |
+| P9 | `SessionTimeline.kt` | CindyCore. Kotlin's `Readout` is `TimelineReadout`, because P8's progress `Readout` already holds the name | tests ported |
 | P10 | `AndroidTtsEngine.kt` | CindyTracker (iOS rewrite) | not started |
 | P10 | `LanguageGroup.kt` | CindyTracker (iOS rewrite) | not started |
 | P10 | `Speaker.kt` | CindyTracker (iOS rewrite) | not started |
