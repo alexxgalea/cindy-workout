@@ -33,8 +33,7 @@ final class AVSpeechTtsEngine: NSObject, TtsEngine, AVSpeechSynthesizerDelegate 
     }
 
     func availability(_ locale: DeviceLocale) -> LanguageAvailability {
-        AVSpeechSynthesisVoice.speechVoices().contains { DeviceLocale(languageTag: $0.language).language == locale.language }
-            ? .available : .notSupported
+        AppleVoiceMapping.availability(ofVoiceLanguages: AVSpeechSynthesisVoice.speechVoices().map(\.language), for: locale)
     }
 
     func setLanguage(_ locale: DeviceLocale) -> Bool {
@@ -67,15 +66,13 @@ final class AVSpeechTtsEngine: NSObject, TtsEngine, AVSpeechSynthesizerDelegate 
     func shutdown() { synthesizer.stopSpeaking(at: .immediate) }
 
     private static func engineVoice(_ v: AVSpeechSynthesisVoice) -> EngineVoice {
-        let locale = DeviceLocale(languageTag: v.language)
-        let quality: Int
+        let quality: AppleVoiceQuality
         switch v.quality {
-        case .premium: quality = 500
-        case .enhanced: quality = 400
-        default: quality = 300
+        case .premium: quality = .premium
+        case .enhanced: quality = .enhanced
+        default: quality = .standard
         }
-        return EngineVoice(name: v.identifier, language: locale.language, country: locale.country,
-                           installed: true, network: false, quality: quality, latency: 200)
+        return AppleVoiceMapping.engineVoice(identifier: v.identifier, languageTag: v.language, quality: quality)
     }
 
     // MARK: - AVSpeechSynthesizerDelegate
