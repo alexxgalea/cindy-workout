@@ -42,4 +42,21 @@ final class HeartRateTracesTests: XCTestCase {
         XCTAssertNil(HeartRateTraces.decode("garbage"))
         XCTAssertNil(HeartRateTraces.decode("hr2|1000\n0,88"))
     }
+
+    // MARK: written for the port
+
+    /// a line with more fields than the format has is skipped
+    func testALineWithMoreFieldsThanTheFormatHasIsSkipped() {
+        let trace = HeartRateTraces.decode("hr1|1000\np|1|2|3\n5,6,7\n10,90\np|4|5")!
+        XCTAssertEqual(trace.samples, [HeartRateSample(10, 90)])
+        XCTAssertEqual(trace.pauses, [HeartRatePause(atClockMs: 4, lengthMs: 5)])
+        XCTAssertNil(HeartRateTraces.decode("hr1|1000|extra\n0,88"))
+    }
+
+    /// pauses are written in order, ahead of the samples
+    func testPausesAreWrittenInOrderAheadOfTheSamples() {
+        let trace = HeartRateTrace(startedAtMillis: 7, samples: [HeartRateSample(1, 90), HeartRateSample(2, 91)],
+                                   pauses: [HeartRatePause(atClockMs: 5, lengthMs: 6), HeartRatePause(atClockMs: 8, lengthMs: 9)])
+        XCTAssertEqual(HeartRateTraces.encode(trace), "hr1|7\np|5|6\np|8|9\n1,90\n2,91")
+    }
 }

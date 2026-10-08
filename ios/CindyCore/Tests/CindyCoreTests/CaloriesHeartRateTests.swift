@@ -114,4 +114,31 @@ final class CaloriesHeartRateTests: XCTestCase {
         XCTAssertNil(Calories.estimate(totalReps: 300, activeMs: twentyMinutes, body: body(0.0, 30, .male), trace: nil))
         XCTAssertNil(Calories.estimate(totalReps: 300, activeMs: 0, body: b, trace: nil))
     }
+
+    // MARK: written for the port
+
+    /// a trace with the sex missing behaves as if there were none
+    func testATraceWithTheSexMissingBehavesAsIfThereWereNone() {
+        let b = body(70.0, 30, nil)
+        let trace = HeartRateTrace(startedAtMillis: 0, samples: [HeartRateSample(0, 150)], pauses: [])
+        XCTAssertFalse(b.canUseHeartRate)
+        let est = Calories.estimate(totalReps: 300, activeMs: twentyMinutes, body: b, trace: trace)!
+        XCTAssertEqual(Calories.burned(totalReps: 300, activeMs: twentyMinutes, bodyWeightKg: 70.0), est.kcal)
+        XCTAssertEqual(est.heartRateMs, 0)
+        XCTAssertFalse(Body(70.0, age: nil, sex: .male).canUseHeartRate)
+        XCTAssertFalse(Body(0.0, age: 30, sex: .male).canUseHeartRate)
+        XCTAssertTrue(Body(70.0, age: 30, sex: .unstated).canUseHeartRate)
+    }
+
+    /// a reading exactly at the end of the clock is outside it
+    func testAReadingExactlyAtTheEndOfTheClockIsOutsideIt() {
+        let b = body(70.0, 30, .male)
+        let trace = HeartRateTrace(startedAtMillis: 0, samples: [HeartRateSample(10_000, 150)], pauses: [])
+        let est = Calories.estimate(totalReps: 0, activeMs: 10_000, body: b, trace: trace)!
+        XCTAssertEqual(est.heartRateMs, 0)
+        XCTAssertFalse(est.usedHeartRate)
+        let points = Calories.timeline(totalReps: 0, activeMs: 10_000, body: b, trace: trace)
+        XCTAssertEqual(points.count, 2)
+        XCTAssertFalse(points[1].fromHeartRate)
+    }
 }

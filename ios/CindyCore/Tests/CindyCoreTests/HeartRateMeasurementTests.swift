@@ -52,4 +52,13 @@ final class HeartRateMeasurementTests: XCTestCase {
         XCTAssertTrue(HeartRateMeasurement.plausible(HeartRateReading(230, .unsupported)))
         XCTAssertTrue(HeartRateMeasurement.plausible(HeartRateReading(120, .unsupported)))
     }
+
+    // MARK: written for the port
+
+    /// the high byte of a uint16 reading counts for 256 each
+    func testTheHighByteOfAUint16ReadingCountsFor256Each() {
+        XCTAssertEqual(parse(0x01, 0x2C, 0x01)!.bpm, 300)
+        XCTAssertEqual(parse(0x01, 0x00, 0x02)!.bpm, 512)
+        XCTAssertEqual(parse(0x01, 0xFF, 0xFF)!.bpm, 65_535)
+    }
 }

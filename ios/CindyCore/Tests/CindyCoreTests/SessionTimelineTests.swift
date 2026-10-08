@@ -453,4 +453,138 @@ final class SessionTimelineTests: XCTestCase {
         XCTAssertEqual(perSet.legend(), "Dashed: your best. Reps are plotted per set for both sessions.")
         XCTAssertNotNil(perSet.reps)
     }
+
+    // MARK: written for the port: edges the Kotlin tests do not reach, found by mutating the source
+
+    /// a movement is named in the session's own plural, for each of the three
+    func testAMovementIsNamedInTheSessionsOwnPluralForEachOfTheThree() {
+        var a = attempt()
+        a.profile = CindyProfile(pull: .invertedRow, push: .standardPushUp, squat: .boxSquat)
+        let t = SessionTimeline.of(a, marks: nil, trace: nil)
+        XCTAssertEqual(t.readout(t.at(5_000)).title, "0:05 · Round 1 · Inverted rows")
+        XCTAssertEqual(t.readout(t.at(20_000)).title, "0:20 · Round 1 · Push-ups")
+        XCTAssertEqual(t.readout(t.at(45_000)).title, "0:45 · Round 1 · Box squats")
+
+        var standardPull = attempt()
+        standardPull.profile = CindyProfile(pull: .strictPullUp, push: .kneePushUp, squat: .airSquat)
+        let s = SessionTimeline.of(standardPull, marks: nil, trace: nil)
+        XCTAssertEqual(s.readout(s.at(5_000)).title, "0:05 · Round 1 · Pull-ups")
+        XCTAssertEqual(s.readout(s.at(45_000)).title, "0:45 · Round 1 · Squats")
+
+        var unknown = attempt()
+        unknown.profile = nil
+        let u = SessionTimeline.of(unknown, marks: nil, trace: nil)
+        XCTAssertEqual(u.readout(u.at(5_000)).title, "0:05 · Round 1 · Pull-ups")
+    }
+
+    /// one rep is said in the singular, and a hand count of nought is not mentioned
+    func testOneRepIsSaidInTheSingularAndAHandCountOfNoughtIsNotMentioned() {
+        let a = attempt()
+        let t = SessionTimeline.of(a, marks: marks(a), trace: nil)
+        XCTAssertEqual(t.readout(t.at(2_000)).detail, "1 rep")
+        XCTAssertEqual(t.readout(t.at(4_000)).detail, "2 reps")
+    }
+
+    /// a gap between the two sessions is rounded to the nearest second, halves away from zero
+    func testAGapBetweenTheTwoSessionsIsRoundedToTheNearestSecond() {
+        func gap(_ ms: Int64) -> String? {
+            let a = attempt(roundSplits: [60_000, 50_000])
+            let ref = attempt(at: 500, splits: [], roundSplits: [60_000 + ms, 50_000], counted: nil)
+            let t = SessionTimeline.of(a, marks: nil, trace: nil, reference: ref, referenceKind: .best)
+            return t.readout(t.at(60_000 + max(ms, 0) + 1)).detail?.components(separatedBy: " · ").last
+        }
+        XCTAssertEqual(gap(10_600), "round 1: 11 s ahead of your best")
+        XCTAssertEqual(gap(10_400), "round 1: 10 s ahead of your best")
+        XCTAssertEqual(gap(500), "round 1: 1 s ahead of your best")
+        XCTAssertEqual(gap(499), "round 1: level with your best")
+        XCTAssertEqual(gap(-499), "round 1: level with your best")
+        XCTAssertEqual(gap(-501), "round 1: 1 s behind your best")
+    }
+
+    /// rounds that run past the clock are cut at it
+    func testRoundsThatRunPastTheClockAreCutAtIt() {
+        let a = attempt(roundSplits: [60_000, 70_000])
+        let t = SessionTimeline.of(a, marks: nil, trace: nil)
+        XCTAssertEqual(t.roundEnds, [60_000, 120_000])
+        XCTAssertEqual(t.rounds.count, 2)
+    }
+
+    /// sets that run past the clock are cut at it, and none is left in progress
+    func testSetsThatRunPastTheClockAreCutAtItAndNoneIsLeftInProgress() {
+        let a = attempt(roundSplits: [], counted: nil, durationMs: 50_000)
+        let t = SessionTimeline.of(a, marks: nil, trace: nil)
+        XCTAssertEqual(t.sets.map { $0.endMs }, [10_000, 30_000, 50_000, 50_000, 50_000, 50_000])
+        XCTAssertFalse(t.sets.contains { $0.inProgress })
+    }
+
+    /// a mark a hair past the clock is drawn on it
+    func testAMarkAHairPastTheClockIsDrawnOnIt() {
+        let a = attempt(splits: [], roundSplits: [], counted: 2, durationMs: 10_000)
+        let late = [RepMark(5_000, .pullup, manual: false), RepMark(10_500, .pullup, manual: false)]
+        let t = SessionTimeline.of(a, marks: late, trace: nil)
+        XCTAssertTrue(t.reps!.exact)
+        XCTAssertEqual(t.reps!.points.map { $0.clockMs }, [0, 5_000, 10_000])
+    }
+
+    /// sets that add up to exactly what was counted are plotted, with no extra point at the stop
+    func testSetsThatAddUpToExactlyWhatWasCountedArePlottedWithNoExtraPointAtTheStop() {
+        let a = attempt(counted: 60)
+        let series = SessionTimeline.of(a, marks: nil, trace: nil).reps!
+        XCTAssertFalse(series.exact)
+        XCTAssertEqual(series.points.last, RepPoint(110_000, 60, 0))
+    }
+
+    /// the hand count at the stop never exceeds the total counted
+    func testTheHandCountAtTheStopNeverExceedsTheTotalCounted() {
+        let a = attempt(manual: 100)
+        let series = SessionTimeline.of(a, marks: nil, trace: nil).reps!
+        XCTAssertEqual(series.points.last, RepPoint(120_000, 63, 63))
+    }
+
+    /// sets with no reps in them draw no line
+    func testSetsWithNoRepsInThemDrawNoLine() {
+        let empty = [SetSplit(.pullup, 10_000, 0, 0), SetSplit(.pushup, 10_000, 0, 0)]
+        let a = attempt(splits: empty, roundSplits: [], counted: nil)
+        XCTAssertNil(SessionTimeline.of(a, marks: nil, trace: nil).reps)
+    }
+
+    /// a round's average counts the samples on both of its edges
+    func testARoundsAverageCountsTheSamplesOnBothOfItsEdges() {
+        let t = SessionTimeline.of(attempt(), marks: nil, trace: trace((0, 100), (60_000, 120), (110_000, 140)))
+        XCTAssertEqual(t.averageBpm(0, 60_000), 110)
+        XCTAssertEqual(t.averageBpm(60_000, 110_000), 130)
+    }
+
+    /// a mean that ends in a half rounds up
+    func testAMeanThatEndsInAHalfRoundsUp() {
+        let t = SessionTimeline.of(attempt(), marks: nil, trace: trace((1_000, 100), (2_000, 101)))
+        XCTAssertEqual(t.averageBpm(0, 60_000), 101)
+    }
+
+    /// seconds under a minute are said as seconds, and a whole minute as a minute
+    func testSecondsUnderAMinuteAreSaidAsSecondsAndAWholeMinuteAsAMinute() {
+        XCTAssertEqual(SessionTimeline.shortSeconds(59), "59 s")
+        XCTAssertEqual(SessionTimeline.shortSeconds(60), "1 min 0 s")
+    }
+
+    /// a stretch that starts at the cursor is not before it
+    func testAStretchThatStartsAtTheCursorIsNotBeforeIt() {
+        let points = [CaloriePoint(0, 0.0, fromHeartRate: false), CaloriePoint(60_000, 60.0, fromHeartRate: true),
+                      CaloriePoint(120_000, 100.0, fromHeartRate: false)]
+        let a = Attempt(rounds: 2, reps: 3, atMillis: 1_000, durationMs: 120_000, roundSplitsMs: [60_000, 50_000],
+                        countedReps: 63, untrackedMs: Records.untrackedToleranceMs, setSplits: [])
+        let t = SessionTimeline.of(a, marks: nil, trace: nil, calories: points)
+        // By 1:00 only the measured stretch is behind it: no "at least". A moment later the
+        // estimated one has begun.
+        XCTAssertFalse(t.readout(t.at(60_000)).detail!.contains("at least"))
+        XCTAssertTrue(t.readout(t.at(60_001)).detail!.contains("at least"))
+    }
+
+    /// the calories at a moment are rounded to the nearest, not cut
+    func testTheCaloriesAtAMomentAreRoundedToTheNearestNotCut() {
+        let points = [CaloriePoint(0, 0.0, fromHeartRate: false), CaloriePoint(120_000, 100.0, fromHeartRate: false)]
+        let a = Attempt(rounds: 0, reps: 0, atMillis: 1_000, durationMs: 120_000, setSplits: [])
+        let t = SessionTimeline.of(a, marks: nil, trace: nil, calories: points)
+        XCTAssertEqual(t.at(75_000).kcal, 63)   // 62.5
+    }
 }

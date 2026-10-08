@@ -229,4 +229,49 @@ final class HeartRateStatsTests: XCTestCase {
         XCTAssertNil(summary(trace(steady(0, 60, 150)), duration: 60_000)!.hardestRound)
         XCTAssertNotNil(summary(trace(steady(0, 60, 150)), duration: 60_000))
     }
+
+    // MARK: written for the port: edges the Kotlin tests do not reach, found by mutating the source
+
+    /// a tie to the millisecond goes to the harder zone
+    func testATieToTheMillisecondGoesToTheHarderZone() {
+        // 60 s at 100 bpm (warm-up), then 55 one-second readings and a last that holds five: 60 s
+        // at 160 (threshold). The Kotlin test of this name is 60 against 65, which is not a tie.
+        let t = trace(steady(0, 60, 100) + steady(60, 56, 160))
+        let s = summary(t, duration: 600_000)!
+        let ms = Dictionary(uniqueKeysWithValues: s.zones!.map { ($0.zone, $0.ms) })
+        XCTAssertEqual(ms[.warmUp], 60_000)
+        XCTAssertEqual(ms[.threshold], 60_000)
+        XCTAssertEqual(s.verdict, "Longest in Z4 Threshold: 1:00 of the 2:00 your watch covered.")
+    }
+
+    /// an age too high to leave a positive maximum has no zones
+    func testAnAgeTooHighToLeaveAPositiveMaximumHasNoZones() {
+        for age in [300, 297] {   // 208 - 0.7 x age is -2 and 0.1: rounded, nothing above zero
+            let s = summary(trace((0, 150)), age: age)!
+            XCTAssertNil(s.estimatedMaxBpm, "age \(age)")
+            XCTAssertNil(s.zones)
+            XCTAssertNil(s.verdict)
+        }
+        XCTAssertEqual(summary(trace((0, 150)), age: 296)!.estimatedMaxBpm, 1)   // 0.8 rounds to 1
+    }
+
+    /// the zones carry their names
+    func testTheZonesCarryTheirNames() {
+        XCTAssertEqual(HeartZone.allCases.map { $0.label }, ["Warm-up", "Easy", "Aerobic", "Threshold", "Maximum"])
+        XCTAssertEqual(HeartZone.allCases.map { $0.short }, ["Z1", "Z2", "Z3", "Z4", "Z5"])
+    }
+
+    /// a reading that a later one at the same moment cuts short does not count towards the maximum
+    func testAReadingThatALaterOneAtTheSameMomentCutsShortDoesNotCountTowardsTheMaximum() {
+        let s = summary(trace((1_000, 200), (1_000, 120)), duration: 60_000)!
+        XCTAssertEqual(s.maxBpm, 120)
+        XCTAssertEqual(s.coveredMs, 5_000)
+    }
+
+    /// the average is rounded to the nearest beat, not cut
+    func testTheAverageIsRoundedToTheNearestBeatNotCut() {
+        // 1 s at 100, then 5 s at 101: 605 / 6 = 100.83.
+        let s = summary(trace((0, 100), (1_000, 101)), duration: 60_000)!
+        XCTAssertEqual(s.avgBpm, 101)
+    }
 }

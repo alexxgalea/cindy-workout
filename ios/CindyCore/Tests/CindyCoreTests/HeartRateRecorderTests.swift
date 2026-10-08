@@ -116,4 +116,89 @@ final class HeartRateRecorderTests: XCTestCase {
         rec.start(atElapsedMs: 2_000, wallMillis: 0)
         XCTAssertNil(rec.finish(atElapsedMs: 2_000))
     }
+
+    // MARK: written for the port: edges the Kotlin tests do not reach, found by mutating the source
+
+    /// a reading exactly five seconds old still seeds, and one a millisecond older does not
+    func testAReadingExactlyFiveSecondsOldStillSeedsAndOneMillisecondOlderDoesNot() {
+        let at = HeartRateRecorder()
+        at.offer(bpm: 88, atElapsedMs: 1_000)
+        at.start(atElapsedMs: 6_000, wallMillis: 0)
+        XCTAssertEqual(at.finish(atElapsedMs: 6_000)?.samples, [HeartRateSample(0, 88)])
+
+        let past = HeartRateRecorder()
+        past.offer(bpm: 88, atElapsedMs: 1_000)
+        past.start(atElapsedMs: 6_001, wallMillis: 0)
+        XCTAssertNil(past.finish(atElapsedMs: 6_001))
+    }
+
+    /// two readings exactly 900 ms apart are both kept, and 899 ms apart only the first
+    func testTwoReadingsExactlyNineHundredMsApartAreBothKept() {
+        let kept = HeartRateRecorder()
+        kept.start(atElapsedMs: 0, wallMillis: 0)
+        kept.offer(bpm: 100, atElapsedMs: 0)
+        kept.offer(bpm: 110, atElapsedMs: 900)
+        XCTAssertEqual(kept.finish(atElapsedMs: 900)?.samples.map { $0.clockMs }, [0, 900])
+
+        let dropped = HeartRateRecorder()
+        dropped.start(atElapsedMs: 0, wallMillis: 0)
+        dropped.offer(bpm: 100, atElapsedMs: 0)
+        dropped.offer(bpm: 110, atElapsedMs: 899)
+        XCTAssertEqual(dropped.finish(atElapsedMs: 899)?.samples.map { $0.clockMs }, [0])
+    }
+
+    /// the clock never runs backward, even when a late callback hands in an earlier time
+    func testTheClockNeverRunsBackwardEvenWhenALateCallbackHandsInAnEarlierTime() {
+        let rec = HeartRateRecorder()
+        rec.start(atElapsedMs: 0, wallMillis: 0)
+        rec.offer(bpm: 120, atElapsedMs: 3_000) // clock 3000
+        rec.pause(atElapsedMs: 2_000) // a stale time: the clock was already at 3000
+        rec.resume(atElapsedMs: 5_000)
+        let trace = rec.finish(atElapsedMs: 5_000)!
+        XCTAssertEqual(trace.pauses, [HeartRatePause(atClockMs: 3_000, lengthMs: 3_000)])
+    }
+
+    /// pause and resume do nothing out of turn
+    func testPauseAndResumeDoNothingOutOfTurn() {
+        let idle = HeartRateRecorder()
+        idle.pause(atElapsedMs: 1_000)   // nothing is running yet
+        idle.resume(atElapsedMs: 2_000)  // and nothing is paused
+        idle.start(atElapsedMs: 3_000, wallMillis: 0)
+        idle.offer(bpm: 100, atElapsedMs: 4_000)
+        let trace = idle.finish(atElapsedMs: 4_000)!
+        XCTAssertEqual(trace.pauses, [])
+        XCTAssertEqual(trace.samples, [HeartRateSample(1_000, 100)])
+
+        let twice = HeartRateRecorder()
+        twice.start(atElapsedMs: 0, wallMillis: 0)
+        twice.offer(bpm: 100, atElapsedMs: 100)
+        twice.pause(atElapsedMs: 1_000)
+        twice.pause(atElapsedMs: 2_000)  // already paused: the first stands
+        twice.resume(atElapsedMs: 5_000)
+        twice.resume(atElapsedMs: 6_000) // already running
+        XCTAssertEqual(twice.finish(atElapsedMs: 6_000)?.pauses, [HeartRatePause(atClockMs: 1_000, lengthMs: 4_000)])
+    }
+
+    /// nothing is recorded once the trace is finished
+    func testNothingIsRecordedOnceTheTraceIsFinished() {
+        let rec = HeartRateRecorder()
+        rec.start(atElapsedMs: 0, wallMillis: 0)
+        rec.offer(bpm: 100, atElapsedMs: 1_000)
+        XCTAssertNotNil(rec.finish(atElapsedMs: 2_000))
+        rec.offer(bpm: 200, atElapsedMs: 3_000)
+        XCTAssertEqual(rec.finish(atElapsedMs: 4_000)?.samples, [HeartRateSample(1_000, 100)])
+    }
+
+    /// a second trace starts its clock again
+    func testASecondTraceStartsItsClockAgain() {
+        let rec = HeartRateRecorder()
+        rec.start(atElapsedMs: 0, wallMillis: 0)
+        rec.offer(bpm: 100, atElapsedMs: 10_000)
+        XCTAssertNotNil(rec.finish(atElapsedMs: 10_000))
+        rec.start(atElapsedMs: 100_000, wallMillis: 5)
+        rec.offer(bpm: 110, atElapsedMs: 101_000)
+        let second = rec.finish(atElapsedMs: 101_000)!
+        XCTAssertEqual(second.startedAtMillis, 5)
+        XCTAssertEqual(second.samples.last, HeartRateSample(1_000, 110))
+    }
 }
