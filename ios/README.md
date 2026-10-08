@@ -46,6 +46,9 @@ ios/
 │   │   ├── VoiceLine.swift       what the voice says, as facts
 │   │   ├── Phrasebook*.swift     the same facts as words, in eleven languages
 │   │   ├── VoiceDirector.swift   which voice speaks, and keeping words and voice in agreement
+│   │   ├── Speaker.swift         the voice's switches, volume, and its main and background threads
+│   │   ├── LanguageGroupModel.swift  the language list: rows, taps, downloads, previews
+│   │   ├── AppleVoiceMapping.swift   what a system voice is called to the director
 │   │   ├── OverlayTransform.swift  the frame onto the screen and the recording
 │   │   ├── RoiTracker.swift      where to look next, and Vision's side of it
 │   │   ├── FrameHandoff.swift    analysis thread to main thread without losing a rep
@@ -78,6 +81,7 @@ ios/
     ├── ReplayPoseSource.swift    a scripted body for the simulator (debug builds only)
     ├── CameraModel.swift         what the screens watch, fed by a PoseSource
     ├── WorkoutViewModel.swift    clock, setup, score, voice
+    ├── LanguageSheet.swift       the voice's language list
     ├── ContentView.swift         camera, skeleton, HUD
     └── ResultsView.swift         score, level, splits
 └── CindyTrackerUITests/  drives the app in the simulator against the scripted body

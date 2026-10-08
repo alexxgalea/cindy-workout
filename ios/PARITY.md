@@ -37,6 +37,14 @@ Kotlin table and compare every number.
 | `ProfileHeartRateTest` (8) | P13 | The profile screen's heart-rate card |
 | `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
 
+### Kotlin tests with no Swift counterpart
+
+| Kotlin test | Because |
+|---|---|
+| `AndroidTtsEngineTest` (13) | Robolectric's shadow of Android's `TextToSpeech`: what its constants mean. iOS has none of them; the translation it does have is `AppleVoiceMapping`, held by `AppleVoiceMappingTests` (written for the port) |
+| `SpeakerTest`, `the default stack says something once Android says it is ready` | Drives the real Android engine. `AVSpeechTtsEngine` needs a device |
+| `SpeakerTest`, `an engine that fails to answer does not stop the questions after it`; `LanguageGroupTest`, `an engine that stays silent is asked less often` | Kotlin's engine could throw from `getVoices`. A Swift `TtsEngine` cannot throw, so both are held with an engine that answers nothing (and one that never connects) instead, as their doc comments say |
+
 ### What the Kotlin leans on, which Swift has no counterpart for
 
 | Phase | Kotlin / JDK | Lands in | Status |
@@ -133,9 +141,9 @@ Kotlin table and compare every number.
 | P9 | `HeartRateStats.kt` | CindyCore | tests ported |
 | P9 | `HeartRateStore.kt` | CindyCore: the trace format (`HeartRateTraces`) and the file store over a folder, as `RepTimesStore` is (nothing here needs the app target) | tests ported |
 | P9 | `SessionTimeline.kt` | CindyCore. Kotlin's `Readout` is `TimelineReadout`, because P8's progress `Readout` already holds the name | tests ported |
-| P10 | `AndroidTtsEngine.kt` | CindyTracker (iOS rewrite) | not started |
-| P10 | `LanguageGroup.kt` | CindyTracker (iOS rewrite) | not started |
-| P10 | `Speaker.kt` | CindyTracker (iOS rewrite) | not started |
+| P10 | `AndroidTtsEngine.kt` | CindyTracker `AVSpeechTtsEngine` over CindyCore `AppleVoiceMapping` (what a system voice is called to the director). iOS lists only installed voices, so a voice is never "not fetched" and none is online; the engine itself needs a device and is built by the macOS job | ported |
+| P10 | `LanguageGroup.kt` | CindyCore `LanguageGroupModel` (every decision: rows, taps, settling, downloads, previews, polling) and CindyTracker `LanguageSheet` (the SwiftUI list over it). "Manage voices" explains Settings → Accessibility → Spoken Content → Voices instead of opening an engine's screen | tests ported |
+| P10 | `Speaker.kt` | CindyCore `Speaker`, with its main-thread and background dispatchers injected; the workout now speaks through it | tests ported |
 | P11 | `ResultsActivity.kt` | CindyTracker (iOS rewrite) | not started |
 | P11 | `RoundSplitsView.kt` | CindyTracker (iOS rewrite) | not started |
 | P11 | `RoundTrackView.kt` | CindyTracker (iOS rewrite) | not started |
