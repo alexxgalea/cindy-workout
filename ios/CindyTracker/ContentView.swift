@@ -103,7 +103,7 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
-        .sheet(item: $workout.finished) { ResultsView(attempt: $0) }
+        .sheet(item: $workout.finished) { ResultsView($0) }
         .sheet(isPresented: $showLanguage) {
             LanguageSheet(speaker: workout.speaker, saved: workout.voiceLanguage,
                           save: { workout.saveLanguage($0) },

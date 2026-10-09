@@ -29,7 +29,7 @@ final class WorkoutViewModel: ObservableObject {
     @Published private(set) var toast: String?
     /// The attempt the results sheet is showing. Settable because `.sheet(item:)` clears it when
     /// the sheet is dismissed.
-    @Published var finished: Attempt?
+    @Published var finished: ResultsRequest?
     @Published var voiceEnabled = true {
         didSet {
             speaker.enabled = voiceEnabled
@@ -226,7 +226,8 @@ final class WorkoutViewModel: ObservableObject {
         if records.add(done.attempt) {
             try? repTimes.save(atMillis: done.attempt.atMillis, done.marks)
         }
-        finished = done.attempt
+        finished = ResultsRequest(attempt: done.attempt, stoppedEarly: done.stoppedEarly,
+                                  heelsFlatSpotted: done.heelsFlatSpotted, reviewing: false)
         perform(done.effects)
     }
 
