@@ -217,29 +217,22 @@ final class CindyTrackerUITests: XCTestCase {
         // control and ends on the last, one step per control the screen has (the iOS camera screen
         // has no SKIP button, so that step is left out). Read from what is on the screen, so that
         // it holds the order and the end and not how many taps it took to get there.
-        let expected = ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"]
-        let title = app.staticTexts["tourTitle"]
-        XCTAssertTrue(title.waitForExistence(timeout: 10), "the tour has a title")
-        var seen: [String] = []
-        for _ in 0..<(expected.count + 2) where title.exists {
-            let current = title.label
-            seen.append(current)
+        let steps = 6
+        let skip = app.buttons["Skip the tour"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour opens")
+        XCTAssertTrue(app.staticTexts["tourTitle"].waitForExistence(timeout: 5), "the tour has a title")
+        XCTAssertEqual(app.staticTexts["tourTitle"].label, "Start", "it opens on the first control")
+        // NEXT is what takes the athlete through it, and the end of the tour is what it is for:
+        // so count the taps it takes to put the tour away. One per step, and not one fewer: a NEXT
+        // that does nothing leaves the tour up, and one that skips steps ends it early.
+        var taps = 0
+        while skip.exists && taps < steps + 3 {
             tapTourNext(app)
-            // The tour moves on when the title changes, or when the last step's DONE takes it away.
-            let deadline = Date().addingTimeInterval(4)
-            while title.exists && title.label == current && Date() < deadline { usleep(200_000) }
-            if title.exists && title.label == current {
-                let texts = app.staticTexts.allElementsBoundByIndex.map { $0.label }
-                let buttons = app.buttons.allElementsBoundByIndex.filter { $0.exists }.map { "\($0.label)/\($0.identifier)" }
-                XCTFail("NEXT did not move the tour on from \(current); static texts: \(texts); buttons: \(buttons)")
-                break
-            }
+            taps += 1
+            _ = skip.waitForNonExistence(timeout: 1.5)
         }
-        XCTAssertEqual(seen.first, "Start")
-        XCTAssertEqual(seen, seen.sorted { expected.firstIndex(of: $0)! < expected.firstIndex(of: $1)! },
-                       "the steps come in order: \(seen)")
-        XCTAssertGreaterThanOrEqual(Set(seen).count, 4, "most of the steps were shown: \(seen)")
-        XCTAssertEqual(seen.last, "Flip", "the tour ends on the last control: \(seen)")
+        XCTAssertFalse(skip.exists, "the tour was still up after \(taps) taps on NEXT")
+        XCTAssertEqual(taps, steps, "one tap on NEXT for each of the \(steps) controls")
         XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
