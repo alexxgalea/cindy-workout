@@ -32,7 +32,6 @@ Kotlin table and compare every number.
 | `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
 | `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
-| `ProfileHeartRateTest` (8) | P13 | The profile screen's heart-rate card |
 | `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
 
 ### Kotlin tests that were ported in P11, and the ones that were not
@@ -41,7 +40,6 @@ Kotlin table and compare every number.
 |---|---|---|
 | `RoundTrackViewTest` (7), `ZoneBarViewTest` (9), `RoundSplitsViewTest` (10), `SessionTimelineViewTest` (13) | CindyCore `RoundTrackModelTests`, `ZoneBarModelTests`, `RoundSplitsChartModelTests`, `SessionTimelineChartModelTests` | Robolectric drives each chart as a `View` with `MotionEvent`s. Each chart's touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 39 tests run on Linux against the same numbers. The drawing itself is not under test |
 | `ScreenSmokeTest`, the results parts | CindyCore `ResultsPageTests` (30) and `ResultsChartsTests` (23) | The assertions read facts off the inflated screen (which cards exist, what each says). `ResultsPageBuilder` decides those facts and the tests read them off the `ResultsPage` it returns |
-| `ScreenSmokeTest`, the body-weight and heart-rate details sheets | P13 | They are the profile's sheets; P11 has a minimal `BodyDetailsSheet` so the results page's two invitations work |
 | `ScreenSmokeTest`, the Strava row | P19 | Strava |
 
 ### Kotlin tests that were ported in P12
@@ -50,7 +48,21 @@ Kotlin table and compare every number.
 |---|---|---|
 | `CalendarViewTest` (4), `ProgressChartViewTest` (4) | CindyCore `CalendarModelTests`, `ProgressChartModelTests` | Robolectric drives each as a `View` with `MotionEvent`s. Touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 8 tests run on Linux against the same numbers |
 | `ScreenSmokeTest`, the Progress parts: the records screen builds (empty, with history, across categories), the chart card switches metric and range and handles a range with no sessions, a trained day opens its sessions, a leaderboard row, a day-sheet row and the chart's OPEN button each open that session | CindyCore `ProgressPageTests` (9) | The assertions read facts off the inflated screen. `ProgressPageBuilder` and `ProgressModel` decide those facts, and the tests read them off the `ProgressPage` they return; "opens that session" is the `atMillis` a row or button asks to reopen |
-| `AccountScreenTest`, the three that open `RecordsActivity` (the leaderboard says "You" until there is a name; the CLEAR sheet says the badges go and the name and photo stay; CLEAR keeps the name and photo) | P13 | They belong to its 58, with the profile that holds the name and photo. The facts are already held here: `ProgressDetailTests` checks the leaderboard's "You" and name, and the wording of the CLEAR question |
+
+### Kotlin tests that were ported in P13
+
+The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `ProfileHeartRateTest` (8) and `ProfileVoiceLanguageTest` (5), plus the menu parts of `ScreenSmokeTest`. Robolectric inflated each screen and read its views; the same facts are read off the page the core builds, each test named after the Kotlin one, and the part that is a platform's (a view drawn or measured, a picker started, a screen opened) stays with the SwiftUI layer.
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `ProfileHeartRateTest` (8), `ProfileVoiceLanguageTest` (5) | CindyCore `ProfileTests` | Pure settings over `UserDefaults` instead of `SharedPreferences`, in a throwaway suite |
+| `HeelsFlatScreensTest` (11) | CindyCore `HeelsFlatScreensTests` | The sheet's setting is `MovementsForm`, the row `MenuBuilder`, the results sheet `HeelsFlatSheet` |
+| `AccountScreenTest`, 25 of 34 | CindyCore `AccountPageTests` and `AvatarFilesTests` | The page is `AccountBuilder`, the name `NameForm`, the photo's sheet `PhotoSheet`, its file `AvatarFiles`, the menu's card `MenuBuilder`, and the badges on the results page `ResultsPageBuilder` |
+| `AccountScreenTest`, 2 of 34: the leaderboard says "You" until there is a name; the CLEAR sheet says the badges go and the name and photo stay | CindyCore `ProgressDetailTests` (P12) | They open `RecordsActivity`, which P12 ported |
+| `AccountScreenTest`, 7 of 34: choosing a photo opens the system picker; DONE closes the screen; the profile card opens the profile screen; the four `AvatarView` tests (it draws, it is a row's size, it is square, it is decoration until made a button) | CindyTracker, built by the macOS job | They start a screen or measure and draw a view. The same facts are held in the SwiftUI: a `PhotosPicker`, a `dismiss`, a `NavigationLink`, an `AvatarView` that is a square and hidden from VoiceOver |
+| `ScreenSmokeTest`, the menu builds (also mid-workout, with a track chosen, with a watch paired, with the reminder on) and the voice row names its language | CindyCore `MenuPageTests` | Every row's subtitle, for every state |
+| `ScreenSmokeTest`, the body-weight and heart-rate details sheets | CindyCore `ProfileFormsTests` | `BodyWeightForm`, `HeartRateDetailsForm` and `MovementsForm` hold what each asks, refuses and keeps |
+| `ScreenSmokeTest`, the heart-rate sheet (with and without a watch), the reminder row's sheet, the voice sheet's language list | P15, P18, P10 | The Bluetooth link, the scheduler and the language list (`LanguageGroupModelTests`, P10) |
 
 ### Kotlin tests with no Swift counterpart
 
@@ -126,10 +138,10 @@ Kotlin table and compare every number.
 | P5 | `OverlayView.kt` | CindyTracker (iOS rewrite: `SkeletonOverlay`) | ported |
 | P5 | `PoseDetector.kt` | CindyCore `RoiTracker` (crop decisions), CindyVision `VisionFrameAnalyser` (the crop, Vision, following the body) and CindyTracker `VisionPoseSource`; the model, the model-input fill and the brightness lift (`softGain`) are not ported | ported |
 | P5 | `YuvCrop.kt` | not ported — Android YUV path; Vision's `regionOfInterest` replaces it | not ported |
-| P6 | `CindySheet.kt` | CindyTracker (iOS rewrite): native `confirmationDialog`s for skip and stop; the styled sheet lands with P13's menu | behind |
+| P6 | `CindySheet.kt` | CindyTracker (iOS rewrite): native `confirmationDialog`s for skip and stop, and system sheets (`NavigationStack` with Save and Cancel) for the menu's choices; the Android sheet's own styling is not copied | ported as native |
 | P6 | `CindyViews.kt` | CindyTracker (iOS rewrite) | not started |
 | P6 | `CountdownView.kt` | CindyCore `Countdown` (the timing, ported with its tests); the ring and digit are drawn with filming | tests ported |
-| P6 | `Dialogs.kt` | CindyTracker (iOS rewrite) | not started |
+| P6 | `Dialogs.kt` | CindyCore `ProfileForms` (`BodyWeightForm`, `HeartRateDetailsForm`, `MovementsForm`; what each sheet asks, refuses and keeps) and CindyTracker `ProfileSheets` (the fields and lists). A comma is accepted for the point in a weight, because the number pad of a phone set to many languages types one | tests written for the port |
 | P6 | `LaunchView.kt` | CindyTracker (iOS rewrite) | not started |
 | P6 | `MainActivity.kt` | CindyCore `WorkoutSession` (the decisions) and CindyTracker `WorkoutViewModel`/`ContentView` (the plumbing); music, heart rate, filming, the tour, and camera-moved detection land in later phases | behind |
 | P6 | `PlacementFacts.kt` | CindyCore (the three facts) | ported |
@@ -163,18 +175,17 @@ Kotlin table and compare every number.
 | P11 | `RoundSplitsView.kt` | CindyCore `RoundSplitsChartModel` and CindyTracker `RoundSplitsView` (`Canvas`) | tests ported |
 | P11 | `RoundTrackView.kt` | CindyCore `RoundTrackModel` and CindyTracker `RoundTrackView` (`Canvas`) | tests ported |
 | P11 | `SessionTimelineView.kt` | CindyCore `SessionTimelineChartModel` and CindyTracker `SessionTimelineView` (`Canvas`) | tests ported |
-| P11 | `BodyProfile` (new; the Kotlin keeps these in `Profile`) | CindyCore `BodyProfile`: body weight, birth year and sex over `UserDefaults`, under the Android keys, so the results page can read them before P13 builds the profile | tests written for the port |
 | P11 | `SessionTimelineView.kt`, `snapPoints` | **Deliberate difference.** The Kotlin starts `lastKept` at `Long.MIN_VALUE`, and `clockMs - Long.MIN_VALUE` overflows, so on a lane that is not stepped (a heart rate with no reps) it keeps no point and the scrub never ticks. Swift keeps the first point, as the Kotlin comment says it should. Found by the P11 mutation check; the Android app still has it | tested in `ChartDetailTests` |
 | P11 | `ZoneBarView.kt` | CindyCore `ZoneBarModel` and CindyTracker `ZoneBarView` (`Canvas`) | tests ported |
 | P12 | `CalendarView.kt` | CindyCore `CalendarModel` (the month's cells, taps, stops and words) and CindyTracker `CalendarGridView` (`Canvas`) | tests ported |
 | P12 | `ProgressChartView.kt` | CindyCore `ProgressChartModel` (points, bars, the best-so-far steps, touch, stops) and CindyTracker `ProgressChartView` (`Canvas`) | tests ported |
 | P12 | `RecordsActivity.kt` | CindyCore `ProgressPageBuilder` and `ProgressModel` (which cards show and what each says: the habit, this week, the chart card and its chips, peaks, the calendar's paging, the leaderboard, a day's sessions, the CLEAR question) and CindyTracker `ProgressScreen` over `ProgressViewModel`. CLEAR does not clear Strava uploads (P19). Reached from the results page's PROGRESS button and, until the menu (P13), a PROGRESS chip on the camera screen | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
 | P12 | `WeekStripView.kt` | CindyCore `WeekStrip` and CindyTracker `WeekStripView` (`Canvas`) | tests written for the port (`WeekStripView` has none) |
-| P13 | `AccountActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P13 | `AvatarStore.kt` | CindyTracker (image I/O); square-crop maths already in `Avatar` | not started |
-| P13 | `AvatarView.kt` | CindyTracker (iOS rewrite) | not started |
-| P13 | `MenuActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P13 | `Profile.kt` | CindyCore (values, tidy rules) + `UserDefaults` | not started |
+| P13 | `AccountActivity.kt` | CindyCore `AccountBuilder` (the header, the 26 badges by family, each tile's spoken sentence and its sheet) and `NameForm` / `PhotoSheet`, and CindyTracker `AccountScreen` with `PhotosPicker` for the photo | tests ported |
+| P13 | `AvatarStore.kt` | CindyCore `AvatarFiles` (exists, load, clear with its partial, store whole or not at all, by `rename(2)`), and CindyTracker `AvatarImporter`: ImageIO decodes no bigger than the short side needs and stands the picture upright from its orientation tag, so `Avatar.upright` and `Avatar.sampleSize` are not used on iOS; the square and the 320 px are `Avatar`'s. The file is `avatar.jpg` in Application Support, which iCloud backup carries | file handling tested; the decoding is built by the macOS job |
+| P13 | `AvatarView.kt` | CindyTracker `AvatarView` (SwiftUI): the photo, else the letters of the name, else a neutral figure; the initials are `Avatar`'s | built by the macOS job |
+| P13 | `MenuActivity.kt` | CindyCore `MenuBuilder` (the profile card, every row and what it says underneath, the live-workout refusal, the stagger of the entrance) and `VoiceForm`, and CindyTracker `MenuScreen`. A **MENU** chip on the camera screen opens it (the VOICE, LANG and PROGRESS chips are gone: the voice's switch, volume and language are one sheet now, as on Android). Only the rows that can be opened are shown: Movements, Progress, Body weight and Voice. Heart rate (P15), Music (P17), Daily reminder (P18), Help (P14) and Strava (P20) are built and tested in the builder and are switched on with their screens | tests ported |
+| P13 | `Profile.kt` | CindyCore `Profile` over `UserDefaults`, under Android's keys (the movement choice is `movement_profile`; the iOS app's own earlier `cindy.movementProfile` is not read, as no build was ever released). `WorkoutViewModel` reads every setting from it, and the session now gets `smartSquats`, which P6 had left unwired | tests ported |
 | P14 | `AppLinks.kt` | CindyCore | not started |
 | P14 | `HelpActivity.kt` | CindyTracker (iOS rewrite) | not started |
 | P14 | `Licences.kt` | CindyTracker (iOS rewrite) | not started |
