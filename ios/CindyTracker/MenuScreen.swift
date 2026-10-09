@@ -16,8 +16,8 @@ final class MenuViewModel: ObservableObject {
     private let workoutLive: Bool
 
     /// What this build can open. The rest arrive with their phases: heart rate (P15), music (P17),
-    /// the daily reminder (P18), Help (P14) and Strava (P20).
-    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice]
+    /// the daily reminder (P18) and Strava (P20).
+    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .help]
 
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
@@ -54,6 +54,8 @@ final class MenuViewModel: ObservableObject {
 
 struct MenuScreen: View {
     let workout: WorkoutViewModel
+    /// Closes the menu: Help's pages, taken again, end on the camera screen with the tour next.
+    let onReturnToCamera: () -> Void
     @StateObject private var vm: MenuViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -66,10 +68,11 @@ struct MenuScreen: View {
         var id: Int { hashValue }
     }
 
-    private enum Destination: Hashable { case account, progress }
+    private enum Destination: Hashable { case account, progress, help }
 
-    init(workout: WorkoutViewModel, workoutLive: Bool) {
+    init(workout: WorkoutViewModel, workoutLive: Bool, onReturnToCamera: @escaping () -> Void) {
         self.workout = workout
+        self.onReturnToCamera = onReturnToCamera
         _vm = StateObject(wrappedValue: MenuViewModel(profile: workout.settings, workoutLive: workoutLive))
     }
 
@@ -156,6 +159,7 @@ struct MenuScreen: View {
         switch destination {
         case .account: AccountScreen(profile: vm.profile)
         case .progress: ProgressScreen()
+        case .help: HelpScreen(profile: vm.profile, onReturnToCamera: onReturnToCamera)
         }
     }
 
@@ -176,9 +180,10 @@ struct MenuScreen: View {
         case .movements:
             if vm.page.movementsRefused { vm.show(MovementsForm.refusedWhileLive) } else { sheet = .movements }
         case .progress: path.append(.progress)
+        case .help: path.append(.help)
         case .bodyWeight: sheet = .bodyWeight
         case .voice: sheet = .voice
-        case .reminder, .heartRate, .strava, .music, .help: break
+        case .reminder, .heartRate, .strava, .music: break
         }
     }
 

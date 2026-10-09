@@ -25,6 +25,8 @@ final class ReplayPoseSource: PoseSource {
     static let frameSize = CGSize(width: 720, height: 1280)
     private static let interval: TimeInterval = 0.1
 
+    var needsCameraPermission: Bool { false }
+
     /// Hanging, then pull-ups for ever: bottom, top, bottom, top. The first two cycles are what
     /// the setup check reads as its calibration reps.
     static func script(named name: String) -> Script? {
