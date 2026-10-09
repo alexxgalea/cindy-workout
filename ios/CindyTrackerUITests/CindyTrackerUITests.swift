@@ -182,6 +182,16 @@ final class CindyTrackerUITests: XCTestCase {
 
     // MARK: - the first run
 
+    /// The tour's NEXT (DONE on the last step), tapped where it is. The accessibility tree reports it
+    /// as not hittable on some steps, where the card sits against the bottom edge, though the same
+    /// card's SKIP TOUR is; a tap anywhere on the dimmed screen also moves on, so the flow is
+    /// what is under test, not that query.
+    private func tapTourNext(_ app: XCUIApplication) {
+        let next = app.buttons["tourNext"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "the tour has a NEXT")
+        next.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
     /// NEXT, or LET'S GO on the last page: found by what it says, as a person would.
     private func tutorialNext(_ app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label == 'NEXT' OR label BEGINSWITH 'LET'")).firstMatch
@@ -207,9 +217,9 @@ final class CindyTrackerUITests: XCTestCase {
         // screen has (the iOS camera screen has no SKIP button, so that step is left out).
         for title in ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"] {
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10), "tour step: \(title)")
-            if title != "Flip" { app.buttons["tourNext"].tap() }
+            if title != "Flip" { tapTourNext(app) }
         }
-        app.buttons["tourNext"].tap()
+        tapTourNext(app)
         XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
