@@ -50,6 +50,29 @@ final class CameraModel: ObservableObject {
         source.onRecordingChanged = { [weak self] recording in self?.isRecording = recording }
     }
 
+    /// Whether the camera's permission is already held. The evidence a returning athlete leaves
+    /// behind: a fresh install starts without it, and one updated from a version older than the
+    /// first-launch pages has held it since the first time the camera opened.
+    static var permissionHeld: Bool { AVCaptureDevice.authorizationStatus(for: .video) == .authorized }
+
+    /// Asks for the camera's permission if it has not been answered, and calls `done` with the
+    /// answer on the main queue. Asked for here, once the first-launch pages are done, so the
+    /// athlete has been told what the app is and that the picture stays on the phone before being
+    /// asked to hand it the camera. A source that is not a camera is never asked.
+    func ensureAccess(_ done: @escaping (Bool) -> Void) {
+        guard source.needsCameraPermission else { return done(true) }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            done(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async { done(granted) }
+            }
+        default:
+            done(false)
+        }
+    }
+
     func start() { source.start() }
     func stop() { source.stop() }
 

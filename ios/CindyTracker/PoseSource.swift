@@ -31,6 +31,10 @@ protocol PoseSource: AnyObject {
     /// What the preview layer shows, or nil when there is no camera to show.
     var previewSession: AVCaptureSession? { get }
 
+    /// Whether this source reads the camera, and so needs the athlete's permission for it. A script
+    /// playing a body back does not.
+    var needsCameraPermission: Bool { get }
+
     func start()
     func stop()
     /// Switches between the rear and the selfie camera. Nothing to do without a camera.
@@ -38,4 +42,8 @@ protocol PoseSource: AnyObject {
     /// Forgets the tracked crop: call when the camera changes or a workout restarts.
     func resetRoi()
     func toggleRecording()
+}
+
+extension PoseSource {
+    var needsCameraPermission: Bool { true }
 }

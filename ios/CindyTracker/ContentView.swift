@@ -78,21 +78,51 @@ struct ContentView: View {
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showMenu = false
-    /// Kept across launches: "Don't show this again" on the placement guide.
-    @AppStorage("placementGuideSeen") private var placementSeen = false
+    /// Kept across launches: "Don't show this again" on the placement guide. It is also evidence
+    /// that the athlete has used the app before, which is why `Onboarding` owns the key.
+    @AppStorage(Onboarding.keyPlacementSeen) private var placementSeen = false
+    /// The first-launch pages, shown before the camera is asked for. Decided when the screen is
+    /// made, so the pages are there from the first frame and the camera never gets the chance to
+    /// ask first.
+    @State private var showTutorial: Bool
+    /// Whether the camera's permission has been answered, either way. The tour of the controls
+    /// waits behind it, so the athlete is not shown a dimmed screen with a system dialog on top.
+    @State private var cameraAnswered = false
+    @State private var tour = SpotlightTour()
+    @State private var tourFrames: [HudTour.Target: CGRect] = [:]
+    private let firstRun = FirstRun()
+
+    init() {
+        let flags = FirstRun()
+        _showTutorial = State(initialValue: flags.shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
+                                                                    cameraGranted: CameraModel.permissionHeld))
+    }
 
     var body: some View {
         ZStack {
-            CameraPreview(session: camera.session).ignoresSafeArea()
-            SkeletonOverlay(keypoints: camera.keypoints, frameSize: camera.frameSize)
-                .ignoresSafeArea()
-            hud
+            Group {
+                CameraPreview(session: camera.session).ignoresSafeArea()
+                SkeletonOverlay(keypoints: camera.keypoints, frameSize: camera.frameSize)
+                    .ignoresSafeArea()
+                hud
+            }
+            // While the tour is showing the screen under it is for nobody: the dim keeps it from
+            // sight and from touch, and this keeps it from a screen reader.
+            .accessibilityHidden(tour.hidesScreenBeneath)
+            if tour.isShowing {
+                SpotlightOverlay(tour: tour, frames: tourFrames, advance: advanceTour, skip: skipTour)
+            }
         }
+        .coordinateSpace(.named(TourSpace.name))
+        .onPreferenceChange(TourFramesKey.self) { tourFrames = $0 }
+        .onChange(of: tourFrames) { _, _ in maybeStartTour() }
+        // A tour that was waiting for the clock to be idle starts when it is.
+        .onChange(of: workout.phase) { _, _ in maybeStartTour() }
         .background(Color.appBackground)
         .onAppear {
             camera.onPoseFrame = { workout.onFrame($0) }
             workout.onResetCrop = { camera.resetRoi() }
-            camera.start()
+            beginFirstRun()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
             // when the app is backgrounded.
@@ -104,8 +134,13 @@ struct ContentView: View {
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { ResultsView($0) }
-        .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile() }) {
-            MenuScreen(workout: workout, workoutLive: workout.inWorkout)
+        .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
+            MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
+        }
+        // However the pages end, finished or skipped, the camera comes next, after the movements
+        // chosen on the second page have reached the session that START will run.
+        .fullScreenCover(isPresented: $showTutorial, onDismiss: { workout.applyProfile(); openCamera() }) {
+            TutorialScreen(replay: false, profile: workout.settings) { _ in showTutorial = false }
         }
         .sheet(isPresented: $showPlacement) {
             PlacementGuideView(dontShowAgain: $placementSeen) {
@@ -144,9 +179,11 @@ struct ContentView: View {
                         // What changes state mid-set stays here; navigation and configuration are
                         // things you settle before the clock starts, and they live in the menu.
                         chipButton("MENU", on: false) { showMenu = true }
+                            .tourTarget(.menu)
                         chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
                             camera.toggleRecording()
                         }
+                        .tourTarget(.record)
                     }
                 }
             }
@@ -159,6 +196,7 @@ struct ContentView: View {
                     .accessibilityIdentifier("status")
             }
             .chip()
+            .tourTarget(.status)
             // A long press on the status line is the way to the debug readout, as on Android.
             .onLongPressGesture { showDebug.toggle() }
 
@@ -186,6 +224,7 @@ struct ContentView: View {
                     .accessibilityHidden(true)
             }
             .chip()
+            .tourTarget(.reps)
 
             HStack(spacing: 8) {
                 // The left button is FLIP outside a workout and STOP inside one: flipping the
@@ -200,6 +239,7 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(GhostButton(tint: workout.inWorkout ? .warn : .white))
+                .tourTarget(.flip)
 
                 Button(workout.startButtonTitle) {
                     switch workout.phase {
@@ -212,6 +252,7 @@ struct ContentView: View {
                     }
                 }
                 .buttonStyle(PrimaryButton())
+                .tourTarget(.start)
 
                 Button("−1") { workout.undoRep() }.buttonStyle(GhostButton(tint: .white))
                 Button("+1") { workout.manualRep() }
@@ -222,6 +263,53 @@ struct ContentView: View {
         }
         .padding(16)
     }
+
+    // MARK: first run
+
+    /// Someone who has already used the app is never shown the pages, and is marked as having seen
+    /// them so that clearing their records later does not make them look new. A new install waits
+    /// behind the pages: the camera opens when they end (`openCamera`, from the cover's dismissal).
+    private func beginFirstRun() {
+        guard !showTutorial else { return }
+        if !firstRun.tutorialSeen { firstRun.tutorialSeen = true }
+        openCamera()
+    }
+
+    /// Opens the camera, asking for its permission first if the athlete has not yet given it.
+    private func openCamera() {
+        camera.ensureAccess { _ in
+            camera.start()
+            cameraAnswered = true
+            maybeStartTour()
+        }
+    }
+
+    /// Starts the tour of the controls if one is waiting and nothing is in its way.
+    ///
+    /// Called from every place it could become possible: the camera's answer, the screen being laid
+    /// out, and the menu closing, which is how a replay from Help arrives. It is guarded rather than
+    /// scheduled, so that however many of them fire, it starts once, and never mid-workout: it stays
+    /// pending until the clock is idle. It waits for a layout before lighting anything, because the
+    /// hole is cut from where the controls actually are.
+    private func maybeStartTour() {
+        guard !tour.isShowing, cameraAnswered, !showMenu, !showTutorial, !showPlacement,
+              workout.phase == .idle, workout.finished == nil,
+              firstRun.hudTourPending, !tourFrames.isEmpty else { return }
+        // Nothing lit yet is not the same as nothing to light: it stays pending, and the next layout
+        // or the next time the screen is free asks again.
+        _ = tour.start(HudTour.steps, frame: { tourFrames[$0].map(spotlightRect) })
+    }
+
+    private func spotlightRect(_ rect: CGRect) -> SpotlightRect {
+        SpotlightRect(x: Float(rect.minX), y: Float(rect.minY), width: Float(rect.width), height: Float(rect.height))
+    }
+
+    private func advanceTour() { if tour.advance() { endTour() } }
+
+    private func skipTour() { if tour.skip() { endTour() } }
+
+    /// Done or skipped: it is taken, and does not come back until Help asks for it.
+    private func endTour() { firstRun.hudTourPending = false }
 
     /// "3 / 5", "1 / 2" during the setup check, or just "—" where nothing counts against a target.
     private var repCountLabel: String {
