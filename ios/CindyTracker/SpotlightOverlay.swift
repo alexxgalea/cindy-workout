@@ -123,7 +123,7 @@ struct SpotlightOverlay: View {
     private func caption(_ step: HudTour.Step) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(step.title).cindy(.headline)
+                Text(step.title).cindy(.headline).accessibilityIdentifier("tourTitle")
                 Text(step.body).cindy(.callout, colour: Palette.labelBody).padding(.top, 6)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

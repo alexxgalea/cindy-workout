@@ -218,16 +218,20 @@ final class CindyTrackerUITests: XCTestCase {
         // has no SKIP button, so that step is left out). Read from what is on the screen, so that
         // it holds the order and the end and not how many taps it took to get there.
         let expected = ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"]
-        XCTAssertTrue(app.staticTexts[expected[0]].waitForExistence(timeout: 10), "the tour opens on \(expected[0])")
+        let title = app.staticTexts["tourTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "the tour has a title")
         var seen: [String] = []
-        for _ in 0..<(expected.count + 2) where app.buttons["tourNext"].exists {
-            guard let title = expected.first(where: { app.staticTexts[$0].exists }) else { break }
-            seen.append(title)
+        for _ in 0..<(expected.count + 2) where title.exists {
+            let current = title.label
+            seen.append(current)
             tapTourNext(app)
-            _ = app.staticTexts[title].waitForNonExistence(timeout: 2)
-            if app.staticTexts[title].exists {
-                let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label) \($0.identifier) \($0.frame) hittable=\($0.isHittable)" }
-                XCTFail("NEXT did not move the tour on from \(title); buttons: \(buttons)")
+            // The tour moves on when the title changes, or when the last step's DONE takes it away.
+            let deadline = Date().addingTimeInterval(4)
+            while title.exists && title.label == current && Date() < deadline { usleep(200_000) }
+            if title.exists && title.label == current {
+                let texts = app.staticTexts.allElementsBoundByIndex.map { $0.label }
+                let buttons = app.buttons.allElementsBoundByIndex.filter { $0.exists }.map { "\($0.label)/\($0.identifier)" }
+                XCTFail("NEXT did not move the tour on from \(current); static texts: \(texts); buttons: \(buttons)")
                 break
             }
         }
