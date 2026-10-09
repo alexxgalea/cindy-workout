@@ -93,9 +93,9 @@ struct ContentView: View {
     private let firstRun = FirstRun()
 
     init() {
-        let seen = FirstRun().shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
-                                                 cameraGranted: CameraModel.permissionHeld)
-        _showTutorial = State(initialValue: seen)
+        let flags = FirstRun()
+        _showTutorial = State(initialValue: flags.shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
+                                                                    cameraGranted: CameraModel.permissionHeld))
     }
 
     var body: some View {
@@ -116,6 +116,8 @@ struct ContentView: View {
         .coordinateSpace(.named(TourSpace.name))
         .onPreferenceChange(TourFramesKey.self) { tourFrames = $0 }
         .onChange(of: tourFrames) { _, _ in maybeStartTour() }
+        // A tour that was waiting for the clock to be idle starts when it is.
+        .onChange(of: workout.phase) { _, _ in maybeStartTour() }
         .background(Color.appBackground)
         .onAppear {
             camera.onPoseFrame = { workout.onFrame($0) }
@@ -135,8 +137,9 @@ struct ContentView: View {
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
         }
-        // However the pages end, finished or skipped, the camera comes next.
-        .fullScreenCover(isPresented: $showTutorial, onDismiss: openCamera) {
+        // However the pages end, finished or skipped, the camera comes next, after the movements
+        // chosen on the second page have reached the session that START will run.
+        .fullScreenCover(isPresented: $showTutorial, onDismiss: { workout.applyProfile(); openCamera() }) {
             TutorialScreen(replay: false, profile: workout.settings) { _ in showTutorial = false }
         }
         .sheet(isPresented: $showPlacement) {
@@ -289,9 +292,12 @@ struct ContentView: View {
     /// pending until the clock is idle. It waits for a layout before lighting anything, because the
     /// hole is cut from where the controls actually are.
     private func maybeStartTour() {
-        guard !tour.isShowing, cameraAnswered, !showMenu, !showTutorial, workout.phase == .idle,
+        guard !tour.isShowing, cameraAnswered, !showMenu, !showTutorial, !showPlacement,
+              workout.phase == .idle, workout.finished == nil,
               firstRun.hudTourPending, !tourFrames.isEmpty else { return }
-        if !tour.start(HudTour.steps, frame: { tourFrames[$0].map(spotlightRect) }) { endTour() }
+        // Nothing lit yet is not the same as nothing to light: it stays pending, and the next layout
+        // or the next time the screen is free asks again.
+        _ = tour.start(HudTour.steps, frame: { tourFrames[$0].map(spotlightRect) })
     }
 
     private func spotlightRect(_ rect: CGRect) -> SpotlightRect {
