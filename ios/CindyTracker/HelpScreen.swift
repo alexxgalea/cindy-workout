@@ -2,11 +2,11 @@ import SwiftUI
 import UIKit
 import CindyCore
 
-/// What this build can describe. Heart rate (P15), filming (P16), music (P17), the daily reminder
+/// What this build can describe. Filming (P16), music (P17), the daily reminder
 /// (P18) and Strava (P20) join as their phases land, and Help starts describing each the moment it
 /// is switched on; until then it says nothing of it.
 enum HelpContent {
-    static let features: HelpFeatures = []
+    static let features: HelpFeatures = [.heartRate]
 
     static var versionName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"

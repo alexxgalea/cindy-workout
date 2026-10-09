@@ -82,4 +82,13 @@ final class HeartRateAccessTests: XCTestCase {
     func testTheWordsAreTheKotlinsWhereTheFactIsTheSame() {
         XCTAssertEqual(HeartRateAccess.unsupportedToast, "This phone has no Bluetooth LE, so it cannot hear a watch")
     }
+
+    /// the words iOS shows when it asks are the ones the core says, set in the project the app is built from
+    func testTheWordsIOSShowsWhenItAsksAreTheOnesTheCoreSaysSetInTheProjectTheAppIsBuiltFrom() throws {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { url.deleteLastPathComponent() }
+        let project = try String(contentsOf: url.appendingPathComponent("ios/project.yml"), encoding: .utf8)
+        XCTAssertTrue(project.contains("INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: \(HeartRateAccess.usageDescription)"),
+                      "the Info.plist string is not HeartRateAccess.usageDescription")
+    }
 }

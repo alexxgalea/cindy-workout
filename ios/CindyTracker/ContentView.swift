@@ -123,6 +123,7 @@ struct ContentView: View {
             camera.onPoseFrame = { workout.onFrame($0) }
             workout.onResetCrop = { camera.resetRoi() }
             beginFirstRun()
+            workout.syncHeartRate()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
             // when the app is backgrounded.
@@ -130,6 +131,7 @@ struct ContentView: View {
         }
         .onDisappear {
             camera.stop()
+            workout.stopHeartRate()
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }

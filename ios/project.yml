@@ -36,6 +36,9 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         # The camera is the whole app; without this string iOS kills it on first frame.
         INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
+        # The heart-rate sheets. iOS shows this when Cindy first listens for a watch or chest strap;
+        # HeartRateAccess.usageDescription is the same words, and a test holds the two together.
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Cindy reads the heart rate your watch or chest strap broadcasts. Nothing is uploaded.
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Saves your workout recording.
         INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_UIStatusBarHidden: YES

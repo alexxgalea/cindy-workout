@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges), the first-launch pages, the camera-screen tour and Help (their pages, steps and every word) | **1,664 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges), the first-launch pages, the camera-screen tour and Help (their pages, steps and every word), and the heart-rate pairing (which adverts count, the list's order, what Bluetooth permits, what the sheets say) | **1,695 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
 | `CindyClips` — scores the recorded clips with Vision, in the shape the Python harness scores them with MoveNet | **65 tests, passing** on Linux and in CI: the scoring is run through the real `run_batch.py` on the same frames and the reports are identical (see [Vision on the clips](#vision-on-the-clips)). **Not yet run on a clip**: it needs a Mac with the clips provisioned, which is yours to do |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
@@ -77,6 +77,9 @@ ios/
 │   │   ├── SpotlightTour.swift   the camera-screen tour: which controls, which step, where the card sits
 │   │   ├── HelpPage.swift        every section of Help, as data; HelpFeatures says which parts exist
 │   │   ├── Licences.swift        the credits and the licence texts that ship; AppLinks.swift the addresses
+│   │   ├── HeartRateAdvert.swift which adverts count, the list's order, the reconnect backoff
+│   │   ├── HeartRateAccess.swift what Bluetooth permits, and the step FIND MY WATCH takes
+│   │   ├── HeartRateSheets.swift what the heart-rate sheets say
 │   │   └── Levels.swift          the rank ladder
 │   ├── Sources/CindyVision/      Vision → the 17 keypoints; the camera and the clip tool share it
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
@@ -96,6 +99,9 @@ ios/
     ├── TutorialScreen.swift      the five first-launch pages
     ├── SpotlightOverlay.swift    the tour of the camera screen
     ├── HelpScreen.swift          Help, and the licence texts
+    ├── CoreBluetoothHeartRateSource.swift  the paired watch, over Core Bluetooth
+    ├── HeartRateScanner.swift    the search behind FIND MY WATCH
+    ├── HeartRateSheet.swift      the Heart rate sheet and the search sheet
     ├── PlacementDiagram.swift    where to stand, drawn
     ├── Palette.swift             Android's colours and Manrope, for the screens written from P14 on
     ├── Resources/                Manrope's five files and its licence text

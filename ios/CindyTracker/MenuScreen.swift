@@ -15,9 +15,9 @@ final class MenuViewModel: ObservableObject {
     @Published private(set) var toast: String?
     private let workoutLive: Bool
 
-    /// What this build can open. The rest arrive with their phases: heart rate (P15), music (P17),
+    /// What this build can open. The rest arrive with their phases: music (P17),
     /// the daily reminder (P18) and Strava (P20).
-    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .help]
+    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .heartRate, .help]
 
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
@@ -64,7 +64,7 @@ struct MenuScreen: View {
     @State private var path: [Destination] = []
 
     private enum Sheet: Identifiable {
-        case movements, bodyWeight, voice
+        case movements, bodyWeight, voice, heartRate
         var id: Int { hashValue }
     }
 
@@ -169,6 +169,8 @@ struct MenuScreen: View {
             MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
         case .bodyWeight:
             BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+        case .heartRate:
+            HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
         case .voice:
             VoiceSheet(speaker: workout.speaker, profile: vm.profile,
                        save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
@@ -183,7 +185,8 @@ struct MenuScreen: View {
         case .help: path.append(.help)
         case .bodyWeight: sheet = .bodyWeight
         case .voice: sheet = .voice
-        case .reminder, .heartRate, .strava, .music: break
+        case .heartRate: sheet = .heartRate
+        case .reminder, .strava, .music: break
         }
     }
 

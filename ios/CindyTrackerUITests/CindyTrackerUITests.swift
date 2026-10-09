@@ -279,4 +279,22 @@ final class CindyTrackerUITests: XCTestCase {
         skip.tap()
         XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5))
     }
+
+    // MARK: - heart rate
+
+    func testTheMenuOffersHeartRateAndTheSheetSaysHowToFindAWatch() {
+        let app = launchReplaying("pullups")
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        app.buttons["MENU"].tap()
+
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Heart rate row")
+        XCTAssertTrue(row.label.contains("No watch paired"), row.label)
+        row.tap()
+
+        // Not tapped: looking for a watch asks iOS for Bluetooth, and the simulator has none.
+        XCTAssertTrue(app.buttons["findMyWatch"].waitForExistence(timeout: 5), "the sheet offers FIND MY WATCH")
+        let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Broadcast Heart Rate'")).firstMatch
+        XCTAssertTrue(advice.exists, "the sheet says to turn the broadcast on first")
+    }
 }

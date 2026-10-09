@@ -61,6 +61,7 @@ final class WorkoutViewModel: ObservableObject {
             session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
         }
         sync()
+        syncHeartRate()
     }
 
     /// Rebuilt rather than mutated when the movements change: a session's profile is immutable for
@@ -68,6 +69,66 @@ final class WorkoutViewModel: ObservableObject {
     /// contributes to.
     private var session: WorkoutSession
     private let records = RecordStore()
+
+    // MARK: - heart rate
+
+    /// Puts what the paired watch broadcasts onto the workout clock. A watch does not stop because the
+    /// workout is not running, so readings always arrive; the recorder decides which are kept.
+    private let heartRate = HeartRateRecorder()
+    private var heartSource: HeartRateSource?
+    /// The device `heartSource` was built for, so `syncHeartRate` only rebuilds it on a change.
+    private var heartDevice: HeartRateDevice?
+    /// When the last reading arrived, on the same monotonic clock; 0 for none yet.
+    private var lastHeartRateAt: Int64 = 0
+    /// The one listener a source is ever handed. Status changes have nowhere to go on this screen.
+    private lazy var heartFeed = HeartFeed(owner: self)
+
+    fileprivate func heartRateArrived(bpm: Int, at: Int64) {
+        heartRate.offer(bpm: bpm, atElapsedMs: at)
+        lastHeartRateAt = at
+    }
+
+    /// Brings the heart-rate connection in line with whichever device the menu has paired. Called when
+    /// the camera screen appears and whenever a menu sheet is saved; a heart rate is only wanted while
+    /// this screen is in front.
+    func syncHeartRate() {
+        let device = settings.heartRateDevice
+        if device != heartDevice {
+            heartSource?.stop()
+            heartDevice = device
+            heartSource = device.map { saved in
+                CoreBluetoothHeartRateSource(device: saved, onDeviceMoved: { [settings] moved in
+                    settings.heartRateDevice = moved
+                })
+            }
+        }
+        heartSource?.start(listener: heartFeed)
+    }
+
+    func stopHeartRate() { heartSource?.stop() }
+
+    /// The recorder follows the clock: started with the workout, frozen with a pause, picked up again
+    /// by a resume, and put back by a reset. Its end is `finish`'s, because only a saved attempt keeps
+    /// its trace.
+    private func followHeartRate(from old: Phase, to new: Phase) {
+        guard old != new else { return }
+        switch (old, new) {
+        case (.paused, .running):
+            heartRate.resume(atElapsedMs: now)
+        case (_, .running):
+            heartRate.start(atElapsedMs: now, wallMillis: wallClockMs)
+            if let text = HeartRateSheets.silentWarning(device: heartDevice, sourceRunning: heartSource != nil,
+                                                        nowMs: now, lastReadingAtMs: lastHeartRateAt) {
+                show(text)
+            }
+        case (.running, .paused):
+            heartRate.pause(atElapsedMs: now)
+        case (_, .idle):
+            heartRate.reset()
+        default:
+            break
+        }
+    }
     private let repTimes = RepTimesStore(directory: FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("rep_times", isDirectory: true))
@@ -215,8 +276,10 @@ final class WorkoutViewModel: ObservableObject {
         timer = nil
         // A workout with nothing counted is someone opening the app and letting the clock run out,
         // so the store drops it; the rep times belong beside a saved attempt and only one.
+        let trace = heartRate.finish(atElapsedMs: now)
         if records.add(done.attempt) {
             try? repTimes.save(atMillis: done.attempt.atMillis, done.marks)
+            if let trace { try? HeartRateStore().save(atMillis: done.attempt.atMillis, trace) }
         }
         finished = ResultsRequest(attempt: done.attempt, stoppedEarly: done.stoppedEarly,
                                   heelsFlatSpotted: done.heelsFlatSpotted, reviewing: false)
@@ -270,13 +333,16 @@ final class WorkoutViewModel: ObservableObject {
     }
 
     private func sync() {
+        let next: Phase
         switch session.state {
-        case .idle: phase = .idle
-        case .setup: phase = .setup
-        case .running: phase = .running
-        case .paused: phase = .paused
-        case .finished: phase = .finished
+        case .idle: next = .idle
+        case .setup: next = .setup
+        case .running: next = .running
+        case .paused: next = .paused
+        case .finished: next = .finished
         }
+        followHeartRate(from: phase, to: next)
+        phase = next
         clockText = session.clockText
         exerciseText = session.exerciseText
         repsText = session.repsText
@@ -287,4 +353,18 @@ final class WorkoutViewModel: ObservableObject {
         repProgress = session.repProgress
         coachShowing = session.coachShowing
     }
+}
+
+/// Hands a source's readings to the workout. A class of its own because the protocol is not tied to
+/// the main actor, and a source calls it on the main queue.
+private final class HeartFeed: HeartRateListener {
+    private weak var owner: WorkoutViewModel?
+
+    init(owner: WorkoutViewModel) { self.owner = owner }
+
+    func onHeartRate(bpm: Int, atElapsedMs: Int64) {
+        MainActor.assumeIsolated { owner?.heartRateArrived(bpm: bpm, at: atElapsedMs) }
+    }
+
+    func onStatus(_ status: HeartRateStatus) {}
 }
