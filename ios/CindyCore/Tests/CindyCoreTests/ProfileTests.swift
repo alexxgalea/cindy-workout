@@ -226,6 +226,11 @@ final class ProfileTests: XCTestCase {
         XCTAssertEqual(p.musicVolume, 1)
         p.musicVolume = -0.5
         XCTAssertEqual(p.musicVolume, 0)
+        // What is written is in range too, so a backup carries a sane value.
+        p.voiceVolume = 5
+        p.musicVolume = -5
+        XCTAssertEqual(defaults.float(forKey: "voice_volume"), 1)
+        XCTAssertEqual(defaults.float(forKey: "music_volume"), 0)
         defaults.set(Float(9), forKey: "voice_volume")
         XCTAssertEqual(p.voiceVolume, 1, "a stored value out of range reads back in range")
         defaults.set(Float(-9), forKey: "music_volume")
@@ -253,6 +258,9 @@ final class ProfileTests: XCTestCase {
         XCTAssertEqual(p.reminderMinute, 1439)
         p.reminderMinute = -3
         XCTAssertEqual(p.reminderMinute, 0)
+        XCTAssertEqual(defaults.integer(forKey: "reminder_minute"), 0, "what is written is inside the day too")
+        p.reminderMinute = 99_999
+        XCTAssertEqual(defaults.integer(forKey: "reminder_minute"), 1439)
         defaults.set(99_999, forKey: "reminder_minute")
         XCTAssertEqual(p.reminderMinute, 1439)
     }

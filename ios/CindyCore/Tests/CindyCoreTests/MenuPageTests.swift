@@ -129,6 +129,21 @@ final class MenuPageTests: XCTestCase {
         XCTAssertEqual(profile.voiceVolume, 1)
     }
 
+    /// SAVE keeps all three: the switch, the volume and the language.
+    func testSaveKeepsTheSwitchTheVolumeAndTheLanguage() {
+        let profile = fresh()
+        var form = VoiceForm(profile)
+        form.on = false
+        form.volume = 0.25
+        form.language = "fr"
+
+        form.save(to: profile)
+
+        XCTAssertFalse(profile.voiceOn)
+        XCTAssertEqual(profile.voiceVolume, 0.25)
+        XCTAssertEqual(profile.voiceLanguage, "fr")
+    }
+
     /// The row says off when the voice is off, and the volume as a whole percent otherwise.
     func testTheVoiceRowSaysOffOrTheVolumeAsAWholePercent() {
         let profile = fresh()

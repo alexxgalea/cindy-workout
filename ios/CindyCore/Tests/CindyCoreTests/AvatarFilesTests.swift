@@ -68,6 +68,8 @@ final class AvatarFilesTests: XCTestCase {
         // Not clearing first: that would remove the folder, and the point is a failure.
         XCTAssertFalse(photo.store(Data([7])))
         XCTAssertEqual(photo.load(), Data([1, 2, 3]))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("avatar.jpg.partial").path),
+                       "what is left of a failed store is not worth a place in the backup")
     }
 
     /// The directory is made if it is not there yet.
