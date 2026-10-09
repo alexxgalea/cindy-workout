@@ -22,22 +22,25 @@ final class MenuViewModel: ObservableObject {
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
         self.workoutLive = workoutLive
-        page = MenuPage(card: MenuProfileCard(title: "", value: "", name: nil, hasPhoto: false), rows: [],
-                        footnote: nil, movementsRefused: false)
-        refresh()
+        page = Self.build(profile, workoutLive, files, store)
+        photo = files.load().flatMap(UIImage.init(data:))
+    }
+
+    private static func build(_ profile: Profile, _ workoutLive: Bool, _ files: AvatarFiles, _ store: RecordStore) -> MenuPage {
+        let zone = Zone(TimeZone.current.identifier)
+        let today = zone.localDate(epochMs: Int64(Date().timeIntervalSince1970 * 1000))
+        let first = DayOfWeek(rawValue: (Calendar.current.firstWeekday + 5) % 7 + 1) ?? .monday
+        let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
+        return MenuBuilder.build(MenuInput(
+            profile: profile, attempts: store.all(), zone: zone, firstDayOfWeek: first, today: today,
+            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive, shown: shown))
     }
 
     /// Rebuilt rather than patched, because a row's subtitle is derived from state a sheet may just
     /// have changed.
     func refresh() {
-        let zone = Zone(TimeZone.current.identifier)
-        let today = zone.localDate(epochMs: Int64(Date().timeIntervalSince1970 * 1000))
-        let first = DayOfWeek(rawValue: (Calendar.current.firstWeekday + 5) % 7 + 1) ?? .monday
-        let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
         photo = files.load().flatMap(UIImage.init(data:))
-        page = MenuBuilder.build(MenuInput(
-            profile: profile, attempts: store.all(), zone: zone, firstDayOfWeek: first, today: today,
-            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive, shown: Self.shown))
+        page = Self.build(profile, workoutLive, files, store)
     }
 
     func show(_ text: String) {
@@ -72,48 +75,13 @@ struct MenuScreen: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Button { path.append(.account) } label: { profileCard(vm.page.card) }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(vm.page.card.spoken)
-                        .accessibilityAddTraits(.isButton)
-                        .dealt(0, settled: settled, still: reduceMotion)
-
-                    VStack(spacing: 0) {
-                        ForEach(Array(vm.page.rows.enumerated()), id: \.element.id) { i, row in
-                            Button { open(row.id) } label: { rowView(row) }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(row.spoken)
-                                .accessibilityAddTraits(.isButton)
-                                .dealt(i + 1, settled: settled, still: reduceMotion)
-                        }
-                    }
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-
-                    // Said here rather than only when the row is tapped, because it explains why
-                    // the row will refuse rather than reporting the refusal after the fact.
-                    if let note = vm.page.footnote {
-                        Text(note).font(.system(size: 12)).foregroundStyle(Color.dim).padding(.horizontal, 4).padding(.top, 14)
-                    }
-
-                    Button("DONE") { dismiss() }.buttonStyle(PrimaryButton()).padding(.top, 16)
+            ScrollView { content }
+                .background(Color.appBackground)
+                .overlay(alignment: .bottom) { toastView }
+                .navigationBarHidden(true)
+                .navigationDestination(for: Destination.self) { destination in
+                    destinationView(destination)
                 }
-                .padding(20)
-            }
-            .background(Color.appBackground)
-            .overlay(alignment: .bottom) {
-                if let toast = vm.toast {
-                    Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
-                }
-            }
-            .navigationBarHidden(true)
-            .navigationDestination(for: Destination.self) { destination in
-                switch destination {
-                case .account: AccountScreen(profile: vm.profile)
-                case .progress: ProgressScreen()
-                }
-            }
         }
         .onAppear {
             vm.refresh()
@@ -123,15 +91,83 @@ struct MenuScreen: View {
         }
         .onChange(of: path) { _, _ in vm.refresh() }
         .sheet(item: $sheet, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
-            switch which {
-            case .movements:
-                MovementsSheet(profile: vm.profile) { vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
-            case .bodyWeight:
-                BodyWeightSheet(profile: vm.profile) { vm.refresh() }
-            case .voice:
-                VoiceSheet(speaker: workout.speaker, profile: vm.profile,
-                           save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
+            sheetView(which)
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            profileButton
+            rowsList
+            footnote
+            Button("DONE") { dismiss() }.buttonStyle(PrimaryButton()).padding(.top, 16)
+        }
+        .padding(20)
+    }
+
+    private var profileButton: some View {
+        Button { path.append(.account) } label: { profileCard(vm.page.card) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(vm.page.card.spoken)
+            .accessibilityAddTraits(.isButton)
+            .dealt(0, settled: settled, still: reduceMotion)
+    }
+
+    private var rowsList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(vm.page.rows.enumerated()), id: \.element.id) { i, row in
+                menuRow(i, row)
             }
+        }
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func menuRow(_ index: Int, _ row: MenuRow) -> some View {
+        Button { open(row.id) } label: { rowView(row) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(row.spoken)
+            .accessibilityAddTraits(.isButton)
+            .dealt(index + 1, settled: settled, still: reduceMotion)
+    }
+
+    /// Said here rather than only when the row is tapped, because it explains why the row will
+    /// refuse rather than reporting the refusal after the fact.
+    @ViewBuilder private var footnote: some View {
+        if let note = vm.page.footnote {
+            Text(note)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.dim)
+                .padding(.horizontal, 4)
+                .padding(.top, 14)
+        }
+    }
+
+    @ViewBuilder private var toastView: some View {
+        if let toast = vm.toast {
+            Text(toast)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .chip()
+                .padding(.bottom, 90)
+        }
+    }
+
+    @ViewBuilder private func destinationView(_ destination: Destination) -> some View {
+        switch destination {
+        case .account: AccountScreen(profile: vm.profile)
+        case .progress: ProgressScreen()
+        }
+    }
+
+    @ViewBuilder private func sheetView(_ which: Sheet) -> some View {
+        switch which {
+        case .movements:
+            MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
+        case .bodyWeight:
+            BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+        case .voice:
+            VoiceSheet(speaker: workout.speaker, profile: vm.profile,
+                       save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
         }
     }
 
