@@ -30,7 +30,6 @@ Kotlin table and compare every number.
 | Kotlin test | Stays with | Because |
 |---|---|---|
 | `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
-| `ProgressChartViewTest` (4) | P12 | Taps and drags on the progress chart's `View`; the progress screen is P12, not the results page |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
 | `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
 | `ProfileHeartRateTest` (8) | P13 | The profile screen's heart-rate card |
@@ -42,9 +41,16 @@ Kotlin table and compare every number.
 |---|---|---|
 | `RoundTrackViewTest` (7), `ZoneBarViewTest` (9), `RoundSplitsViewTest` (10), `SessionTimelineViewTest` (13) | CindyCore `RoundTrackModelTests`, `ZoneBarModelTests`, `RoundSplitsChartModelTests`, `SessionTimelineChartModelTests` | Robolectric drives each chart as a `View` with `MotionEvent`s. Each chart's touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 39 tests run on Linux against the same numbers. The drawing itself is not under test |
 | `ScreenSmokeTest`, the results parts | CindyCore `ResultsPageTests` (30) and `ResultsChartsTests` (23) | The assertions read facts off the inflated screen (which cards exist, what each says). `ResultsPageBuilder` decides those facts and the tests read them off the `ResultsPage` it returns |
-| `ScreenSmokeTest`, the leaderboard row, the day sheet's row and the chart OPEN tests | P12 | They open the results page from Progress |
 | `ScreenSmokeTest`, the body-weight and heart-rate details sheets | P13 | They are the profile's sheets; P11 has a minimal `BodyDetailsSheet` so the results page's two invitations work |
 | `ScreenSmokeTest`, the Strava row | P19 | Strava |
+
+### Kotlin tests that were ported in P12
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `CalendarViewTest` (4), `ProgressChartViewTest` (4) | CindyCore `CalendarModelTests`, `ProgressChartModelTests` | Robolectric drives each as a `View` with `MotionEvent`s. Touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 8 tests run on Linux against the same numbers |
+| `ScreenSmokeTest`, the Progress parts: the records screen builds (empty, with history, across categories), the chart card switches metric and range and handles a range with no sessions, a trained day opens its sessions, a leaderboard row, a day-sheet row and the chart's OPEN button each open that session | CindyCore `ProgressPageTests` (9) | The assertions read facts off the inflated screen. `ProgressPageBuilder` and `ProgressModel` decide those facts, and the tests read them off the `ProgressPage` they return; "opens that session" is the `atMillis` a row or button asks to reopen |
+| `AccountScreenTest`, the three that open `RecordsActivity` (the leaderboard says "You" until there is a name; the CLEAR sheet says the badges go and the name and photo stay; CLEAR keeps the name and photo) | P13 | They belong to its 58, with the profile that holds the name and photo. The facts are already held here: `ProgressDetailTests` checks the leaderboard's "You" and name, and the wording of the CLEAR question |
 
 ### Kotlin tests with no Swift counterpart
 
@@ -160,10 +166,10 @@ Kotlin table and compare every number.
 | P11 | `BodyProfile` (new; the Kotlin keeps these in `Profile`) | CindyCore `BodyProfile`: body weight, birth year and sex over `UserDefaults`, under the Android keys, so the results page can read them before P13 builds the profile | tests written for the port |
 | P11 | `SessionTimelineView.kt`, `snapPoints` | **Deliberate difference.** The Kotlin starts `lastKept` at `Long.MIN_VALUE`, and `clockMs - Long.MIN_VALUE` overflows, so on a lane that is not stepped (a heart rate with no reps) it keeps no point and the scrub never ticks. Swift keeps the first point, as the Kotlin comment says it should. Found by the P11 mutation check; the Android app still has it | tested in `ChartDetailTests` |
 | P11 | `ZoneBarView.kt` | CindyCore `ZoneBarModel` and CindyTracker `ZoneBarView` (`Canvas`) | tests ported |
-| P12 | `CalendarView.kt` | CindyTracker (iOS rewrite) | not started |
-| P12 | `ProgressChartView.kt` | CindyTracker (iOS rewrite) | not started |
-| P12 | `RecordsActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P12 | `WeekStripView.kt` | CindyTracker (iOS rewrite) | not started |
+| P12 | `CalendarView.kt` | CindyCore `CalendarModel` (the month's cells, taps, stops and words) and CindyTracker `CalendarGridView` (`Canvas`) | tests ported |
+| P12 | `ProgressChartView.kt` | CindyCore `ProgressChartModel` (points, bars, the best-so-far steps, touch, stops) and CindyTracker `ProgressChartView` (`Canvas`) | tests ported |
+| P12 | `RecordsActivity.kt` | CindyCore `ProgressPageBuilder` and `ProgressModel` (which cards show and what each says: the habit, this week, the chart card and its chips, peaks, the calendar's paging, the leaderboard, a day's sessions, the CLEAR question) and CindyTracker `ProgressScreen` over `ProgressViewModel`. CLEAR does not clear Strava uploads (P19). Reached from the results page's PROGRESS button and, until the menu (P13), a PROGRESS chip on the camera screen | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
+| P12 | `WeekStripView.kt` | CindyCore `WeekStrip` and CindyTracker `WeekStripView` (`Canvas`) | tests written for the port (`WeekStripView` has none) |
 | P13 | `AccountActivity.kt` | CindyTracker (iOS rewrite) | not started |
 | P13 | `AvatarStore.kt` | CindyTracker (image I/O); square-crop maths already in `Avatar` | not started |
 | P13 | `AvatarView.kt` | CindyTracker (iOS rewrite) | not started |
