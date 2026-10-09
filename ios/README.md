@@ -21,7 +21,13 @@ checks are XCTest and run anywhere:
 tools/ios/swift.sh test                          # Linux: fetches a pinned toolchain once (~880 MB)
 tools/ios/swift.sh test --filter BarGateTests    # a single class
 swift test --package-path ios/CindyCore          # on a Mac, with Xcode's swift
+tools/ios/parse-app.sh                           # Linux: every app file parses (syntax only)
 ```
+
+The app itself (`ios/CindyTracker`, SwiftUI and UIKit) needs Apple's SDK to compile, so on Linux
+the most that can be checked is that it parses. Whatever is decided about what a screen shows is in
+`CindyCore` for that reason, and tested there; the views only draw it. Compiling the app is the
+macOS job in `.github/workflows/ios-app.yml`, or Xcode on a Mac.
 
 [PLAN.md](PLAN.md) sets out how the app catches up with Android, and [PARITY.md](PARITY.md) tracks
 which Kotlin file each Swift file mirrors.
