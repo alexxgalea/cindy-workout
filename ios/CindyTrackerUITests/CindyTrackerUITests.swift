@@ -226,13 +226,8 @@ final class CindyTrackerUITests: XCTestCase {
             tapTourNext(app)
             _ = app.staticTexts[title].waitForNonExistence(timeout: 2)
             if app.staticTexts[title].exists {
-                // NEXT did nothing. The card's words move on too: try them, and say what is on screen.
-                app.staticTexts[title].tap()
-                _ = app.staticTexts[title].waitForNonExistence(timeout: 2)
-            }
-            if app.staticTexts[title].exists {
                 let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label) \($0.identifier) \($0.frame) hittable=\($0.isHittable)" }
-                XCTFail("the tour did not move on from \(title); buttons: \(buttons)")
+                XCTFail("NEXT did not move the tour on from \(title); buttons: \(buttons)")
                 break
             }
         }
