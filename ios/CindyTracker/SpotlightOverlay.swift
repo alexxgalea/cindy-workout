@@ -61,7 +61,11 @@ struct SpotlightOverlay: View {
                 window: window.map(spotlight) ?? SpotlightRect(x: 0, y: 0, width: 0, height: 0),
                 captionHeight: Float(captionHeight), screenHeight: screen.height))
             ZStack(alignment: .top) {
+                // A tap anywhere on the dimmed screen moves on. The gesture is on the dim alone and
+                // not on the whole layer, so a tap on the card's buttons cannot also reach it.
                 dim(window)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: advance)
                 if let step = tour.current {
                     caption(step)
                         .offset(y: top)
@@ -70,8 +74,6 @@ struct SpotlightOverlay: View {
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
         .ignoresSafeArea()
-        .contentShape(Rectangle())
-        .onTapGesture(perform: advance)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, skip)
@@ -120,8 +122,13 @@ struct SpotlightOverlay: View {
 
     private func caption(_ step: HudTour.Step) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(step.title).cindy(.headline)
-            Text(step.body).cindy(.callout, colour: Palette.labelBody).padding(.top, 6)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(step.title).cindy(.headline)
+                Text(step.body).cindy(.callout, colour: Palette.labelBody).padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: advance)
             HStack {
                 Button(action: skip) {
                     Text(SpotlightTour.skipLabel).cindy(.eyebrow, colour: Palette.labelSecondary)

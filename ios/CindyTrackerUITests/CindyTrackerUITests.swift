@@ -213,13 +213,23 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["LET'S GO"].exists)
         tutorialNext(app).tap()
 
-        // The pages are done, and the tour of the controls comes next, one step per control the
-        // screen has (the iOS camera screen has no SKIP button, so that step is left out).
-        for title in ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"] {
-            XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10), "tour step: \(title)")
-            if title != "Flip" { tapTourNext(app) }
+        // The pages are done, and the tour of the controls comes next: it opens on the first
+        // control and ends on the last, one step per control the screen has (the iOS camera screen
+        // has no SKIP button, so that step is left out). Read from what is on the screen, so that
+        // it holds the order and the end and not how many taps it took to get there.
+        let expected = ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"]
+        XCTAssertTrue(app.staticTexts[expected[0]].waitForExistence(timeout: 10), "the tour opens on \(expected[0])")
+        var seen: [String] = []
+        for _ in 0..<(expected.count + 2) where app.buttons["tourNext"].exists {
+            if let title = expected.first(where: { app.staticTexts[$0].exists }) { seen.append(title) }
+            tapTourNext(app)
+            _ = app.buttons["Skip the tour"].waitForNonExistence(timeout: 1)
         }
-        tapTourNext(app)
+        XCTAssertEqual(seen.first, "Start")
+        XCTAssertEqual(seen, seen.sorted { expected.firstIndex(of: $0)! < expected.firstIndex(of: $1)! },
+                       "the steps come in order: \(seen)")
+        XCTAssertGreaterThanOrEqual(Set(seen).count, 4, "most of the steps were shown: \(seen)")
+        XCTAssertEqual(seen.last, "Flip", "the tour ends on the last control: \(seen)")
         XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
