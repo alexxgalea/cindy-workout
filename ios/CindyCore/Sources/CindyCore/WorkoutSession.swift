@@ -101,12 +101,18 @@ public final class WorkoutSession {
     private var blockedSince: Int64 = 0
     private var heelsFlatAnnounced = false
 
-    public init(profile: CindyProfile = .standard) {
-        engine = WorkoutEngine(profile: profile)
+    /// `smartSquats` is the profile's setting: whether an air-squat session may switch itself to
+    /// heels flat when the squats turn out to be. It does not change `profile`, which stays what the
+    /// athlete chose; it only lets the engine notice one of them.
+    public init(profile: CindyProfile = .standard, smartSquats: Bool = false) {
+        engine = WorkoutEngine(profile: profile, smartSquats: smartSquats)
         render(RepEvent.none)
     }
 
     public var profile: CindyProfile { engine.profile }
+
+    /// Whether this session may spot heels-flat squats.
+    public var smartSquats: Bool { engine.smartSquats }
 
     /// Whether the clock has started, whether or not it is ticking right now.
     public var inWorkout: Bool { state == .running || state == .paused }

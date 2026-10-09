@@ -3,9 +3,9 @@ import CindyCore
 
 /// Asks for what the estimates need: body weight for the lifted and burned figures, birth year and
 /// sex for the heart-rate zones and the calories read off a pulse. Kept on the phone in
-/// `BodyProfile`, and each field can be left blank. P13 gives these their full sheets.
+/// `Profile`, and each field can be left blank. P13 gives these their full sheets.
 struct BodyDetailsSheet: View {
-    let profile: BodyProfile
+    let profile: Profile
     let asksWeight: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var weight = ""

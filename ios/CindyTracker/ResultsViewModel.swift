@@ -30,7 +30,7 @@ extension ResultsRequest {
 final class ResultsViewModel: ObservableObject {
 
     let results: ResultsModel
-    let profile: BodyProfile
+    let profile: Profile
 
     let track = RoundTrackModel()
     let splits = RoundSplitsChartModel()
@@ -45,7 +45,7 @@ final class ResultsViewModel: ObservableObject {
     /// Bumped whenever a chart model was given new data, so its canvas draws again.
     @Published private(set) var revision = 0
 
-    init(_ request: ResultsRequest, profile: BodyProfile = BodyProfile()) {
+    init(_ request: ResultsRequest, profile: Profile = Profile()) {
         let all = RecordStore().all()
         let zone = Zone(TimeZone.current.identifier)
         let trace = HeartRateStore().load(atMillis: request.attempt.atMillis)
