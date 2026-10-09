@@ -221,9 +221,20 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[expected[0]].waitForExistence(timeout: 10), "the tour opens on \(expected[0])")
         var seen: [String] = []
         for _ in 0..<(expected.count + 2) where app.buttons["tourNext"].exists {
-            if let title = expected.first(where: { app.staticTexts[$0].exists }) { seen.append(title) }
+            guard let title = expected.first(where: { app.staticTexts[$0].exists }) else { break }
+            seen.append(title)
             tapTourNext(app)
-            _ = app.buttons["Skip the tour"].waitForNonExistence(timeout: 1)
+            _ = app.staticTexts[title].waitForNonExistence(timeout: 2)
+            if app.staticTexts[title].exists {
+                // NEXT did nothing. The card's words move on too: try them, and say what is on screen.
+                app.staticTexts[title].tap()
+                _ = app.staticTexts[title].waitForNonExistence(timeout: 2)
+            }
+            if app.staticTexts[title].exists {
+                let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label) \($0.identifier) \($0.frame) hittable=\($0.isHittable)" }
+                XCTFail("the tour did not move on from \(title); buttons: \(buttons)")
+                break
+            }
         }
         XCTAssertEqual(seen.first, "Start")
         XCTAssertEqual(seen, seen.sorted { expected.firstIndex(of: $0)! < expected.firstIndex(of: $1)! },
