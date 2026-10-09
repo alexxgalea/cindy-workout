@@ -77,7 +77,6 @@ struct SpotlightOverlay: View {
         .accessibilityAction(.escape, skip)
         .onAppear { announce() }
         .onChange(of: tour.stepIndex) { _, _ in announce() }
-        .accessibilityIdentifier("tour")
     }
 
     /// Said on every step rather than left to be found: a screen reader cannot see where the light

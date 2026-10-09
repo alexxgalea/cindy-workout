@@ -94,7 +94,6 @@ struct TutorialScreen: View {
             }
         }
         .preferredColorScheme(.dark)
-        .accessibilityIdentifier("tutorial")
     }
 
     // MARK: moving

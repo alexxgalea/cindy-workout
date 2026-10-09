@@ -182,21 +182,26 @@ final class CindyTrackerUITests: XCTestCase {
 
     // MARK: - the first run
 
+    /// NEXT, or LET'S GO on the last page: found by what it says, as a person would.
+    private func tutorialNext(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == 'NEXT' OR label BEGINSWITH 'LET'")).firstMatch
+    }
+
     func testANewInstallIsShownFivePagesAndThenTheTourOfTheCameraScreen() {
         let app = launchNewInstall()
 
         XCTAssertTrue(app.staticTexts["Cindy, counted for you"].waitForExistence(timeout: 10),
                       "a new install opens on the first page")
-        XCTAssertFalse(app.buttons["tutorialBack"].exists, "the first page has no way back")
+        XCTAssertFalse(app.buttons["BACK"].exists, "the first page has no way back")
         for title in ["Your Cindy, your movements", "Where to stand", "Before the clock starts",
                       "Nothing leaves your phone"] {
-            app.buttons["tutorialNext"].tap()
+            tutorialNext(app).tap()
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5), "page: \(title)")
         }
         XCTAssertTrue(app.staticTexts["Next, iOS asks to use the camera."].exists,
                       "the last page of a first run says the camera is next")
-        XCTAssertEqual(app.buttons["tutorialNext"].label, "LET'S GO")
-        app.buttons["tutorialNext"].tap()
+        XCTAssertTrue(app.buttons["LET'S GO"].exists)
+        tutorialNext(app).tap()
 
         // The pages are done, and the tour of the controls comes next, one step per control the
         // screen has (the iOS camera screen has no SKIP button, so that step is left out).
@@ -211,8 +216,8 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testTheTourCanBeSkippedAndDoesNotComeBack() {
         let app = launchNewInstall()
-        XCTAssertTrue(app.buttons["tutorialSkip"].waitForExistence(timeout: 10))
-        app.buttons["tutorialSkip"].tap()
+        XCTAssertTrue(app.buttons["Skip the introduction"].waitForExistence(timeout: 10))
+        app.buttons["Skip the introduction"].tap()
 
         let skip = app.buttons["Skip the tour"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "skipping the pages still leads to the tour")
@@ -243,7 +248,7 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Cindy, counted for you"].waitForExistence(timeout: 5))
 
         // A replay ends back on the camera screen, closing the menu and Help over it.
-        app.buttons["tutorialSkip"].tap()
+        app.buttons["Skip the introduction"].tap()
         let skip = app.buttons["Skip the tour"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour follows the replayed pages")
         skip.tap()

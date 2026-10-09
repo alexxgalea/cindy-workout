@@ -95,7 +95,6 @@ struct HelpScreen: View {
         .sheet(item: $licence) { shown in
             LicenceSheet(licence: shown.licence)
         }
-        .accessibilityIdentifier("help")
     }
 
     private func perform(_ action: HelpAction) {
@@ -316,6 +315,5 @@ private struct LicenceSheet: View {
         }
         .background(Palette.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .accessibilityIdentifier("licence")
     }
 }
