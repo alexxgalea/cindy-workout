@@ -136,16 +136,21 @@ struct SpotlightOverlay: View {
                 }
                 .accessibilityLabel(SpotlightTour.skipDescription)
                 Spacer()
-                // At its own size, 96 wide at least and 44 tall, as on Android.
-                Button(action: advance) {
-                    Text(tour.nextLabel)
-                        .cindy(.buttonSmall, colour: Palette.onPrimary)
-                        .padding(.horizontal, 22)
-                        .frame(minWidth: 96, minHeight: 44)
-                        .background(Palette.primaryFill, in: RoundedRectangle(cornerRadius: Palette.radiusControl))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tourNext")
+                // At its own size, 96 wide at least and 44 tall, as on Android. A tap gesture
+                // like the card's words rather than a Button: on the macOS run a Button here did
+                // not move the tour on, while the words beside it did, and the gesture is what
+                // the dim around it uses too. It is still a button to VoiceOver.
+                Text(tour.nextLabel)
+                    .cindy(.buttonSmall, colour: Palette.onPrimary)
+                    .padding(.horizontal, 22)
+                    .frame(minWidth: 96, minHeight: 44)
+                    .background(Palette.primaryFill, in: RoundedRectangle(cornerRadius: Palette.radiusControl))
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: advance)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(tour.nextLabel)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("tourNext")
             }
             .padding(.top, 8)
         }
