@@ -31,9 +31,10 @@ struct SkeletonOverlay: View {
     let keypoints: [Keypoint]
     let frameSize: CGSize
 
-    private static let minScore: Float = 0.3
-    private static let boneWidth: CGFloat = 0.0045
-    private static let jointRadius: CGFloat = 0.0055
+    // The film draws the same skeleton at the same weight, from the same numbers.
+    private static let minScore = RecordingLayout.minScore
+    private static let boneWidth = CGFloat(RecordingLayout.boneWidthFraction)
+    private static let jointRadius = CGFloat(RecordingLayout.jointRadiusFraction)
 
     var body: some View {
         GeometryReader { geo in
@@ -73,6 +74,8 @@ struct ContentView: View {
 
     @StateObject private var camera = CameraModel()
     @StateObject private var workout = WorkoutViewModel()
+    @StateObject private var film = FilmModel()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showStopConfirm = false
     @State private var showSkipConfirm = false
     @State private var showPlacement = false
@@ -105,6 +108,9 @@ struct ContentView: View {
                 SkeletonOverlay(keypoints: camera.keypoints, frameSize: camera.frameSize)
                     .ignoresSafeArea()
                 hud
+                if film.state == .counting, let digit = film.digit {
+                    CountdownOverlay(digit: digit, into: film.into, label: film.countLabel)
+                }
             }
             // While the tour is showing the screen under it is for nobody: the dim keeps it from
             // sight and from touch, and this keeps it from a screen reader.
@@ -121,6 +127,7 @@ struct ContentView: View {
         .background(Color.appBackground)
         .onAppear {
             camera.onPoseFrame = { workout.onFrame($0) }
+            film.bind(camera: camera, workout: workout)
             workout.onResetCrop = { camera.resetRoi() }
             beginFirstRun()
             workout.syncHeartRate()
@@ -130,11 +137,15 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
+            film.interrupt()
             camera.stop()
             workout.stopHeartRate()
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
+        // Leaving the app ends a film, with what it caught kept, and drops a count: the camera stops
+        // with it, and a film that outlived the picture would be a blank one.
+        .onChange(of: scenePhase) { _, phase in if phase != .active { film.interrupt() } }
         .sheet(item: $workout.finished) { ResultsView($0) }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
@@ -182,9 +193,13 @@ struct ContentView: View {
                         // things you settle before the clock starts, and they live in the menu.
                         chipButton("MENU", on: false) { showMenu = true }
                             .tourTarget(.menu)
-                        chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
-                            camera.toggleRecording()
+                        // Red once a tap has bought a count, and lit while it films.
+                        chipButton(FilmFlow.title(for: film.state), on: film.state == .filming,
+                                   tint: film.state == .idle ? nil : Color.warn) {
+                            film.tap()
                         }
+                        .accessibilityLabel(FilmFlow.label(for: film.state))
+                        .accessibilityIdentifier("recButton")
                         .tourTarget(.record)
                     }
                 }
@@ -341,11 +356,12 @@ struct ContentView: View {
         .accessibilityIdentifier("debugReadout")
     }
 
-    private func chipButton(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+    private func chipButton(_ title: String, on: Bool, tint: Color? = nil,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(on ? Color.accent : Color.dim)
+                .foregroundStyle(tint ?? (on ? Color.accent : Color.dim))
         }
         .chip()
     }

@@ -6,7 +6,7 @@ import CindyCore
 /// (P18) and Strava (P20) join as their phases land, and Help starts describing each the moment it
 /// is switched on; until then it says nothing of it.
 enum HelpContent {
-    static let features: HelpFeatures = [.heartRate]
+    static let features: HelpFeatures = [.heartRate, .filming]
 
     static var versionName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"

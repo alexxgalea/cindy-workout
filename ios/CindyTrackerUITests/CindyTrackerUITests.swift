@@ -297,4 +297,21 @@ final class CindyTrackerUITests: XCTestCase {
         let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Broadcast Heart Rate'")).firstMatch
         XCTAssertTrue(advice.exists, "the sheet says to turn the broadcast on first")
     }
+
+    // MARK: - filming
+
+    func testRecSaysWhenThereIsNoCameraToFilmWith() {
+        // A replayed body has no picture, as a camera that cannot film has none: the tap is answered
+        // at once and no count starts. Nothing here asks Photos for anything.
+        let app = launchReplaying("pullups")
+        let rec = app.buttons["Record this workout"]
+        XCTAssertTrue(rec.waitForExistence(timeout: 10), "REC is on the camera screen")
+        rec.tap()
+
+        let toast = app.staticTexts["toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5), "the tap is answered")
+        XCTAssertEqual(toast.label, "Recording is not available on this camera")
+        XCTAssertTrue(app.buttons["Record this workout"].exists, "REC is still offering to record")
+        XCTAssertFalse(app.buttons["Recording is about to start, tap to cancel"].exists, "no count started")
+    }
 }

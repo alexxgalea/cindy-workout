@@ -87,7 +87,10 @@ final class CameraModel: ObservableObject {
         tracking = false
     }
 
-    func toggleRecording() { source.toggleRecording() }
+    var canRecord: Bool { source.canRecord }
+    func startRecording() -> Bool { source.startRecording() }
+    func stopRecording() { source.stopRecording() }
+    func updateOverlay(_ hud: RecordedHudText) { source.updateOverlay(hud) }
 
     /// The camera, unless a debug build was launched with `-CindyReplay <script>`.
     private static func defaultSource() -> PoseSource {

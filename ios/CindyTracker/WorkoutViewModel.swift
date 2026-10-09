@@ -298,7 +298,7 @@ final class WorkoutViewModel: ObservableObject {
             case .toast(let text): show(text)
             case .resetCrop: onResetCrop?()
             case .liveWorkout(let live): LiveWorkout.active = live
-            case .calibratedBanner: break   // the recording's banner: filming is a later phase
+            case .calibratedBanner: break   // the session already told the film's HUD
             }
         }
         sync()
@@ -314,8 +314,16 @@ final class WorkoutViewModel: ObservableObject {
         }
     }
 
+    /// Said after what is already being said, and not at all while a screen reader is on: it reads
+    /// the countdown and the toasts itself, and the same sentence from two voices is worse than one.
+    func announceRecording(_ line: VoiceLine) { speak(line, queue: .append) }
+
+    /// What the film shows over the picture at `now` (`now` is the uptime in milliseconds that every
+    /// duration here is measured on).
+    func recordedHud(now: Int64) -> RecordedHudText { session.recordedHud(now: now) }
+
     /// Short per rep, longer per movement, longest per round.
-    private func buzz(_ ms: Int) {
+    func buzz(_ ms: Int) {
         switch ms {
         case ..<40: UIImpactFeedbackGenerator(style: .light).impactOccurred()
         case ..<100: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -324,7 +332,7 @@ final class WorkoutViewModel: ObservableObject {
         }
     }
 
-    private func show(_ text: String) {
+    func show(_ text: String) {
         toast = text
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_500_000_000)
