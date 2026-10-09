@@ -101,6 +101,13 @@ public final class WorkoutSession {
     private var blockedSince: Int64 = 0
     private var heelsFlatAnnounced = false
 
+    /// What the burned-in recording shows, which disagrees with the screen during the setup check
+    /// and for a few seconds after it ends. Fed from `apply` and the two ways the check ends, so the
+    /// film's round and rep lines are always the screen's.
+    private let hud = RecordedHud()
+    /// The latest reading of the setup check, for the film's calibration count.
+    private var lastSetup: Setup?
+
     /// `smartSquats` is the profile's setting: whether an air-squat session may switch itself to
     /// heels flat when the squats turn out to be. It does not change `profile`, which stays what the
     /// athlete chose; it only lets the engine notice one of them.
@@ -135,6 +142,7 @@ public final class WorkoutSession {
 
     public func enterSetup() -> [SessionEffect] {
         state = .setup
+        lastSetup = nil
         engine.beginSetup()
         exerciseText = "SET UP"
         repsText = "—"
@@ -151,6 +159,7 @@ public final class WorkoutSession {
     }
 
     private func applySetup(_ setup: Setup, now: Int64) -> [SessionEffect] {
+        lastSetup = setup
         switch setup.stage {
         case .framing:
             repsText = "—"
@@ -170,6 +179,7 @@ public final class WorkoutSession {
         case .ready:
             // The banner belongs to the moment the check ends, not to beginWorkout(), which also
             // runs for a workout that skipped the check altogether.
+            hud.calibrated(now: now)
             return [.calibratedBanner] + beginWorkout(calibrated: true, now: now)
         }
         return []
@@ -178,7 +188,16 @@ public final class WorkoutSession {
     /// The athlete chose to skip the check, after being told what that costs.
     public func skipSetup(now: Int64) -> [SessionEffect] {
         guard state == .setup else { return [] }
+        hud.skipped(now: now)
         return beginWorkout(calibrated: false, now: now)
+    }
+
+    /// What the film shows at `now`: the calibration panel while the setup check runs, else the
+    /// workout's own clock, round, movement and count, with the banner for the few seconds after the
+    /// check ends.
+    public func recordedHud(now: Int64) -> RecordedHudText {
+        if state == .setup { return hud.forSetup(now: now, setup: lastSetup, label: exercise.label) }
+        return hud.forWorkout(now: now, clock: clockText, label: exerciseText)
     }
 
     /// Starts the clock. `calibrated` only changes what is announced.
@@ -392,6 +411,7 @@ public final class WorkoutSession {
         }
         rounds = snap.rounds
         repProgress = snap.reps * 100 / max(snap.exercise.target, 1)
+        hud.workout(rounds: snap.rounds, reps: snap.reps, target: snap.exercise.target)
 
         var effects: [SessionEffect] = []
         if state == .running {
