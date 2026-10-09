@@ -207,9 +207,9 @@ final class CindyTrackerUITests: XCTestCase {
         // screen has (the iOS camera screen has no SKIP button, so that step is left out).
         for title in ["Start", "What Cindy sees", "Your reps", "Record", "Menu", "Flip"] {
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 10), "tour step: \(title)")
-            if title != "Flip" { app.buttons["NEXT"].tap() }
+            if title != "Flip" { app.buttons["tourNext"].tap() }
         }
-        app.buttons["DONE"].tap()
+        app.buttons["tourNext"].tap()
         XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
@@ -236,6 +236,8 @@ final class CindyTrackerUITests: XCTestCase {
     func testHelpTakesTheTourAgainAndReturnsToTheCameraWithTheTourNext() {
         let app = launchReplaying("pullups", tour: true)
         XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        // A tour left pending by an earlier test is taken first: it would swallow the tap.
+        if app.buttons["Skip the tour"].waitForExistence(timeout: 3) { app.buttons["Skip the tour"].tap() }
         app.buttons["MENU"].tap()
 
         let help = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Help'")).firstMatch

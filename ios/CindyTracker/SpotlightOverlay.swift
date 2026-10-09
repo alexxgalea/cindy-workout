@@ -129,9 +129,16 @@ struct SpotlightOverlay: View {
                 }
                 .accessibilityLabel(SpotlightTour.skipDescription)
                 Spacer()
-                Button(tour.nextLabel, action: advance)
-                    .buttonStyle(CindyPrimaryButtonStyle(height: 44, small: true))
-                    .frame(width: 110)
+                // At its own size, 96 wide at least and 44 tall, as on Android.
+                Button(action: advance) {
+                    Text(tour.nextLabel)
+                        .cindy(.buttonSmall, colour: Palette.onPrimary)
+                        .padding(.horizontal, 22)
+                        .frame(minWidth: 96, minHeight: 44)
+                        .background(Palette.primaryFill, in: RoundedRectangle(cornerRadius: Palette.radiusControl))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tourNext")
             }
             .padding(.top, 8)
         }
