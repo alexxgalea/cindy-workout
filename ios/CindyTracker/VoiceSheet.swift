@@ -44,27 +44,55 @@ final class LanguageSheetModel: ObservableObject {
     }
 }
 
-/// The voice sheet's list of languages: one row each, saying where that language stands on this
-/// phone, with a button to hear it and a tap to choose it. What each row says and what a tap does
-/// is `LanguageGroupModel`'s, which the Kotlin `LanguageGroup` decided in the same way.
-struct LanguageSheet: View {
+/// The voice sheet: whether it counts, how loud, and in which language. The language list is one row
+/// each, saying where that language stands on this phone, with a button to hear it and a tap to
+/// choose it. What each row says and what a tap does is `LanguageGroupModel`'s, which the Kotlin
+/// `LanguageGroup` decided in the same way; what is kept, and when, is `VoiceForm`'s.
+struct VoiceSheet: View {
 
     @StateObject private var sheet: LanguageSheetModel
     @Environment(\.dismiss) private var dismiss
-    private let save: (String) -> Void
+    private let speaker: Speaker
+    private let save: (VoiceForm) -> Void
     private let cancel: () -> Void
-    /// Saving puts the chosen language on the profile; leaving any other way puts the speaker back.
+    @State private var form: VoiceForm
+    /// Saving puts the form on the profile; leaving any other way puts the speaker back.
     @State private var saved = false
 
-    init(speaker: Speaker, saved: String, save: @escaping (String) -> Void, cancel: @escaping () -> Void) {
-        _sheet = StateObject(wrappedValue: LanguageSheetModel(speaker: speaker, initial: saved))
+    init(speaker: Speaker, profile: Profile, save: @escaping (VoiceForm) -> Void, cancel: @escaping () -> Void) {
+        let form = VoiceForm(profile)
+        _form = State(initialValue: form)
+        _sheet = StateObject(wrappedValue: LanguageSheetModel(speaker: speaker, initial: form.language))
+        self.speaker = speaker
         self.save = save
         self.cancel = cancel
+        speaker.volume = form.volume
     }
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Toggle(VoiceForm.toggleTitle, isOn: $form.on)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Volume").font(.subheadline)
+                        // Spoken only once the grip is let go: restarting the utterance on every
+                        // pixel of the drag would stutter rather than demonstrate.
+                        Slider(value: Binding(get: { Double(form.volume) }, set: {
+                            form.volume = Float($0)
+                            speaker.volume = form.volume
+                        }), in: 0...1) { editing in
+                            if !editing { speaker.preview(.volumeCheck) }
+                        }
+                        .accessibilityLabel("Volume")
+                        .accessibilityValue(MenuBuilder.percent(form.volume))
+                    }
+                } header: {
+                    Text(VoiceForm.title.uppercased())
+                } footer: {
+                    Text(VoiceForm.subtitle + " " + VoiceForm.note)
+                }
+
                 Section {
                     ForEach(sheet.rows, id: \.tag) { row in
                         HStack(spacing: 0) {
@@ -119,7 +147,12 @@ struct LanguageSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Save") { saved = true; save(sheet.chosen); dismiss() }
+                    Button("Save") {
+                        saved = true
+                        form.language = sheet.chosen
+                        save(form)
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Button("HEAR IT") { sheet.previewChosen() }

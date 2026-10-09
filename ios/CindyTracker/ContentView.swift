@@ -77,8 +77,7 @@ struct ContentView: View {
     @State private var showSkipConfirm = false
     @State private var showPlacement = false
     @State private var showDebug = false
-    @State private var showLanguage = false
-    @State private var showProgress = false
+    @State private var showMenu = false
     /// Kept across launches: "Don't show this again" on the placement guide.
     @AppStorage("placementGuideSeen") private var placementSeen = false
 
@@ -105,11 +104,8 @@ struct ContentView: View {
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { ResultsView($0) }
-        .sheet(isPresented: $showProgress) { ProgressScreen() }
-        .sheet(isPresented: $showLanguage) {
-            LanguageSheet(speaker: workout.speaker, saved: workout.voiceLanguage,
-                          save: { workout.saveLanguage($0) },
-                          cancel: { workout.restoreLanguage() })
+        .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile() }) {
+            MenuScreen(workout: workout, workoutLive: workout.inWorkout)
         }
         .sheet(isPresented: $showPlacement) {
             PlacementGuideView(dontShowAgain: $placementSeen) {
@@ -145,10 +141,9 @@ struct ContentView: View {
                         .font(.system(size: 15, weight: .bold))
                         .chip()
                     HStack(spacing: 6) {
-                        chipButton("VOICE", on: workout.voiceEnabled) { workout.voiceEnabled.toggle() }
-                        chipButton("LANG", on: false) { showLanguage = true }
-                        // Until the menu (P13) is the way in, Progress is a chip: not mid-workout.
-                        if !workout.inWorkout { chipButton("PROGRESS", on: false) { showProgress = true } }
+                        // What changes state mid-set stays here; navigation and configuration are
+                        // things you settle before the clock starts, and they live in the menu.
+                        chipButton("MENU", on: false) { showMenu = true }
                         chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
                             camera.toggleRecording()
                         }
