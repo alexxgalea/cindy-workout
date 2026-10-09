@@ -85,6 +85,16 @@ The 12 pure tests (`HeartRateAdvertTest` 9, `BleHeartRateSourceTest` 1, `HeartRa
 | `HeartRatePermissionsTest` (2), `HeartRatePermissionSheetTest` (3) | CindyCore `HeartRateAccessTests` (5, and 3 more) | The Kotlin pins which Android permission is asked for by SDK, and that the location prompt is explained first before Android 12 and not after. iOS has one permission and nothing about location, so each is held as its iOS half: only Bluetooth, never location on any answer, no explanation before iOS asks, a denial goes to Settings |
 | (none) | CindyCore `HeartRateSheetsTests` (9) | `MenuActivity` builds the heart-rate sheets in code and no Kotlin test reads them except through the screen: the status line and its hints, the signal bands, the row labels, what pairing keeps, the silent-watch warning |
 
+### Tests written for P16
+
+Android has no test of its own for the recording overlay or the recorder; `MainActivity`'s REC flow is covered only through `CountdownTest` (ported in P6) and the transform through `OverlayTransformTest` and `RecordedHudTest` (ported in P5 and P4).
+
+| Lands in | What it holds |
+|---|---|
+| CindyCore `FilmFlowTests` (15) | A tap in the Android screen's order: a count is called off, a film is stopped, a camera that cannot film says so, then Photos is asked and refused or agreed before the count. What the far side of the count and a finished film say, and which of them are said aloud. What leaving does. The control's words in each state. A film's name |
+| CindyCore `RecordingLayoutTests` (12) | Every panel and word is inside the safe area and none in the strip fill-centre crops (with the same layout on the whole frame shown to fail it), the corners, the sizes, the banner centred in the safe area, the watermark |
+| CindyCore `SessionRecordedHudTests` (8) | The session feeds the film's HUD: fresh, setup check, both banners and their three seconds, a rep, a round, an undo, a reset |
+
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
@@ -145,7 +155,7 @@ The 12 pure tests (`HeartRateAdvertTest` 9, `BleHeartRateSourceTest` 1, `HeartRa
 | P4 | `PhrasebookRu.kt` | CindyCore | tests ported |
 | P4 | `PhrasebookTr.kt` | CindyCore | tests ported |
 | P4 | `Plurals.kt` | CindyCore | tests ported |
-| P4 | `RecordedHud.kt` | CindyCore | tests ported |
+| P4 | `RecordedHud.kt` | CindyCore. From P16 `WorkoutSession` feeds it itself (the round and count from `apply`, the banners from the two ways the setup check ends) instead of the screen doing it | tests ported |
 | P4 | `TtsEngine.kt` | CindyCore (protocol) | ported |
 | P4 | `VoiceChoice.kt` | CindyCore | tests ported |
 | P4 | `VoiceDirector.kt` | CindyCore | tests ported |
@@ -161,7 +171,7 @@ The 12 pure tests (`HeartRateAdvertTest` 9, `BleHeartRateSourceTest` 1, `HeartRa
 | P5 | `YuvCrop.kt` | not ported — Android YUV path; Vision's `regionOfInterest` replaces it | not ported |
 | P6 | `CindySheet.kt` | CindyTracker (iOS rewrite): native `confirmationDialog`s for skip and stop, and system sheets (`NavigationStack` with Save and Cancel) for the menu's choices; the Android sheet's own styling is not copied | ported as native |
 | P6 | `CindyViews.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `CountdownView.kt` | CindyCore `Countdown` (the timing, ported with its tests); the ring and digit are drawn with filming | tests ported |
+| P6 | `CountdownView.kt` | CindyCore `Countdown` (the timing, ported with its tests) and, from P16, CindyTracker `CountdownOverlay` (the vignette, ring, digit and caption) driven by `FilmModel` | tests ported |
 | P6 | `Dialogs.kt` | CindyCore `ProfileForms` (`BodyWeightForm`, `HeartRateDetailsForm`, `MovementsForm`; what each sheet asks, refuses and keeps) and CindyTracker `ProfileSheets` (the fields and lists). A comma is accepted for the point in a weight, because the number pad of a phone set to many languages types one | tests written for the port |
 | P6 | `LaunchView.kt` | CindyTracker (iOS rewrite) | not started |
 | P6 | `MainActivity.kt` | CindyCore `WorkoutSession` (the decisions) and CindyTracker `WorkoutViewModel`/`ContentView` (the plumbing); music, heart rate, filming, the tour, and camera-moved detection land in later phases | behind |
@@ -215,8 +225,8 @@ The 12 pure tests (`HeartRateAdvertTest` 9, `BleHeartRateSourceTest` 1, `HeartRa
 | P15 | `BleHeartRateSource.kt` | CindyTracker `CoreBluetoothHeartRateSource` (Core Bluetooth over the Heart Rate profile; a device's address is its identifier on this phone; a moved watch is found by name; Android's cache drop has no equivalent and a watch with no service is reported as not sending heart rate; the source waits for Bluetooth to come back instead of giving up), and `reconnectDelayMs` → CindyCore `HeartRateReconnect` | tests ported; the source is built by the macOS job and wants a watch and a strap on an iPhone |
 | P15 | `HeartRatePermissions.kt` | CindyCore `HeartRateAccess` (what Bluetooth permits, in the order the Kotlin checks: no radio, permission, radio, scan). iOS has one Bluetooth permission and no location case, so Android's explanation sheet and Location-off sheet have no counterpart; `NSBluetoothAlwaysUsageDescription` is set in `project.yml` and a test holds it to the core's words | tests ported |
 | P15 | `HeartRateScanner.kt` | CindyCore `HeartRateAdvert` and `FoundDevice` (matching, the list's order, rows relabelled not rebuilt) and CindyTracker `HeartRateScanner` (an unfiltered scan matched in software, plus peripherals already connected with the Heart Rate service, marked "Connected to this phone") | tests ported; the scanner is built by the macOS job |
-| P16 | `RecordingOverlay.kt` | CindyTracker (iOS rewrite) | not started |
-| P16 | `VideoRecorder.kt` | CindyTracker (iOS rewrite) | not started |
+| P16 | `RecordingOverlay.kt` | CindyCore `RecordingLayout` (every panel and word of the burned-in HUD, laid out inside `OverlayTransform.visibleSource` with the width of words handed in) and CindyTracker `FilmRecorder` (the skeleton and the words painted with Core Graphics). The buffer that feeds the analysis feeds the film, upright and mirrored as the preview is, so the map from the analysis frame onto the film is the identity; the Android matrix juggling for a differently sized, rotated or mirrored recording stream has nothing to do | `RecordingLayout` tested; the painting is built by the macOS job and wants a film watched from each camera |
+| P16 | `VideoRecorder.kt` | CindyTracker `FilmRecorder` (`AVAssetWriter`, H.264, video only, so no microphone) and `FilmLibrary` (Photos, add-only, no album: D6), with CindyCore `FilmFlow` deciding what a tap does and says. Photos is asked before the count and not after the film. A film that cannot be written is reported when it ends, and counting carries on | `FilmFlow` tested; the recorder is built by the macOS job and wants a film watched from each camera |
 | P17 | `MusicPlayer.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderNotifier.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderReceiver.kt` | CindyTracker (iOS rewrite) | not started |
