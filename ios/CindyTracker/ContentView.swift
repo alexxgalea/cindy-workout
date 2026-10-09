@@ -78,6 +78,7 @@ struct ContentView: View {
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showLanguage = false
+    @State private var showProgress = false
     /// Kept across launches: "Don't show this again" on the placement guide.
     @AppStorage("placementGuideSeen") private var placementSeen = false
 
@@ -104,6 +105,7 @@ struct ContentView: View {
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { ResultsView($0) }
+        .sheet(isPresented: $showProgress) { ProgressScreen() }
         .sheet(isPresented: $showLanguage) {
             LanguageSheet(speaker: workout.speaker, saved: workout.voiceLanguage,
                           save: { workout.saveLanguage($0) },
@@ -145,6 +147,8 @@ struct ContentView: View {
                     HStack(spacing: 6) {
                         chipButton("VOICE", on: workout.voiceEnabled) { workout.voiceEnabled.toggle() }
                         chipButton("LANG", on: false) { showLanguage = true }
+                        // Until the menu (P13) is the way in, Progress is a chip: not mid-workout.
+                        if !workout.inWorkout { chipButton("PROGRESS", on: false) { showProgress = true } }
                         chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
                             camera.toggleRecording()
                         }

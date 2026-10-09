@@ -10,6 +10,7 @@ struct ResultsView: View {
     @State private var asking: Asking?
     @State private var reopened: ResultsRequest?
     @State private var heelsFlatExplained = false
+    @State private var showProgress = false
 
     private enum Asking: Identifiable {
         case weight, heartRate
@@ -37,9 +38,14 @@ struct ResultsView: View {
                 if let timeline = page.timeline { timelineCard(timeline) }
                 if let heart = page.heart { heartCard(heart) }
 
-                Button("DONE") { dismiss() }
-                    .buttonStyle(PrimaryButton())
-                    .padding(.top, 16)
+                HStack(spacing: 10) {
+                    // A reopened session offers DONE only: it came from Progress.
+                    if page.offersProgress {
+                        Button("PROGRESS") { showProgress = true }.buttonStyle(GhostButton(tint: .white))
+                    }
+                    Button("DONE") { dismiss() }.buttonStyle(PrimaryButton())
+                }
+                .padding(.top, 16)
             }
             .padding(20)
         }
@@ -48,6 +54,7 @@ struct ResultsView: View {
             BodyDetailsSheet(profile: vm.profile, asksWeight: which == .weight)
         }
         .sheet(item: $reopened) { ResultsView($0) }
+        .sheet(isPresented: $showProgress) { ProgressScreen() }
         .alert("Heels-flat squats", isPresented: $heelsFlatExplained) {
             Button("OK", role: .cancel) {}
         } message: {

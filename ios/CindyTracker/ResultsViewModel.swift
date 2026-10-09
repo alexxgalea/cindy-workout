@@ -13,6 +13,16 @@ struct ResultsRequest: Identifiable, Equatable {
     var id: Int64 { attempt.atMillis }
 }
 
+extension ResultsRequest {
+    /// The saved session filed at `atMillis`, to reopen as it looked the day it happened. Nil when
+    /// the board no longer has it, in which case nothing opens.
+    static func reopening(_ atMillis: Int64) -> ResultsRequest? {
+        ResultsModel.session(at: atMillis, in: RecordStore().all()).map {
+            ResultsRequest(attempt: $0, stoppedEarly: false, heelsFlatSpotted: false, reviewing: true)
+        }
+    }
+}
+
 /// The results page with its state, for SwiftUI: wraps `ResultsModel`, which decides everything,
 /// and the four chart models, which own the touch. It publishes what the views must redraw for
 /// and does nothing of its own to the page.
@@ -77,11 +87,7 @@ final class ResultsViewModel: ObservableObject {
 
     /// The saved session filed at `atMillis`, to reopen from the comparison card. Nil when the
     /// board no longer has it, in which case nothing opens.
-    func reopen(_ atMillis: Int64) -> ResultsRequest? {
-        ResultsModel.session(at: atMillis, in: RecordStore().all()).map {
-            ResultsRequest(attempt: $0, stoppedEarly: false, heelsFlatSpotted: false, reviewing: true)
-        }
-    }
+    func reopen(_ atMillis: Int64) -> ResultsRequest? { ResultsRequest.reopening(atMillis) }
 
     func chooseComparison(_ i: Int) { results.chooseComparison(i) }
 

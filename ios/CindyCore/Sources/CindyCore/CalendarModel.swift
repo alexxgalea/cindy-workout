@@ -75,10 +75,13 @@ public final class CalendarModel {
         self.streak = streak
     }
 
+    /// The shown month's name in full, as the phone says it ("September").
+    public var monthTitle: String { monthName(month) }
+
     /// "September 2026, trained on 1 day".
     public var summary: String {
         let inMonth = trained.filter { $0.yearMonth == month }.count
-        return "\(monthName(month)) \(month.year), trained on \(inMonth) day\(inMonth == 1 ? "" : "s")"
+        return "\(monthTitle) \(month.year), trained on \(inMonth) day\(inMonth == 1 ? "" : "s")"
     }
 
     // MARK: geometry

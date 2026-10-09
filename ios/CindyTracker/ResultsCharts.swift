@@ -34,7 +34,7 @@ enum Ink {
 
 /// Hands a finger's down, move and up to a chart model. A vertical gesture never becomes a drag in
 /// the model, so the scroll view around the chart keeps it.
-private struct ChartTouch: ViewModifier {
+struct ChartTouch: ViewModifier {
     let down: (CGPoint) -> Void
     let move: (CGPoint) -> Void
     let up: (CGPoint) -> Void
@@ -57,14 +57,14 @@ private struct ChartTouch: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func chartTouch(down: @escaping (CGPoint) -> Void, move: @escaping (CGPoint) -> Void,
                     up: @escaping (CGPoint) -> Void) -> some View {
         modifier(ChartTouch(down: down, move: move, up: up))
     }
 }
 
-private func rect(_ r: ChartRect) -> CGRect {
+func rect(_ r: ChartRect) -> CGRect {
     CGRect(x: r.left, y: r.top, width: r.width, height: r.height)
 }
 
