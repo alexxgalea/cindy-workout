@@ -43,11 +43,10 @@ final class ProgressViewModel: ObservableObject {
             let symbols = DateFormatter().standaloneMonthSymbols ?? CalendarModel.fullMonths
             return symbols[month.month - 1]
         })
-        let name = UserDefaults.standard.string(forKey: "display_name")?.trimmingCharacters(in: .whitespaces)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         progress = ProgressModel(ProgressInput(
             attempts: store.all(), today: zone.localDate(epochMs: now), nowMs: now, zone: zone, firstDayOfWeek: first,
-            displayName: (name?.isEmpty ?? true) ? nil : name, is24Hour: Self.is24Hour()))
+            displayName: Profile().displayName, is24Hour: Self.is24Hour()))
         page = progress.page
 
         chart.onSelect = { [weak self] in self?.selected = $0 }

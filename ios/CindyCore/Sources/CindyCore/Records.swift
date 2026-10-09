@@ -274,6 +274,16 @@ public enum Records {
         text.unicodeScalars.allSatisfy { $0.properties.isWhitespace }
     }
 
+    /// Kotlin's `trim()` for a string: the whitespace taken off both ends.
+    static func trimmed(_ text: String) -> String {
+        var scalars = Array(text.unicodeScalars)
+        while let first = scalars.first, first.properties.isWhitespace { scalars.removeFirst() }
+        while let last = scalars.last, last.properties.isWhitespace { scalars.removeLast() }
+        var out = String.UnicodeScalarView()
+        out.append(contentsOf: scalars)
+        return String(out)
+    }
+
     /// Kotlin's `toIntOrNull` and `toLongOrNull`.
     ///
     /// Two things Swift's own parsers do differently. Kotlin reads any Unicode decimal digit

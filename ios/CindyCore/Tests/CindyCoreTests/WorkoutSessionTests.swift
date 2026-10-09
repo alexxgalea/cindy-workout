@@ -461,4 +461,12 @@ final class WorkoutSessionTests: XCTestCase {
         hold(PoseFixtures.pullup(170), frames: 2)
         XCTAssertNil(session.coachShowing, "a readout on the status line stands the figure down")
     }
+
+    /// The profile's smart-squats setting reaches the engine, and leaves the movements as chosen.
+    func testTheSmartSquatsSettingReachesTheEngineAndLeavesTheMovementsAsChosen() {
+        XCTAssertFalse(WorkoutSession().smartSquats)
+        let session = WorkoutSession(profile: .standard, smartSquats: true)
+        XCTAssertTrue(session.smartSquats)
+        XCTAssertEqual(session.profile, .standard)
+    }
 }

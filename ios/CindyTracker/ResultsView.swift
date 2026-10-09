@@ -11,6 +11,7 @@ struct ResultsView: View {
     @State private var reopened: ResultsRequest?
     @State private var heelsFlatExplained = false
     @State private var showProgress = false
+    @State private var toast: String?
 
     private enum Asking: Identifiable {
         case weight, heartRate
@@ -51,14 +52,32 @@ struct ResultsView: View {
         }
         .background(Color.appBackground)
         .sheet(item: $asking, onDismiss: { vm.bodyChanged() }) { which in
-            BodyDetailsSheet(profile: vm.profile, asksWeight: which == .weight)
+            switch which {
+            case .weight: BodyWeightSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
+            case .heartRate: HeartRateDetailsSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
+            }
         }
         .sheet(item: $reopened) { ResultsView($0) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
-        .alert("Heels-flat squats", isPresented: $heelsFlatExplained) {
-            Button("OK", role: .cancel) {}
+        // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
+        // athlete's own.
+        .alert(HeelsFlatSheet.title, isPresented: $heelsFlatExplained) {
+            Button(HeelsFlatSheet.primary) {
+                HeelsFlatSheet.setHeelsFlat(on: vm.profile)
+                toast = HeelsFlatSheet.done
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    toast = nil
+                }
+            }
+            Button(HeelsFlatSheet.secondary, role: .cancel) {}
         } message: {
-            Text("Smart counting noticed your heels staying down and switched this session to heels-flat squats. Your score is ranked against sessions at the same movements.")
+            Text(HeelsFlatSheet.subtitle + "\n\n" + HeelsFlatSheet.note)
+        }
+        .overlay(alignment: .bottom) {
+            if let toast {
+                Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
+            }
         }
     }
 

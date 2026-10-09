@@ -30,7 +30,7 @@ final class WorkoutViewModel: ObservableObject {
     /// The attempt the results sheet is showing. Settable because `.sheet(item:)` clears it when
     /// the sheet is dismissed.
     @Published var finished: ResultsRequest?
-    @Published var voiceEnabled = true {
+    @Published private(set) var voiceEnabled = true {
         didSet {
             speaker.enabled = voiceEnabled
             if !voiceEnabled { speaker.stop() }
@@ -40,23 +40,28 @@ final class WorkoutViewModel: ObservableObject {
     /// Asks the camera to forget the crop that was following the athlete.
     var onResetCrop: (() -> Void)?
 
-    /// The language saved for the count, as a `VoicePacks` tag.
-    var voiceLanguage: String { VoicePacks.of(defaults.string(forKey: Self.languageKey)).tag }
+    /// What the athlete has told the app, edited from the menu. Read again by `applyProfile`
+    /// whenever a sheet there is saved, so the workout acts on it without a restart.
+    let settings = Profile()
 
-    /// Saves the language chosen in the sheet. Until it is saved, choosing only changes what the
-    /// speaker previews in, so a sheet dismissed without saving is put back with `restoreLanguage`.
-    func saveLanguage(_ tag: String) {
-        let pack = VoicePacks.of(tag)
-        defaults.set(pack.tag, forKey: Self.languageKey)
-        speaker.language = pack.tag
+    /// Puts the speaker back on the saved language, after a voice sheet was left without saving:
+    /// until it is saved, choosing only changes what the speaker previews in.
+    func restoreLanguage() { speaker.language = settings.voiceLanguage }
+
+    /// Acts on the profile: the voice's switch, volume and language, and, between workouts, the
+    /// movements and whether the squats may switch themselves to heels flat. Refused mid-session for
+    /// the movements, because a rep's meaning must not change halfway through the score it
+    /// contributes to; the menu says so before it gets here.
+    func applyProfile() {
+        voiceEnabled = settings.voiceOn
+        speaker.volume = settings.voiceVolume
+        speaker.language = settings.voiceLanguage
+        if phase == .idle || phase == .finished,
+           session.profile != settings.movements || session.smartSquats != settings.smartSquats {
+            session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
+        }
+        sync()
     }
-
-    /// Puts the speaker back on the saved language.
-    func restoreLanguage() { speaker.language = voiceLanguage }
-
-    private static let profileKey = "cindy.movementProfile"
-    private static let languageKey = "voice_language"
-    private let defaults = UserDefaults.standard
 
     /// Rebuilt rather than mutated when the movements change: a session's profile is immutable for
     /// its life on purpose, because a rep's meaning must not change halfway through the score it
@@ -75,10 +80,8 @@ final class WorkoutViewModel: ObservableObject {
     private(set) var stopPending = false
 
     init() {
-        session = WorkoutSession(
-            profile: Variations.decode(UserDefaults.standard.string(forKey: WorkoutViewModel.profileKey)))
-        speaker.language = VoicePacks.of(defaults.string(forKey: Self.languageKey)).tag
-        sync()
+        session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
+        applyProfile()
     }
 
     var startButtonTitle: String {
@@ -185,17 +188,6 @@ final class WorkoutViewModel: ObservableObject {
     private func reset() {
         finished = nil
         perform(session.reset())
-    }
-
-    /// Changes the movements for the next workout. Refused mid-session: a rep's meaning cannot
-    /// change halfway through the score it contributes to.
-    @discardableResult
-    func setMovementProfile(_ chosen: CindyProfile) -> Bool {
-        guard phase == .idle || phase == .finished else { return false }
-        defaults.set(Variations.encode(chosen), forKey: Self.profileKey)
-        session = WorkoutSession(profile: chosen)
-        sync()
-        return true
     }
 
     // MARK: - the clock

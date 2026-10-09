@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip | **1,500 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges) | **1,589 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
 | `CindyClips` — scores the recorded clips with Vision, in the shape the Python harness scores them with MoveNet | **65 tests, passing** on Linux and in CI: the scoring is run through the real `run_batch.py` on the same frames and the reports are identical (see [Vision on the clips](#vision-on-the-clips)). **Not yet run on a clip**: it needs a Mac with the clips provisioned, which is yours to do |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
@@ -21,7 +21,13 @@ checks are XCTest and run anywhere:
 tools/ios/swift.sh test                          # Linux: fetches a pinned toolchain once (~880 MB)
 tools/ios/swift.sh test --filter BarGateTests    # a single class
 swift test --package-path ios/CindyCore          # on a Mac, with Xcode's swift
+tools/ios/parse-app.sh                           # Linux: every app file parses (syntax only)
 ```
+
+The app itself (`ios/CindyTracker`, SwiftUI and UIKit) needs Apple's SDK to compile, so on Linux
+the most that can be checked is that it parses. Whatever is decided about what a screen shows is in
+`CindyCore` for that reason, and tested there; the views only draw it. Compiling the app is the
+macOS job in `.github/workflows/ios-app.yml`, or Xcode on a Mac.
 
 [PLAN.md](PLAN.md) sets out how the app catches up with Android, and [PARITY.md](PARITY.md) tracks
 which Kotlin file each Swift file mirrors.
