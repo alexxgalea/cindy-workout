@@ -110,14 +110,16 @@ final class StoreMetadataTests: XCTestCase {
         XCTAssertEqual((try manifest(withoutStrava)["NSPrivacyCollectedDataTypes"] as? [Any])?.count, 0)
     }
 
-    /// a build with Strava declares exactly what an upload sends: health and fitness, for the app's function, not linked, not tracking
+    /// a build with Strava declares exactly what an upload sends: health and fitness, for the app's function, linked to the athlete's Strava account, not tracking
     func testABuildWithStravaDeclaresExactlyWhatAnUploadSends() throws {
         let m = try manifest(withStrava)
         let collected = try XCTUnwrap(m["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
         XCTAssertEqual(Set(collected.compactMap { $0["NSPrivacyCollectedDataType"] as? String }),
                        ["NSPrivacyCollectedDataTypeHealth", "NSPrivacyCollectedDataTypeFitness"])
         for entry in collected {
-            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, false)
+            // Linked: it reaches Strava as part of an activity on the athlete's own account, and the label
+            // says so, though Cindy receives nothing back and keeps no copy.
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
             XCTAssertEqual(entry["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
             XCTAssertEqual(entry["NSPrivacyCollectedDataTypePurposes"] as? [String],
                            ["NSPrivacyCollectedDataTypePurposeAppFunctionality"])
