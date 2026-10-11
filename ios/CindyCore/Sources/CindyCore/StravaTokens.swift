@@ -247,6 +247,25 @@ public final class StravaSession: StravaAccessToken, @unchecked Sendable {
         }
     }
 
+    /// Refreshes now whatever the clock says, for a token the API has just refused, under the same
+    /// lock as `get`. True once a fresh grant is stored; false once there is no grant to refresh or
+    /// Strava says the grant is gone (and then it is cleared). Any other failure escapes.
+    ///
+    /// Android's worker does this unlocked, and so could race a refresh that `get` is making. The
+    /// lock is the one that comment above `get` explains.
+    public func forceRefresh() async throws -> Bool {
+        try await Self.lock.withLock {
+            guard let grant = store.grant else { return false }
+            do {
+                store.grant = try await auth.refresh(grant.refreshToken)
+                return true
+            } catch let error as StravaAuthError {
+                if error.revoked { store.clearGrant() }
+                return false
+            }
+        }
+    }
+
     /// Refreshes with ten minutes of headroom, so an upload never races the access token's own
     /// expiry mid-request.
     private static let refreshWindowS: Int64 = 600

@@ -96,6 +96,17 @@ public final class StravaUploads: @unchecked Sendable {
         return requeued
     }
 
+    /// Every attempt with a ledger entry, oldest first, with what is known of it.
+    public func entries() -> [(atMillis: Int64, status: StravaUploadStatus)] {
+        var found: [(atMillis: Int64, status: StravaUploadStatus)] = []
+        for key in storage.keys() where key.hasPrefix(Self.keyPrefix) {
+            guard let atMillis = Records.toLong(String(key.dropFirst(Self.keyPrefix.count))),
+                  let status = Self.decode(storage.string(forKey: key)) else { continue }
+            found.append((atMillis, status))
+        }
+        return found.sorted { $0.atMillis < $1.atMillis }
+    }
+
     /// Forgets every ledger entry. Called when the record board is cleared, so the app stops asking
     /// Strava about attempts it no longer has on file. Nothing already on Strava is touched: this
     /// is only the app's own memory of what it did.
