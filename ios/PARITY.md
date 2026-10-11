@@ -163,6 +163,29 @@ Written for the port, with no Kotlin test behind them (49): `StravaConfigTests` 
 - Android's parser reads some things this one refuses (single quotes, text after the closing brace). Strava sends strict JSON, so no real reply tells them apart.
 - A repeated response header reaches Kotlin as a list and `URLSession` as one comma-joined value. Only `Retry-After` is read, and it is sent once.
 
+### Kotlin tests that were ported in P20
+
+| Kotlin test | Kotlin | Swift | In |
+|---|---|---|---|
+| `StravaScreenTest` | 18 | 18 | `StravaScreenTests` |
+| `StravaConsentTest` | 7 | 7 | `StravaConsentTests` |
+| `StravaUploadWorkerTest` | 18 | 18 | `StravaUploadWorkerTests` |
+| | **43** | **43** | |
+
+(`StravaSessionTest`, the plan's fourth file, is P19's: see above.) Robolectric built each activity and read its views; the same facts are read off the models the screens draw from (`MenuPage`, `StravaSheet`, `StravaRow`, `StravaRedirectHandler`), so they run on Linux. `NoStravaCredentials` is a `StravaConfig` that is not `available`, and `availableForTest` is gone. The manifest test that holds the redirect scheme to the application id reads `ios/project.yml`.
+
+Written for the port, with no Kotlin test behind them (20): `StravaUploadQueueTests` (12: what WorkManager did for Android), five in `StravaScreenTests` (a good redirect through to a connected athlete, a redirect that cannot be exchanged, one without the write scope, disconnecting offline, the sheet's words), two in `StravaConsentTests`, one in `HelpPageTests`. Two UI tests run in the simulator: a build with no credentials has no Strava on its menu, and with `-CindyStrava` (debug builds only) the row asks first and NOT NOW starts nothing.
+
+**What iOS does differently, and why:**
+
+- **No WorkManager.** The ledger is the persisted queue and `StravaUploadQueue` drains it (see the `StravaUploadWorker.kt` row). A drain interrupted by the system leaves the attempt pending, never failed.
+- **The consent page opens in the Strava app** when it is installed, otherwise in `ASWebAuthenticationSession`, which also catches the redirect. Closing the web sheet without an answer takes back the state that was minted.
+- **The Keychain outlives the app** and Android's prefs do not, so a fresh install wipes it (and the ledger with it).
+- **The forced refresh after a 401 takes the session's lock**, which Android's worker does not.
+- **A request the transport refuses is not retried** (`HttpRequestRefused`), and neither is an upload that cannot be prepared: it is marked failed where the athlete can see it.
+- **Help's upload paragraph** says it is sent when the workout is saved and tried again when Cindy is open or a connection returns, instead of "carries on in the background".
+- **Credentials** come from `ios/Config/Strava.xcconfig`, gitignored, through an optional include; the values reach `Info.plist`. Without the file the build has none.
+
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
@@ -184,6 +207,8 @@ Written for the port, with no Kotlin test behind them (49): `StravaConfigTests` 
 | P19 | `Instant.toString()` | `StravaPayload.isoInstant`, from the day count, so no platform formatter is involved |
 | P19 | `HttpsURLConnection` | `URLSessionTransport`: https only, no redirects followed, no cookies or cache |
 | P19 | `synchronized`, `SharedPreferences` | `AsyncLock` and `StravaStorage` |
+| P20 | `WorkManager` (unique work, a network constraint, exponential backoff, resuming after a process death), `LiveData` of work info | `StravaUploadQueue` over the ledger, driven by `StravaCenter`: `beginBackgroundTask`, `NWPathMonitor`, `BGAppRefreshTask`, and a redraw when the storage is written to |
+| P20 | `Intent.ACTION_VIEW` on Strava's authorize URL, the manifest's intent filter | `strava://oauth/mobile/authorize` or `ASWebAuthenticationSession`, `CFBundleURLTypes`, `onOpenURL` |
 
 ### Not a Kotlin file
 
@@ -312,8 +337,8 @@ Written for the port, with no Kotlin test behind them (49): `StravaConfigTests` 
 | P19 | `StravaHeartRate.kt` | CindyCore | tests ported |
 | P19 | `StravaHttp.kt` | CindyCore `HttpRequest`, `HttpResponse`, `HttpTransport`, `FormBody`, `Multipart`, `StravaAuthError`, `StravaAccessToken`, and `URLSessionTransport` (`FoundationNetworking` on Linux) | tests ported; a real 3xx through Apple's `URLSession` wants a device |
 | P19 | `StravaPayload.kt` | CindyCore `StravaExercises`, `StravaPayload`, `HrPoint`, `startMillisOf` | tests ported |
-| P19 | `StravaTokens.kt` | CindyCore `StravaGrant`, `StravaTokenStore` and `StravaSession` over a `StravaStorage` protocol; the Keychain store behind it is P20's | tests ported |
+| P19 | `StravaTokens.kt` | CindyCore `StravaGrant`, `StravaTokenStore` and `StravaSession` over a `StravaStorage` protocol; the Keychain store behind it is `StravaKeychainStorage` in CindyTracker (P20) | tests ported |
 | P19 | `StravaUploads.kt` | CindyCore `StravaUploads`: the ledger, the auto-upload decision, requeueing after a reconnect, clearing. The scheduling is P20's | tests ported |
-| P20 | `StravaAuthActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P20 | `StravaConsent.kt` | CindyTracker (iOS rewrite) | not started |
-| P20 | `StravaUploadWorker.kt` | CindyTracker (iOS rewrite) | not started |
+| P20 | `StravaAuthActivity.kt` | CindyCore `StravaConnect` (mints the state and gives Strava's URL only once Strava's own button is tapped; clears the attempt a menu connect is not about) and `StravaRedirectHandler` (what the return meant, the exchange, the grant stored, what waited requeued, the attempt that sent the athlete queued), and CindyTracker `StravaCenter` (the Strava app by `strava://oauth/mobile/authorize` when `LSApplicationQueriesSchemes` finds it, otherwise `ASWebAuthenticationSession`; the Strava app's redirect arrives by `onOpenURL`). The redirect scheme is the bundle identifier, declared once in `project.yml` | tests ported; the round trip wants an iPhone |
+| P20 | `StravaConsent.kt` | CindyCore `StravaConsent` (every word of the sheet, and `StravaSheet` for the connected one) and CindyTracker `StravaConsentSheet` and `StravaConnectedSheet`. Strava's two images are its own SVG path data, copied from the Android drawables into an asset catalog | tests ported; the sheets are built by the macOS job |
+| P20 | `StravaUploadWorker.kt` | CindyCore `StravaUploadRun` (the worker's decisions, unchanged) and `StravaUploadQueue` (what WorkManager did: the ledger is the persisted queue; oldest first, one drain at a time, Android's backoff from 30 s to five hours). CindyTracker `StravaCenter` drains it right after a saved session inside `beginBackgroundTask`, when the app comes forward, when `NWPathMonitor` finds a network, when a retry falls due, and from a `BGAppRefreshTask`. An upload may wait until the app is next opened, and Help says so | tests ported; the scheduling wants an iPhone |

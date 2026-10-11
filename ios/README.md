@@ -6,9 +6,9 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges), the first-launch pages, the camera-screen tour and Help (their pages, steps and every word), and the heart-rate pairing (which adverts count, the list's order, what Bluetooth permits, what the sheets say), filming (what a tap on REC does and says, and where the burned-in words go) the music (how loud, when it plays, what its sheet says) and the reminder (the week of notifications to schedule, and what the sheet does about permission), and Strava's logic (the activity's JSON, name and description, the requests and how every answer is read, OAuth, the stored grant and its refresh, the upload ledger, and a `URLSession` transport that only speaks https and follows no redirect) | **1,935 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Strava has no screen or background upload yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges), the first-launch pages, the camera-screen tour and Help (their pages, steps and every word), and the heart-rate pairing (which adverts count, the list's order, what Bluetooth permits, what the sheets say), filming (what a tap on REC does and says, and where the burned-in words go) the music (how loud, when it plays, what its sheet says) and the reminder (the week of notifications to schedule, and what the sheet does about permission), and Strava's logic (the activity's JSON, name and description, the requests and how every answer is read, OAuth, the stored grant and its refresh, the upload ledger, and a `URLSession` transport that only speaks https and follows no redirect) | **1,998 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** Strava is connected and uploaded from the phone (the screens and the scheduling are built by the macOS job and have not met a phone): see [PARITY.md](PARITY.md) |
 | `CindyClips` — scores the recorded clips with Vision, in the shape the Python harness scores them with MoveNet | **65 tests, passing** on Linux and in CI: the scoring is run through the real `run_batch.py` on the same frames and the reports are identical (see [Vision on the clips](#vision-on-the-clips)). **Not yet run on a clip**: it needs a Mac with the clips provisioned, which is yours to do |
-| `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
+| `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and its UI tests pass** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
 The logic is a real, running, tested port. The app layer compiled on its first macOS build with
 one error, and counts a replayed workout in the simulator, but nothing has pointed a real camera at
@@ -51,6 +51,9 @@ ios/
 │   │   ├── StravaAuth.swift      the consent URL, the redirect, the three token calls
 │   │   ├── StravaTokens.swift    the stored grant and the session that keeps it fresh
 │   │   ├── StravaUploads.swift   what happened to each attempt's upload
+│   │   ├── StravaUploadWorker.swift  one upload's decisions, and the queue that drains the ledger
+│   │   ├── StravaConnect.swift   the consent words, starting OAuth, reading the return, the sheets' words
+│   │   ├── StravaRow.swift       the results screen's Strava row
 │   │   ├── StravaHttp.swift      requests, bodies and the transport; URLSessionTransport is the real one
 │   │   ├── RoundSplits.swift     what the round chart draws and says
 │   │   ├── SessionStats.swift    a session as rounds and movements
@@ -127,6 +130,20 @@ download, and no 22 MB of model in the bundle. `CindyVision` (`VisionFrameAnalys
 `VisionPose`) is the whole adapter.
 
 Everything downstream of that file is the same logic as Android, arrived at the same way.
+
+## Strava
+
+Off unless the build is given credentials, exactly as Android is without `strava.properties`: put
+`STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `ios/Config/Strava.xcconfig` (gitignored, picked up
+by `Config/Base.xcconfig` through an optional include) and regenerate the project. A build without
+that file has no Strava row, no Help section, no tutorial bullet, and uploads nothing.
+
+Strava's authorization callback domain stays `localhost`; the redirect scheme is the bundle
+identifier. The athlete is asked first (a sheet that says what each workout sends), connects in the
+Strava app if it is installed and in a web sheet if not, and the tokens go in the Keychain, this device
+only. There is no scheduler that runs an upload while the app is closed: it is sent as the session is
+saved, and again when the app comes forward, when a network appears, and when iOS grants a background
+refresh, so **an upload can wait until the app is next opened**. Help says so.
 
 ## Vision on the clips
 
