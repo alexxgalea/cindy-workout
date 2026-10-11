@@ -350,7 +350,7 @@ final class CindyTrackerUITests: XCTestCase {
         // with a dialog the test does not drive.
         XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5), "the sheet has the switch")
         XCTAssertTrue(app.buttons["reminderTry"].exists, "and TRY IT")
-        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'none on days you've already trained'")).firstMatch
+        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "none on days you've already trained")).firstMatch
         XCTAssertTrue(note.exists, "the sheet says it stays quiet on a day already trained")
     }
 }
