@@ -1,0 +1,14 @@
+// Settings every configuration shares.
+//
+// Strava is behind credentials that are not in the repository. Put them in Config/Strava.xcconfig,
+// which is gitignored, as the Android build reads strava.properties:
+//
+//     STRAVA_CLIENT_ID = 12345
+//     STRAVA_CLIENT_SECRET = the-client-secret-from-strava.com/settings/api
+//
+// A build without that file has no Strava at all: no menu row, no Help section, no tutorial
+// bullet, and nothing is uploaded. The empty values below are what such a build gets.
+STRAVA_CLIENT_ID =
+STRAVA_CLIENT_SECRET =
+
+#include? "Strava.xcconfig"

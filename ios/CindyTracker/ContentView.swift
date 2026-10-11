@@ -162,7 +162,7 @@ struct ContentView: View {
         // However the pages end, finished or skipped, the camera comes next, after the movements
         // chosen on the second page have reached the session that START will run.
         .fullScreenCover(isPresented: $showTutorial, onDismiss: { workout.applyProfile(); openCamera() }) {
-            TutorialScreen(replay: false, profile: workout.settings) { _ in showTutorial = false }
+            TutorialScreen(replay: false, profile: workout.settings, stravaAvailable: StravaBuild.available) { _ in showTutorial = false }
         }
         .sheet(isPresented: $showPlacement) {
             PlacementGuideView(dontShowAgain: $placementSeen) {

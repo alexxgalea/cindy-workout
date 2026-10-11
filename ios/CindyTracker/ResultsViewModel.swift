@@ -31,6 +31,8 @@ final class ResultsViewModel: ObservableObject {
 
     let results: ResultsModel
     let profile: Profile
+    /// Which attempt this is, for its Strava row.
+    let atMillis: Int64
 
     let track = RoundTrackModel()
     let splits = RoundSplitsChartModel()
@@ -62,6 +64,7 @@ final class ResultsViewModel: ObservableObject {
             zone: zone, firstDayOfWeek: Self.firstDay(), today: zone.localDate(epochMs: now),
             font: AppleEmojiFont(), is24Hour: Self.is24Hour())
         self.profile = profile
+        atMillis = request.attempt.atMillis
         results = ResultsModel(input)
         page = results.page
 

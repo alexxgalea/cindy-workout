@@ -337,6 +337,8 @@ final class WorkoutViewModel: ObservableObject {
             if let trace { try? HeartRateStore().save(atMillis: done.attempt.atMillis, trace) }
             // Today is trained now, so today's reminder goes and the days after it are worded again.
             ReminderCenter.shared.replan()
+            // Sent to Strava by itself, when the athlete is connected and wants that.
+            StravaCenter.shared.attemptSaved(atMillis: done.attempt.atMillis)
         }
         finished = ResultsRequest(attempt: done.attempt, stoppedEarly: done.stoppedEarly,
                                   heelsFlatSpotted: done.heelsFlatSpotted, reviewing: false)

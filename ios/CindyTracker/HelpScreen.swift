@@ -2,11 +2,15 @@ import SwiftUI
 import UIKit
 import CindyCore
 
-/// What this build can describe. Filming (P16), music (P17), the daily reminder
-/// (P18) and Strava (P20) join as their phases land, and Help starts describing each the moment it
-/// is switched on; until then it says nothing of it.
+/// What this build can describe. Help describes each part only where the build has it: Strava only
+/// with credentials, as on Android.
 enum HelpContent {
-    static let features: HelpFeatures = [.heartRate, .filming, .music, .reminders]
+    /// Strava is described only in a build that has it, as on Android.
+    static var features: HelpFeatures {
+        var features: HelpFeatures = [.heartRate, .filming, .music, .reminders]
+        if StravaBuild.available { features.insert(.strava) }
+        return features
+    }
 
     static var versionName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
@@ -87,7 +91,7 @@ struct HelpScreen: View {
         .navigationBarHidden(true)
         .preferredColorScheme(.dark)
         .fullScreenCover(isPresented: $replaying) {
-            TutorialScreen(replay: true, profile: profile) { exit in
+            TutorialScreen(replay: true, profile: profile, stravaAvailable: StravaBuild.available) { exit in
                 replaying = false
                 if exit == .returnToCamera { onReturnToCamera() }
             }

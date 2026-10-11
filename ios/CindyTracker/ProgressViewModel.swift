@@ -84,6 +84,8 @@ final class ProgressViewModel: ObservableObject {
     func clear() {
         store.clear()
         HeartRateStore().clear()
+        // The app stops asking Strava about attempts it no longer has; nothing already on Strava is touched.
+        StravaCenter.shared.forgetUploads()
         RepTimesStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("rep_times", isDirectory: true)).clear()
         progress.reload([])
