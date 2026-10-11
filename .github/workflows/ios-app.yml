@@ -62,6 +62,7 @@ jobs:
       # if the app that comes out has any trace of it, so a release build can never be told to
       # ignore its camera.
       - name: Build the release configuration, without the replay source
+        if: success() || failure()  # a failing UI test says nothing about what a release build is
         run: |
           set -o pipefail
           xcodebuild build \
@@ -81,6 +82,7 @@ jobs:
       # Both are built here, the second with stand-in credentials, because the copy that makes the
       # difference is a build phase and nothing else would notice it stop working.
       - name: Check the store metadata of a build without Strava, and of one with it
+        if: success() || failure()  # a failing UI test says nothing about what a release build is
         run: |
           set -o pipefail
           check() {  # app, expected collected data types, strava key expected
