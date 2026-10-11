@@ -152,6 +152,38 @@ final class StravaUploadQueueTests: XCTestCase {
         XCTAssertNil(drained.nextDueMs)
     }
 
+    /// an interrupted drain leaves the attempt pending instead of marking it failed
+    func testAnInterruptedDrainLeavesTheAttemptPendingInsteadOfMarkingItFailed() async {
+        ledger.queue(atMillis: 1)
+        ledger.queue(atMillis: 2)
+        let script = self.script
+        let queue = StravaUploadQueue(ledger: ledger, run: { at in
+            _ = try script.next(at)
+            throw CancellationError()
+        }, clock: { script.now })
+
+        let drained = await queue.drain(force: true)
+
+        XCTAssertEqual(drained.ran, [1], "the drain stops where it was interrupted")
+        XCTAssertEqual(ledger.status(atMillis: 1)?.state, .queued)
+        XCTAssertEqual(queue.pending(), [1, 2])
+        XCTAssertNil(drained.nextDueMs, "being interrupted is not a failure to back off from")
+    }
+
+    /// a drain started in a cancelled task runs nothing
+    func testADrainStartedInACancelledTaskRunsNothing() async {
+        ledger.queue(atMillis: 1)
+        let queue = queue()
+        let task = Task { () -> StravaUploadQueue.Drained in
+            while !Task.isCancelled { await Task.yield() }
+            return await queue.drain(force: true)
+        }
+        task.cancel()
+        let drained = await task.value
+        XCTAssertEqual(drained.ran, [])
+        XCTAssertEqual(script.ran, [])
+    }
+
     /// two drains at once never run the same attempt at the same time
     func testTwoDrainsAtOnceNeverRunTheSameAttemptAtTheSameTime() async {
         ledger.queue(atMillis: 1)

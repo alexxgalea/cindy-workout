@@ -211,6 +211,9 @@ public final class StravaUploadQueue: @unchecked Sendable {
         await Self.lock.withLock {
             var ran: [Int64] = []
             for atMillis in pending() {
+                // The system took the app's time away (a background refresh ran out). What is left
+                // stays pending for the next drain; nothing is marked failed for being interrupted.
+                if Task.isCancelled { break }
                 let now = clock()
                 if !force, let retry = retry(atMillis), retry.notBefore > now { continue }
                 ran.append(atMillis)
@@ -219,6 +222,8 @@ public final class StravaUploadQueue: @unchecked Sendable {
                     case .success, .failure: forget(atMillis)
                     case .retry: failed(atMillis, now: clock())
                     }
+                } catch is CancellationError {
+                    break
                 } catch {
                     // A bug in what was sent, not the network's doing: retrying would repeat it for
                     // ever, so the attempt is marked failed where the athlete can see it.

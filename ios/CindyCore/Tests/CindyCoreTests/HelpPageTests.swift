@@ -104,6 +104,14 @@ final class HelpPageTests: XCTestCase {
         XCTAssertEqual(row.subtitle, "Opens in your browser")
     }
 
+    /// Help says an upload may wait until Cindy is next opened, since iOS has nothing to send it while closed
+    func testHelpSaysAnUploadMayWaitUntilCindyIsNextOpened() {
+        let text = page(HelpFeatures.strava).text
+        XCTAssertTrue(text.contains("The upload is sent as soon as the workout is saved, and tried again when you open Cindy"))
+        XCTAssertTrue(text.contains("it may wait until you next open Cindy"))
+        XCTAssertFalse(text.contains("carries on in the background"), "Android's wording promises what iOS cannot")
+    }
+
     /// the Strava paragraph of the privacy section is there when the build has Strava, and not otherwise
     func testTheStravaParagraphOfThePrivacySectionIsThereWhenTheBuildHasStravaAndNotOtherwise() {
         let marker = "Strava is the one thing that leaves the phone"

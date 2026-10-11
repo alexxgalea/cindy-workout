@@ -14,10 +14,13 @@ final class CindyTrackerUITests: XCTestCase {
     /// arguments stand in for the defaults of a used install, because the simulator keeps what
     /// earlier tests left: the first-launch pages are not shown, and nor is the tour that follows
     /// them, unless `tour` asks for it.
-    private func launchReplaying(_ script: String, seenGuide: Bool = true, tour: Bool = false) -> XCUIApplication {
+    private func launchReplaying(_ script: String, seenGuide: Bool = true, tour: Bool = false,
+                                 strava: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         var arguments = ["-CindyReplay", script, "-placement_guide_dismissed", seenGuide ? "YES" : "NO",
                          "-tutorial_seen", "YES"]
+        // A debug build believes it was given Strava credentials; without this none is, as in CI.
+        if strava { arguments += ["-CindyStrava"] }
         if !tour { arguments += ["-hud_tour_pending", "NO"] }
         app.launchArguments = arguments
         app.launch()
@@ -352,5 +355,42 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["reminderTry"].exists, "and TRY IT")
         let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "none on days you've already trained")).firstMatch
         XCTAssertTrue(note.exists, "the sheet says it stays quiet on a day already trained")
+    }
+
+    // MARK: - strava
+
+    func testABuildWithNoStravaCredentialsHasNoStravaAnywhereOnTheMenu() {
+        let app = launchReplaying("pullups")
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        app.buttons["MENU"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
+            .waitForExistence(timeout: 5), "the menu is up")
+
+        let strava = NSPredicate(format: "label CONTAINS 'Strava'")
+        XCTAssertFalse(app.buttons.matching(strava).firstMatch.exists, "a row says Strava")
+        XCTAssertFalse(app.staticTexts.matching(strava).firstMatch.exists, "some menu text says Strava")
+    }
+
+    func testTheStravaRowAsksFirstAndNOTNOWStartsNothing() {
+        let app = launchReplaying("pullups", strava: true)
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        app.buttons["MENU"].tap()
+
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strava'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Strava row")
+        XCTAssertTrue(row.label.contains("Not connected"), row.label)
+        row.tap()
+
+        // The sheet that says what is sent comes first, with Strava's own button and the safe one.
+        let promise = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Nothing is sent until you connect.'")).firstMatch
+        XCTAssertTrue(promise.waitForExistence(timeout: 5), "the consent sheet says nothing is sent until you connect")
+        XCTAssertTrue(app.buttons["Connect with Strava"].exists, "Strava's own button")
+        let notNow = app.buttons["NOT NOW"]
+        XCTAssertTrue(notNow.exists)
+        notNow.tap()
+
+        // Back on the menu, still not connected: nothing was started.
+        XCTAssertTrue(promise.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strava, Not connected'")).firstMatch.exists)
     }
 }

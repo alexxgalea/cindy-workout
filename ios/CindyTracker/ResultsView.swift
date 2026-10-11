@@ -12,6 +12,9 @@ struct ResultsView: View {
     @State private var heelsFlatExplained = false
     @State private var showProgress = false
     @State private var toast: String?
+    @State private var askingStrava = false
+    /// Redraws the Strava row as its upload moves through the ledger.
+    @ObservedObject private var strava = StravaCenter.shared
 
     private enum Asking: Identifiable {
         case weight, heartRate
@@ -34,7 +37,7 @@ struct ResultsView: View {
                 if let movements = page.movements { movementCard(movements) }
                 lifted(page.lifted)
                 if let compare = page.compare { comparison(compare) }
-                if !page.stats.isEmpty { statRows(page.stats) }
+                if !page.stats.isEmpty || stravaRow != nil { statRows(page.stats) }
                 if let splits = page.splits { splitsCard(splits) }
                 if let timeline = page.timeline { timelineCard(timeline) }
                 if let heart = page.heart { heartCard(heart) }
@@ -58,6 +61,7 @@ struct ResultsView: View {
             }
         }
         .sheet(item: $reopened) { ResultsView($0) }
+        .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
         // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
         // athlete's own.
@@ -353,6 +357,43 @@ struct ResultsView: View {
                     }
                 }
             }
+            if let row = stravaRow { stravaLine(row) }
+        }
+    }
+
+    // MARK: strava
+
+    /// Where this attempt's upload has got to, or an offer to start one. Absent in a build with no
+    /// Strava credentials. `strava.revision` is read so the row follows the ledger.
+    private var stravaRow: StravaRow? {
+        _ = strava.revision
+        return StravaRow.of(config: strava.config, tokens: strava.tokens, ledger: strava.ledger, atMillis: vm.atMillis)
+    }
+
+    @ViewBuilder private func stravaLine(_ row: StravaRow) -> some View {
+        let line = HStack {
+            Text(StravaRow.label).font(.system(size: 14)).foregroundStyle(Color.dim)
+            Spacer()
+            Text(row.value)
+                .font(.system(size: 16, weight: row.isLink ? .bold : .regular, design: .monospaced))
+                .underline(row.isLink)
+                .foregroundStyle(.white)
+            if row.action != nil { Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Color.dim) }
+        }
+        if let action = row.action {
+            Button { performStrava(action) } label: { line }
+                .accessibilityLabel("\(StravaRow.label), \(row.value)")
+                .accessibilityIdentifier("stravaRow")
+        } else {
+            line.accessibilityElement(children: .combine).accessibilityIdentifier("stravaRow")
+        }
+    }
+
+    private func performStrava(_ action: StravaRow.Action) {
+        switch action {
+        case .upload: strava.upload(atMillis: vm.atMillis)
+        case .askThenConnect: askingStrava = true
+        case .openActivity(let id): strava.openActivity(id)
         }
     }
 
