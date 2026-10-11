@@ -17,6 +17,28 @@ targets:
     platform: iOS
     sources:
       - path: CindyTracker
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    # Keys that need a value from the build settings, or that Xcode's generated plist has no
+    # INFOPLIST_KEY_ for. The rest stay below, where they were.
+    info:
+      path: Config/Info.plist
+      properties:
+        # Strava's own credentials, empty in a build that was not given any (Config/Base.xcconfig).
+        StravaClientID: $(STRAVA_CLIENT_ID)
+        StravaClientSecret: $(STRAVA_CLIENT_SECRET)
+        # Where Strava sends the athlete back to: the bundle identifier as a scheme (D5), as
+        # Android's is the application id. One scheme, so a debug and a release build on one phone
+        # each catch only their own redirect.
+        CFBundleURLTypes:
+          - CFBundleURLName: Strava redirect
+            CFBundleURLSchemes: [$(PRODUCT_BUNDLE_IDENTIFIER)]
+        # Lets the app ask whether the Strava app is installed, to open its consent page there.
+        LSApplicationQueriesSchemes: [strava]
+        # The background refresh that sends an upload that was waiting for the app to be opened.
+        BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).strava-upload]
+        UIBackgroundModes: [fetch]
     dependencies:
       - package: CindyCore
         product: CindyCore
