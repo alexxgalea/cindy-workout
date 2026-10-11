@@ -333,4 +333,24 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(advice.exists, "the sheet says the track ducks under the voice")
         XCTAssertEqual(app.staticTexts["musicTrack"].label, "No track chosen")
     }
+
+    // MARK: - reminder
+
+    func testTheMenuOffersTheDailyReminderAndTheSheetSaysWhatItDoes() {
+        let app = launchReplaying("pullups")
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        app.buttons["MENU"].tap()
+
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Daily reminder'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Daily reminder row")
+        XCTAssertTrue(row.label.contains("Off"), row.label)
+        row.tap()
+
+        // Nothing is switched on: that asks iOS for notifications, which the simulator would answer
+        // with a dialog the test does not drive.
+        XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5), "the sheet has the switch")
+        XCTAssertTrue(app.buttons["reminderTry"].exists, "and TRY IT")
+        let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'none on days you've already trained'")).firstMatch
+        XCTAssertTrue(note.exists, "the sheet says it stays quiet on a day already trained")
+    }
 }

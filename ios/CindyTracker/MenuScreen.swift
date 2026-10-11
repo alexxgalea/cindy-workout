@@ -15,9 +15,8 @@ final class MenuViewModel: ObservableObject {
     @Published private(set) var toast: String?
     private let workoutLive: Bool
 
-    /// What this build can open. The rest arrive with their phases: the daily reminder (P18) and
-    /// Strava (P20).
-    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .music, .heartRate, .help]
+    /// What this build can open. Strava (P20) arrives with its phase.
+    static let shown: Set<MenuRowID> = [.movements, .progress, .reminder, .bodyWeight, .voice, .music, .heartRate, .help]
 
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
@@ -34,6 +33,7 @@ final class MenuViewModel: ObservableObject {
         return MenuBuilder.build(MenuInput(
             profile: profile, attempts: store.all(), zone: zone, firstDayOfWeek: first, today: today,
             is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive,
+            notificationsAllowed: ReminderCenter.shared.access != .refused,
             trackName: { MusicLibrary.displayName($0) }, shown: shown))
     }
 
@@ -65,7 +65,7 @@ struct MenuScreen: View {
     @State private var path: [Destination] = []
 
     private enum Sheet: Identifiable {
-        case movements, bodyWeight, voice, music, heartRate
+        case movements, bodyWeight, voice, music, reminder, heartRate
         var id: Int { hashValue }
     }
 
@@ -170,6 +170,8 @@ struct MenuScreen: View {
             MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
         case .bodyWeight:
             BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+        case .reminder:
+            ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .music:
             MusicSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .heartRate:
@@ -189,8 +191,9 @@ struct MenuScreen: View {
         case .bodyWeight: sheet = .bodyWeight
         case .voice: sheet = .voice
         case .music: sheet = .music
+        case .reminder: sheet = .reminder
         case .heartRate: sheet = .heartRate
-        case .reminder, .strava: break
+        case .strava: break
         }
     }
 

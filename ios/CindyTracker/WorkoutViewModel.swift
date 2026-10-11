@@ -335,6 +335,8 @@ final class WorkoutViewModel: ObservableObject {
         if records.add(done.attempt) {
             try? repTimes.save(atMillis: done.attempt.atMillis, done.marks)
             if let trace { try? HeartRateStore().save(atMillis: done.attempt.atMillis, trace) }
+            // Today is trained now, so today's reminder goes and the days after it are worded again.
+            ReminderCenter.shared.replan()
         }
         finished = ResultsRequest(attempt: done.attempt, stoppedEarly: done.stoppedEarly,
                                   heelsFlatSpotted: done.heelsFlatSpotted, reviewing: false)
