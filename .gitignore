@@ -66,6 +66,7 @@ __pycache__/
 
 # Rendered store listing and privacy policy, with the publisher's own details filled in.
 /play/dist/
+/appstore/dist/
 
 # Strava credentials for the iOS build, and the Info.plist xcodegen writes
 ios/Config/Strava.xcconfig
