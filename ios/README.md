@@ -209,6 +209,19 @@ the target device, so a build cannot simply be downloaded from a URL. The routes
 
 For one phone, Xcode wireless is enough. For sending builds to anyone else, it is TestFlight.
 
+### TestFlight and the App Store
+
+The project is ready to archive (version 1.0.0, build 1, the 1024 px icon, a privacy manifest per
+build, `ITSAppUsesNonExemptEncryption` false), and the listing, the policy and the App Store Connect
+answers are in [../appstore/](../appstore/README.md), which also has the steps: choose your team,
+Product → Archive on **Any iOS Device**, Distribute App → App Store Connect. Each upload needs a new
+`CURRENT_PROJECT_VERSION`. A build with Strava and one without are different uploads with different
+App Privacy answers; the build is chosen by whether `Config/Strava.xcconfig` exists.
+
+What is the owner's: the Developer Program membership, the bundle ID (`com.cindy.tracker` unless it is
+taken), signing, the upload, the screenshots, publishing the policy page at
+`https://alexxgalea.github.io/cindy-privacy/ios/`, and the testers.
+
 ## Still to port
 
 The record board (history list and progress chart) and the music picker. `RecordStore` and
