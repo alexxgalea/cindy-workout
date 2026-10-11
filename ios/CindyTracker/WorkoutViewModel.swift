@@ -13,7 +13,20 @@ import CindyCore
 @MainActor
 final class WorkoutViewModel: ObservableObject {
 
-    enum Phase { case idle, setup, running, paused, finished }
+    enum Phase {
+        case idle, setup, running, paused, finished
+
+        /// The session's name for the same thing, which is what the core's rules are written in.
+        var state: WorkoutState {
+            switch self {
+            case .idle: return .idle
+            case .setup: return .setup
+            case .running: return .running
+            case .paused: return .paused
+            case .finished: return .finished
+            }
+        }
+    }
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var clockText = "20:00"
@@ -62,6 +75,7 @@ final class WorkoutViewModel: ObservableObject {
         }
         sync()
         syncHeartRate()
+        syncMusic()
     }
 
     /// Rebuilt rather than mutated when the movements change: a session's profile is immutable for
@@ -69,6 +83,43 @@ final class WorkoutViewModel: ObservableObject {
     /// contributes to.
     private var session: WorkoutSession
     private let records = RecordStore()
+
+    // MARK: - music
+
+    /// One track, looped for the workout. Chosen in the menu and remembered by the profile; this is
+    /// the only screen that plays it.
+    private let music = MusicPlayer()
+
+    /// Brings the player in line with what the menu says: on launch, and whenever the menu closes,
+    /// because coming back from it is exactly when the answer can have changed. A track that will
+    /// not load has had its grant lapse, and the choice is cleared rather than retried every time.
+    func syncMusic() {
+        switch MusicFlow.plan(chosen: settings.musicTrack, loaded: music.track) {
+        case .release:
+            music.release()
+        case .keep:
+            break
+        case .load:
+            if let chosen = settings.musicTrack, !music.load(chosen) {
+                settings.musicTrack = nil
+                show(MusicFlow.lapsedText)
+            }
+        }
+        music.volume = settings.musicVolume
+        conduct(MusicFlow.onSync(musicOn: settings.musicOn, running: phase == .running))
+    }
+
+    /// The athlete left the app: do not keep playing over whatever they open next.
+    func pauseMusic() { music.pause() }
+
+    private func conduct(_ action: MusicAction?) {
+        switch action {
+        case .play: music.play()
+        case .pause: music.pause()
+        case .stop: music.stop()
+        case nil: break
+        }
+    }
 
     // MARK: - heart rate
 
@@ -142,6 +193,10 @@ final class WorkoutViewModel: ObservableObject {
 
     init() {
         session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
+        // The track drops while the voice is counting over it.
+        speaker.onSpeakingChanged = { [weak self] speaking in
+            Task { @MainActor in self?.music.duck(speaking) }
+        }
         applyProfile()
     }
 
@@ -350,6 +405,7 @@ final class WorkoutViewModel: ObservableObject {
         case .finished: next = .finished
         }
         followHeartRate(from: phase, to: next)
+        conduct(MusicFlow.onWorkout(from: phase.state, to: next.state, musicOn: settings.musicOn))
         phase = next
         clockText = session.clockText
         exerciseText = session.exerciseText

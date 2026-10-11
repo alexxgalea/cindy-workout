@@ -15,9 +15,9 @@ final class MenuViewModel: ObservableObject {
     @Published private(set) var toast: String?
     private let workoutLive: Bool
 
-    /// What this build can open. The rest arrive with their phases: music (P17),
-    /// the daily reminder (P18) and Strava (P20).
-    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .heartRate, .help]
+    /// What this build can open. The rest arrive with their phases: the daily reminder (P18) and
+    /// Strava (P20).
+    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .music, .heartRate, .help]
 
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
@@ -33,7 +33,8 @@ final class MenuViewModel: ObservableObject {
         let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
         return MenuBuilder.build(MenuInput(
             profile: profile, attempts: store.all(), zone: zone, firstDayOfWeek: first, today: today,
-            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive, shown: shown))
+            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive,
+            trackName: { MusicLibrary.displayName($0) }, shown: shown))
     }
 
     /// Rebuilt rather than patched, because a row's subtitle is derived from state a sheet may just
@@ -64,7 +65,7 @@ struct MenuScreen: View {
     @State private var path: [Destination] = []
 
     private enum Sheet: Identifiable {
-        case movements, bodyWeight, voice, heartRate
+        case movements, bodyWeight, voice, music, heartRate
         var id: Int { hashValue }
     }
 
@@ -169,6 +170,8 @@ struct MenuScreen: View {
             MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
         case .bodyWeight:
             BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+        case .music:
+            MusicSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .heartRate:
             HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
         case .voice:
@@ -185,8 +188,9 @@ struct MenuScreen: View {
         case .help: path.append(.help)
         case .bodyWeight: sheet = .bodyWeight
         case .voice: sheet = .voice
+        case .music: sheet = .music
         case .heartRate: sheet = .heartRate
-        case .reminder, .strava, .music: break
+        case .reminder, .strava: break
         }
     }
 

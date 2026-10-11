@@ -138,6 +138,7 @@ struct ContentView: View {
         }
         .onDisappear {
             film.interrupt()
+            workout.pauseMusic()
             camera.stop()
             workout.stopHeartRate()
             UIApplication.shared.isIdleTimerDisabled = false
@@ -145,7 +146,15 @@ struct ContentView: View {
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         // Leaving the app ends a film, with what it caught kept, and drops a count: the camera stops
         // with it, and a film that outlived the picture would be a blank one.
-        .onChange(of: scenePhase) { _, phase in if phase != .active { film.interrupt() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                film.interrupt()
+                workout.pauseMusic()
+            } else {
+                // Back in front: the track carries on if the clock is still running.
+                workout.syncMusic()
+            }
+        }
         .sheet(item: $workout.finished) { ResultsView($0) }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })

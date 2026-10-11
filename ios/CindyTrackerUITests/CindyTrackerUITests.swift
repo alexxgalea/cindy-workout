@@ -314,4 +314,23 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Record this workout"].exists, "REC is still offering to record")
         XCTAssertFalse(app.buttons["Recording is about to start, tap to cancel"].exists, "no count started")
     }
+
+    // MARK: - music
+
+    func testTheMenuOffersMusicAndTheSheetSaysWhatTheTrackDoes() {
+        let app = launchReplaying("pullups")
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        app.buttons["MENU"].tap()
+
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Music'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Music row")
+        XCTAssertTrue(row.label.contains("No track chosen"), row.label)
+        row.tap()
+
+        // Not tapped: choosing a track opens the system's file picker, which the test cannot drive.
+        XCTAssertTrue(app.buttons["musicChoose"].waitForExistence(timeout: 5), "the sheet offers CHOOSE A TRACK")
+        let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'drops in volume while the voice'")).firstMatch
+        XCTAssertTrue(advice.exists, "the sheet says the track ducks under the voice")
+        XCTAssertEqual(app.staticTexts["musicTrack"].label, "No track chosen")
+    }
 }
