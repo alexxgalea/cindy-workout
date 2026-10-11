@@ -23,6 +23,7 @@ Kotlin table and compare every number.
 | Kotlin test | Moved to | Because |
 |---|---|---|
 | `StravaSetsTest`, all but the last (`the adaptive profile on the attempt reaches StravaPayload's mapping`) | P3 (from P19) | `RoundSplits` and `SessionStats` read `StravaSets.from`, so it cannot wait for the Strava phase. The last test feeds the result to `StravaPayload`, and stays with it |
+| `StravaSessionTest` (6) | P19 (from P20) | Robolectric on Android only because its store is `SharedPreferences`. `StravaSession` is in `StravaTokens.kt`, which is P19's, and over an in-memory `StravaStorage` the six are plain tests |
 | `VariationsTest`, `adaptive sessions count toward the streak` | P8 | It needs `Streak`. Ported in P8, in `VariationsTests` |
 
 ### Kotlin tests that stay with their view or their phase
@@ -32,7 +33,7 @@ Kotlin table and compare every number.
 | `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
 | `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
-| `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
+| `StravaHeartRateTest` | P19 | Strava's heart-rate stream (ported in P19, below) |
 
 ### Kotlin tests that were ported in P11, and the ones that were not
 
@@ -40,7 +41,7 @@ Kotlin table and compare every number.
 |---|---|---|
 | `RoundTrackViewTest` (7), `ZoneBarViewTest` (9), `RoundSplitsViewTest` (10), `SessionTimelineViewTest` (13) | CindyCore `RoundTrackModelTests`, `ZoneBarModelTests`, `RoundSplitsChartModelTests`, `SessionTimelineChartModelTests` | Robolectric drives each chart as a `View` with `MotionEvent`s. Each chart's touch, selection, geometry and screen-reader stops are a pure model here, which the `Canvas` view only paints, so the same 39 tests run on Linux against the same numbers. The drawing itself is not under test |
 | `ScreenSmokeTest`, the results parts | CindyCore `ResultsPageTests` (30) and `ResultsChartsTests` (23) | The assertions read facts off the inflated screen (which cards exist, what each says). `ResultsPageBuilder` decides those facts and the tests read them off the `ResultsPage` it returns |
-| `ScreenSmokeTest`, the Strava row | P19 | Strava |
+| `ScreenSmokeTest`, the Strava row | CindyCore `StravaConfigTests` and `MenuPageTests` (P19, P13) | The test only keeps Strava out of the screens it lays out (`NoStravaCredentials`). Here a build with no credentials is a `StravaConfig` that is not `available`, and the menu's row is a `StravaStatus` that is nil |
 
 ### Kotlin tests that were ported in P12
 
@@ -64,6 +65,42 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | `ScreenSmokeTest`, the body-weight and heart-rate details sheets | CindyCore `ProfileFormsTests` | `BodyWeightForm`, `HeartRateDetailsForm` and `MovementsForm` hold what each asks, refuses and keeps |
 | `ScreenSmokeTest`, the heart-rate sheet (with and without a watch), the reminder row's sheet, the voice sheet's language list | P15, P18, P10 | The Bluetooth link, the scheduler and the language list (`LanguageGroupModelTests`, P10) |
 
+### Kotlin tests that were ported in P19
+
+| Kotlin test | Kotlin | Swift | In |
+|---|---|---|---|
+| `StravaHttpTest` | 16 | 16 | `StravaHttpTests` |
+| `StravaPayloadTest` | 15 | 15 | `StravaPayloadTests` |
+| `StravaSetsTest`, the one that stayed (`the adaptive profile on the attempt reaches StravaPayload's mapping`) | 1 | 1 | `StravaPayloadTests` |
+| `StravaActivityTextTest` | 23 | 23 | `StravaActivityTextTests` |
+| `StravaHeartRateTest` | 6 | 6 | `StravaHeartRateTests` |
+| `StravaApiTest` | 25 | 25 | `StravaApiTests` |
+| `StravaAuthTest` | 23 | 23 | `StravaAuthTests` |
+| `StravaSessionTest` | 6 | 6 | `StravaSessionTests` |
+| `StravaUploadsTest` | 7 | 7 | `StravaUploadsTests` |
+| | **122** | **122** | |
+
+Written for the port, with no Kotlin test behind them (46): `StravaConfigTests` (4), `StravaTokenStoreTests` (9), `URLSessionTransportTests` (6), the composer's five and one past-the-start sample in `StravaHeartRateTests`, one on the instant's text in `StravaPayloadTests`, five on how replies are read in `StravaApiTests`, six on the redirect's edges and an unreadable token reply in `StravaAuthTests`, three on the refresh window and on failures that must not disconnect in `StravaSessionTests`, and six on the ledger's decisions in `StravaUploadsTests`.
+
+`FakeTransport` is `FakeTransport.kt`, and is the double for all of it.
+
+**What iOS does differently, and why:**
+
+- **Calls are `async`.** `URLSession` is, and the worker thread Android blocks on has no twin. `StravaAccessToken.get()`, `StravaApi`, `StravaAuth` and `HttpTransport.execute` all `async throws`.
+- **`StravaConfig` is a value**, built once from the app's `Strava.xcconfig` (P20), not an `object` over `BuildConfig`. `authorizeUri` and `StravaAuth` take it. The `availableForTest` seam has nothing to do: a test builds a config with credentials, or without.
+- **The grant is one stored item**, not five prefs keys. Android writes them in one `commit()`, which is atomic; five Keychain items are not, and a new access token beside the old refresh token (already invalidated by Strava) would strand the athlete.
+- **The session's lock is an async lock**, shared by every session in the process. Android's `synchronized` cannot be held across the network call.
+- **`StravaStorage`** (strings by key) is what the Keychain fills in P20. The ledger and the grant share it, as Android's share the `strava` prefs file, and for the same reason: out of backups.
+- **`require` throws** (`StravaPayloadError`); `IOException` is `HttpTransportError`; `StravaAuthException` is `StravaAuthError`; Android's `JSONException` out of the token calls is `StravaResponseError`, which the upload treats as worth retrying.
+- **The redirect is read by rules checked against `java.net.URI`**, not `URL(string:)`, which on current Apple systems repairs a string (a space becomes `%20`) that Android refuses.
+- **Not here:** the upload's scheduling. `StravaUploads` is the ledger and its decisions; WorkManager's part (a network, a backoff, surviving a restart) is the app's, from the ledger, in P20.
+
+**Worth knowing** (Android behaviour that is ported as it is, not fixed):
+
+- `optString` on a JSON `null` is the word "null" on Android, so a token reply with `"firstname": null` names the athlete "null Smith". Strava sends strings. Kotlin's unit tests run on the `org.json` Maven artifact, which says "" for the same input; the shipped app does not.
+- Android's parser reads some things this one refuses (single quotes, text after the closing brace). Strava sends strict JSON, so no real reply tells them apart.
+- A repeated response header reaches Kotlin as a list and `URLSession` as one comma-joined value. Only `Retry-After` is read, and it is sent once.
+
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
@@ -80,6 +117,11 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P8 | `String.format(Locale.US, "%,d" / "%.Nf")`, `Math.round`, `roundToInt`, `sortedBy`, `maxByOrNull` | CindyCore `JavaText`. `%.Nf` rounds the shortest digits half up, which is not what C does (this corrected P5's `javaFixed`), and was checked against a JVM on 326,044 values at five precisions | tests written for the port |
 | P9 | `kotlin.random.Random(seed)`, which `CaloriesTimelineTest` draws its 250 generated traces from | CindyFixtures `KotlinRandom`: xorwow, and Kotlin's own rejection loops for `nextInt(from, until)` and `nextLong(from, until)`, so the Swift test sees the traces the Kotlin one did. Checked against a JVM for both seeds the tests use, and for powers of two | tests written for the port |
 | P9 | `String.toIntOrNull` / `toLongOrNull` | `Records.toInt` / `toLong`, which now read any Unicode decimal digit, as Kotlin does (`Character.digit`). Swift's parsers read ASCII only, so a saved file with an Arabic-Indic number decoded on Android and not here. Found by the P9 cross-check; fixed for every codec at once | tests written for the port |
+| P19 | `org.json` (`has`, `isNull`, `getString`, `getLong`, `optString`) | CindyCore `JsonObject`, over `JSONSerialization`, answering as Android's does (a `null` is the text "null", a numeric string is a number, a boolean is not) |
+| P19 | `java.net.URI`, `URLDecoder`, `URLEncoder` | `StravaAuth`'s redirect reader, checked against `java.net.URI` on 19 strings, and `FormBody.encodePart` (a space is a plus, `~` is escaped, `.-*_` stay) |
+| P19 | `Instant.toString()` | `StravaPayload.isoInstant`, from the day count, so no platform formatter is involved |
+| P19 | `HttpsURLConnection` | `URLSessionTransport`: https only, no redirects followed, no cookies or cache |
+| P19 | `synchronized`, `SharedPreferences` | `AsyncLock` and `StravaStorage` |
 
 ### Not a Kotlin file
 
@@ -200,16 +242,16 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P18 | `ReminderNotifier.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderReceiver.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderScheduler.kt` | CindyTracker (iOS rewrite) | not started |
-| P19 | `StravaActivityText.kt` | CindyCore | not started |
-| P19 | `StravaApi.kt` | CindyCore | not started |
-| P19 | `StravaAuth.kt` | CindyCore | not started |
-| P19 | `StravaComposer.kt` | CindyCore | not started |
-| P19 | `StravaConfig.kt` | CindyCore | not started |
-| P19 | `StravaHeartRate.kt` | CindyCore | not started |
-| P19 | `StravaHttp.kt` | CindyCore (`URLSession` behind a transport protocol) | not started |
-| P19 | `StravaPayload.kt` | CindyCore | not started |
-| P19 | `StravaTokens.kt` | CindyCore (logic) + Keychain store in CindyTracker | not started |
-| P19 | `StravaUploads.kt` | CindyCore (state machine) + CindyTracker (scheduling) | not started |
+| P19 | `StravaActivityText.kt` | CindyCore `StravaActivityText` and `CalorieBasis` | tests ported |
+| P19 | `StravaApi.kt` | CindyCore `StravaApi` (`async`; `UploadOutcome` has the same seven cases) and `JsonObject`, which reads a reply the way Android's `org.json` does | tests ported |
+| P19 | `StravaAuth.kt` | CindyCore `StravaAuth`. `authorizeUri` and the three token calls take a `StravaConfig`; the redirect is read by rules checked against `java.net.URI` | tests ported |
+| P19 | `StravaComposer.kt` | CindyCore `StravaComposer`, which throws where Kotlin's `require` fails. No Kotlin test; five written | ported |
+| P19 | `StravaConfig.kt` | CindyCore `StravaConfig`, a value the app builds from `Strava.xcconfig` (P20), with `available` and `redirectUri`. No `BuildConfig`, no `availableForTest` | tests ported |
+| P19 | `StravaHeartRate.kt` | CindyCore | tests ported |
+| P19 | `StravaHttp.kt` | CindyCore `HttpRequest`, `HttpResponse`, `HttpTransport`, `FormBody`, `Multipart`, `StravaAuthError`, `StravaAccessToken`, and `URLSessionTransport` (`FoundationNetworking` on Linux) | tests ported; a real 3xx through Apple's `URLSession` wants a device |
+| P19 | `StravaPayload.kt` | CindyCore `StravaExercises`, `StravaPayload`, `HrPoint`, `startMillisOf` | tests ported |
+| P19 | `StravaTokens.kt` | CindyCore `StravaGrant`, `StravaTokenStore` and `StravaSession` over a `StravaStorage` protocol; the Keychain store behind it is P20's | tests ported |
+| P19 | `StravaUploads.kt` | CindyCore `StravaUploads`: the ledger, the auto-upload decision, requeueing after a reconnect, clearing. The scheduling is P20's | tests ported |
 | P20 | `StravaAuthActivity.kt` | CindyTracker (iOS rewrite) | not started |
 | P20 | `StravaConsent.kt` | CindyTracker (iOS rewrite) | not started |
 | P20 | `StravaUploadWorker.kt` | CindyTracker (iOS rewrite) | not started |
