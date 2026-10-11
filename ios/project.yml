@@ -56,6 +56,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+        # The asset catalog holds Strava's two images and no app icon yet (P21 adds it); without this
+        # the catalog compiler looks for one called AppIcon and fails the build.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         # The camera is the whole app; without this string iOS kills it on first frame.
         INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
         # The heart-rate sheets. iOS shows this when Cindy first listens for a watch or chest strap;
