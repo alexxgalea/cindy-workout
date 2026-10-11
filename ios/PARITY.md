@@ -105,6 +105,22 @@ Android has no test of `MusicPlayer`, `syncMusic` or the music sheet beyond the 
 
 **iOS deviation from the plan:** the plan says "tap to pick or mute, long press to change", which is how Android's HUD chip behaved until the music moved into the menu. Android now has a Music row and a sheet (a toggle, a volume, CHANGE TRACK and LISTEN), and iOS follows that, as the Kotlin is the specification.
 
+### Kotlin tests that were ported in P18
+
+The 10 Robolectric `ReminderDeliveryTest`s ran the real scheduler, receiver and notifier against Robolectric's alarm manager and notification manager. iOS has neither, so each is held as the plan that replaces it.
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `turning the reminder on arms one alarm at the chosen time` | CindyCore `ReminderPlanTests` (`TurningTheReminderOnArmsTheFirstAtTheChosenTime`) | The first request is at the chosen time |
+| `opening the app does not postpone a reminder that is due`, `opening the app arms a reminder when none is armed` | `OpeningTheAppDoesNotPostponeAReminderThatIsDue`, `OpeningTheAppArmsAReminderWhenNoneIsArmed` | Planning again holds the same requests, by id |
+| `turning it off cancels the alarm` | `TurningItOffCancelsThemAll` | An off setting plans nothing, and the centre removes what was held |
+| `a day with no session gets a reminder`, `a day already trained stays quiet but re-arms` | `ADayWithNoSessionGetsAReminder`, `ADayAlreadyTrainedStaysQuietButTheRestAreStillPlanned` | |
+| `a live workout silences it` | `ALiveWorkoutSilencesIt` | `willPresent` shows nothing during one |
+| `without notification permission it stays quiet but still re-arms` | `WithoutPermissionNothingIsScheduledUntilItIsGiven` | Coming forward asks iOS again and plans again |
+| `a reminder hours late is dropped`, `boot re-arms the reminder` | (none) | iOS delivers on time and keeps scheduled notifications across a restart |
+
+The rest of `ReminderPlanTests` (8) holds what iOS adds: a week of requests with stable ids, the week starting tomorrow once today's time has passed, tomorrow's words knowing today was trained, a saved session taking today's request away, a time zone change, a clock change, the sheet's permission steps and words, and the menu row's honesty.
+
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
@@ -238,9 +254,9 @@ Android has no test of `MusicPlayer`, `syncMusic` or the music sheet beyond the 
 | P16 | `RecordingOverlay.kt` | CindyCore `RecordingLayout` (every panel and word of the burned-in HUD, laid out inside `OverlayTransform.visibleSource` with the width of words handed in) and CindyTracker `FilmRecorder` (the skeleton and the words painted with Core Graphics). The buffer that feeds the analysis feeds the film, upright and mirrored as the preview is, so the map from the analysis frame onto the film is the identity; the Android matrix juggling for a differently sized, rotated or mirrored recording stream has nothing to do | `RecordingLayout` tested; the painting is built by the macOS job and wants a film watched from each camera |
 | P16 | `VideoRecorder.kt` | CindyTracker `FilmRecorder` (`AVAssetWriter`, H.264, video only, so no microphone) and `FilmLibrary` (Photos, add-only, no album: D6), with CindyCore `FilmFlow` deciding what a tap does and says. Photos is asked before the count and not after the film. A film that cannot be written is reported when it ends, and counting carries on | `FilmFlow` tested; the recorder is built by the macOS job and wants a film watched from each camera |
 | P17 | `MusicPlayer.kt` | CindyCore `MusicFlow` (the volume rules, 18% under the voice and multiplied not replaced; when it plays, holds and stops; what is done about the chosen track; the sheet's words) and CindyTracker `MusicPlayer` (`AVAudioPlayer`, looped, `.playback`), `MusicLibrary` (the picked file is remembered as a security-scoped bookmark, Android's persistable URI grant; the name is the file's, as `substringBeforeLast('.')` takes it) and `MusicSheet` (the Files picker through `fileImporter`). The workout plays it, pauses with it, and ducks it from `Speaker.onSpeakingChanged` | `MusicFlow` tested; the player and the sheet are built by the macOS job and want a track from Files, and a lapsed one, on an iPhone |
-| P18 | `ReminderNotifier.kt` | CindyTracker (iOS rewrite) | not started |
-| P18 | `ReminderReceiver.kt` | CindyTracker (iOS rewrite) | not started |
-| P18 | `ReminderScheduler.kt` | CindyTracker (iOS rewrite) | not started |
+| P18 | `ReminderNotifier.kt` | CindyTracker `ReminderCenter` (permission, the requests, the words as a notification) and CindyCore `ReminderPlan` (what the sheet does about permission). iOS has no channels, so the channel's description has no counterpart | `ReminderPlan` tested; the centre is built by the macOS job and wants a notification delivered on an iPhone |
+| P18 | `ReminderReceiver.kt` | Nothing runs when a notification fires on iOS, so the receiver's work (the text, the trained-today rule, the live-workout rule) is done beforehand: CindyCore `ReminderPlan` words each of the next seven days from the records, drops a day already trained and plans again after each session; the live-workout rule is `ReminderPlan.showsInApp`, used by `willPresent`. The "more than two hours late" rule has nothing to do, because iOS delivers on time; boot and update re-arms have no counterpart, because scheduled notifications survive both | tests ported |
+| P18 | `ReminderScheduler.kt` | CindyCore `ReminderPlan` (the seven requests, with stable ids, so planning again never doubles or postpones one) and CindyTracker `ReminderCenter` (adds and removes them: on launch, whenever the app comes forward, after a saved session, on a time zone or clock change, and when the setting changes) | tests ported |
 | P19 | `StravaActivityText.kt` | CindyCore | not started |
 | P19 | `StravaApi.kt` | CindyCore | not started |
 | P19 | `StravaAuth.kt` | CindyCore | not started |
