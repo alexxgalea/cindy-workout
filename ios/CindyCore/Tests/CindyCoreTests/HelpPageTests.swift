@@ -100,7 +100,7 @@ final class HelpPageTests: XCTestCase {
     func testThePrivacyPolicyRowOpensThePolicyInABrowser() throws {
         let row = try XCTUnwrap(rows(page()).first { $0.spoken.hasPrefix("Privacy policy") }, "no Privacy policy row")
         XCTAssertEqual(row.action, .openLink(AppLinks.privacyPolicy))
-        XCTAssertEqual(AppLinks.privacyPolicy, "https://alexxgalea.github.io/cindy-privacy/")
+        XCTAssertEqual(AppLinks.privacyPolicy, "https://alexxgalea.github.io/cindy-privacy/ios/")
         XCTAssertEqual(row.subtitle, "Opens in your browser")
     }
 
