@@ -95,6 +95,16 @@ Android has no test of its own for the recording overlay or the recorder; `MainA
 | CindyCore `RecordingLayoutTests` (12) | Every panel and word is inside the safe area and none in the strip fill-centre crops (with the same layout on the whole frame shown to fail it), the corners, the sizes, the banner centred in the safe area, the watermark |
 | CindyCore `SessionRecordedHudTests` (8) | The session feeds the film's HUD: fresh, setup check, both banners and their three seconds, a rep, a round, an undo, a reset |
 
+### Tests written for P17
+
+Android has no test of `MusicPlayer`, `syncMusic` or the music sheet beyond the menu row's two subtitles (`ScreenSmokeTest`, already in `MenuPageTests`) and the Help text (`HelpPageTests`).
+
+| Lands in | What it holds |
+|---|---|
+| CindyCore `MusicFlowTests` (16) | The voice leaves 18% and ducking multiplies, never raises; a level is held to 0 to 1; the track starts with the clock if it is on, is held by a pause and put back at the top by the end or a reset; what returning from the menu does; a loaded track is not reloaded; a track is named without its last extension; the sheet's card and buttons; the menu row and the sheet agree about a track that cannot be opened |
+
+**iOS deviation from the plan:** the plan says "tap to pick or mute, long press to change", which is how Android's HUD chip behaved until the music moved into the menu. Android now has a Music row and a sheet (a toggle, a volume, CHANGE TRACK and LISTEN), and iOS follows that, as the Kotlin is the specification.
+
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
@@ -227,7 +237,7 @@ Android has no test of its own for the recording overlay or the recorder; `MainA
 | P15 | `HeartRateScanner.kt` | CindyCore `HeartRateAdvert` and `FoundDevice` (matching, the list's order, rows relabelled not rebuilt) and CindyTracker `HeartRateScanner` (an unfiltered scan matched in software, plus peripherals already connected with the Heart Rate service, marked "Connected to this phone") | tests ported; the scanner is built by the macOS job |
 | P16 | `RecordingOverlay.kt` | CindyCore `RecordingLayout` (every panel and word of the burned-in HUD, laid out inside `OverlayTransform.visibleSource` with the width of words handed in) and CindyTracker `FilmRecorder` (the skeleton and the words painted with Core Graphics). The buffer that feeds the analysis feeds the film, upright and mirrored as the preview is, so the map from the analysis frame onto the film is the identity; the Android matrix juggling for a differently sized, rotated or mirrored recording stream has nothing to do | `RecordingLayout` tested; the painting is built by the macOS job and wants a film watched from each camera |
 | P16 | `VideoRecorder.kt` | CindyTracker `FilmRecorder` (`AVAssetWriter`, H.264, video only, so no microphone) and `FilmLibrary` (Photos, add-only, no album: D6), with CindyCore `FilmFlow` deciding what a tap does and says. Photos is asked before the count and not after the film. A film that cannot be written is reported when it ends, and counting carries on | `FilmFlow` tested; the recorder is built by the macOS job and wants a film watched from each camera |
-| P17 | `MusicPlayer.kt` | CindyTracker (iOS rewrite) | not started |
+| P17 | `MusicPlayer.kt` | CindyCore `MusicFlow` (the volume rules, 18% under the voice and multiplied not replaced; when it plays, holds and stops; what is done about the chosen track; the sheet's words) and CindyTracker `MusicPlayer` (`AVAudioPlayer`, looped, `.playback`), `MusicLibrary` (the picked file is remembered as a security-scoped bookmark, Android's persistable URI grant; the name is the file's, as `substringBeforeLast('.')` takes it) and `MusicSheet` (the Files picker through `fileImporter`). The workout plays it, pauses with it, and ducks it from `Speaker.onSpeakingChanged` | `MusicFlow` tested; the player and the sheet are built by the macOS job and want a track from Files, and a lapsed one, on an iPhone |
 | P18 | `ReminderNotifier.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderReceiver.kt` | CindyTracker (iOS rewrite) | not started |
 | P18 | `ReminderScheduler.kt` | CindyTracker (iOS rewrite) | not started |
