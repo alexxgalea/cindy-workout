@@ -46,15 +46,20 @@ final class FakeTransport: HttpTransport, @unchecked Sendable {
     }
 
     func execute(_ request: HttpRequest) async throws -> HttpResponse {
-        lock.lock()
-        sent.append(request)
-        let next = script.isEmpty ? nil : script.removeFirst()
-        lock.unlock()
-        guard let step = next else {
+        guard let step = record(request) else {
             throw FakeTransportError(
                 message: "FakeTransport got \(request.method) \(request.url) with nothing scripted for it")
         }
         return try step()
+    }
+
+    /// Written down and the next scripted step taken under the lock, in a synchronous function
+    /// because a lock may not be held in an `async` one.
+    private func record(_ request: HttpRequest) -> (() throws -> HttpResponse)? {
+        lock.lock()
+        defer { lock.unlock() }
+        sent.append(request)
+        return script.isEmpty ? nil : script.removeFirst()
     }
 }
 
