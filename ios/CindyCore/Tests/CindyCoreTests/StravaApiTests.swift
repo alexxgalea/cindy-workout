@@ -331,4 +331,13 @@ final class StravaApiTests: XCTestCase {
         ])
         XCTAssertEqual(got, [.rateLimited(retryAfterS: nil), .rateLimited(retryAfterS: nil)])
     }
+
+    /// a transport that refuses a request is a bug and escapes, where a network failure is a retry
+    func testATransportThatRefusesARequestIsABugAndEscapesWhereANetworkFailureIsARetry() async {
+        struct Refusing: HttpTransport {
+            func execute(_ request: HttpRequest) async throws -> HttpResponse { throw HttpRequestRefused(url: request.url) }
+        }
+        let error = await thrownError { _ = try await StravaApi(transport: Refusing(), token: tokenOf("t")).status("1") }
+        XCTAssertEqual(error as? HttpRequestRefused, HttpRequestRefused(url: "https://www.strava.com/api/v3/uploads/1"))
+    }
 }

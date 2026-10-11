@@ -3,6 +3,20 @@ import Foundation
 import FoundationNetworking
 #endif
 
+/// A request this transport will not send: not `https`, or not a URL at all.
+///
+/// Not an `HttpTransportError`, which means the network failed and the request is worth sending
+/// again. This is a mistake in the code that built the request, and sending it again would only
+/// repeat it, so it escapes `StravaApi` instead of becoming a retry. (Android's cast to
+/// `HttpsURLConnection` fails the same way, with a `ClassCastException`.)
+public struct HttpRequestRefused: Error, Equatable, Sendable {
+    public let url: String
+
+    public init(url: String) {
+        self.url = url
+    }
+}
+
 /// The real `HttpTransport`, over `URLSession`. Every Strava endpoint is `https`, and a request to
 /// anything else is refused rather than sent.
 ///
@@ -38,9 +52,15 @@ public final class URLSessionTransport: HttpTransport, @unchecked Sendable {
         self.session = URLSession(configuration: config, delegate: RefuseRedirects(), delegateQueue: nil)
     }
 
+    deinit {
+        // A session keeps its delegate alive until it is invalidated, so a transport made for one
+        // upload would otherwise leave a session, a delegate and its connections behind.
+        session.finishTasksAndInvalidate()
+    }
+
     public func execute(_ request: HttpRequest) async throws -> HttpResponse {
         guard let url = URL(string: request.url), url.scheme == "https" else {
-            throw HttpTransportError("Only https requests are sent")
+            throw HttpRequestRefused(url: request.url)
         }
         var urlRequest = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: readTimeout)
         urlRequest.httpMethod = request.method

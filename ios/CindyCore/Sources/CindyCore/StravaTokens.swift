@@ -113,8 +113,10 @@ public final class StravaTokenStore: @unchecked Sendable {
                 "scopes": value.scopes.sorted()
             ]
             if let name = value.athleteName { object["athlete_name"] = name }
-            let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-            storage.set(data.map { String(decoding: $0, as: UTF8.self) }, forKey: Self.keyGrant)
+            // Strings, a number and an array of strings always encode; if that ever stopped being
+            // true, keeping what is stored is better than erasing the only grant there is.
+            guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
+            storage.set(String(decoding: data, as: UTF8.self), forKey: Self.keyGrant)
         }
     }
 
@@ -227,6 +229,9 @@ public final class StravaSession: StravaAccessToken, @unchecked Sendable {
 
     public func get() async throws -> String {
         try await Self.lock.withLock {
+            // A caller cancelled while it waited (the app was suspended and its background time
+            // ran out) must not go on to spend a refresh on the network.
+            try Task.checkCancellation()
             guard let grant = store.grant else { throw StravaAuthError() }
             let secondsLeft = grant.expiresAtEpochS - clock() / 1000
             if secondsLeft >= Self.refreshWindowS { return grant.accessToken }

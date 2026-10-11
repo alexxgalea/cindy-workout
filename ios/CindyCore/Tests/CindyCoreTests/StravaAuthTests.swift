@@ -238,6 +238,16 @@ final class StravaAuthTests: XCTestCase {
 
     // ---- beyond the Kotlin: the parts Java's URI and org.json did for it ----------------------------------
 
+    /// with no attempt in flight nothing matches, not even an empty state
+    func testWithNoAttemptInFlightNothingMatchesNotEvenAnEmptyState() {
+        let crafted = "\(redirect)?state=&code=attacker&scope=read,activity:write"
+        XCTAssertEqual(StravaAuth.parseRedirect(crafted, expectedState: nil), .stateMismatch)
+        XCTAssertEqual(StravaAuth.parseRedirect(crafted, expectedState: ""), .stateMismatch)
+        XCTAssertEqual(StravaAuth.parseRedirect("\(redirect)?code=attacker", expectedState: nil), .stateMismatch)
+        // A redirect that is not even a URI is still malformed, whatever is expected.
+        XCTAssertEqual(StravaAuth.parseRedirect("not a uri ??", expectedState: nil), .malformed)
+    }
+
     /// a fragment after the query is not part of it, and a second one makes the URI malformed
     func testAFragmentAfterTheQueryIsNotPartOfItAndASecondOneMakesTheUriMalformed() {
         XCTAssertEqual(parse("\(redirect)?state=xyz&code=abc&scope=activity:write#done"),

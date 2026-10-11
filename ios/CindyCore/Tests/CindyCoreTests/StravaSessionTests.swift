@@ -161,6 +161,26 @@ final class StravaSessionTests: XCTestCase {
 
     // ---- beyond the Kotlin ----------------------------------------------------------------
 
+    /// a call cancelled while it waited for the lock does not refresh
+    func testACallCancelledWhileItWaitedForTheLockDoesNotRefresh() async throws {
+        store.grant = grant("stale", "staleRefresh", expiresAtEpochS: nowS + 100)
+        let transport = GatedTransport(reply: refreshReply("freshA", "freshR"))
+        let session = session(transport)
+
+        let first = Task { try await session.get() }
+        await transport.entered.wait()
+        let second = Task { try await session.get() }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        second.cancel()
+        await transport.release.open()
+
+        let firstToken = try await first.value
+        XCTAssertEqual(firstToken, "freshA")
+        let error = await thrownError { _ = try await second.value }
+        XCTAssertTrue(error is CancellationError)
+        XCTAssertEqual(transport.calls, 1)
+    }
+
     /// exactly the refresh window is not enough life, and one second more is
     func testExactlyTheRefreshWindowIsEnoughLifeAndOneSecondLessIsNot() async throws {
         // Ten minutes of headroom: 600 s left is kept, 599 s left is refreshed.

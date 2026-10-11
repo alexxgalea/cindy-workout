@@ -101,7 +101,8 @@ final class URLSessionTransportTests: XCTestCase {
         StubProtocol.reset { _ in .init() }
         for url in ["http://www.strava.com/api/v3/uploads", "ftp://example.invalid/x", "not a url", ""] {
             let error = await thrownError { _ = try await transport().execute(HttpRequest(method: "GET", url: url)) }
-            XCTAssertEqual(error as? HttpTransportError, HttpTransportError("Only https requests are sent"), url)
+            // Not an HttpTransportError: that means "the network failed, send it again".
+            XCTAssertEqual(error as? HttpRequestRefused, HttpRequestRefused(url: url), url)
         }
         XCTAssertTrue(StubProtocol.requests.isEmpty)
     }

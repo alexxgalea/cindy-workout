@@ -80,7 +80,7 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | `StravaUploadsTest` | 7 | 7 | `StravaUploadsTests` |
 | | **122** | **122** | |
 
-Written for the port, with no Kotlin test behind them (46): `StravaConfigTests` (4), `StravaTokenStoreTests` (9), `URLSessionTransportTests` (6), the composer's five and one past-the-start sample in `StravaHeartRateTests`, one on the instant's text in `StravaPayloadTests`, five on how replies are read in `StravaApiTests`, six on the redirect's edges and an unreadable token reply in `StravaAuthTests`, three on the refresh window and on failures that must not disconnect in `StravaSessionTests`, and six on the ledger's decisions in `StravaUploadsTests`.
+Written for the port, with no Kotlin test behind them (49): `StravaConfigTests` (4), `StravaTokenStoreTests` (9), `URLSessionTransportTests` (6), the composer's five and one past-the-start sample in `StravaHeartRateTests`, one on the instant's text in `StravaPayloadTests`, six on how replies are read, and on a transport that refuses a request, in `StravaApiTests`, seven on the redirect's edges, on no attempt being in flight and on an unreadable token reply in `StravaAuthTests`, four on the refresh window, on failures that must not disconnect and on a caller cancelled while it waits in `StravaSessionTests`, and six on the ledger's decisions in `StravaUploadsTests`.
 
 `FakeTransport` is `FakeTransport.kt`, and is the double for all of it.
 
@@ -93,11 +93,16 @@ Written for the port, with no Kotlin test behind them (46): `StravaConfigTests` 
 - **`StravaStorage`** (strings by key) is what the Keychain fills in P20. The ledger and the grant share it, as Android's share the `strava` prefs file, and for the same reason: out of backups.
 - **`require` throws** (`StravaPayloadError`); `IOException` is `HttpTransportError`; `StravaAuthException` is `StravaAuthError`; Android's `JSONException` out of the token calls is `StravaResponseError`, which the upload treats as worth retrying.
 - **The redirect is read by rules checked against `java.net.URI`**, not `URL(string:)`, which on current Apple systems repairs a string (a space becomes `%20`) that Android refuses.
+- **No attempt in flight cannot match.** `parseRedirect` takes the expected state as optional, and nil or empty is a mismatch. Android's handler drops the redirect before it gets there; this does not rely on the caller, because an empty expectation would match a crafted `state=` and bind the athlete's account to someone else's Strava.
+- **A request the transport refuses** (not https, not a URL) is `HttpRequestRefused`, which escapes `StravaApi` as Android's `ClassCastException` escapes the worker. It is not an `HttpTransportError`, which means the network failed and is retried.
+- **A caller cancelled while it waits for the refresh lock** throws `CancellationError` instead of going on to refresh; a suspended app's background time runs out mid-wait.
 - **Not here:** the upload's scheduling. `StravaUploads` is the ledger and its decisions; WorkManager's part (a network, a backoff, surviving a restart) is the app's, from the ledger, in P20.
 
 **Worth knowing** (Android behaviour that is ported as it is, not fixed):
 
 - `optString` on a JSON `null` is the word "null" on Android, so a token reply with `"firstname": null` names the athlete "null Smith". Strava sends strings. Kotlin's unit tests run on the `org.json` Maven artifact, which says "" for the same input; the shipped app does not.
+- A refresh reply carries no athlete and no scope, so after the first refresh (about six hours after connecting) the stored grant has no name and no scopes, and the menu says "Connected · Strava" instead of the athlete's name. Android does the same; nothing reads the scopes.
+- Every 4xx but 401 and 429 is a permanent rejection, so a 408 or 425 marks the upload failed. Android does the same.
 - Android's parser reads some things this one refuses (single quotes, text after the closing brace). Strava sends strict JSON, so no real reply tells them apart.
 - A repeated response header reaches Kotlin as a list and `URLSession` as one comma-joined value. Only `Retry-After` is read, and it is sent once.
 

@@ -183,8 +183,14 @@ public struct StravaAuth: Sendable {
     ///
     /// The state check runs before anything else, including before noticing `error=`: a denial for
     /// someone else's request is not this app's business to report either.
-    public static func parseRedirect(_ uri: String, expectedState: String) -> RedirectResult {
+    ///
+    /// `expectedState` is nil, or empty, when there is no attempt in flight. Android's handler
+    /// drops the redirect before it gets here; this takes the same view without relying on its
+    /// caller, because an empty expectation would otherwise match a crafted `state=` and bind the
+    /// athlete's account to someone else's Strava.
+    public static func parseRedirect(_ uri: String, expectedState: String?) -> RedirectResult {
         guard let query = rawQuery(of: uri), let params = parseQuery(query) else { return .malformed }
+        guard let expectedState = expectedState, !expectedState.isEmpty else { return .stateMismatch }
         if params["state"] != expectedState { return .stateMismatch }
         if params["error"] != nil { return .denied }
 
