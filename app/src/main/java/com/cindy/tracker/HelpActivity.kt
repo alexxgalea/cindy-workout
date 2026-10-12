@@ -592,8 +592,8 @@ class HelpActivity : AppCompatActivity() {
             )
         }
         bullets(
-            "To delete: CLEAR on the Progress screen removes your sessions with their rep times " +
-                "and heart-rate traces; REMOVE on the Account screen removes the photo; " +
+            "To delete: DISCARD on a session's page removes that session with its rep times " +
+                "and heart-rate trace; REMOVE on the Account screen removes the photo; " +
                 "Android's Clear storage in the app's settings removes everything else, and so " +
                 "does uninstalling. Videos in Movies/Cindy are yours to delete."
         )
