@@ -115,9 +115,10 @@ object StravaUploads {
     }
 
     /**
-     * Forgets every ledger entry. Called when the record board is cleared, so the app stops
-     * asking Strava about attempts it no longer has on file. Nothing already on Strava is
-     * touched — this is only the app's own memory of what it did.
+     * Forgets every ledger entry, so the app stops asking Strava about attempts it no longer has
+     * on file. Nothing already on Strava is touched — this is only the app's own memory of what
+     * it did. The app removes one session at a time, with [forget]; this is for emptying the
+     * ledger whole, as the tests do between cases.
      */
     fun clear(context: Context) {
         val prefs = prefs(context)
