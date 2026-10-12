@@ -222,21 +222,29 @@ class MainActivity : AppCompatActivity() {
     /**
      * elapsedRealtime of the most recent reading, in any state.
      *
-     * Kept only to judge, at [beginWorkout], whether the watch has said anything lately — a
-     * paired device that has not spoken in the last ten seconds is worth a toast, not a silent
+     * Kept only to judge whether the watch is sending right now — see [WatchLinks.judge]. A
+     * paired device that is not is worth asking about before a session starts, not a silent
      * assumption that calories will have a heart rate to work with.
      */
     private var lastHeartRateAt = 0L
 
-    /** The one listener a [HeartRateSource] is ever handed. Status changes have nowhere to go on
-     *  this screen — see the paired-device sheet in the menu for where connection state is shown. */
+    /** The latest word from the link, kept only to say why a silent watch is silent. */
+    private var heartStatus = HeartRateStatus.OFF
+
+    /** Set when the athlete chose to start without a silent watch, so START does not warn twice. */
+    private var silentWatchAcknowledged = false
+
+    /** The one listener a [HeartRateSource] is ever handed. Connection state is shown in the
+     *  paired-device sheet in the menu; here it is only kept to explain a silent watch at START. */
     private val heartRateListener = object : HeartRateListener {
         override fun onHeartRate(bpm: Int, atElapsedMs: Long) {
             heartRate.offer(bpm, atElapsedMs)
             lastHeartRateAt = atElapsedMs
         }
 
-        override fun onStatus(status: HeartRateStatus) = Unit
+        override fun onStatus(status: HeartRateStatus) {
+            heartStatus = status
+        }
     }
 
     @Volatile private var detector: PoseDetector? = null
@@ -1276,23 +1284,105 @@ class MainActivity : AppCompatActivity() {
         ui.post(ticker)
     }
 
+    private fun watchLink(now: Long) = WatchLinks.judge(
+        paired = heartSource != null && heartDevice != null,
+        lastReadingAt = lastHeartRateAt,
+        now = now
+    )
+
     /**
-     * Said once, at the very start, when a watch is paired but has gone quiet.
+     * Said once, at the very start, when a watch has gone quiet since the athlete was asked.
      *
-     * Not a HUD change — the out-of-scope list rules out a live readout — just a heads-up that
-     * calories will lean on reps alone until the first reading lands, so the number on the
-     * results screen does not look like a silent downgrade nobody explained.
+     * [askAboutWatch] is the proper place to ask; this is the net under it, for a watch that was
+     * sending when START was tapped and had stopped by the time the clock began — the setup
+     * check takes several seconds. Not a HUD change — the
+     * out-of-scope list rules out a live readout — just a heads-up that calories will lean on
+     * reps alone until the first reading lands, so the number on the results screen does not
+     * look like a silent downgrade nobody explained.
      */
     private fun warnIfHeartRateSilent(now: Long) {
+        val acknowledged = silentWatchAcknowledged
+        silentWatchAcknowledged = false
         val device = heartDevice
-        if (heartSource != null && device != null && now - lastHeartRateAt > 10_000L) {
+        if (!acknowledged && device != null && watchLink(now) == WatchLink.SILENT) {
             toast("No heart rate from ${device.name} yet — calories will use your reps until it arrives")
         }
     }
 
+    /**
+     * Asks, before anything else on START, about a heart-rate watch that is missing or silent.
+     *
+     * Two different questions, both put now because nothing else in the app puts them: there is
+     * no tour that says a watch can be paired, and a session that starts without one is scored
+     * on reps alone, which the athlete only finds out from the results afterwards. Never asked
+     * mid-session. Not lenient about a link that is still connecting: if no heart rate is coming
+     * in when START is tapped, the session would start without one.
+     *
+     * Declining carries on exactly as START always has. Choosing to check the watch leaves for
+     * the menu's heart-rate sheet, and START is tapped again on the way back.
+     */
+    private fun askAboutWatch(then: () -> Unit) {
+        val bleAvailable = packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)
+        val link = watchLink(SystemClock.elapsedRealtime())
+        val silenced = prefs().getBoolean(Onboarding.KEY_WATCH_OFFER_SILENCED, false)
+        when (WatchLinks.promptAtStart(link, bleAvailable, silenced)) {
+            WatchPrompt.NONE -> then()
+            WatchPrompt.OFFER_TO_PAIR -> {
+                var dontAskAgain = false
+                CindySheet(
+                    this,
+                    title = "Add a heart-rate watch?",
+                    subtitle = "With one, calories come from your heart rate. Without it, " +
+                        "from your reps alone."
+                ).add(
+                    sheetNote(
+                        "A Garmin, a Polar or a chest strap can broadcast it. You can add one " +
+                            "later from the menu."
+                    )
+                ).toggle("Don't ask again", checked = false) { dontAskAgain = it }
+                    .actions(
+                        primary = "CONNECT WATCH",
+                        onPrimary = {
+                            rememberWatchOfferAnswer(dontAskAgain)
+                            startActivity(MenuActivity.intent(this, workoutLive = false, openHeartRate = true))
+                        },
+                        secondary = "NOT NOW",
+                        onSecondary = {
+                            rememberWatchOfferAnswer(dontAskAgain)
+                            then()
+                        }
+                    ).show()
+            }
+            WatchPrompt.ASK_ABOUT_SILENT_WATCH -> {
+                val name = heartDevice?.name ?: "your watch"
+                CindySheet(
+                    this,
+                    title = "No heart rate from $name",
+                    subtitle = WatchLinks.why(heartStatus)
+                ).add(
+                    sheetNote("Without it, calories come from your reps alone.")
+                ).actions(
+                    primary = "CHECK WATCH",
+                    onPrimary = {
+                        startActivity(MenuActivity.intent(this, workoutLive = false, openHeartRate = true))
+                    },
+                    secondary = "START ANYWAY",
+                    onSecondary = {
+                        silentWatchAcknowledged = true
+                        then()
+                    }
+                ).show()
+            }
+        }
+    }
+
+    private fun rememberWatchOfferAnswer(dontAskAgain: Boolean) {
+        if (dontAskAgain) prefs().edit().putBoolean(Onboarding.KEY_WATCH_OFFER_SILENCED, true).apply()
+    }
+
     private fun toggleRun() {
         when (state) {
-            State.IDLE -> showPlacementGuide { enterSetup() }
+            State.IDLE -> askAboutWatch { showPlacementGuide { enterSetup() } }
             // Unreachable: the shutter is disabled for the duration of the check, and SKIP is
             // the way out of it. Named rather than left to `else` so the state machine stays
             // readable from this one when-block.

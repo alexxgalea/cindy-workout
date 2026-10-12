@@ -73,9 +73,17 @@ class MenuActivity : AppCompatActivity() {
          */
         private const val EXTRA_WORKOUT_LIVE = "workout_live"
 
-        fun intent(context: Context, workoutLive: Boolean): Intent =
+        /**
+         * Whether to open the heart-rate sheet on arrival: the camera screen sends an athlete
+         * here from "Add a heart-rate watch?" and "No heart rate from …", and the answer to both
+         * is on that sheet, not on the menu behind it.
+         */
+        private const val EXTRA_OPEN_HEART_RATE = "open_heart_rate"
+
+        fun intent(context: Context, workoutLive: Boolean, openHeartRate: Boolean = false): Intent =
             Intent(context, MenuActivity::class.java)
                 .putExtra(EXTRA_WORKOUT_LIVE, workoutLive)
+                .putExtra(EXTRA_OPEN_HEART_RATE, openHeartRate)
 
         /** How long each row waits behind the one above it as the list settles in. */
         private const val ROW_STAGGER_MS = 34L
@@ -100,6 +108,10 @@ class MenuActivity : AppCompatActivity() {
         })
         render()
         settleRowsIn()
+        // Only on a fresh start: a recreated screen must not put the sheet back after it was closed.
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_HEART_RATE, false)) {
+            chooseHeartRate()
+        }
     }
 
     /**
