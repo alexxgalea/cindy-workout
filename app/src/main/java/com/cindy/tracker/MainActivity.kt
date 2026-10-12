@@ -1929,8 +1929,9 @@ class MainActivity : AppCompatActivity() {
         LiveWorkout.active = false // No screen, no workout on the clock.
         ui.removeCallbacks(ticker)
         handoff.clear()
-        analysisExecutor.shutdown()
-        detector?.close()
+        // The analysis thread owns the detector, and may be mid-frame right now: close it from
+        // there, after that frame, not from here under it.
+        analysisExecutor.releaseAfterPending { detector?.close() }
         speaker.shutdown()
         music.release()
         video.stop()
