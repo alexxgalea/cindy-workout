@@ -25,7 +25,19 @@ data class StravaUploadStatus(
     val uploadId: String? = null,
     val activityId: Long? = null,
     val message: String? = null
-)
+) {
+    /**
+     * True when Strava has, or is about to have, this attempt as an activity.
+     *
+     * Done is the plain case. An [uploadId] means Strava accepted the file, so the activity will
+     * exist even if the athlete never returns to poll it — unless Strava then refused it, which
+     * is [StravaUploadState.FAILED] and leaves nothing behind. Cancelling the app's own work does
+     * not take any of this back, which is why a discard has to say so.
+     */
+    val reachedStrava: Boolean
+        get() = state == StravaUploadState.DONE ||
+            (uploadId != null && state != StravaUploadState.FAILED)
+}
 
 /**
  * Queues a saved attempt's Strava upload, and remembers what happened to it.
@@ -112,6 +124,22 @@ object StravaUploads {
         val edit = prefs.edit()
         prefs.all.keys.filter { it.startsWith(KEY_PREFIX) }.forEach { edit.remove(it) }
         edit.apply()
+    }
+
+    /**
+     * Stops the app asking Strava about [atMillis]: cancels its queued upload and forgets its
+     * ledger entry. For a session the athlete discarded.
+     *
+     * Only the app's own side. An activity Strava already holds stays there — there is nothing
+     * here that could remove it — and a worker caught mid-upload is asked to stop but not
+     * guaranteed to. [StravaConfig.available] guards the cancel because a build without Strava
+     * never queued anything, and so never started the [WorkManager] this would need.
+     */
+    fun forget(context: Context, atMillis: Long) {
+        if (StravaConfig.available) {
+            WorkManager.getInstance(context).cancelUniqueWork(uniqueWorkName(atMillis))
+        }
+        prefs(context).edit().remove(key(atMillis)).apply()
     }
 
     /**
