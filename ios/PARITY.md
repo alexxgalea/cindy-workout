@@ -29,7 +29,6 @@ Kotlin table and compare every number.
 
 | Kotlin test | Stays with | Because |
 |---|---|---|
-| `HudTourTest` (17) | P14 | Robolectric, against the inflated camera layout and the spotlight view |
 | `ReminderDeliveryTest` (10) | P18 | Arms and cancels Android alarms |
 | `HeartRateAdvertTest` (7), `BleHeartRateSourceTest`, `HeartRatePermissionsTest`, `HeartRatePermissionSheetTest` | P15 | The Bluetooth link and the permission sheet; the pure advert matching and `reconnectDelayMs` move to CindyCore there |
 | `StravaHeartRateTest` | P19 | Strava's heart-rate stream |
@@ -63,6 +62,18 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | `ScreenSmokeTest`, the menu builds (also mid-workout, with a track chosen, with a watch paired, with the reminder on) and the voice row names its language | CindyCore `MenuPageTests` | Every row's subtitle, for every state |
 | `ScreenSmokeTest`, the body-weight and heart-rate details sheets | CindyCore `ProfileFormsTests` | `BodyWeightForm`, `HeartRateDetailsForm` and `MovementsForm` hold what each asks, refuses and keeps |
 | `ScreenSmokeTest`, the heart-rate sheet (with and without a watch), the reminder row's sheet, the voice sheet's language list | P15, P18, P10 | The Bluetooth link, the scheduler and the language list (`LanguageGroupModelTests`, P10) |
+
+### Kotlin tests that were ported in P14
+
+The 59 screen tests of `TutorialScreenTest` (29), `HelpScreenTest` (10) and `LicencesTest` (3), and the 17 of `HudTourTest`, which Robolectric ran against the inflated screens. The same facts are read off what the core returns for the screen to draw, each test named after the Kotlin one, and the part that is a platform's (a view laid out and drawn, a button pressed, a screen started) stays with the SwiftUI layer and the UI tests the macOS job runs.
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `TutorialScreenTest` (29) | CindyCore `TutorialPagesTests` (29, and 3 for the model's edges) | The pages, buttons, dots, swipe rule and what ending does are `TutorialModel`. "Each page builds and lays out at phone size" is a layout pass on Android; here it holds that every page has a title and something to draw. The back button is the two-finger escape gesture on iOS. The four flag tests are `FirstRun`'s, which `OnboardingTests` also holds |
+| `HelpScreenTest` (10) | CindyCore `HelpPageTests` (10, and 8 for the tiers and for a build without each part) | `HelpBuilder` writes every section and the tests read the strings off the `HelpPage`. One Kotlin expectation is inverted on iOS: Android pins "Hold +1" as stale because SKIP is a button there; the iOS camera screen has no SKIP button, so Help says to hold +1 and the test pins that |
+| `LicencesTest` (3) | CindyCore `LicencesTests` (3, and 3 for what iOS changes) | The credits and the shipped texts are held to each other, reading the texts from the folder the app bundles them from. Apache-2.0 is not shipped (nothing under it is in the iOS app) and Apple's frameworks are credited without a licence text |
+| `HudTourTest` (17) | CindyCore `SpotlightTourTests` (17, and 2 for the arithmetic) | `SpotlightTour` is the tour's state and `SpotlightMath` its card; the Android layout is stood in for by two bands of controls on a 1080 by 2400 screen. `HudTourTests` (P8) still holds the seven steps to `HudTour.kt` word for word |
+| The five parts of the app that arrive in later phases (heart rate, filming, music, the reminder, Strava) | `HelpFeatures` | Help describes a part only when it is switched on; `HelpPageTests` holds that each is described exactly when it is |
 
 ### Kotlin tests with no Swift counterpart
 
@@ -184,13 +195,13 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P13 | `AccountActivity.kt` | CindyCore `AccountBuilder` (the header, the 26 badges by family, each tile's spoken sentence and its sheet) and `NameForm` / `PhotoSheet`, and CindyTracker `AccountScreen` with `PhotosPicker` for the photo | tests ported |
 | P13 | `AvatarStore.kt` | CindyCore `AvatarFiles` (exists, load, clear with its partial, store whole or not at all, by `rename(2)`), and CindyTracker `AvatarImporter`: ImageIO decodes no bigger than the short side needs and stands the picture upright from its orientation tag, so `Avatar.upright` and `Avatar.sampleSize` are not used on iOS; the square and the 320 px are `Avatar`'s. The file is `avatar.jpg` in Application Support, which iCloud backup carries | file handling tested; the decoding is built by the macOS job |
 | P13 | `AvatarView.kt` | CindyTracker `AvatarView` (SwiftUI): the photo, else the letters of the name, else a neutral figure; the initials are `Avatar`'s | built by the macOS job |
-| P13 | `MenuActivity.kt` | CindyCore `MenuBuilder` (the profile card, every row and what it says underneath, the live-workout refusal, the stagger of the entrance) and `VoiceForm`, and CindyTracker `MenuScreen`. A **MENU** chip on the camera screen opens it (the VOICE, LANG and PROGRESS chips are gone: the voice's switch, volume and language are one sheet now, as on Android). Only the rows that can be opened are shown: Movements, Progress, Body weight and Voice. Heart rate (P15), Music (P17), Daily reminder (P18), Help (P14) and Strava (P20) are built and tested in the builder and are switched on with their screens | tests ported |
+| P13 | `MenuActivity.kt` | CindyCore `MenuBuilder` (the profile card, every row and what it says underneath, the live-workout refusal, the stagger of the entrance) and `VoiceForm`, and CindyTracker `MenuScreen`. A **MENU** chip on the camera screen opens it (the VOICE, LANG and PROGRESS chips are gone: the voice's switch, volume and language are one sheet now, as on Android). Only the rows that can be opened are shown: Movements, Progress, Body weight, Voice and, from P14, Help. Heart rate (P15), Music (P17), Daily reminder (P18) and Strava (P20) are built and tested in the builder and are switched on with their screens | tests ported |
 | P13 | `Profile.kt` | CindyCore `Profile` over `UserDefaults`, under Android's keys (the movement choice is `movement_profile`; the iOS app's own earlier `cindy.movementProfile` is not read, as no build was ever released). `WorkoutViewModel` reads every setting from it, and the session now gets `smartSquats`, which P6 had left unwired | tests ported |
-| P14 | `AppLinks.kt` | CindyCore | not started |
-| P14 | `HelpActivity.kt` | CindyTracker (iOS rewrite) | not started |
-| P14 | `Licences.kt` | CindyTracker (iOS rewrite) | not started |
-| P14 | `SpotlightView.kt` | CindyTracker (iOS rewrite) | not started |
-| P14 | `TutorialActivity.kt` | CindyTracker (iOS rewrite) | not started |
+| P14 | `AppLinks.kt` | CindyCore `AppLinks`, and the CrossFit address of `HelpActivity.SOURCE` beside it | tests ported |
+| P14 | `HelpActivity.kt` | CindyCore `HelpBuilder` (every section, written as data) and CindyTracker `HelpScreen`. The words differ only where the app does: Photos for Movies/Cindy, iCloud Backup for Android's backup, Settings for the speech engine's own screen, a hold on +1 for the SKIP button. Heart rate, filming, music, the reminder and Strava are described only once their phase switches them on (`HelpContent.features`) | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
+| P14 | `Licences.kt` | CindyCore `Licences`. The credits name Vision and Apple's frameworks (no licence text to carry) and Manrope under the OFL, whose text and five font files ship in the app. The Apache-2.0 text is not shipped: MoveNet, LiteRT, AndroidX, CameraX and Kotlin are not in the iOS app | tests ported |
+| P14 | `SpotlightView.kt` | CindyCore `SpotlightTour` (which controls are lit, the step, the one-time end, the window and where the card sits) and CindyTracker `SpotlightOverlay`. The iOS camera screen has no SKIP button, so that step is left out, as the tour leaves out any control that is not showing | tests ported; the overlay is built by the macOS job |
+| P14 | `TutorialActivity.kt` | CindyCore `TutorialModel` (the five pages and what each says, the buttons, the dots, the swipe, what ending does) and CindyTracker `TutorialScreen`. A first run asks for the camera when the pages end (`CameraModel.ensureAccess`); the second page opens the movement sheet; the placement diagram is drawn by `PlacementDiagram` | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
 | P15 | `BleHeartRateSource.kt` | CindyTracker; `reconnectDelayMs` → CindyCore | not started |
 | P15 | `HeartRatePermissions.kt` | CindyTracker (iOS needs only Bluetooth; no location path) | not started |
 | P15 | `HeartRateScanner.kt` | CindyTracker; pure `HeartRateAdvert` matching → CindyCore | not started |

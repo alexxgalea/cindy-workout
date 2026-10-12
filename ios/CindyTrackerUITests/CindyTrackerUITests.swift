@@ -10,10 +10,25 @@ final class CindyTrackerUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// `seenGuide` skips the placement guide, which one test looks at on its own.
-    private func launchReplaying(_ script: String, seenGuide: Bool = true) -> XCUIApplication {
+    /// `seenGuide` skips the placement guide, which one test looks at on its own. The launch
+    /// arguments stand in for the defaults of a used install, because the simulator keeps what
+    /// earlier tests left: the first-launch pages are not shown, and nor is the tour that follows
+    /// them, unless `tour` asks for it.
+    private func launchReplaying(_ script: String, seenGuide: Bool = true, tour: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-CindyReplay", script, "-placementGuideSeen", seenGuide ? "YES" : "NO"]
+        var arguments = ["-CindyReplay", script, "-placement_guide_dismissed", seenGuide ? "YES" : "NO",
+                         "-tutorial_seen", "YES"]
+        if !tour { arguments += ["-hud_tour_pending", "NO"] }
+        app.launchArguments = arguments
+        app.launch()
+        return app
+    }
+
+    /// A new install: nothing seen, nothing on record, the placement guide never dismissed.
+    private func launchNewInstall() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "pullups", "-attempts", "",
+                               "-placement_guide_dismissed", "NO", "-tutorial_seen", "NO"]
         app.launch()
         return app
     }
@@ -163,5 +178,105 @@ final class CindyTrackerUITests: XCTestCase {
         app.buttons["Keep going"].tap()
         XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5),
                       "the clock that was parked behind the question is running again")
+    }
+
+    // MARK: - the first run
+
+    /// The tour's NEXT (DONE on the last step), tapped where it is. The accessibility tree reports it
+    /// as not hittable on some steps, where the card sits against the bottom edge, though the same
+    /// card's SKIP TOUR is; a tap anywhere on the dimmed screen also moves on, so the flow is
+    /// what is under test, not that query.
+    private func tapTourNext(_ app: XCUIApplication) {
+        let next = app.buttons["tourNext"]
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "the tour has a NEXT")
+        next.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    /// NEXT, or LET'S GO on the last page: found by what it says, as a person would.
+    private func tutorialNext(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == 'NEXT' OR label BEGINSWITH 'LET'")).firstMatch
+    }
+
+    func testANewInstallIsShownFivePagesAndThenTheTourOfTheCameraScreen() {
+        let app = launchNewInstall()
+
+        XCTAssertTrue(app.staticTexts["Cindy, counted for you"].waitForExistence(timeout: 10),
+                      "a new install opens on the first page")
+        XCTAssertFalse(app.buttons["BACK"].exists, "the first page has no way back")
+        for title in ["Your Cindy, your movements", "Where to stand", "Before the clock starts",
+                      "Nothing leaves your phone"] {
+            tutorialNext(app).tap()
+            XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5), "page: \(title)")
+        }
+        XCTAssertTrue(app.staticTexts["Next, iOS asks to use the camera."].exists,
+                      "the last page of a first run says the camera is next")
+        XCTAssertTrue(app.buttons["LET'S GO"].exists)
+        tutorialNext(app).tap()
+
+        // The pages are done, and the tour of the controls comes next: it opens on the first
+        // control and ends on the last, one step per control the screen has (the iOS camera screen
+        // has no SKIP button, so that step is left out). Read from what is on the screen, so that
+        // it holds the order and the end and not how many taps it took to get there.
+        let steps = 6
+        let skip = app.buttons["Skip the tour"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour opens")
+        XCTAssertTrue(app.staticTexts["tourTitle"].waitForExistence(timeout: 5), "the tour has a title")
+        XCTAssertEqual(app.staticTexts["tourTitle"].label, "Start", "it opens on the first control")
+        // NEXT is what takes the athlete through it, and the end of the tour is what it is for:
+        // so count the taps it takes to put the tour away. One per step, and not one fewer: a NEXT
+        // that does nothing leaves the tour up, and one that skips steps ends it early.
+        var taps = 0
+        while skip.exists && taps < steps + 3 {
+            tapTourNext(app)
+            taps += 1
+            _ = skip.waitForNonExistence(timeout: 1.5)
+        }
+        XCTAssertFalse(skip.exists, "the tour was still up after \(taps) taps on NEXT")
+        XCTAssertEqual(taps, steps, "one tap on NEXT for each of the \(steps) controls")
+        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
+        XCTAssertFalse(app.buttons["Skip the tour"].exists)
+    }
+
+    func testTheTourCanBeSkippedAndDoesNotComeBack() {
+        let app = launchNewInstall()
+        XCTAssertTrue(app.buttons["Skip the introduction"].waitForExistence(timeout: 10))
+        app.buttons["Skip the introduction"].tap()
+
+        let skip = app.buttons["Skip the tour"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "skipping the pages still leads to the tour")
+        skip.tap()
+        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5))
+
+        // The same install again: what was written when the pages and the tour ended is all there is.
+        app.terminate()
+        app.launchArguments = ["-CindyReplay", "pullups", "-placement_guide_dismissed", "NO"]
+        app.launch()
+        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 10),
+                      "neither the pages nor the tour come back for the same install")
+        XCTAssertFalse(app.buttons["Skip the tour"].exists)
+    }
+
+    func testHelpTakesTheTourAgainAndReturnsToTheCameraWithTheTourNext() {
+        let app = launchReplaying("pullups", tour: true)
+        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        // A tour left pending by an earlier test is taken first: it would swallow the tap.
+        if app.buttons["Skip the tour"].waitForExistence(timeout: 3) { app.buttons["Skip the tour"].tap() }
+        app.buttons["MENU"].tap()
+
+        let help = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Help'")).firstMatch
+        XCTAssertTrue(help.waitForExistence(timeout: 5), "the menu has a Help row")
+        help.tap()
+
+        let tour = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Take the tour'")).firstMatch
+        XCTAssertTrue(tour.waitForExistence(timeout: 5), "Help offers the tour first")
+        tour.tap()
+        XCTAssertTrue(app.staticTexts["Cindy, counted for you"].waitForExistence(timeout: 5))
+
+        // A replay ends back on the camera screen, closing the menu and Help over it.
+        app.buttons["Skip the introduction"].tap()
+        let skip = app.buttons["Skip the tour"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour follows the replayed pages")
+        skip.tap()
+        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5))
     }
 }

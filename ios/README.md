@@ -6,7 +6,7 @@ A port of the Android app, sharing its counting logic in spirit and its behaviou
 
 | | Status |
 |---|---|
-| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges) | **1,589 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
+| `CindyCore` — counting, Cindy progression, setup check, bar gate, heels-flat and smart squats, records (format v1 to v7), sets, rep times, levels, the voice's words in eleven languages, voice choice and coaching, streaks, progress, peaks, badges, session tiles, the lifted-weight and equivalents card, the reminder's rules and the first-run flags, heart rate (its zones, hardest round and saved trace), the calorie estimate and the results timeline, the speaker and the voice language list, the results page (which cards show and what each says) and the touch, geometry and screen-reader stops of its four charts, the Progress screen (which cards show, what each says) with its chart, calendar and week strip, the profile, the menu and the account (their rows, sheets and badges), the first-launch pages, the camera-screen tour and Help (their pages, steps and every word) | **1,664 tests, passing** (`tools/ios/swift.sh test`), on Linux and in CI. **The engine reproduces the Kotlin's parity trace on all 1,639 frames, every column.** The Bluetooth link and Strava are not ported yet, and nothing here is on a screen yet: see [PARITY.md](PARITY.md) |
 | `CindyClips` — scores the recorded clips with Vision, in the shape the Python harness scores them with MoveNet | **65 tests, passing** on Linux and in CI: the scoring is run through the real `run_batch.py` on the same frames and the reports are identical (see [Vision on the clips](#vision-on-the-clips)). **Not yet run on a clip**: it needs a Mac with the clips provisioned, which is yours to do |
 | `CindyTracker` — camera, Vision, SwiftUI screens | **Builds, and one UI test passes** on CI (macOS, Xcode 16.4, iOS 18.5 simulator), against a scripted body. **Never run on a device** |
 
@@ -73,6 +73,10 @@ ios/
 │   │   ├── Avatar.swift          names, initials, photo arithmetic
 │   │   ├── Reminder.swift        when the reminder fires and what it says
 │   │   ├── Onboarding.swift      who is shown around, and the flags (FirstRun)
+│   │   ├── TutorialPages.swift   the five first-launch pages, their buttons, swipe and ending
+│   │   ├── SpotlightTour.swift   the camera-screen tour: which controls, which step, where the card sits
+│   │   ├── HelpPage.swift        every section of Help, as data; HelpFeatures says which parts exist
+│   │   ├── Licences.swift        the credits and the licence texts that ship; AppLinks.swift the addresses
 │   │   └── Levels.swift          the rank ladder
 │   ├── Sources/CindyVision/      Vision → the 17 keypoints; the camera and the clip tool share it
 │   ├── Sources/CindyFixtures/    synthetic bodies and a rig that drives an engine with them
@@ -88,7 +92,13 @@ ios/
     ├── CameraModel.swift         what the screens watch, fed by a PoseSource
     ├── WorkoutViewModel.swift    clock, setup, score, voice
     ├── LanguageSheet.swift       the voice's language list
-    ├── ContentView.swift         camera, skeleton, HUD
+    ├── ContentView.swift         camera, skeleton, HUD, and the first run (pages, camera, tour)
+    ├── TutorialScreen.swift      the five first-launch pages
+    ├── SpotlightOverlay.swift    the tour of the camera screen
+    ├── HelpScreen.swift          Help, and the licence texts
+    ├── PlacementDiagram.swift    where to stand, drawn
+    ├── Palette.swift             Android's colours and Manrope, for the screens written from P14 on
+    ├── Resources/                Manrope's five files and its licence text
     └── ResultsView.swift         score, level, splits
 └── CindyTrackerUITests/  drives the app in the simulator against the scripted body
 ```
