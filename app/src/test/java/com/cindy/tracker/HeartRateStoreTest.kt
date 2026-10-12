@@ -42,4 +42,18 @@ class HeartRateStoreTest {
         assertNull(store.load(1L))
         assertNull(store.load(2L))
     }
+
+    @Test
+    fun `remove deletes that session's trace and no other`() {
+        val store = store()
+        val trace = HeartRateTrace(1000L, listOf(HeartRateSample(0L, 100)), emptyList())
+        store.save(1L, trace)
+        store.save(2L, trace)
+
+        store.remove(1L)
+
+        assertNull(store.load(1L))
+        assertEquals(trace, store.load(2L))
+        store.clear()
+    }
 }

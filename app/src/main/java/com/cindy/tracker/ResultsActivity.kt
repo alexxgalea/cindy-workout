@@ -145,21 +145,59 @@ class ResultsActivity : AppCompatActivity() {
         stoppedEarly = !reviewing && intent.getBooleanExtra(EXTRA_STOPPED, false)
         heelsFlatSpotted = !reviewing && intent.getBooleanExtra(EXTRA_HEELS_FLAT, false)
 
-        if (reviewing) {
-            // Reopened from Progress, which is where this came from — PROGRESS would be a way
-            // back to a page already behind this one.
-            binding.actions.addView(primaryButton("DONE").apply {
-                setOnClickListener { finish() }
-            })
-        } else {
+        // Reopened from Progress, which is where this came from — PROGRESS would be a way back to
+        // a page already behind this one.
+        if (!reviewing) {
             binding.actions.addView(glassButton("PROGRESS").apply {
                 setOnClickListener { startActivity(Intent(this@ResultsActivity, RecordsActivity::class.java)) }
             })
-            binding.actions.addView(primaryButton("DONE").apply {
-                setOnClickListener { finish() }
+        }
+        // Only a session on the board can be taken off it. A result with no reps was never filed,
+        // and a button that discards nothing would only ask a question with no answer.
+        if (RecordStore(this).all().any { it.atMillis == attempt.atMillis }) {
+            binding.actions.addView(glassButton("DISCARD", R.color.state_alert).apply {
+                setOnClickListener { confirmDiscard() }
             })
         }
+        binding.actions.addView(primaryButton("DONE").apply {
+            setOnClickListener { finish() }
+        })
         render(attempt, stoppedEarly)
+    }
+
+    /**
+     * Asks, then takes this session off the board with everything filed beside it.
+     *
+     * Arranged the way the old CLEAR sheet was after a tester lost their history to it: the
+     * confirmation had put the destructive word in the *filled* slot, which on every other sheet
+     * in the app is where the safe, expected action sits — and where the thumb already is, having
+     * just tapped a button to get here. Two taps in the same place wiped the board.
+     *
+     * So KEEP IT is the filled primary, a reflex second tap cancels, and discarding is the quiet
+     * secondary painted in the alert colour. The session is named, because "this session" is
+     * abstract in a way that a date and a rep count are not. A copy Strava already holds is said
+     * to stay there, since nothing here can take it back.
+     */
+    private fun confirmDiscard() {
+        val onStrava = StravaUploads.status(this, attempt.atMillis)?.reachedStrava == true
+        CindySheet(
+            this,
+            title = "Discard this session?",
+            subtitle = "${attempt.totalReps} reps · ${reviewHeadline(attempt, ZoneId.systemDefault())}" +
+                "\n\nIts heart-rate trace and rep times go with it, and so does any badge or " +
+                "record only it earned. This cannot be undone." +
+                if (onStrava) " It stays on Strava — remove it there." else ""
+        ).actions(
+            primary = "KEEP IT",
+            onPrimary = {},
+            secondary = "DISCARD",
+            onSecondary = {
+                SessionDiscard.discard(this, attempt.atMillis)
+                toast("Session discarded")
+                finish()
+            },
+            secondaryTint = R.color.state_alert
+        ).show()
     }
 
     private fun render(a: Attempt, stopped: Boolean) {

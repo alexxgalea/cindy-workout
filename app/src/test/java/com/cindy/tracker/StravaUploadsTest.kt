@@ -50,4 +50,25 @@ class StravaUploadsTest {
     fun `an unknown state name decodes to null`() {
         assertNull(StravaUploads.decode("SOMETHING_NEWER||||"))
     }
+
+    @Test
+    fun `an upload has reached Strava once it is done or Strava has accepted the file`() {
+        val reached = listOf(
+            StravaUploadStatus(StravaUploadState.DONE, activityId = 5L),
+            StravaUploadStatus(StravaUploadState.PROCESSING, uploadId = "u"),
+            // Accepted on an earlier run and waiting to be polled: Strava has the file.
+            StravaUploadStatus(StravaUploadState.QUEUED, uploadId = "u"),
+            StravaUploadStatus(StravaUploadState.NEEDS_RECONNECT, uploadId = "u")
+        )
+        val notReached = listOf(
+            StravaUploadStatus(StravaUploadState.QUEUED),
+            StravaUploadStatus(StravaUploadState.NEEDS_RECONNECT),
+            StravaUploadStatus(StravaUploadState.UNAVAILABLE),
+            StravaUploadStatus(StravaUploadState.FAILED, message = "rejected"),
+            // Strava took the file and then refused it: there is no activity to leave behind.
+            StravaUploadStatus(StravaUploadState.FAILED, uploadId = "u", message = "unreadable")
+        )
+        reached.forEach { assertEquals("$it", true, it.reachedStrava) }
+        notReached.forEach { assertEquals("$it", false, it.reachedStrava) }
+    }
 }

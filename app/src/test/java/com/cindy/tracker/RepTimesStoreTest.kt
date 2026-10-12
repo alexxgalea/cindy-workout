@@ -41,4 +41,18 @@ class RepTimesStoreTest {
         assertNull(store.load(1L))
         assertNull(store.load(2L))
     }
+
+    @Test
+    fun `remove deletes that session's rep times and no other`() {
+        val store = store()
+        val marks = listOf(RepMark(0L, Exercise.SQUAT, manual = false))
+        store.save(1L, marks)
+        store.save(2L, marks)
+
+        store.remove(1L)
+
+        assertNull(store.load(1L))
+        assertEquals(marks, store.load(2L))
+        store.clear()
+    }
 }
