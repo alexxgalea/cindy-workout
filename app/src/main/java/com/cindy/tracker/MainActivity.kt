@@ -312,17 +312,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Scratch for the rotation-vector maths, reused so the sensor callback allocates nothing. */
     private val rotationMatrix = FloatArray(9)
-    private val orientation = FloatArray(3)
 
     private val rotationListener = object : SensorEventListener {
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
         override fun onSensorChanged(event: SensorEvent) {
             SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-            SensorManager.getOrientation(rotationMatrix, orientation)
             stability.update(
-                yaw = Math.toDegrees(orientation[0].toDouble()).toFloat(),
-                pitch = Math.toDegrees(orientation[1].toDouble()).toFloat(),
+                yaw = CameraLook.heading(rotationMatrix),
+                pitch = CameraLook.elevation(rotationMatrix),
                 now = SystemClock.elapsedRealtime()
             )
             if (stability.consumeReframed()) onCameraMoved()
