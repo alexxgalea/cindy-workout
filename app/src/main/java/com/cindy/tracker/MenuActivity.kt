@@ -582,12 +582,29 @@ class MenuActivity : AppCompatActivity() {
         if (device == null) chooseHeartRateUnpaired() else chooseHeartRatePaired(device)
     }
 
+    /**
+     * What the heart-rate sheet says about where the reading goes.
+     *
+     * "Nothing is uploaded" was true until Strava: an upload carries the heart-rate trace of a
+     * workout a watch recorded, which the privacy policy, Help's PRIVACY section and the Data
+     * safety answers all say. The Strava half exists only in a build that has Strava, like the
+     * same sentence in Help.
+     */
+    private fun heartRateIntro(): String {
+        val reads = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
+            "for calories."
+        return if (StravaConfig.available) {
+            "$reads It stays on this phone, except in a workout you upload to Strava."
+        } else {
+            "$reads It stays on this phone."
+        }
+    }
+
     private fun chooseHeartRateUnpaired() {
         CindySheet(
             this,
             title = "Heart rate",
-            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
-                "for calories. Nothing is uploaded."
+            subtitle = heartRateIntro()
         ).add(
             sheetNote(
                 "Turn on heart-rate broadcast on your watch first. Garmin: Broadcast Heart " +
@@ -616,8 +633,7 @@ class MenuActivity : AppCompatActivity() {
         val sheet = CindySheet(
             this,
             title = "Heart rate",
-            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
-                "for calories. Nothing is uploaded."
+            subtitle = heartRateIntro()
         )
 
         val statusLine = styledText(R.style.Cindy_Footnote, "Connecting…").apply {
