@@ -99,7 +99,8 @@ final class CindyTrackerUITests: XCTestCase {
         let sure = app.buttons.matching(NSPredicate(format: "label == 'DISCARD'")).allElementsBoundByIndex.last!
         sure.tap()
 
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 10), "discarding closes the page")
+        // A finished workout leaves the camera screen on RESET, discarded or not.
+        XCTAssertTrue(app.buttons["RESET"].waitForExistence(timeout: 10), "discarding closes the page")
         let toast = app.staticTexts["toast"]
         XCTAssertTrue(toast.waitForExistence(timeout: 5), "the screen underneath says what happened")
         XCTAssertEqual(toast.label, "Session discarded")
