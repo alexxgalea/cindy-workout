@@ -2,8 +2,8 @@ import XCTest
 @testable import CindyCore
 
 /// What the Progress screen says beyond the Robolectric smoke tests: the streak columns, the week
-/// tiles, the calendar's paging, the leaderboard's ranks, the chart card's words and the question
-/// CLEAR asks. Written for the port, from the lines of `RecordsActivity` that decide each.
+/// tiles, the calendar's paging, the leaderboard's ranks, the chart card's words and the board redrawing
+/// after a discard. Written for the port, from the lines of `RecordsActivity` that decide each.
 final class ProgressDetailTests: XCTestCase {
 
     private let zone = Zone("Europe/Bucharest")
@@ -344,32 +344,49 @@ final class ProgressDetailTests: XCTestCase {
         XCTAssertNil(model([]).page.progress)
     }
 
-    // MARK: CLEAR
+    // MARK: discarding from a session's own page
 
-    /// It names what is at stake and says it cannot be undone.
-    func testClearNamesWhatIsAtStake() {
-        XCTAssertNil(model([]).clearQuestion)
+    /// Progress redraws when it comes back, so a discarded session is gone from it
+    func testProgressRedrawsWhenItComesBackSoADiscardedSessionIsGoneFromIt() {
+        let suite = "ProgressDetailTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let store = RecordStore(defaults: defaults)
+        let shown = attempt(10, at: now)
+        XCTAssertTrue(store.add(shown))
+        let m = model(store.all())
+        XCTAssertTrue(m.page.leaderboard.rows.contains { $0.spoken.hasPrefix("2, You, ") })
 
-        let one = model([attempt(12, at: now)]).clearQuestion!
-        XCTAssertEqual(one.title, "Delete your 1 session?")
-        XCTAssertEqual(one.keep, "KEEP THEM")
-        XCTAssertEqual(one.delete, "DELETE")
-        XCTAssertTrue(one.subtitle.contains("This cannot be undone."))
-        XCTAssertTrue(one.subtitle.contains("The benchmark stays."))
-        XCTAssertTrue(one.subtitle.contains("Your name and photo stay."))
+        // What discarding from the session's own page does, while Progress waits underneath it.
+        XCTAssertTrue(store.remove(atMillis: shown.atMillis))
+        XCTAssertTrue(m.reloadIfChanged(store.all()))
 
-        XCTAssertEqual(model([attempt(12, at: now), attempt(13, at: now - day), attempt(14, at: now - 2 * day)])
-            .clearQuestion?.title, "Delete all 3 sessions?")
+        XCTAssertFalse(m.page.leaderboard.rows.contains { $0.spoken.hasPrefix("2, You, ") })
     }
 
-    /// Once the board is cleared the page is the empty page again.
-    func testOnceTheBoardIsClearedThePageIsTheEmptyPageAgain() {
+    /// coming back to a board that has not changed costs nothing
+    func testComingBackToABoardThatHasNotChangedCostsNothing() {
+        let board = [attempt(12, at: now), attempt(13, at: now - day)]
+        let m = model(board)
+        var redraws = 0
+        m.onChange = { redraws += 1 }
+
+        XCTAssertFalse(m.reloadIfChanged(board))
+        XCTAssertEqual(redraws, 0)
+
+        XCTAssertTrue(m.reloadIfChanged(Array(board.dropFirst())))
+        XCTAssertEqual(redraws, 1)
+        XCTAssertFalse(m.reloadIfChanged(Array(board.dropFirst())))
+        XCTAssertEqual(redraws, 1)
+    }
+
+    /// once the last session is discarded the page is the empty page again
+    func testOnceTheLastSessionIsDiscardedThePageIsTheEmptyPageAgain() {
         let m = model([attempt(12, at: now), attempt(13, at: now - day)])
-        m.reload([])
+        m.reloadIfChanged([])
         XCTAssertNil(m.page.progress)
         XCTAssertNil(m.page.calendar)
-        XCTAssertFalse(m.page.canClear)
+        XCTAssertEqual(m.page.actions, [.done])
         XCTAssertEqual(m.page.hero.headline, "Your first Cindy starts everything.")
-        XCTAssertEqual(ProgressPageBuilder.clearedToast, "Records cleared")
     }
 }
