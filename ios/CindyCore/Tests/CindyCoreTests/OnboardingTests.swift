@@ -97,6 +97,19 @@ final class OnboardingTests: XCTestCase {
         XCTAssertTrue(d.bool(forKey: "hud_tour_pending"))
     }
 
+    /// written for the port: the watch offer's "Don't ask again" is Android's flag, under Android's key
+    func testTheWatchOffersDontAskAgainIsAndroidsFlagUnderAndroidsKey() {
+        let d = defaults()
+        let first = FirstRun(defaults: d)
+        XCTAssertFalse(first.watchOfferSilenced)
+        first.watchOfferSilenced = true
+        XCTAssertTrue(d.bool(forKey: "watch_offer_silenced"))
+        XCTAssertEqual(Onboarding.keyWatchOfferSilenced, "watch_offer_silenced")
+        XCTAssertTrue(FirstRun(defaults: d).watchOfferSilenced)
+        // It is not evidence that the app is old: only the offer is switched off.
+        XCTAssertTrue(first.shouldShowTutorial(hasHistory: false, cameraGranted: false))
+    }
+
     func testHistoryAndCameraPermissionStopThePagesWhateverTheFlagsSay() {
         let first = FirstRun(defaults: defaults())
         XCTAssertFalse(first.shouldShowTutorial(hasHistory: true, cameraGranted: false))
