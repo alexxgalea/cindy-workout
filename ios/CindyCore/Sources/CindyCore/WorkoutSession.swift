@@ -235,6 +235,26 @@ public final class WorkoutSession {
         tracking.reframe()
     }
 
+    /// The phone was knocked or turned and has settled (`CameraStabilityMonitor.consumeReframed`),
+    /// so the bar zone and the learned band, which are kept in frame pixels, describe a picture that
+    /// is no longer there. Port of `MainActivity.onCameraMoved`.
+    ///
+    /// Only while the setup check or the clock is going. Idle has nothing learned to lose, and a
+    /// paused workout recalibrates on resume anyway. During the workout it also says so, on the
+    /// status line and aloud, queued behind whatever is being said: a rep count must not be cut off
+    /// for it.
+    public func cameraMoved() -> [SessionEffect] {
+        guard state == .running || state == .setup else { return [] }
+        engine.recalibrate()
+        tracking.reframe()
+        var effects: [SessionEffect] = [.resetCrop]
+        if state == .running {
+            status = "Phone moved — checking framing"
+            effects.append(.queue(.phoneMoved))
+        }
+        return effects
+    }
+
     /// Skips the movement being worked on, banking the reps it reached.
     public func skipExercise(now: Int64) -> [SessionEffect] {
         guard inWorkout else { return [] }
