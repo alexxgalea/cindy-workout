@@ -41,7 +41,7 @@ struct ResultsView: View {
 
                 HStack(spacing: 10) {
                     // A reopened session offers DONE only: it came from Progress.
-                    if page.offersProgress {
+                    if page.actions.contains(.progress) {
                         Button("PROGRESS") { showProgress = true }.buttonStyle(GhostButton(tint: .white))
                     }
                     Button("DONE") { dismiss() }.buttonStyle(PrimaryButton())
