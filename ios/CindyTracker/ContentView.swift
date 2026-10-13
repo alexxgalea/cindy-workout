@@ -103,7 +103,9 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = false
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
-        .sheet(item: $workout.finished) { ResultsView($0) }
+        .sheet(item: $workout.finished) { request in
+            ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
+        }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout)
         }

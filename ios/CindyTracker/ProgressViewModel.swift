@@ -29,7 +29,6 @@ final class ProgressViewModel: ObservableObject {
     @Published private(set) var selected: Int?
     @Published private(set) var revision = 0
     @Published var route: ProgressRoute?
-    @Published var asksToClear = false
     @Published private(set) var toast: String?
 
     private let store = RecordStore()
@@ -79,20 +78,18 @@ final class ProgressViewModel: ObservableObject {
         if let request = ResultsRequest.reopening(atMillis) { route = .session(request) }
     }
 
-    /// The one irreversible thing in the app, after it has asked twice. A trace or a rep log with
-    /// nothing left to sit beside is not a record of anything.
-    func clear() {
-        store.clear()
-        HeartRateStore().clear()
-        RepTimesStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("rep_times", isDirectory: true)).clear()
-        progress.reload([])
-        toast = ProgressPageBuilder.clearedToast
+    /// A session was discarded from its own page, which has closed over this one.
+    func discarded() {
+        toast = ResultsPageBuilder.discardedToast
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             self?.toast = nil
         }
     }
+
+    /// Builds the page again when the board changed while this screen was waiting underneath a
+    /// session's own page, which can discard that session.
+    func boardMayHaveChanged() { progress.reloadIfChanged(store.all()) }
 
     // MARK: the models
 

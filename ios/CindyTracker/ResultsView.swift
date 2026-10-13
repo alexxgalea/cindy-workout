@@ -11,19 +11,25 @@ struct ResultsView: View {
     @State private var reopened: ResultsRequest?
     @State private var heelsFlatExplained = false
     @State private var showProgress = false
+    @State private var asksToDiscard = false
     @State private var toast: String?
+    /// Said to whatever is underneath once this page has discarded its session and closed: a
+    /// dismissed sheet takes its own overlay with it, so the screen it was over has to say so.
+    private let onDiscarded: () -> Void
 
     private enum Asking: Identifiable {
         case weight, heartRate
         var id: Int { self == .weight ? 0 : 1 }
     }
 
-    init(_ request: ResultsRequest) {
+    init(_ request: ResultsRequest, onDiscarded: @escaping () -> Void = {}) {
         _vm = StateObject(wrappedValue: ResultsViewModel(request))
+        self.onDiscarded = onDiscarded
     }
 
     var body: some View {
         let page = vm.page
+        let discardQuestion = vm.discardQuestion()
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header(page)
@@ -39,12 +45,19 @@ struct ResultsView: View {
                 if let timeline = page.timeline { timelineCard(timeline) }
                 if let heart = page.heart { heartCard(heart) }
 
+                // The bar is whatever the page says it is: PROGRESS only straight after a workout (a
+                // reopened session came from Progress), DISCARD only for a session on the board.
                 HStack(spacing: 10) {
-                    // A reopened session offers DONE only: it came from Progress.
-                    if page.actions.contains(.progress) {
-                        Button("PROGRESS") { showProgress = true }.buttonStyle(GhostButton(tint: .white))
+                    ForEach(page.actions, id: \.rawValue) { action in
+                        switch action {
+                        case .progress:
+                            Button(action.rawValue) { showProgress = true }.buttonStyle(GhostButton(tint: .white))
+                        case .discard:
+                            Button(action.rawValue) { asksToDiscard = true }.buttonStyle(GhostButton(tint: .warn))
+                        case .done:
+                            Button(action.rawValue) { dismiss() }.buttonStyle(PrimaryButton())
+                        }
                     }
-                    Button("DONE") { dismiss() }.buttonStyle(PrimaryButton())
                 }
                 .padding(.top, 16)
             }
@@ -57,8 +70,22 @@ struct ResultsView: View {
             case .heartRate: HeartRateDetailsSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
             }
         }
-        .sheet(item: $reopened) { ResultsView($0) }
+        .sheet(item: $reopened) { request in
+            ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
+        }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
+        // The safe answer is the filled one and the one that cancels: a reflex second tap where the
+        // thumb already is keeps the session.
+        .confirmationDialog(discardQuestion.title, isPresented: $asksToDiscard, titleVisibility: .visible) {
+            Button(discardQuestion.discard, role: .destructive) {
+                vm.discard()
+                onDiscarded()
+                dismiss()
+            }
+            Button(discardQuestion.keep, role: .cancel) {}
+        } message: {
+            Text(discardQuestion.subtitle)
+        }
         // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
         // athlete's own.
         .alert(HeelsFlatSheet.title, isPresented: $heelsFlatExplained) {
@@ -78,6 +105,14 @@ struct ResultsView: View {
             if let toast {
                 Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
             }
+        }
+    }
+
+    private func flash(_ text: String) {
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if toast == text { toast = nil }
         }
     }
 

@@ -91,6 +91,13 @@ final class ResultsViewModel: ObservableObject {
 
     func chooseComparison(_ i: Int) { results.chooseComparison(i) }
 
+    /// What DISCARD asks. Nothing on iOS uploads to Strava before P20, so there is no copy there for
+    /// the question to say stays; P20 reads the ledger here.
+    func discardQuestion() -> DiscardQuestion { results.discardQuestion(onStrava: false) }
+
+    /// Takes this session off the board with the files beside it, after the athlete has said so.
+    func discard() { results.discard(using: SessionDiscard()) }
+
     /// Builds the page again after the weight, age or sex changed.
     func bodyChanged() {
         let zone = results.input.zone
