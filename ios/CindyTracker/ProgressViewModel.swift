@@ -80,10 +80,11 @@ final class ProgressViewModel: ObservableObject {
 
     /// A session was discarded from its own page, which has closed over this one.
     func discarded() {
-        toast = ResultsPageBuilder.discardedToast
+        let text = ResultsPageBuilder.discardedToast
+        toast = text
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            self?.toast = nil
+            if self?.toast == text { self?.toast = nil }
         }
     }
 

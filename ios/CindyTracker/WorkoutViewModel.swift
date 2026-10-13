@@ -68,9 +68,7 @@ final class WorkoutViewModel: ObservableObject {
     /// contributes to.
     private var session: WorkoutSession
     private let records = RecordStore()
-    private let repTimes = RepTimesStore(directory: FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("rep_times", isDirectory: true))
+    private let repTimes = RepTimesStore()
     /// The voice. Held for the sheet that chooses its language too: both talk to the same engine.
     let speaker = Speaker(engine: AVSpeechTtsEngine())
 

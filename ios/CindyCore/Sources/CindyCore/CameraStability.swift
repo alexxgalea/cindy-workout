@@ -15,6 +15,9 @@ import Foundation
 /// North, Up, so the camera, which looks out of the back along the device's -Z, is the negated third
 /// column. A front camera looks the opposite way, which shifts every heading by half a turn and
 /// changes no difference between two of them, the only thing the monitor uses.
+///
+/// Core Motion's `CMRotationMatrix` is not this layout. Whatever feeds the monitor on iOS converts it
+/// first, in one place of its own, and checks the result against gravity (S2).
 public enum CameraLook {
     /// Compass bearing of the camera's axis, in degrees from -180 to 180.
     public static func heading(_ matrix: [Float]) -> Float {
