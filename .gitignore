@@ -66,3 +66,7 @@ __pycache__/
 
 # Rendered store listing and privacy policy, with the publisher's own details filled in.
 /play/dist/
+
+# code-review-graph database and superpowers workspaces (local, rebuilt per session)
+.code-review-graph/
+.superpowers/
