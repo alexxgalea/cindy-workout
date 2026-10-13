@@ -1,5 +1,33 @@
 import Foundation
 
+/// Where the camera is pointing, read from a rotation matrix. Port of `CameraLook` in
+/// `CameraStability.kt`.
+///
+/// Not the compass bearing of the phone's *top edge*, which is what an Euler "azimuth" is. A phone
+/// propped up to film a workout is standing on its end: the top edge points at the ceiling, and a
+/// bearing of something pointing straight up is not defined. A phone leaning back by five degrees
+/// still has a top edge that is only nine per cent horizontal, so the tremor of a squat landing
+/// nearby turns a degree or two of real movement into tens of degrees of azimuth. The axis the
+/// camera looks along does not have that problem for a phone filming the horizon, and it is the
+/// thing the bar zone is measured against anyway.
+///
+/// The matrix is Android's layout, nine floats, row-major: its columns are the device's axes in East,
+/// North, Up, so the camera, which looks out of the back along the device's -Z, is the negated third
+/// column. A front camera looks the opposite way, which shifts every heading by half a turn and
+/// changes no difference between two of them, the only thing the monitor uses.
+public enum CameraLook {
+    /// Compass bearing of the camera's axis, in degrees from -180 to 180.
+    public static func heading(_ matrix: [Float]) -> Float {
+        Float(atan2(-Double(matrix[2]), -Double(matrix[5])) * 57.29577951308232)
+    }
+
+    /// Angle of the camera's axis above the horizon, in degrees: positive looks up.
+    public static func elevation(_ matrix: [Float]) -> Float {
+        let up = min(max(Double(-matrix[8]), -1), 1)
+        return Float(asin(up) * 57.29577951308232)
+    }
+}
+
 /// Notices that the *phone* moved, as opposed to the athlete.
 ///
 /// Everything the pull-up gate knows is stored in frame pixels — where the bar is, how wide its
@@ -51,11 +79,12 @@ public final class CameraStabilityMonitor {
         return true
     }
 
-    /// Feeds one orientation reading, in degrees.
+    /// Feeds one reading, in degrees: the heading and the elevation of the axis the camera points
+    /// along, from `CameraLook`.
     ///
-    /// Yaw and pitch only. Roll is ignored: a phone rotating about the axis it is pointing along
-    /// changes which way up the picture is, and the frame the analysis runs on is already rotated
-    /// to upright before anything sees it.
+    /// Roll does not appear: a phone rotating about the axis it is pointing along changes which way
+    /// up the picture is, and the frame the analysis runs on is already rotated to upright before
+    /// anything sees it.
     public func update(yaw: Float, pitch: Float, now: Int64) {
         if anchorYaw.isNaN {
             anchorYaw = yaw

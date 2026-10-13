@@ -88,4 +88,124 @@ final class CameraStabilityTests: XCTestCase {
         hold(2_000, yaw: 2)
         XCTAssertFalse(monitor.moving, "359 and 2 are three degrees apart")
     }
+
+    // The monitor is only as good as the angles it is fed. These build the rotation matrix a phone
+    // propped up to film would report, and read the camera's direction from it the way the app does.
+
+    /// Row-major 3x3 product.
+    private func times(_ a: [Double], _ b: [Double]) -> [Double] {
+        var out = [Double](repeating: 0, count: 9)
+        for i in 0..<9 {
+            let row = i / 3 * 3
+            let column = i % 3
+            var sum = 0.0
+            for k in 0..<3 { sum += a[row + k] * b[k * 3 + column] }
+            out[i] = sum
+        }
+        return out
+    }
+
+    /// Rotation by `degrees` about a world axis (East, North, Up), by Rodrigues' formula.
+    private func turn(_ x: Double, _ y: Double, _ z: Double, _ degrees: Double) -> [Double] {
+        let n: Double = (x * x + y * y + z * z).squareRoot()
+        let ux: Double = x / n
+        let uy: Double = y / n
+        let uz: Double = z / n
+        let a: Double = degrees * 0.017453292519943295
+        let s: Double = sin(a)
+        let c: Double = cos(a)
+        let t: Double = 1 - c
+        // Rodrigues' formula, row by row, with each product named so the type checker can follow.
+        let xx: Double = t * ux * ux + c
+        let xy: Double = t * ux * uy - s * uz
+        let xz: Double = t * ux * uz + s * uy
+        let yx: Double = t * ux * uy + s * uz
+        let yy: Double = t * uy * uy + c
+        let yz: Double = t * uy * uz - s * ux
+        let zx: Double = t * ux * uz - s * uy
+        let zy: Double = t * uy * uz + s * ux
+        let zz: Double = t * uz * uz + c
+        return [xx, xy, xz, yx, yy, yz, zx, zy, zz]
+    }
+
+    /// A phone standing on its end facing north: top edge up, camera along the horizon.
+    private let upright: [Double] = [1, 0, 0, 0, 0, -1, 0, 1, 0]
+
+    /// Leaning back against a box by `tiltBack` degrees, so the camera looks that far up.
+    private func propped(_ tiltBack: Double) -> [Double] { times(turn(1, 0, 0, tiltBack), upright) }
+
+    private func matrix(_ m: [Double]) -> [Float] { m.map { Float($0) } }
+    private func heading(_ m: [Double]) -> Float { CameraLook.heading(matrix(m)) }
+    private func elevation(_ m: [Double]) -> Float { CameraLook.elevation(matrix(m)) }
+
+    /// What `SensorManager.getOrientation` reported before: the bearing of the top edge.
+    private func azimuth(_ m: [Double]) -> Float { Float(atan2(m[1], m[4]) * 57.29577951308232) }
+
+    private func apart(_ a: Float, _ b: Float) -> Float {
+        var d = (a - b).truncatingRemainder(dividingBy: 360)
+        if d > 180 { d -= 360 }
+        if d < -180 { d += 360 }
+        return abs(d)
+    }
+
+    private func feed(_ m: [Double], _ ms: Int64, stepMs: Int64 = 50) {
+        let until = clock + ms
+        while clock < until {
+            monitor.update(yaw: heading(m), pitch: elevation(m), now: clock)
+            clock += stepMs
+        }
+    }
+
+    private let tremor: [(Double, Double, Double)] = [
+        (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0), (1, 0, 1), (0, 1, 1), (1, 1, 1), (1, -1, 0),
+        (1, 0, -1), (0, 1, -1),
+    ]
+
+    /// a tremor barely moves where the camera points though it sends the compass round
+    func testATremorBarelyMovesWhereTheCameraPointsThoughItSendsTheCompassRound() {
+        let at = propped(5)
+        var compass: Float = 0
+        for (x, y, z) in tremor {
+            let shaken = times(turn(x, y, z, 1.5), at)
+            XCTAssertTrue(apart(heading(shaken), heading(at)) < 2,
+                          "heading moved \(apart(heading(shaken), heading(at)))")
+            XCTAssertTrue(apart(elevation(shaken), elevation(at)) < 2,
+                          "elevation moved \(apart(elevation(shaken), elevation(at)))")
+            compass = max(compass, apart(azimuth(shaken), azimuth(at)))
+        }
+        // The reading this replaces: the same one and a half degrees, through the top edge of a
+        // phone that is nearly vertical, is well past the eight degrees that count as a move.
+        XCTAssertTrue(compass > 8, "azimuth moved only \(compass)")
+    }
+
+    /// turning the phone is the same angle in the camera heading
+    func testTurningThePhoneIsTheSameAngleInTheCameraHeading() {
+        let at = propped(5)
+        let panned = times(turn(0, 0, 1, 12), at)
+        XCTAssertEqual(12, apart(heading(panned), heading(at)), accuracy: 0.01)
+    }
+
+    /// tilting the phone up is its elevation
+    func testTiltingThePhoneUpIsItsElevation() {
+        let at = propped(5)
+        let tipped = times(turn(1, 0, 0, 10), at)
+        XCTAssertEqual(5, elevation(at), accuracy: 0.01)
+        XCTAssertEqual(15, elevation(tipped), accuracy: 0.01)
+    }
+
+    /// the monitor stays quiet through a tremor and reports a real turn
+    func testTheMonitorStaysQuietThroughATremorAndReportsARealTurn() {
+        let at = propped(5)
+        feed(at, 2_000)
+        for i in 0..<20 {
+            let (x, y, z) = tremor[i % tremor.count]
+            feed(times(turn(x, y, z, 1.5), at), 100)
+        }
+        feed(at, 2_000)
+        XCTAssertFalse(monitor.moving)
+        XCTAssertFalse(monitor.consumeReframed())
+
+        feed(times(turn(0, 0, 1, 15), at), 3_000)
+        XCTAssertTrue(monitor.consumeReframed())
+    }
 }
