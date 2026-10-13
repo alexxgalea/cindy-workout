@@ -261,6 +261,9 @@ final class WorkoutViewModel: ObservableObject {
         }
     }
 
+    /// A session was discarded from its page, which has closed over this screen.
+    func sessionDiscarded() { show(ResultsPageBuilder.discardedToast) }
+
     private func show(_ text: String) {
         toast = text
         Task { @MainActor [weak self] in
