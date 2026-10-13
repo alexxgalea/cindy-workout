@@ -29,7 +29,7 @@ struct ResultsView: View {
 
     var body: some View {
         let page = vm.page
-        let discardQuestion = vm.discardQuestion()
+        let discardQuestion = vm.discardQuestion
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header(page)
@@ -74,12 +74,13 @@ struct ResultsView: View {
             ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
         }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
-        // The safe answer is the filled one and the one that cancels: a reflex second tap where the
-        // thumb already is keeps the session.
+        // The system's dialog has no filled button: the safe answer is the one with the cancel role,
+        // which it sets apart at the bottom, under the thumb that has just tapped DISCARD, while the
+        // destructive one is the red row above it.
         .confirmationDialog(discardQuestion.title, isPresented: $asksToDiscard, titleVisibility: .visible) {
             Button(discardQuestion.discard, role: .destructive) {
-                vm.discard()
-                onDiscarded()
+                // The page closes either way, but only a session that was there was discarded.
+                if vm.discard() { onDiscarded() }
                 dismiss()
             }
             Button(discardQuestion.keep, role: .cancel) {}

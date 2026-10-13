@@ -64,14 +64,16 @@ public enum ResultsButton: String, Equatable, Sendable {
 /// The confirmation that once put the destructive word in the *filled* slot, which on every other
 /// sheet in the app is where the safe, expected action sits, and where the thumb already is having
 /// just tapped a button to get here, wiped a tester's history with two taps in the same place. So
-/// KEEP IT is the filled, safe action and DISCARD the quiet one, painted in the alert colour. The
-/// session is named, because "this session" is abstract in a way that a date and a rep count are not.
+/// the safe answer, KEEP IT, goes where a reflex tap lands, and DISCARD is the quiet one, in the
+/// alert colour. On Android that is the filled button of the sheet; on iOS the system's dialog has
+/// no filled button, and KEEP IT is the cancel row it sets apart at the bottom. The session is
+/// named, because "this session" is abstract in a way that a date and a rep count are not.
 public struct DiscardQuestion: Equatable, Sendable {
     public let title: String
     public let subtitle: String
-    /// The filled, safe action.
+    /// The safe answer: nothing is touched.
     public let keep = "KEEP IT"
-    /// The quiet one, painted in the alert colour.
+    /// The destructive one.
     public let discard = "DISCARD"
 }
 
