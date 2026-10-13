@@ -23,6 +23,9 @@ public enum Onboarding {
     /// key means the two readers cannot disagree about what it is called.
     public static let keyPlacementSeen = "placement_guide_dismissed"
 
+    /// Where "Don't ask again" on the offer to pair a heart-rate watch is kept.
+    public static let keyWatchOfferSilenced = "watch_offer_silenced"
+
     /// Whether to show the pages before the camera opens.
     ///
     /// Only to a new install: nothing seen, no session on record, the placement guide never
@@ -66,6 +69,14 @@ public final class FirstRun {
     /// Whether the athlete has asked never to see the placement guide again. Nobody does that
     /// without having met the app before, which is why it counts as history.
     public var placementDismissed: Bool { defaults.bool(forKey: Onboarding.keyPlacementSeen) }
+
+    /// Whether the athlete has asked not to be offered a heart-rate watch when they tap START.
+    ///
+    /// Only the offer: a watch that is paired and silent is asked about whatever this says.
+    public var watchOfferSilenced: Bool {
+        get { defaults.bool(forKey: Onboarding.keyWatchOfferSilenced) }
+        set { defaults.set(newValue, forKey: Onboarding.keyWatchOfferSilenced) }
+    }
 
     /// Whether to show the pages now. `hasHistory` is whether any session is on record, and
     /// `cameraGranted` whether the camera's permission is already held.

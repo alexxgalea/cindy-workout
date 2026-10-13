@@ -71,6 +71,41 @@ final class CindyTrackerUITests: XCTestCase {
                       "the results screen follows")
     }
 
+    // MARK: - discarding a session
+
+    func testASessionCanBeDiscardedFromItsPage() {
+        let app = launchReplaying("nohands")
+        startSkippingSetup(app)
+        app.buttons["+1"].tap()
+        app.buttons["+1"].tap()
+        app.buttons["STOP"].tap()
+        XCTAssertTrue(app.buttons["End"].waitForExistence(timeout: 5), "stopping asks first")
+        app.buttons["End"].tap()
+
+        // Two counted reps are a session on the board, so its page offers DISCARD beside DONE.
+        let discard = app.buttons["DISCARD"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 10), "a saved session can be discarded")
+        XCTAssertTrue(app.buttons["DONE"].exists)
+
+        // KEEP IT is the answer that does nothing: the page is still there.
+        discard.tap()
+        XCTAssertTrue(app.buttons["KEEP IT"].waitForExistence(timeout: 5), "DISCARD asks first")
+        app.buttons["KEEP IT"].tap()
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5), "keeping the session closed its page")
+
+        // The dialog has a DISCARD of its own, after the page's.
+        discard.tap()
+        XCTAssertTrue(app.buttons["KEEP IT"].waitForExistence(timeout: 5))
+        let sure = app.buttons.matching(NSPredicate(format: "label == 'DISCARD'")).allElementsBoundByIndex.last!
+        sure.tap()
+
+        // A finished workout leaves the camera screen on RESET, discarded or not.
+        XCTAssertTrue(app.buttons["RESET"].waitForExistence(timeout: 10), "discarding closes the page")
+        let toast = app.staticTexts["toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5), "the screen underneath says what happened")
+        XCTAssertEqual(toast.label, "Session discarded")
+    }
+
     // MARK: - the placement guide
 
     func testThePlacementGuideComesFirstAndCanBeTurnedOff() {

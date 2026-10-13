@@ -297,21 +297,26 @@ final class AccountPageTests: XCTestCase {
 
     // MARK: the record board
 
-    /// clearing the records takes the badges with them and leaves the name and photo
-    func testClearingTheRecordsTakesTheBadgesWithThemAndLeavesTheNameAndPhoto() throws {
-        let name = "AccountPageTests-clear-\(UUID().uuidString)"
+    /// discarding the session that earned a badge takes the badge, and leaves the name and photo
+    func testDiscardingTheSessionThatEarnedABadgeTakesTheBadgeAndLeavesTheNameAndPhoto() throws {
+        let name = "AccountPageTests-discard-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         addTeardownBlock { defaults.removePersistentDomain(forName: name) }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let profile = Profile(defaults: defaults)
-        let photo = AvatarFiles(directory: directory)
+        let photo = AvatarFiles(directory: directory.appendingPathComponent("avatar"))
         let store = RecordStore(defaults: defaults)
+        let discard = SessionDiscard(records: store,
+                                     heartRates: HeartRateStore(directory: directory.appendingPathComponent("heart_rate")),
+                                     repTimes: RepTimesStore(directory: directory.appendingPathComponent("rep_times")))
         profile.displayName = "Alex"
         XCTAssertTrue(photo.store(Data([1, 2, 3])))
-        XCTAssertTrue(store.add(session(rounds: 10)))
+        let earner = session(rounds: 10)
+        XCTAssertTrue(store.add(earner))
+        XCTAssertFalse(Badges.earned(store.all(), zone: zone, firstDayOfWeek: .monday).isEmpty)
 
-        store.clear()
+        XCTAssertTrue(discard.discard(atMillis: earner.atMillis))
 
         XCTAssertTrue(store.all().isEmpty)
         XCTAssertTrue(Badges.earned(store.all(), zone: zone, firstDayOfWeek: .monday).isEmpty)
