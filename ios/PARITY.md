@@ -57,17 +57,36 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 |---|---|---|
 | `ProfileHeartRateTest` (8), `ProfileVoiceLanguageTest` (5) | CindyCore `ProfileTests` | Pure settings over `UserDefaults` instead of `SharedPreferences`, in a throwaway suite |
 | `HeelsFlatScreensTest` (11) | CindyCore `HeelsFlatScreensTests` | The sheet's setting is `MovementsForm`, the row `MenuBuilder`, the results sheet `HeelsFlatSheet` |
-| `AccountScreenTest`, 25 of 34 | CindyCore `AccountPageTests` and `AvatarFilesTests` | The page is `AccountBuilder`, the name `NameForm`, the photo's sheet `PhotoSheet`, its file `AvatarFiles`, the menu's card `MenuBuilder`, and the badges on the results page `ResultsPageBuilder` |
-| `AccountScreenTest`, 2 of 34: the leaderboard says "You" until there is a name; the CLEAR sheet says the badges go and the name and photo stay | CindyCore `ProgressDetailTests` (P12) | They open `RecordsActivity`, which P12 ported |
-| `AccountScreenTest`, 7 of 34: choosing a photo opens the system picker; DONE closes the screen; the profile card opens the profile screen; the four `AvatarView` tests (it draws, it is a row's size, it is square, it is decoration until made a button) | CindyTracker, built by the macOS job | They start a screen or measure and draw a view. The same facts are held in the SwiftUI: a `PhotosPicker`, a `dismiss`, a `NavigationLink`, an `AvatarView` that is a square and hidden from VoiceOver |
+| `AccountScreenTest`, 25 of 35 | CindyCore `AccountPageTests` and `AvatarFilesTests` | The page is `AccountBuilder`, the name `NameForm`, the photo's sheet `PhotoSheet`, its file `AvatarFiles`, the menu's card `MenuBuilder`, and the badges on the results page `ResultsPageBuilder` |
+| `AccountScreenTest`, 3 of 35: the leaderboard says "You" until there is a name; Progress has no way to delete everything at once; Progress redraws when it comes back, so a discarded session is gone from it | CindyCore `ProgressDetailTests` (P12, S1) and `ProgressPageTests` | They open `RecordsActivity`, which P12 ported. The last two replaced the CLEAR sheet's test and the clearing test on 12 October; the badge test that follows them is among the 25 |
+| `AccountScreenTest`, 7 of 35: choosing a photo opens the system picker; DONE closes the screen; the profile card opens the profile screen; the four `AvatarView` tests (it draws, it is a row's size, it is square, it is decoration until made a button) | CindyTracker, built by the macOS job | They start a screen or measure and draw a view. The same facts are held in the SwiftUI: a `PhotosPicker`, a `dismiss`, a `NavigationLink`, an `AvatarView` that is a square and hidden from VoiceOver |
 | `ScreenSmokeTest`, the menu builds (also mid-workout, with a track chosen, with a watch paired, with the reminder on) and the voice row names its language | CindyCore `MenuPageTests` | Every row's subtitle, for every state |
 | `ScreenSmokeTest`, the body-weight and heart-rate details sheets | CindyCore `ProfileFormsTests` | `BodyWeightForm`, `HeartRateDetailsForm` and `MovementsForm` hold what each asks, refuses and keeps |
 | `ScreenSmokeTest`, the heart-rate sheet (with and without a watch), the reminder row's sheet, the voice sheet's language list | P15, P18, P10 | The Bluetooth link, the scheduler and the language list (`LanguageGroupModelTests`, P10) |
+
+### Kotlin tests that were ported in S1
+
+The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 30 ported now.
+
+| Kotlin test | Lands in | Because |
+|---|---|---|
+| `CameraStabilityTest`, the 4 new (11) | CindyCore `CameraStabilityTests` | The same rotation matrices, built with the same helpers; the tremor test also shows the old azimuth moving more than 8 degrees |
+| `WatchLinkTest` (10) | CindyCore `WatchLinkTests` | Pure rules. One more test, written for the port, holds the flag under Android's key in `OnboardingTests` |
+| `RecordStoreTest`, 2 new (4) | CindyCore `RecordStoreTests` | |
+| `HeartRateStoreTest`, 1 new (4); `RepTimesStoreTest`, 1 new (4) | CindyCore `HeartRateStoreTests`, `RepTimesStoreTests` | |
+| `SessionDiscardTest`, 2 of 3 | CindyCore `SessionDiscardTests` | The third cancels the queued Strava upload and forgets the ledger entry: P19 |
+| `ScreenSmokeTest`, 1 renamed and 4 new (67): reopening shows DISCARD beside DONE; after a workout the page offers DISCARD; a result never saved has nothing to discard; DISCARD asks first and KEEP IT leaves the session; confirming removes it | CindyCore `ResultsPageTests` (2 new, 1 renamed) and `ResultsDiscardTests` (the two that ask and confirm) | The assertions read the bar and the sheet off the inflated screen; here they read `ResultsPage.actions` and `DiscardQuestion`. That KEEP IT is the filled button and that confirming closes the page are the SwiftUI layer's, and `testASessionCanBeDiscardedFromItsPage` holds them in the simulator |
+| `StravaScreenTest`, 2 new (20) | CindyCore `ResultsDiscardTests`, the sheet's wording | `onStrava` is false until P20 feeds it from the ledger |
+| `AccountScreenTest`, 3 of 35 (see P13) | CindyCore `ProgressDetailTests`, `ProgressPageTests`, `AccountPageTests` | |
+| `HelpScreenTest`, `PlayPolicyTest` (a phrase each) | P14, P21 | Help and the listing do not exist on iOS yet |
+| `StravaUploadsTest`, `reachedStrava` | P19 | Strava |
+| `HeartRateSheetCopyTest` (3) | P15 | The heart-rate sheet is built there |
 
 ### Kotlin tests with no Swift counterpart
 
 | Kotlin test | Because |
 |---|---|
+| `ExecutorReleaseTest` (2) | `ExecutorRelease` closes a native model after the frame using it, which only Android needs: see its row below |
 | `AndroidTtsEngineTest` (13) | Robolectric's shadow of Android's `TextToSpeech`: what its constants mean. iOS has none of them; the translation it does have is `AppleVoiceMapping`, held by `AppleVoiceMappingTests` (written for the port) |
 | `SpeakerTest`, `the default stack says something once Android says it is ready` | Drives the real Android engine. `AVSpeechTtsEngine` needs a device |
 | `SpeakerTest`, `an engine that fails to answer does not stop the questions after it`; `LanguageGroupTest`, `an engine that stays silent is asked less often` | Kotlin's engine could throw from `getVoices`. A Swift `TtsEngine` cannot throw, so both are held with an engine that answers nothing (and one that never connects) instead, as their doc comments say |
@@ -91,7 +110,7 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | Phase | Kotlin file | Lands in | Status |
 |---|---|---|---|
 | P2 | `BarZone.kt` | CindyCore | tests ported |
-| P2 | `CameraStability.kt` | CindyCore | tests ported |
+| P2 | `CameraStability.kt` | CindyCore, with `CameraLook` (S1: the heading and elevation of the axis the camera looks along, from Android's rotation matrix). Nothing on iOS feeds the monitor yet: that is S2 | tests ported |
 | P2 | `PoseGeometry.kt` | CindyCore | ported |
 | P2 | `PosePrediction.kt` | CindyCore | tests ported |
 | P2 | `RepCounter.kt` | CindyCore | tests ported |
@@ -103,9 +122,9 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P3 | `Comparisons.kt` | CindyCore | tests ported |
 | P3 | `Levels.kt` | CindyCore | tests ported |
 | P3 | `LiveWorkout.kt` | CindyCore | ported |
-| P3 | `RecordStore.kt` | CindyCore (`Records`, format v1 to v7) and a `RecordStore` over `UserDefaults` | tests ported |
+| P3 | `RecordStore.kt` | CindyCore (`Records`, format v1 to v7) and a `RecordStore` over `UserDefaults`, with `remove(atMillis:)` (S1) | tests ported |
 | P3 | `RepLog.kt` | CindyCore | tests ported |
-| P3 | `RepTimesStore.kt` | CindyCore (format + file store) | tests ported |
+| P3 | `RepTimesStore.kt` | CindyCore (format + file store), with `remove(atMillis:)` (S1) | tests ported |
 | P3 | `RoundSplits.kt` | CindyCore | tests ported |
 | P3 | `SessionStats.kt` | CindyCore | tests ported |
 | P3 | `SplitBook.kt` | CindyCore | tests ported |
@@ -155,7 +174,7 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P8 | `FirstRun.kt` | CindyCore (the flags) over `UserDefaults`; the Kotlin has no test, so the Swift ones are new | ported |
 | P8 | `HudTour.kt` | CindyCore (the list of seven steps: control, title, words); the spotlight that draws it is P14. `HudTourTest` inflates the Android layout, so what is held to the Kotlin is the list, read from `HudTour.kt` | ported |
 | P8 | `Lifted.kt` | CindyCore | tests ported |
-| P8 | `Onboarding.kt` | CindyCore | tests ported |
+| P8 | `Onboarding.kt` | CindyCore, with the watch offer's "Don't ask again" flag, `watch_offer_silenced` (S1) | tests ported |
 | P8 | `Peaks.kt` | CindyCore | tests ported |
 | P8 | `Progress.kt` | CindyCore | tests ported |
 | P8 | `Reminder.kt` | CindyCore | tests ported |
@@ -166,12 +185,12 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P9 | `HeartRate.kt` | CindyCore (the types, the Bluetooth profile's UUIDs, measurement parsing, the `HeartRateSource` protocol). `HeartRateSources.forProfile` builds the Android Bluetooth source, so it comes with the Core Bluetooth one in P15 | tests ported |
 | P9 | `HeartRateRecorder.kt` | CindyCore | tests ported |
 | P9 | `HeartRateStats.kt` | CindyCore | tests ported |
-| P9 | `HeartRateStore.kt` | CindyCore: the trace format (`HeartRateTraces`) and the file store over a folder, as `RepTimesStore` is (nothing here needs the app target) | tests ported |
+| P9 | `HeartRateStore.kt` | CindyCore: the trace format (`HeartRateTraces`) and the file store over a folder, as `RepTimesStore` is (nothing here needs the app target), with `remove(atMillis:)` (S1) | tests ported |
 | P9 | `SessionTimeline.kt` | CindyCore. Kotlin's `Readout` is `TimelineReadout`, because P8's progress `Readout` already holds the name | tests ported |
 | P10 | `AndroidTtsEngine.kt` | CindyTracker `AVSpeechTtsEngine` over CindyCore `AppleVoiceMapping` (what a system voice is called to the director). iOS lists only installed voices, so a voice is never "not fetched" and none is online; the engine itself needs a device and is built by the macOS job | ported |
 | P10 | `LanguageGroup.kt` | CindyCore `LanguageGroupModel` (every decision: rows, taps, settling, downloads, previews, polling) and CindyTracker `LanguageSheet` (the SwiftUI list over it). "Manage voices" explains Settings → Accessibility → Spoken Content → Voices instead of opening an engine's screen | tests ported |
 | P10 | `Speaker.kt` | CindyCore `Speaker`, with its main-thread and background dispatchers injected; the workout now speaks through it | tests ported |
-| P11 | `ResultsActivity.kt` | CindyCore `ResultsPageBuilder` / `ResultsModel` (which cards show, what each says, the comparison chosen, the lines that follow the fingers) and CindyTracker `ResultsView` over `ResultsViewModel` (the SwiftUI page). The Strava row (P19) and the PROGRESS button (P12) are not drawn; a reopened session offers DONE only, as on Android | tests ported; the screen is built by the macOS job and still wants a real session on an iPhone at the smallest and largest text sizes |
+| P11 | `ResultsActivity.kt` | CindyCore `ResultsPageBuilder` / `ResultsModel` (which cards show, what each says, the comparison chosen, the lines that follow the fingers) and CindyTracker `ResultsView` over `ResultsViewModel` (the SwiftUI page). The Strava row (P19) and the PROGRESS button (P12) are not drawn; a reopened session offers DISCARD and DONE, a page that has just ended PROGRESS, DISCARD and DONE, and DISCARD is absent for a result that was never saved (S1: `ResultsPage.actions`, `DiscardQuestion`, `ResultsModel.discard`; the dialog is the system's `confirmationDialog` with KEEP IT as the cancel role, and the screen underneath says "Session discarded", since a dismissed sheet takes its own overlay with it). Whether a copy is on Strava is fed by the ledger in P20 | tests ported; the screen is built by the macOS job and still wants a real session on an iPhone at the smallest and largest text sizes |
 | P11 | `RoundSplitsView.kt` | CindyCore `RoundSplitsChartModel` and CindyTracker `RoundSplitsView` (`Canvas`) | tests ported |
 | P11 | `RoundTrackView.kt` | CindyCore `RoundTrackModel` and CindyTracker `RoundTrackView` (`Canvas`) | tests ported |
 | P11 | `SessionTimelineView.kt` | CindyCore `SessionTimelineChartModel` and CindyTracker `SessionTimelineView` (`Canvas`) | tests ported |
@@ -179,7 +198,7 @@ The 58 screen tests of `AccountScreenTest` (34), `HeelsFlatScreensTest` (11), `P
 | P11 | `ZoneBarView.kt` | CindyCore `ZoneBarModel` and CindyTracker `ZoneBarView` (`Canvas`) | tests ported |
 | P12 | `CalendarView.kt` | CindyCore `CalendarModel` (the month's cells, taps, stops and words) and CindyTracker `CalendarGridView` (`Canvas`) | tests ported |
 | P12 | `ProgressChartView.kt` | CindyCore `ProgressChartModel` (points, bars, the best-so-far steps, touch, stops) and CindyTracker `ProgressChartView` (`Canvas`) | tests ported |
-| P12 | `RecordsActivity.kt` | CindyCore `ProgressPageBuilder` and `ProgressModel` (which cards show and what each says: the habit, this week, the chart card and its chips, peaks, the calendar's paging, the leaderboard, a day's sessions, the CLEAR question) and CindyTracker `ProgressScreen` over `ProgressViewModel`. CLEAR does not clear Strava uploads (P19). Reached from the results page's PROGRESS button and, until the menu (P13), a PROGRESS chip on the camera screen | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
+| P12 | `RecordsActivity.kt` | CindyCore `ProgressPageBuilder` and `ProgressModel` (which cards show and what each says: the habit, this week, the chart card and its chips, peaks, the calendar's paging, the leaderboard, a day's sessions) and CindyTracker `ProgressScreen` over `ProgressViewModel`. Since S1 there is no CLEAR, as on Android: a session is discarded from its own page, and `ProgressModel.reloadIfChanged` builds the page again when the sheet of a session opened from here goes and the board changed. Reached from the results page's PROGRESS button and, until the menu (P13), a PROGRESS chip on the camera screen | tests ported; the screen is built by the macOS job and still wants a look on an iPhone |
 | P12 | `WeekStripView.kt` | CindyCore `WeekStrip` and CindyTracker `WeekStripView` (`Canvas`) | tests written for the port (`WeekStripView` has none) |
 | P13 | `AccountActivity.kt` | CindyCore `AccountBuilder` (the header, the 26 badges by family, each tile's spoken sentence and its sheet) and `NameForm` / `PhotoSheet`, and CindyTracker `AccountScreen` with `PhotosPicker` for the photo | tests ported |
 | P13 | `AvatarStore.kt` | CindyCore `AvatarFiles` (exists, load, clear with its partial, store whole or not at all, by `rename(2)`), and CindyTracker `AvatarImporter`: ImageIO decodes no bigger than the short side needs and stands the picture upright from its orientation tag, so `Avatar.upright` and `Avatar.sampleSize` are not used on iOS; the square and the 320 px are `Avatar`'s. The file is `avatar.jpg` in Application Support, which iCloud backup carries | file handling tested; the decoding is built by the macOS job |
