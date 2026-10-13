@@ -82,6 +82,13 @@ struct ContentView: View {
     /// Kept across launches: "Don't show this again" on the placement guide.
     @AppStorage("placementGuideSeen") private var placementSeen = false
 
+    /// Whether to be listening for a knocked phone. Not once the app is in the background, nor while
+    /// the menu or the results are open over the camera: Android's `onPause` stops it for both (they
+    /// are activities there), and picking the phone up to use either is not a knock. Only
+    /// `.background`, not `.inactive`: Control Centre or a banner pulled over the screen is not the
+    /// app leaving, and stopping would lose a knock still waiting to settle.
+    private var wantsMotion: Bool { scenePhase != .background && !showMenu && workout.finished == nil }
+
     var body: some View {
         ZStack {
             CameraPreview(session: camera.session).ignoresSafeArea()
@@ -105,10 +112,8 @@ struct ContentView: View {
             workout.stopWatchingPhone()
             UIApplication.shared.isIdleTimerDisabled = false
         }
-        // The three seconds of picking the phone up to leave the app are not a knock: stop listening
-        // when the app is not in front, and start from where the phone is when it comes back.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
+        .onChange(of: wantsMotion) { _, wanted in
+            if wanted { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { request in
@@ -252,7 +257,7 @@ struct ContentView: View {
         VStack(spacing: 2) {
             Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
             Text(workout.counterReadout)
-            if !workout.lookLine.isEmpty { Text(workout.lookLine) }
+            Text(workout.lookLine.isEmpty ? "look: not listening" : workout.lookLine)
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }
         .font(.system(size: 11, design: .monospaced))

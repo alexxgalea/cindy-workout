@@ -52,23 +52,33 @@ final class PhoneMotion {
         manager.stopDeviceMotionUpdates()
         monitor.reset()
         readings = 0
+        // So the debug line does not go on showing the last reading as if it were live.
+        onReadout?("")
     }
 
     private func feed(_ motion: CMDeviceMotion) {
+        // A reading queued before `stop` can still arrive after it, and would anchor the monitor at
+        // the pose the phone had before it was picked up.
+        guard manager.isDeviceMotionActive else { return }
         let r = motion.attitude.rotationMatrix
         let g = motion.gravity
         let look = CameraMotion.look(
             rowMajor: [r.m11, r.m12, r.m13, r.m21, r.m22, r.m23, r.m31, r.m32, r.m33].map { Float($0) },
             gravity: (Float(g.x), Float(g.y), Float(g.z)))
-        // The same monotonic clock as the workout's, so a reading and a tick are on one timeline.
-        monitor.update(yaw: look.heading, pitch: look.elevation, now: Int64(ProcessInfo.processInfo.systemUptime * 1000))
-        if monitor.consumeReframed() { onMoved?() }
+        // A matrix that puts "up" nowhere near gravity is not one this code understands, and its
+        // heading means nothing. Better no check than one that recalibrates a count that was fine.
+        if look.agreesWithGravity {
+            // The same monotonic clock as the workout's, so a reading and a tick are on one timeline.
+            monitor.update(yaw: look.heading, pitch: look.elevation, now: Int64(ProcessInfo.processInfo.systemUptime * 1000))
+            if monitor.consumeReframed() { onMoved?() }
+        }
 
         readings += 1
         if readoutEnabled && readings % Self.readoutEvery == 0 {
             // Two elevations that disagree by more than a degree or so mean the matrix is misread.
+            let note = look.agreesWithGravity ? (monitor.moving ? " · moving" : "") : " · matrix disagrees, not used"
             onReadout?(String(format: "look %.0f° · up %.0f° (gravity %.0f°)%@", look.heading, look.elevation,
-                              look.gravityElevation, monitor.moving ? " · moving" : ""))
+                              look.gravityElevation, note))
         }
     }
 }

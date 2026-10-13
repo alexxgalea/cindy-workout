@@ -27,7 +27,16 @@ public enum CameraMotion {
         /// The same elevation worked out from gravity alone. The two should agree to a degree or so;
         /// when they do not, the matrix is being misread and the debug readout shows it.
         public let gravityElevation: Float
+        /// Whether the matrix, in the layout chosen, puts the world's "up" where gravity says. When
+        /// neither layout does, Core Motion's matrix differs from what is assumed in some way other
+        /// than the transpose, the heading means nothing, and the monitor must not be fed: a false
+        /// knock recalibrates a count that was fine, which is worse than the missing check.
+        public let agreesWithGravity: Bool
     }
+
+    /// How far the matrix's "up" may be from gravity, squared, before the two are called
+    /// disagreeing: about 11 degrees. A matching reading is a rounding error away.
+    public static let agreementLimit: Float = 0.04
 
     /// The matrix in Android's layout (row-major, columns the device's axes in the world's
     /// east, north and up), whichever way round `rowMajor` was written.
@@ -37,16 +46,14 @@ public enum CameraMotion {
     /// that wins; the transpose, which is what Core Motion's documentation implies, on a tie. A tie
     /// is harmless: the two then agree on every number the monitor reads.
     public static func androidLayout(rowMajor m: [Float], gravity g: Gravity) -> [Float] {
-        precondition(m.count == 9, "a rotation matrix has nine numbers")
-        let transposed = [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]
-        return distanceFromGravity(transposed, g) <= distanceFromGravity(m, g) ? transposed : m
+        best(m, g).layout
     }
 
     /// The camera's heading and elevation for one Core Motion reading.
     public static func look(rowMajor m: [Float], gravity g: Gravity) -> Look {
-        let android = androidLayout(rowMajor: m, gravity: g)
+        let (android, distance) = best(m, g)
         return Look(heading: CameraLook.heading(android), elevation: CameraLook.elevation(android),
-                    gravityElevation: elevation(gravity: g))
+                    gravityElevation: elevation(gravity: g), agreesWithGravity: distance <= agreementLimit)
     }
 
     /// Degrees above the horizon that the back camera looks, from gravity alone.
@@ -56,6 +63,15 @@ public enum CameraMotion {
     /// face up, looking at the floor, reads -90.
     public static func elevation(gravity g: Gravity) -> Float {
         Float(asin(min(max(Double(g.z), -1), 1)) * 57.29577951308232)
+    }
+
+    /// The layout nearer gravity, and how far (squared) it is.
+    private static func best(_ m: [Float], _ g: Gravity) -> (layout: [Float], distance: Float) {
+        precondition(m.count == 9, "a rotation matrix has nine numbers")
+        let transposed = [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]
+        let ofTransposed = distanceFromGravity(transposed, g)
+        let ofGiven = distanceFromGravity(m, g)
+        return ofTransposed <= ofGiven ? (transposed, ofTransposed) : (m, ofGiven)
     }
 
     private static func distanceFromGravity(_ android: [Float], _ g: Gravity) -> Float {

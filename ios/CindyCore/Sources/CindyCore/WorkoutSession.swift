@@ -245,8 +245,7 @@ public final class WorkoutSession {
     /// for it.
     public func cameraMoved() -> [SessionEffect] {
         guard state == .running || state == .setup else { return [] }
-        engine.recalibrate()
-        tracking.reframe()
+        recalibrate()
         var effects: [SessionEffect] = [.resetCrop]
         if state == .running {
             status = "Phone moved — checking framing"

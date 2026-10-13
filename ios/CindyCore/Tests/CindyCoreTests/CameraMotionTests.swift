@@ -69,6 +69,48 @@ final class CameraMotionTests: XCTestCase {
         XCTAssertEqual(abs(after.heading - before.heading), 12, accuracy: 0.01)
     }
 
+    /// a phone standing upright facing north reads zero and zero, from numbers worked out by hand
+    func testAPhoneStandingUprightFacingNorthReadsZeroAndZeroFromNumbersWorkedOutByHand() {
+        // Device axes in the reference frame (X east, Y north, Z up): the screen's right edge points
+        // east, its top edge up, and the back camera, along -Z of the device, north. Core Motion's
+        // matrix carries a vector from the reference to the device, so its rows are those axes' ends.
+        // Gravity for a phone held upright in portrait is (0, -1, 0), as Apple documents it.
+        let m: [Float] = [1, 0, 0,
+                          0, 0, 1,
+                          0, -1, 0]
+        let look = CameraMotion.look(rowMajor: m, gravity: (0, -1, 0))
+        XCTAssertEqual(look.heading, 0, accuracy: 0.001)
+        XCTAssertEqual(look.elevation, 0, accuracy: 0.001)
+        XCTAssertEqual(look.gravityElevation, 0, accuracy: 0.001)
+        XCTAssertTrue(look.agreesWithGravity)
+    }
+
+    /// turned to face south it reads 180, whichever way round the matrix is read
+    func testTurnedToFaceSouthItReadsOneHundredAndEightyWhicheverWayRoundTheMatrixIsRead() {
+        // The nearest thing to a tie: this matrix is its own transpose, so both layouts agree on every
+        // number the monitor reads.
+        let m: [Float] = [-1, 0, 0,
+                          0, 0, 1,
+                          0, 1, 0]
+        let look = CameraMotion.look(rowMajor: m, gravity: (0, -1, 0))
+        XCTAssertEqual(abs(look.heading), 180, accuracy: 0.001)
+        XCTAssertEqual(look.elevation, 0, accuracy: 0.001)
+        XCTAssertTrue(look.agreesWithGravity)
+    }
+
+    /// a matrix that matches gravity in neither layout is not trusted
+    func testAMatrixThatMatchesGravityInNeitherLayoutIsNotTrusted() {
+        for android in poses {
+            XCTAssertTrue(CameraMotion.look(rowMajor: transposed(android), gravity: gravity(android)).agreesWithGravity)
+            // The phone lying face up, while the matrix says it stands on its end.
+            XCTAssertFalse(CameraMotion.look(rowMajor: transposed(android), gravity: (0, 0, -1)).agreesWithGravity)
+        }
+        // A few degrees of disagreement is rounding and sensor noise; a quarter turn is not.
+        let at = floats(RotationRig.propped(5))
+        let few = CameraMotion.Gravity(gravity(at).x, gravity(at).y + 0.02, gravity(at).z)
+        XCTAssertTrue(CameraMotion.look(rowMajor: transposed(at), gravity: few).agreesWithGravity)
+    }
+
     /// gravity alone says how far up the back camera looks
     func testGravityAloneSaysHowFarUpTheBackCameraLooks() {
         XCTAssertEqual(CameraMotion.elevation(gravity: (0, -1, 0)), 0, accuracy: 0.001, "standing upright")
