@@ -110,7 +110,7 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 | Phase | Kotlin file | Lands in | Status |
 |---|---|---|---|
 | P2 | `BarZone.kt` | CindyCore | tests ported |
-| P2 | `CameraStability.kt` | CindyCore, with `CameraLook` (S1: the heading and elevation of the axis the camera looks along, from Android's rotation matrix). Nothing on iOS feeds the monitor yet: that is S2 | tests ported |
+| P2 | `CameraStability.kt` | CindyCore, with `CameraLook` (S1: the heading and elevation of the axis the camera looks along, from Android's rotation matrix). S2 feeds it: CindyCore `CameraMotion` reads Core Motion's matrix (its layout picked by gravity, with the elevation from gravity returned beside it for the debug readout), CindyTracker `PhoneMotion` runs `CMMotionManager` at 16 Hz and `WorkoutSession.cameraMoved` decides what a knock does. Built by the macOS job; the angles want an iPhone | tests ported |
 | P2 | `PoseGeometry.kt` | CindyCore | ported |
 | P2 | `PosePrediction.kt` | CindyCore | tests ported |
 | P2 | `RepCounter.kt` | CindyCore | tests ported |
@@ -162,7 +162,7 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 | P6 | `CountdownView.kt` | CindyCore `Countdown` (the timing, ported with its tests); the ring and digit are drawn with filming | tests ported |
 | P6 | `Dialogs.kt` | CindyCore `ProfileForms` (`BodyWeightForm`, `HeartRateDetailsForm`, `MovementsForm`; what each sheet asks, refuses and keeps) and CindyTracker `ProfileSheets` (the fields and lists). A comma is accepted for the point in a weight, because the number pad of a phone set to many languages types one | tests written for the port |
 | P6 | `LaunchView.kt` | CindyTracker (iOS rewrite) | not started |
-| P6 | `MainActivity.kt` | CindyCore `WorkoutSession` (the decisions) and CindyTracker `WorkoutViewModel`/`ContentView` (the plumbing); music, heart rate, filming, the tour, and camera-moved detection land in later phases | behind |
+| P6 | `MainActivity.kt` | CindyCore `WorkoutSession` (the decisions) and CindyTracker `WorkoutViewModel`/`ContentView` (the plumbing); music, heart rate, filming and the tour land in later phases. The phone-moved check (`onCameraMoved`) is S2's: `WorkoutSession.cameraMoved` decides, `PhoneMotion` over `CMMotionManager` feeds the monitor and `WorkoutViewModel.cameraMoved` performs | behind |
 | P6 | `PlacementFacts.kt` | CindyCore (the three facts) | ported |
 | P6 | `PlacementGuideView.kt` | CindyTracker (iOS rewrite): `PlacementGuideView` | ported |
 | P6 | `StartPoseView.kt` | CindyTracker (iOS rewrite) | not started |
@@ -205,6 +205,10 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 | P13 | `AvatarView.kt` | CindyTracker `AvatarView` (SwiftUI): the photo, else the letters of the name, else a neutral figure; the initials are `Avatar`'s | built by the macOS job |
 | P13 | `MenuActivity.kt` | CindyCore `MenuBuilder` (the profile card, every row and what it says underneath, the live-workout refusal, the stagger of the entrance) and `VoiceForm`, and CindyTracker `MenuScreen`. A **MENU** chip on the camera screen opens it (the VOICE, LANG and PROGRESS chips are gone: the voice's switch, volume and language are one sheet now, as on Android). Only the rows that can be opened are shown: Movements, Progress, Body weight and Voice. Heart rate (P15), Music (P17), Daily reminder (P18), Help (P14) and Strava (P20) are built and tested in the builder and are switched on with their screens | tests ported |
 | P13 | `Profile.kt` | CindyCore `Profile` over `UserDefaults`, under Android's keys (the movement choice is `movement_profile`; the iOS app's own earlier `cindy.movementProfile` is not read, as no build was ever released). `WorkoutViewModel` reads every setting from it, and the session now gets `smartSquats`, which P6 had left unwired | tests ported |
+| S1 | `SessionDiscard.kt` | CindyCore `SessionDiscard` over the three stores (the attempt first, then the heart-rate trace and the rep times). Strava's ledger joins it in P19, where `StravaUploads.forget` and `reachedStrava` are ported | tests ported but one: the Strava test is P19's |
+| S1 | `WatchLink.kt` | CindyCore `WatchLinks`: whether a paired watch is sending, what START asks and why a silent watch is silent. Nothing asks the question until the Bluetooth link exists (P15) | tests ported |
+| S1 | `ExecutorRelease.kt` | **Not ported.** It closes the TFLite interpreter on the analysis thread, after the frame in flight, because freeing it under that frame crashed Android. iOS frees nothing by hand: `VisionFrameAnalyser` is touched only on `VisionPoseSource`'s serial `queue`, `stop()` is queued behind the frame in flight, and ARC frees Vision's objects when the last reference goes. Read in `VisionPoseSource`, `CameraModel` and `CindyVision`: no `deinit`, no `close`, no unsafe pointer | not ported |
+| S2 | `MainActivity.kt`, the rotation-vector listener | CindyTracker `PhoneMotion` (device motion at 16 Hz, started with the camera screen and stopped when it goes or the app leaves the front, as `onResume`/`onPause` do) over CindyCore `CameraMotion`. Android's rotation vector is magnetometer-corrected, so the corrected reference frame is used where the phone has it. Device motion needs no permission | built by the macOS job; the angles and the matrix layout want an iPhone |
 | P14 | `AppLinks.kt` | CindyCore | not started |
 | P14 | `HelpActivity.kt` | CindyTracker (iOS rewrite) | not started |
 | P14 | `Licences.kt` | CindyTracker (iOS rewrite) | not started |
