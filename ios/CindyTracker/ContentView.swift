@@ -78,6 +78,7 @@ struct ContentView: View {
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showMenu = false
+    @Environment(\.scenePhase) private var scenePhase
     /// Kept across launches: "Don't show this again" on the placement guide.
     @AppStorage("placementGuideSeen") private var placementSeen = false
 
@@ -93,6 +94,7 @@ struct ContentView: View {
             camera.onPoseFrame = { workout.onFrame($0) }
             workout.onResetCrop = { camera.resetRoi() }
             camera.start()
+            workout.startWatchingPhone()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
             // when the app is backgrounded.
@@ -100,7 +102,13 @@ struct ContentView: View {
         }
         .onDisappear {
             camera.stop()
+            workout.stopWatchingPhone()
             UIApplication.shared.isIdleTimerDisabled = false
+        }
+        // The three seconds of picking the phone up to leave the app are not a knock: stop listening
+        // when the app is not in front, and start from where the phone is when it comes back.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         .sheet(item: $workout.finished) { request in
@@ -244,6 +252,7 @@ struct ContentView: View {
         VStack(spacing: 2) {
             Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
             Text(workout.counterReadout)
+            if !workout.lookLine.isEmpty { Text(workout.lookLine) }
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }
         .font(.system(size: 11, design: .monospaced))
