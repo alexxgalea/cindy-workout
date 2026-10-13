@@ -60,6 +60,20 @@ public final class ResultsModel {
         onChange?()
     }
 
+    // MARK: DISCARD
+
+    /// What DISCARD asks about this session. See `ResultsPageBuilder.discardQuestion`.
+    public func discardQuestion(onStrava: Bool) -> DiscardQuestion {
+        ResultsPageBuilder.discardQuestion(input, onStrava: onStrava)
+    }
+
+    /// Takes this session off the board with everything filed beside it, and says whether it was
+    /// there. The page closes either way: it is a page about a session that is no longer anything.
+    @discardableResult
+    public func discard(using discard: SessionDiscard) -> Bool {
+        discard.discard(atMillis: input.attempt.atMillis)
+    }
+
     // MARK: words that follow the fingers
 
     /// What a selected pill says, or the hint with none selected.
