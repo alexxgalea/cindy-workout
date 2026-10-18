@@ -51,15 +51,24 @@ struct SpotlightOverlay: View {
     let skip: () -> Void
 
     @State private var captionHeight: CGFloat = 160
+    /// The tallest the card gets, for as long as it has not been measured.
+    private static let assumedCaptionHeight: CGFloat = 200
 
     var body: some View {
         GeometryReader { geo in
             let origin = geo.frame(in: .named(TourSpace.name)).origin
             let screen = SpotlightRect(x: 0, y: 0, width: Float(geo.size.width), height: Float(geo.size.height))
             let window = windowRect(origin: origin, screen: screen)
+            // The card's height is measured, and on iOS 18 the measurement can come back as 0, which
+            // made every card "fit" below its control, off the bottom of the screen. Until there is
+            // a real one the card is assumed tall, so it goes where it surely fits.
+            let height = Float(captionHeight > 0 ? captionHeight : Self.assumedCaptionHeight)
             let top = CGFloat(SpotlightTour.captionTop(
                 window: window.map(spotlight) ?? SpotlightRect(x: 0, y: 0, width: 0, height: 0),
-                captionHeight: Float(captionHeight), screenHeight: screen.height))
+                captionHeight: height, screenHeight: screen.height))
+            // Above its control the card hangs from the control's top edge, so that where it lands
+            // does not depend on knowing how tall it is.
+            let hangsAbove = window.map { top + CGFloat(height) <= $0.minY } ?? false
             ZStack(alignment: .top) {
                 // A tap anywhere on the dimmed screen moves on. The gesture is on the dim alone and
                 // not on the whole layer, so a tap on the card's buttons cannot also reach it.
@@ -67,8 +76,16 @@ struct SpotlightOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture(perform: advance)
                 if let step = tour.current {
-                    caption(step)
-                        .offset(y: top)
+                    if hangsAbove, let window {
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            caption(step)
+                        }
+                        .frame(height: max(0, window.minY - CGFloat(SpotlightTour.captionGap)), alignment: .bottom)
+                    } else {
+                        caption(step)
+                            .offset(y: top)
+                    }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
@@ -164,7 +181,7 @@ struct SpotlightOverlay: View {
                 Color.clear.preference(key: CaptionHeightKey.self, value: geo.size.height)
             }
         )
-        .onPreferenceChange(CaptionHeightKey.self) { captionHeight = $0 }
+        .onPreferenceChange(CaptionHeightKey.self) { if $0 > 0 { captionHeight = $0 } }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(SpotlightTour.paneTitle)
     }
