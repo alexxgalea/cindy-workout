@@ -30,6 +30,9 @@ object Onboarding {
      */
     const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
+    /** Where "Don't ask again" on the offer to pair a heart-rate watch is kept. */
+    const val KEY_WATCH_OFFER_SILENCED = "watch_offer_silenced"
+
     /**
      * Whether to show the pages before the camera opens.
      *

@@ -1103,7 +1103,7 @@ class ScreenSmokeTest {
     // ── reopening a session from Progress ───────────────────────────────────
 
     @Test
-    fun `reopening a saved session shows its date and time, and a single DONE`() {
+    fun `reopening a saved session shows its date and time, with DISCARD beside DONE`() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = RecordStore(context)
         store.clear()
@@ -1122,9 +1122,10 @@ class ScreenSmokeTest {
 
         val headline = activity.findViewById<android.widget.TextView>(R.id.headline).text.toString()
         assertTrue("headline was not a date: $headline", headline != "TIME" && headline != "STOPPED")
-        val actions = activity.findViewById<android.view.ViewGroup>(R.id.actions)
-        assertEquals("review mode should offer only DONE", 1, actions.childCount)
-        assertEquals("DONE", (actions.getChildAt(0) as android.widget.TextView).text.toString())
+        assertEquals(
+            "review mode has no PROGRESS, which is the page it came from",
+            listOf("DISCARD", "DONE"), actionLabels(activity)
+        )
         assertTrue(
             "the streak row describes today, not the reviewed day",
             findByText(activity.findViewById(R.id.stats), "Streak") == null
@@ -1132,6 +1133,90 @@ class ScreenSmokeTest {
 
         activity.finish()
         store.clear()
+    }
+
+    /** The text of each button on the results page's bottom bar, left to right. */
+    private fun actionLabels(activity: android.app.Activity): List<String> {
+        val actions = activity.findViewById<android.view.ViewGroup>(R.id.actions)
+        return (0 until actions.childCount).map {
+            (actions.getChildAt(it) as android.widget.TextView).text.toString()
+        }
+    }
+
+    private fun savedSession(context: android.content.Context): Attempt {
+        val attempt = Attempt(
+            rounds = 12,
+            reps = 3,
+            atMillis = System.currentTimeMillis() - 24 * 60 * 60 * 1000L,
+            durationMs = 20 * 60 * 1000L,
+            profile = CindyProfile.STANDARD
+        )
+        val store = RecordStore(context)
+        store.clear()
+        assertTrue(store.add(attempt))
+        return attempt
+    }
+
+    /** The sheet that [ShadowDialog] says is on top, as an athlete would see it. */
+    private fun sheetOnTop(): android.view.View {
+        val dialog = ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        return dialog.window!!.decorView
+    }
+
+    @Test
+    fun `DISCARD asks first, and KEEP IT leaves the session where it was`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val attempt = savedSession(context)
+        val activity = openResults(context, attempt, reviewing = true)
+
+        findByText(activity.findViewById(R.id.actions), "DISCARD")!!.performClick()
+        findByText(sheetOnTop(), "KEEP IT")!!.performClick()
+
+        assertEquals(listOf(attempt.atMillis), RecordStore(context).all().map { it.atMillis })
+        assertFalse("keeping the session closed its page", activity.isFinishing)
+
+        activity.finish()
+        RecordStore(context).clear()
+    }
+
+    @Test
+    fun `confirming DISCARD removes the session and closes its page`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val attempt = savedSession(context)
+        val activity = openResults(context, attempt, reviewing = true)
+
+        findByText(activity.findViewById(R.id.actions), "DISCARD")!!.performClick()
+        findByText(sheetOnTop(), "DISCARD")!!.performClick()
+
+        assertTrue(RecordStore(context).all().isEmpty())
+        assertTrue("the page of a discarded session stayed open", activity.isFinishing)
+    }
+
+    @Test
+    fun `straight after a workout the page offers DISCARD, because that session is already saved`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val attempt = savedSession(context)
+
+        val activity = openResults(context, attempt)
+
+        assertEquals(listOf("PROGRESS", "DISCARD", "DONE"), actionLabels(activity))
+
+        activity.finish()
+        RecordStore(context).clear()
+    }
+
+    @Test
+    fun `a result that was never saved has nothing to discard`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        val neverSaved = Attempt(rounds = 0, reps = 0, atMillis = 5_000L)
+
+        val activity = openResults(context, neverSaved)
+
+        assertEquals(listOf("PROGRESS", "DONE"), actionLabels(activity))
+
+        activity.finish()
     }
 
     @Test

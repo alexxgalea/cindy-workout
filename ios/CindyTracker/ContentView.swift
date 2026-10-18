@@ -78,6 +78,7 @@ struct ContentView: View {
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showMenu = false
+    @Environment(\.scenePhase) private var scenePhase
     /// Kept across launches: "Don't show this again" on the placement guide. It is also evidence
     /// that the athlete has used the app before, which is why `Onboarding` owns the key.
     @AppStorage(Onboarding.keyPlacementSeen) private var placementSeen = false
@@ -97,6 +98,13 @@ struct ContentView: View {
         _showTutorial = State(initialValue: flags.shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
                                                                     cameraGranted: CameraModel.permissionHeld))
     }
+
+    /// Whether to be listening for a knocked phone. Not once the app is in the background, nor while
+    /// the menu or the results are open over the camera: Android's `onPause` stops it for both (they
+    /// are activities there), and picking the phone up to use either is not a knock. Only
+    /// `.background`, not `.inactive`: Control Centre or a banner pulled over the screen is not the
+    /// app leaving, and stopping would lose a knock still waiting to settle.
+    private var wantsMotion: Bool { scenePhase != .background && !showMenu && workout.finished == nil }
 
     var body: some View {
         ZStack {
@@ -124,6 +132,7 @@ struct ContentView: View {
             workout.onResetCrop = { camera.resetRoi() }
             beginFirstRun()
             workout.syncHeartRate()
+            workout.startWatchingPhone()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
             // when the app is backgrounded.
@@ -132,10 +141,16 @@ struct ContentView: View {
         .onDisappear {
             camera.stop()
             workout.stopHeartRate()
+            workout.stopWatchingPhone()
             UIApplication.shared.isIdleTimerDisabled = false
         }
+        .onChange(of: wantsMotion) { _, wanted in
+            if wanted { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
+        }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
-        .sheet(item: $workout.finished) { ResultsView($0) }
+        .sheet(item: $workout.finished) { request in
+            ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
+        }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
         }
@@ -332,6 +347,7 @@ struct ContentView: View {
         VStack(spacing: 2) {
             Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
             Text(workout.counterReadout)
+            Text(workout.lookLine.isEmpty ? "look: not listening" : workout.lookLine)
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }
         .font(.system(size: 11, design: .monospaced))

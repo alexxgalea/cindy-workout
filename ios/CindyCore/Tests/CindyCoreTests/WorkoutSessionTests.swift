@@ -366,6 +366,46 @@ final class WorkoutSessionTests: XCTestCase {
         XCTAssertEqual(session.state, .setup)
     }
 
+    // MARK: - the phone moving
+
+    /// a knocked phone during the workout recalibrates, resets the crop and says so
+    func testAKnockedPhoneDuringTheWorkoutRecalibratesResetsTheCropAndSaysSo() {
+        calibrate()
+        XCTAssertEqual(session.state, .running)
+        XCTAssertTrue(session.counterReadout.contains(" cal "), session.counterReadout)
+
+        let effects = session.cameraMoved()
+
+        XCTAssertEqual(effects, [.resetCrop, .queue(.phoneMoved)])
+        XCTAssertEqual(session.status, "Phone moved — checking framing")
+        XCTAssertTrue(session.counterReadout.contains(" warm "), "the learned band is forgotten: \(session.counterReadout)")
+        XCTAssertEqual(session.state, .running, "the clock carries on")
+    }
+
+    /// during the setup check a knocked phone only starts the check over, without a word
+    func testDuringTheSetupCheckAKnockedPhoneOnlyStartsTheCheckOverWithoutAWord() {
+        take(session.enterSetup())
+        let before = session.status
+
+        XCTAssertEqual(session.cameraMoved(), [.resetCrop])
+        XCTAssertEqual(session.status, before)
+        XCTAssertEqual(session.state, .setup)
+    }
+
+    /// the phone moving does nothing off the clock or the check
+    func testThePhoneMovingDoesNothingOffTheClockOrTheCheck() {
+        XCTAssertEqual(session.cameraMoved(), [], "idle")
+
+        begin()
+        _ = session.togglePause(now: clock)
+        XCTAssertEqual(session.cameraMoved(), [], "paused: resuming recalibrates anyway")
+        XCTAssertEqual(session.status, "Paused")
+
+        _ = session.togglePause(now: clock + 1_000)
+        _ = finished()
+        XCTAssertEqual(session.cameraMoved(), [], "finished")
+    }
+
     // MARK: - what a finished workout is made of
 
     /// the attempt carries the counted reps, the sets and the rounds, and the marks match the count

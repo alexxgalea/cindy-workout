@@ -101,6 +101,11 @@ class HeartRateStore(context: Context) {
         return HeartRateTraces.decode(file.readText())
     }
 
+    /** The trace saved for [atMillis], gone — the companion to [RecordStore.remove]. */
+    fun remove(atMillis: Long) {
+        File(dir, "$atMillis.hr").delete()
+    }
+
     /** Every saved trace, gone — the companion to [RecordStore.clear]. */
     fun clear() {
         dir.listFiles { f -> f.name.endsWith(".hr") }?.forEach { it.delete() }

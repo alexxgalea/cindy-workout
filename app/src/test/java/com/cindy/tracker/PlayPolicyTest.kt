@@ -128,7 +128,7 @@ class PlayPolicyTest {
         val policy = words(render(false))
         val help = helpText().replace(Regex("\\s+"), " ")
         for (phrase in listOf(
-            "CLEAR on the Progress screen", "REMOVE on the Account screen", "Clear storage",
+            "DISCARD on a session's page", "REMOVE on the Account screen", "Clear storage",
             "Movies/Cindy"
         )) {
             assertTrue("the policy lacks: $phrase", policy.contains(phrase))
