@@ -235,6 +235,7 @@ it asks before going past it.
 | **D6** | **Where a film goes.** Android writes to `Movies/Cindy`. On iOS, an album needs full photo-library access; saving without an album needs only add-only access. | **Add-only, no album.** A smaller permission for a feature the athlete has to tap. | P16 |
 | **D7** | **Strava in the first iOS release.** | Build it (P19, P20), keep it behind a gitignored `Strava.xcconfig` exactly like `strava.properties`, so a build without credentials has no Strava at all. Ship it when the Strava app is raised past one athlete. | P20 |
 | **D8** | **Distribution.** TestFlight only, or the App Store. Both need the $99/year Apple Developer Program. | **TestFlight first** (the closest thing to the APK link), the App Store listing in P21. | P21 |
+| **D9** | **Phone-moved detection on iOS.** `CameraStabilityMonitor` was ported in P2, but nothing on iOS feeds it: P6 left camera-moved detection to "later phases" and no phase took it. Android's 12 October fix (`CameraLook`) only changes what the monitor is fed, so on iOS it is inert until something feeds it. | **Its own phase, S2, straight after S1.** S1 ports `CameraLook` with its tests, so the core is level; S2 feeds the monitor from Core Motion and recalibrates on a move, as `MainActivity.onCameraMoved` does. Kept apart because the rotation matrix's convention on iOS can only be confirmed on an iPhone, and S1 should not wait on that. | S2 |
 
 ---
 
@@ -256,6 +257,9 @@ P0 tests on Linux ─┬─ P1 app builds on CI ──────────�
                                                          ├─ P15 heart rate (BLE) ─ P16 filming ─ P17 music ─ P18 reminders ══ C
                                                          └─ P19 Strava core ─ P20 Strava app ══ D ─ P21 App Store & TestFlight
 ```
+
+After P13, Android moved under phases already merged; **S1** and **S2** (under **Syncs**, below)
+bring iOS level with it before P14.
 
 - **A**: a full Cindy on an iPhone, counted, voiced and saved.
 - **B**: every screen of the Android app.
@@ -633,6 +637,9 @@ Volume over 1M, 3M, 1Y, All; scrub; running best; record points; a hollow ring f
 peaks, the calendar and its day sheet, the leaderboard against Tom Holland, the category chip,
 OPEN on a chart point, CLEAR.
 
+*Since 12 October Android has no CLEAR: sessions are discarded one at a time from their own page,
+and Progress redraws when it comes back to a board that changed. S1 brings iOS level.*
+
 ---
 
 ### P13 · `ios-p13-menu-and-account` · Give the menu, the movements and the account their screens
@@ -670,6 +677,9 @@ are in it by default; say so where Android's text says Google Drive.
   (unless D1 changes), Manrope's OFL shipped, the PRIVACY section saying iCloud backup and naming
   the iOS controls, the privacy policy row, the version at the foot, the CrossFit and medical
   disclaimers, Take the tour.
+- PRIVACY's "To delete" names **DISCARD on a session's page** (Android changed it on 12 October,
+  with `HelpScreenTest`'s phrase): there is no CLEAR on either platform. On iOS the "everything
+  else" half is deleting the app, since iOS has no Clear storage.
 - Manrope copied from `app/src/main/res/font/` and registered in `UIAppFonts`; the palette from
   `res/values/colors.xml` as one Swift `Palette`; icons from SF Symbols where one matches, the
   rest converted from the vector drawables (their path data is SVG path syntax).
@@ -681,7 +691,8 @@ are in it by default; say so where Android's text says Google Drive.
 **Depends on:** P9, P13. **Port:** `BleHeartRateSource`, `HeartRateScanner`,
 `HeartRatePermissions`; the pure `HeartRateAdvert` matching and `reconnectDelayMs` to CindyCore.
 
-**Kotlin tests: 12 pure + 3 screen.**
+**Kotlin tests: 12 pure + 6 screen** (the 3 of `HeartRateSheetCopyTest` added on 12 October;
+`WatchLinkTest`'s 10 are ported in S1).
 
 - CoreBluetooth: an unfiltered scan matched in software (service `0x180D`, or Garmin's
   manufacturer ID), plus `retrieveConnectedPeripherals(withServices:)` for a watch already
@@ -690,6 +701,28 @@ are in it by default; say so where Android's text says Google Drive.
 - **iOS deviations:** no location permission and no Location-off case (iOS ties a scan only to
   Bluetooth); `NSBluetoothAlwaysUsageDescription` instead. Android's "drop the cached service list
   and look again" has no CoreBluetooth equivalent; say what happens instead.
+- **The question at START** (Android, 12 October, `c8ff7c8`). `WatchLinks` and the
+  `watch_offer_silenced` flag are in CindyCore from S1; this phase asks the questions. START runs
+  `WatchLinks.promptAtStart` before the placement guide, with `lastReadingAt` and `now` on one
+  monotonic clock, and a watch that has never sent anything counted as silent however recently
+  the app opened (the old ten-second toast got both wrong). `bleAvailable` is Core Bluetooth's state
+  not being `.unsupported`. **OFFER_TO_PAIR**: "Add a heart-rate watch?", "With one, calories come
+  from your heart rate. Without it, from your reps alone.", the note "A Garmin, a Polar or a chest
+  strap can broadcast it. You can add one later from the menu.", a "Don't ask again" toggle,
+  CONNECT WATCH (filled) and NOT NOW; both answers remember the toggle. **ASK_ABOUT_SILENT_WATCH**:
+  "No heart rate from <name>" (or "your watch"), `WatchLinks.why(status)`, the note "Without it,
+  calories come from your reps alone.", CHECK WATCH (filled) and START ANYWAY, which sets the
+  acknowledgement so the toast at the clock's start does not warn twice. CONNECT WATCH and CHECK
+  WATCH open the menu **with the heart-rate sheet already open** (Android's `openHeartRate`,
+  only on a fresh presentation). The toast at the start ("No heart rate from <name> yet —
+  calories will use your reps until it arrives") is now the net under the question: it uses
+  `WatchLinks.judge`, not the old ten-second rule. Put the strings in CindyCore with the rules and
+  test them; the sheets only draw them.
+- **The heart-rate sheet's first line** (Android, 12 October, `1433ecc`): "Reads the heart rate
+  your watch or chest strap broadcasts, and uses it for calories." followed by "It stays on this
+  phone." or, in a build with Strava (P20), "It stays on this phone, except in a workout you
+  upload to Strava." Never "Nothing is uploaded". A pure function in CindyCore taking whether
+  Strava is available; `HeartRateSheetCopyTest` (3) ports against it.
 
 **Still owed:** a chest strap and a Garmin with Broadcast Heart Rate, on an iPhone.
 
@@ -746,12 +779,21 @@ delivers on time, so the "more than two hours late" rule has nothing to do. Duri
 `StravaHeartRate`, `StravaApi`, `StravaHttp`, `StravaAuth`, `StravaTokens`, `StravaUploads`,
 `StravaComposer`, `StravaConfig`. (`StravaSets` and `WorkoutSet` landed in P3.)
 
-**Kotlin tests: 125 pure**, with `FakeTransport`.
+**Kotlin tests: 126 pure**, with `FakeTransport` (125, and `reachedStrava` from 12 October), plus
+the one Strava test of `SessionDiscardTest`.
 
 - `StravaHttp` over `URLSession` behind a transport protocol; `FoundationNetworking` on Linux.
 - The payload and activity text identical to Android's for the same attempt: compare parsed JSON
   in the tests, field by field.
 - The tokens' logic here; their storage in the Keychain comes with P20.
+- **Discarding a session** (Android, 12 October, `e9a1567`). `StravaUploadStatus.reachedStrava`
+  (done, or an `uploadId` that did not end in FAILED) and `StravaUploads.forget(atMillis)`, which
+  cancels that session's queued upload and drops its ledger entry. `SessionDiscard` (S1) then
+  forgets the Strava side too, as its fourth step; its doc comment already says the next thing
+  filed under a session is added there. Port `StravaUploadsTest`'s `an upload has reached Strava
+  once it is done or Strava has accepted the file` and `SessionDiscardTest`'s `it cancels the
+  queued Strava upload and forgets the ledger entry` here. `StravaUploads.clear` is no longer
+  called by the app, only by tests between cases.
 
 ---
 
@@ -760,8 +802,8 @@ delivers on time, so the "more than two hours late" rule has nothing to do. Duri
 **Depends on:** P19, P11, P13. **Decisions:** D5, D7. **Milestone D.** **Port:**
 `StravaAuthActivity`, `StravaConsent`, `StravaUploadWorker`.
 
-**Kotlin tests: 49 screen** (`StravaScreenTest`, `StravaConsentTest`, `StravaSessionTest`,
-`StravaUploadWorkerTest`).
+**Kotlin tests: 51 screen** (`StravaScreenTest`, with the two discard-sheet tests of 12 October,
+`StravaConsentTest`, `StravaSessionTest`, `StravaUploadWorkerTest`).
 
 - **The consent sheet first, from every road that starts OAuth**, with Strava's own Connect
   button and the "Compatible with Strava" mark, copied from the official artwork as Android did.
@@ -777,6 +819,10 @@ delivers on time, so the "more than two hours late" rule has nothing to do. Duri
   README and Help say an upload may wait until the app is next opened.
 - **No `Strava.xcconfig`, no Strava**: no menu row, no Help section, no tutorial bullet, nothing
   uploaded. A test pins that, as `NoStravaCredentials` does.
+- **What S1 and P15 left for Strava:** the discard sheet's `onStrava` comes from the ledger's
+  `reachedStrava` instead of `false` (`StravaScreenTest`'s two discard tests, whose wording S1
+  already pins in CindyCore), and the heart-rate sheet's line gains its Strava half in a build
+  with Strava.
 
 ---
 
@@ -799,6 +845,269 @@ delivers on time, so the "more than two hours late" rule has nothing to do. Duri
 
 **Needs you:** the Developer Program membership, the bundle ID, signing, the upload to App Store
 Connect, the screenshots, and TestFlight testers.
+
+---
+
+## Syncs: when Android moves under a phase already merged
+
+A **sync** brings iOS level with Android commits that landed after the phases covering them were
+merged. It runs the same loop as a phase (plan, execute, test, review), one pull request, branch
+`ios-sN-<slug>`, and the same PR template. What the Android change touches that belongs to a phase
+not yet done is not ported in the sync: that phase's section above is amended instead, so nothing
+is ported twice and nothing is lost.
+
+### S1 · `ios-s1-discard-one-session` · Discard one session at a time, as Android does since 12 October
+
+**Depends on:** P13 (merged). **Android commits:** `a81a2ad`, `3485e0a`, `1433ecc`, `c8ff7c8`,
+`e9a1567`, `a9e37ea`, `2bb22ff`, `97a274e` (PRs #86 to #90). `tests/parity/trace_jvm.csv` did not
+change, so the parity replay must stay at 1,639 of 1,639 without any engine change.
+
+**What each Android commit means for iOS:**
+
+| Commit | Android change | On iOS |
+|---|---|---|
+| `e9a1567` | `RecordStore.remove`, `HeartRateStore.remove`, `RepTimesStore.remove`, `SessionDiscard` | **S1**, CindyCore. The Strava half (`StravaUploads.forget`, `reachedStrava`) is P19's |
+| `a9e37ea` | DISCARD beside DONE on the results page, with its sheet | **S1**: the decision in CindyCore, the button and the dialog in CindyTracker. The sheet's Strava sentence is pinned now and fed from the ledger in P20 |
+| `2bb22ff` | CLEAR and its sheet gone from Progress; Progress redraws on return when the board changed | **S1**, both halves |
+| `97a274e` | Help, the policy, the README name DISCARD | Help is P14 (amended above). `ios/README.md` if it names CLEAR (it does not today) |
+| `3485e0a` | `CameraLook`: the heading and elevation of the camera's axis feed the phone-moved monitor | **S1** ports `CameraLook` and its 4 tests to CindyCore. Feeding the monitor at all is **S2** (D9) |
+| `c8ff7c8` | `WatchLinks` and the watch question at START; `Onboarding.KEY_WATCH_OFFER_SILENCED`; the menu opens on the heart-rate sheet | **S1** ports `WatchLinks` with its 10 tests and the flag. The questions, which need a heart-rate source, are P15's (amended above) |
+| `1433ecc` | The heart-rate sheet no longer says "Nothing is uploaded" | P15 (amended above): iOS has no heart-rate sheet yet |
+| `a81a2ad` | `releaseAfterPending`: close the TFLite interpreter on the analysis thread, after the frame in flight | **Not ported**, with the reason in PARITY: iOS frees nothing by hand. `VisionPoseSource` touches its analyser only on its serial `queue`, `stop()` is queued behind the frame in flight, and ARC frees Vision's objects when the last reference goes. Confirm that by reading `VisionPoseSource` and `CameraModel` before writing it down; if any path does free or reuse something off `queue`, say so in the PR and stop |
+
+**Read first, in full:** the eight Android commits above (`git show <sha>`), `SessionDiscard.kt`,
+`WatchLink.kt`, `CameraStability.kt`, the `RecordStore`/`HeartRateStore`/`RepTimesStore` changes,
+`ResultsActivity.kt` (`onCreate`'s action bar, `confirmDiscard`, `reviewHeadline`),
+`RecordsActivity.kt` (`onResume`, `render`), and every test they changed. On the Swift side:
+`Records.swift` (`RecordStore`), `HeartRateStore.swift`, `RepTimes.swift` (`RepTimesStore`),
+`CameraStability.swift`, `Onboarding.swift`, `ResultsPage.swift`, `ResultsPageBuilder.swift`,
+`ResultsModel.swift`, `ProgressPage.swift`, `ProgressPageBuilder.swift`, `ProgressModel.swift`,
+and in the app `ResultsView`, `ResultsViewModel`, `ProgressScreen`, `ProgressViewModel`,
+`ContentView`, `MenuScreen`, `VisionPoseSource`, `CameraModel`.
+
+**Commits, in order** (each builds, and `tools/ios/swift.sh test` passes at each):
+
+1. **Take one session out of each store.** `RecordStore.remove(atMillis:) -> Bool`
+   (`@discardableResult`; decode, filter, write back only when something was removed, false
+   otherwise), `HeartRateStore.remove(atMillis:)` and `RepTimesStore.remove(atMillis:)` (delete
+   that one file; a missing file is not an error). Doc comments translated from the Kotlin. Tests:
+   `RecordStoreTest`'s two (`removing a session leaves every other one on the board`, `removing a
+   time nothing was saved at changes nothing and says so`), `HeartRateStoreTest`'s and
+   `RepTimesStoreTest`'s one each, in the existing Swift test classes, against a throwaway
+   `UserDefaults(suiteName:)` and a temporary directory as their neighbours do.
+
+2. **`SessionDiscard` in CindyCore.** A struct over the three stores, injected, with defaults that
+   are the app's real locations (the default `RepTimesStore()` is already Application
+   Support/`rep_times`, which is what the app passes by hand today; check that and use the
+   default). `discard(atMillis:) -> Bool`, `@discardableResult`: the attempt first, then the
+   trace, then the rep times, and it returns what the record store said. Keep the Kotlin doc
+   comment, including why the attempt goes first, and say that Strava's ledger joins in P19.
+   Tests, `SessionDiscardTests`, mirroring `SessionDiscardTest.kt`: `it removes the record and the
+   files beside it, and only that session's` and `it says it removed nothing for a session that
+   was never saved` (two sessions filed in every store, as its `@Before` does). The third Kotlin
+   test is Strava's and goes to P19: say so in the class's doc comment and in PARITY.
+
+3. **`CameraLook` in CindyCore**, in `CameraStability.swift`, above the monitor, as in Kotlin:
+   `heading(_ m: [Float]) -> Float` is `Float(atan2(-Double(m[2]), -Double(m[5])) *
+   57.29577951308232)`, and `elevation` is `Float(asin(min(max(Double(-m[8]), -1), 1)) *
+   57.29577951308232)` (Kotlin negates in Float and then widens; the order does not change the
+   value, but write it the Kotlin way). The matrix is Android's: row-major, columns the device's
+   axes in East, North, Up. Update the monitor's `update(yaw:pitch:now:)` doc comment as Kotlin
+   did. Tests: the four new `CameraStabilityTest` tests, with their helpers line for line
+   (`times`, `turn` by Rodrigues' formula in Double, `upright`, `propped`, `azimuth`, `apart`,
+   `feed`, the ten-axis `tremor`). `Math.toRadians(d)` is `d * 0.017453292519943295` and
+   `Math.toDegrees(r)` is `r * 57.29577951308232`, per the rules above; Kotlin's Float `%` is
+   `truncatingRemainder(dividingBy:)`. The test of the old azimuth must still show more than 8
+   degrees: if it does not, the helpers are wrong, not the threshold.
+
+4. **`WatchLinks` in CindyCore**, `WatchLink.swift`: `WatchLink` (`notPaired`, `live`, `silent`),
+   `WatchPrompt` (`none`, `offerToPair`, `askAboutSilentWatch`), and `WatchLinks` with
+   `silentAfterMs: Int64 = 5_000`, `judge(paired:lastReadingAt:now:)` (`now - lastReadingAt <=
+   silentAfterMs` is live: the limit itself is live), `promptAtStart(_:bleAvailable:offerSilenced:)`
+   as an exhaustive `switch`, and `why(_ status: HeartRateStatus) -> String` with the three
+   sentences exactly. Every KDoc kept. Plus `Onboarding.keyWatchOfferSilenced =
+   "watch_offer_silenced"` and a `FirstRun.watchOfferSilenced` (get and set), beside
+   `placementDismissed`. Tests: `WatchLinkTests`, the 10 of `WatchLinkTest.kt` one for one, and
+   one written for the port in `OnboardingTests` that the flag round-trips under Android's key. Say
+   in the class's doc comment that nothing on iOS asks the question until P15.
+
+5. **Decide DISCARD on the results page, in CindyCore.**
+   - `ResultsPage.offersProgress` becomes `actions: [ResultsButton]`, left to right, with
+     `enum ResultsButton: String { case progress = "PROGRESS", discard = "DISCARD", done = "DONE" }`:
+     PROGRESS unless reviewing, DISCARD when `input.records` holds an attempt at this
+     `atMillis` (all of `records`, not the before-this-one slice the builder compares with), and
+     always DONE. One truth, not a Boolean beside a list.
+   - `DiscardQuestion` (title, subtitle, `keep = "KEEP IT"`, `discard = "DISCARD"`) and
+     `ResultsPageBuilder.discardQuestion(_ input:, onStrava: Bool)`: title `Discard this
+     session?`; subtitle `"\(a.totalReps) reps · \(reviewHeadline(a, zone, is24Hour))"` + `"\n\nIts
+     heart-rate trace and rep times go with it, and so does any badge or record only it earned.
+     This cannot be undone."` + (`onStrava` ? `" It stays on Strava — remove it there."` : `""`).
+     The review headline is used straight after a workout too, as Kotlin does. Byte for byte:
+     `·` is U+00B7 and `—` is U+2014.
+   - `ResultsPageBuilder.discardedToast = "Session discarded"`.
+   - `ResultsModel.discard(using: SessionDiscard) -> Bool`, which discards
+     `input.attempt.atMillis` and says whether the page should close. It closes whatever the store
+     says, as Kotlin's `finish()` does.
+   - Tests in `ResultsPageTests`, named after `ScreenSmokeTest`'s: the renamed `reopening a saved
+     session shows its date and time, with DISCARD beside DONE` (`[.discard, .done]`), `straight
+     after a workout the page offers DISCARD, because that session is already saved`
+     (`[.progress, .discard, .done]`), `a result that was never saved has nothing to discard`
+     (`[.progress, .done]`), `DISCARD asks first, and KEEP IT leaves the session where it was`
+     (building the question changes no store), `confirming DISCARD removes the session and closes
+     its page` (through `ResultsModel.discard` on throwaway stores). And `StravaScreenTest`'s
+     two, against the question's wording: `the discard sheet says an upload that already reached
+     Strava stays there` (`onStrava: true` contains "stays on Strava") and `the discard sheet says
+     nothing about Strava while the upload is only queued` (`onStrava: false` has no "Strava" at
+     all). Fix every existing use of `offersProgress`.
+
+6. **Take CLEAR off Progress, in CindyCore.** Remove `ProgressPage.canClear`, `ClearQuestion`,
+   `ProgressPageBuilder.clearQuestion`, `clearedToast` and `ProgressModel.clearQuestion`. Add
+   `ProgressPage.actions`, which is `["DONE"]` (deliberately nothing that deletes the board), and
+   `ProgressModel.reloadIfChanged(_ attempts: [Attempt]) -> Bool`, which rebuilds only when
+   `attempts` differs from what the page was built from (Kotlin's `store.all() != shownAttempts`
+   in `onResume`). Tests:
+   - `AccountScreenTest`'s `Progress has no way to delete everything at once` → `ProgressPageTests`
+     (`actions == ["DONE"]`, with history on the board); drop the two `canClear` assertions there.
+   - `Progress redraws when it comes back, so a discarded session is gone from it` →
+     `ProgressDetailTests`: the leaderboard row whose spoken text starts `2, You, ` is there, the
+     session is removed from a throwaway store, `reloadIfChanged(store.all())` returns true and
+     the row is gone; a second call with the same board returns false.
+   - `discarding the session that earned a badge takes the badge, and leaves the name and photo`
+     replaces `testClearingTheRecordsTakesTheBadgesWithThemAndLeavesTheNameAndPhoto` in
+     `AccountPageTests`, through `SessionDiscard` instead of `clear()`.
+   - Delete `testClearNamesWhatIsAtStake` (its Kotlin test is gone) and turn
+     `testOnceTheBoardIsClearedThePageIsTheEmptyPageAgain` into `once the last session is
+     discarded the page is the empty page again`, through `reloadIfChanged`.
+
+7. **Draw DISCARD, and redraw Progress, in the app.**
+   - `ResultsView`'s bar is `page.actions`: PROGRESS as now, DISCARD as `GhostButton(tint: .warn)`
+     (what CLEAR wore), DONE as `PrimaryButton`. DISCARD opens a `confirmationDialog` titled with
+     the question, its subtitle as the message, `DISCARD` with `role: .destructive` and `KEEP IT`
+     with `role: .cancel`, the same arrangement P12 gave CLEAR (the cancel sits apart at the
+     bottom, so a reflex second tap where the thumb already is keeps the session). Confirming
+     calls `vm.discard()`, which runs `ResultsModel.discard(using: SessionDiscard())`, then the
+     view's `onDiscarded` and `dismiss()`.
+   - `ResultsViewModel.discardQuestion` passes `onStrava: false`, with a comment saying why:
+     nothing on iOS uploads to Strava before P20, so no copy can be there; P20 reads the ledger.
+   - `ResultsView(_:onDiscarded:)`, defaulting to nothing. A dismissed sheet takes its overlay with
+     it, so the screen underneath says "Session discarded": `ContentView` through the workout's
+     toast, `ProgressScreen` through its own, and a `ResultsView` that opened another session from
+     its comparison card through its own.
+   - `ProgressScreen`: no CLEAR button and no dialog. `.sheet(item: $vm.route, onDismiss:)` calls
+     `vm.boardMayHaveChanged()`, which is `progress.reloadIfChanged(store.all())`. That covers a
+     session reopened from the leaderboard, a day sheet or OPEN, whichever presented it.
+     `ProgressViewModel.clear()` and `asksToClear` go; its toast stays, for the discard.
+   - A UI test, `testASessionCanBeDiscardedFromItsPage`: `nohands` replay, start skipping the
+     setup check, `+1` twice, STOP and End; on the results page DISCARD, then KEEP IT, and DONE is
+     still there; DISCARD again and the dialog's DISCARD (the last of the two with that label, as
+     the SKIP test picks its own); START is back and the toast says "Session discarded". The
+     existing `testReplayedPullUpsAreCountedAndSaved` waits for DONE and must still pass.
+   - `tools/ios/parse-app.sh` clean before pushing; then the macOS job decides.
+
+8. **Record it.** `ios/PARITY.md`: the `RecordStore.kt`, `HeartRateStore.kt`, `RepTimesStore.kt`,
+   `CameraStability.kt`, `Onboarding.kt`, `ResultsActivity.kt` and `RecordsActivity.kt` rows
+   updated (the latter says DISCARD and the redraw on return, and no longer that CLEAR does not
+   clear Strava uploads); new rows `SessionDiscard.kt` (S1, CindyCore, tests ported but the Strava
+   one, which is P19's), `WatchLink.kt` (S1, CindyCore, tests ported; the question is P15's) and
+   `ExecutorRelease.kt` (not ported, with the reason above); `ExecutorReleaseTest` (2) under
+   "Kotlin tests with no Swift counterpart"; `HeartRateSheetCopyTest` (3) under P15 and the new
+   `StravaUploadsTest`/`SessionDiscardTest` Strava tests under P19 in "Kotlin tests that stay with
+   their view or their phase"; the P13 row that sends "the CLEAR sheet" to `ProgressDetailTests`
+   rewritten to what it is now. `ios/README.md`: the test count, and DISCARD wherever Progress and
+   results are described. Appendices A and B of this plan were updated with S1's plan, so leave
+   them.
+
+**Kotlin tests: 39 added or changed on 12 October. S1 ports 30; P15 takes 3, P19 2, P14 and P21
+one changed phrase each, and 2 have no Swift counterpart.**
+
+| Kotlin test | Kotlin | Swift, in S1 | Elsewhere |
+|---|---|---|---|
+| `CameraStabilityTest` | +4 (11) | +4 in `CameraStabilityTests` | |
+| `WatchLinkTest` | 10 (new) | 10 in `WatchLinkTests` | the question itself, P15 |
+| `RecordStoreTest` | +2 (4) | +2 | |
+| `HeartRateStoreTest` | +1 (4) | +1 | |
+| `RepTimesStoreTest` | +1 (4) | +1 | |
+| `SessionDiscardTest` | 3 (new) | 2 in `SessionDiscardTests` | 1 in P19 |
+| `ScreenSmokeTest` | 1 renamed, +4 (67) | 5 in `ResultsPageTests` (1 renamed) | |
+| `StravaScreenTest` | +2 (20) | 2, the wording, in `ResultsPageTests` | wired to the ledger in P20 |
+| `AccountScreenTest` | −2, +3 (35) | 3, one replacing a test | |
+| `StravaUploadsTest` | +1 (8) | | P19 |
+| `HeartRateSheetCopyTest` | 3 (new) | | P15 |
+| `ExecutorReleaseTest` | 2 (new) | | none: no hand-freed resource on iOS |
+| `HelpScreenTest`, `PlayPolicyTest` | a phrase changed | | P14, P21 |
+
+Plus one test written for the port (the watch flag's key). Swift tests deleted: 1
+(`testClearNamesWhatIsAtStake`); rewritten: 2. The PR says how many `main` had and how many
+there are now, from the output.
+
+**Mutation checks,** each restored, with what failed in the PR:
+
+- `RecordStore.remove` returns `true` without checking that something went: the "changes nothing
+  and says so" test and `SessionDiscardTests`' never-saved test fail.
+- `SessionDiscard` skips the rep times: the first `SessionDiscardTests` test fails.
+- `CameraLook.heading` reads the second column instead of the third (`m[1]`, `m[4]`): the tremor
+  test fails.
+- `WatchLinks.judge` with `<` for `<=`: the limit test fails.
+- DISCARD offered whether or not the attempt is on the board: `a result that was never saved has
+  nothing to discard` fails.
+- `reloadIfChanged` that always returns false: the redraw test fails.
+
+**iOS deviations:** the confirmation is the system's `confirmationDialog` (as CLEAR was in P12),
+not Android's sheet; "Session discarded" is said by the screen underneath, since a dismissed sheet
+cannot show it. Both in the PR.
+
+**Worth knowing, for the PR:** Android's results page under a reopened comparison does not redraw
+after that comparison is discarded, so its COMPARED WITH card can name a session that is gone, and
+tapping it does nothing (Android opens and at once finishes a page). Ported as is.
+
+**Not in this PR:** the watch question at START and the heart-rate sheet's line (P15); the Strava
+half of a discard (P19, P20); Help's PRIVACY wording (P14); feeding the phone-moved monitor (S2).
+
+**Still owed:** on an iPhone, finish a short session, DISCARD from the results page, and check
+that Progress no longer shows it; reopen an older session from Progress, DISCARD it, and check
+that the calendar, the chart and the leaderboard redraw without it; and that a tap on KEEP IT
+changes nothing.
+
+---
+
+### S2 · `ios-s2-phone-moved` · Notice when the phone is knocked, and check the framing again
+
+**Depends on:** S1 (for `CameraLook`). **Decision:** D9.
+
+What `MainActivity` does with `CameraStabilityMonitor` and `onCameraMoved`, which iOS has never
+done: a phone knocked mid-workout keeps counting against a bar zone that is no longer where it
+was.
+
+- **The decision in CindyCore**: `WorkoutSession.cameraMoved()`, mirroring `onCameraMoved`. Only
+  while running or in the setup check: recalibrate the engine, `tracking.reframe()`, and effects to
+  reset the crop and clear the overlay; while running, also the status "Phone moved — checking
+  framing" and `VoiceLine.phoneMoved` queued (not interrupting). Tests in `WorkoutSessionTests`
+  for each state, including that idle and paused do nothing.
+- **The motion in CindyTracker**: `CMMotionManager` device motion at about 16 Hz (Android's
+  `SENSOR_DELAY_UI`), started when the camera screen appears and stopped, with the monitor
+  `reset()`, when it goes, as `onResume`/`onPause` do. Reference frame
+  `.xArbitraryCorrectedZVertical` when `availableAttitudeReferenceFrames()` has it: the monitor
+  compares against an anchor for the whole workout, so an uncorrected yaw that drifts would look
+  like a slow turn, and Android's rotation vector is magnetometer-corrected too.
+  `.xArbitraryZVertical` otherwise. Only differences of heading are used, so where the arbitrary
+  X points does not matter.
+- **The matrix**: `CameraLook` takes Android's layout, whose columns are the device's axes in the
+  reference frame. Core Motion's `CMRotationMatrix` is documented the other way round (believed to
+  be the transpose, so the camera's axis is `-(m31, m32, m33)`). Write one small pure adapter in
+  CindyCore from the nine `mRC` fields to Android's array, with the convention in its doc comment,
+  and check it independently of the matrix: the elevation from `gravity` (`asin(g.z / |g|)` for a
+  camera looking out of the back, sign to be confirmed) must agree with `CameraLook.elevation`.
+  In DEBUG builds the long-press readout (P5) shows both elevations and the heading.
+- The monitor runs the camera's way regardless of which camera is in use: a front camera shifts
+  every heading by half a turn, which changes no difference.
+
+**Kotlin tests:** none new beyond S1's; `WorkoutSessionTests` grow by the cases above, written for
+the port from `onCameraMoved`'s behaviour.
+
+**Still owed:** on an iPhone propped on its end and leaning back about five degrees: the DEBUG
+readout's two elevations agree to a degree; tipping it up ten degrees moves the elevation by ten;
+panning it twelve moves the heading by twelve; a hand slapped on the floor beside it says nothing;
+a real knock mid-workout says "Phone moved — checking framing" once and recalibrates.
 
 ---
 
@@ -939,6 +1248,9 @@ it is current.
 | P20 | `StravaAuthActivity.kt` | 119 | CindyTracker (iOS rewrite) |  |
 | P20 | `StravaConsent.kt` | 100 | CindyTracker (iOS rewrite) |  |
 | P20 | `StravaUploadWorker.kt` | 178 | CindyTracker (iOS rewrite) |  |
+| S1 | `SessionDiscard.kt` | 33 | CindyCore, over the three stores; Strava's ledger joins in P19 | added 12 October |
+| S1 | `WatchLink.kt` | 79 | CindyCore; the question at START is P15's | added 12 October |
+| — | `ExecutorRelease.kt` | 18 | not ported: the analysis queue frees nothing by hand on iOS | added 12 October |
 
 ## Appendix B · Every Kotlin test file, and the phase that ports it
 
@@ -951,7 +1263,7 @@ phases that build them.
 | P2 | `AssistedPullupTest` | 16 | pure |
 | P2 | `BarGateTest` | 12 | pure |
 | P2 | `BarGuideTest` | 6 | pure |
-| P2 | `CameraStabilityTest` | 7 | pure |
+| P2, S1 | `CameraStabilityTest` | 7, +4 in S1 | pure |
 | P2 | `EngineParityTraceTest` | 1 | pure |
 | P2 | `HeelsFlatSquatTest` | 18 | pure |
 | P2 | `KneePushupTest` | 3 | pure |
@@ -969,10 +1281,10 @@ phases that build them.
 | P2 | `WorkoutEngineTest` | 28 | pure |
 | P3 | `ComparisonsTest` | 14 | pure |
 | P3 | `LevelsTest` | 7 | pure |
-| P3 | `RecordStoreTest` | 2 | screen (Robolectric) |
+| P3, S1 | `RecordStoreTest` | 2, +2 in S1 | screen (Robolectric) |
 | P3 | `RecordsTest` | 32 | pure |
 | P3 | `RepLogTest` | 9 | pure |
-| P3 | `RepTimesStoreTest` | 3 | screen (Robolectric) |
+| P3, S1 | `RepTimesStoreTest` | 3, +1 in S1 | screen (Robolectric) |
 | P3 | `RepTimesTest` | 10 | pure |
 | P3 | `RoundSplitsTest` | 36 | pure |
 | P3 | `SessionStatsTest` | 18 | pure |
@@ -1004,7 +1316,7 @@ phases that build them.
 | P5 | `UprightTransformTest` | 6 | pure |
 | P5 | `YuvCropTest` | 11 | not ported |
 | P6 | `CountdownTest` | 3 | screen (Robolectric) |
-| P6, P11–P14 | `ScreenSmokeTest` | 63 | screen (Robolectric) |
+| P6, P11–P14, S1 | `ScreenSmokeTest` | 63, +4 in S1 (and one renamed) | screen (Robolectric) |
 | P8 | `AvatarTest` | 37 | pure |
 | P8 | `BadgesTest` | 75 | pure |
 | P8 | `CalendarGridTest` | 5 | pure |
@@ -1024,7 +1336,7 @@ phases that build them.
 | P9 | `HeartRateMeasurementTest` | 7 | pure |
 | P9 | `HeartRateRecorderTest` | 10 | pure |
 | P9 | `HeartRateStatsTest` | 22 | pure |
-| P9 | `HeartRateStoreTest` | 3 | screen (Robolectric) |
+| P9, S1 | `HeartRateStoreTest` | 3, +1 in S1 | screen (Robolectric) |
 | P9 | `HeartRateTracesTest` | 5 | pure |
 | P9 | `SessionTimelineCaloriesTest` | 15 | pure |
 | P9 | `SessionTimelineTest` | 37 | pure |
@@ -1037,7 +1349,7 @@ phases that build them.
 | P11 | `ZoneBarViewTest` | 9 | screen (Robolectric) |
 | P12 | `CalendarViewTest` | 4 | screen (Robolectric) |
 | P12 | `ProgressChartViewTest` | 4 | screen (Robolectric) |
-| P13 | `AccountScreenTest` | 34 | screen (Robolectric) |
+| P13, S1 | `AccountScreenTest` | 34; 35 since S1 (two replaced by three) | screen (Robolectric) |
 | P13 | `HeelsFlatScreensTest` | 11 | screen (Robolectric) |
 | P13 | `ProfileHeartRateTest` | 8 | screen (Robolectric) |
 | P13 | `ProfileVoiceLanguageTest` | 5 | screen (Robolectric) |
@@ -1049,6 +1361,7 @@ phases that build them.
 | P15 | `HeartRateAdvertTest` | 9 | pure |
 | P15 | `HeartRatePermissionSheetTest` | 3 | screen (Robolectric) |
 | P15 | `HeartRatePermissionsTest` | 2 | pure |
+| P15 | `HeartRateSheetCopyTest` | 3 | screen (Robolectric) |
 | P18 | `ReminderDeliveryTest` | 10 | screen (Robolectric) |
 | P19 | `StravaActivityTextTest` | 23 | pure |
 | P19 | `StravaApiTest` | 25 | pure |
@@ -1057,13 +1370,16 @@ phases that build them.
 | P19 | `StravaHttpTest` | 16 | pure |
 | P19 | `StravaPayloadTest` | 15 | pure |
 | P3 | `StravaSetsTest` | 9 of 10 | pure; the tenth feeds `StravaPayload` and stays in P19 |
-| P19 | `StravaUploadsTest` | 7 | pure |
+| P19 | `StravaUploadsTest` | 8 | pure |
 | P20 | `StravaConsentTest` | 7 | screen (Robolectric) |
-| P20 | `StravaScreenTest` | 18 | screen (Robolectric) |
+| P20 | `StravaScreenTest` | 20; S1 pins the wording of the 2 discard-sheet tests | screen (Robolectric) |
 | P20 | `StravaSessionTest` | 6 | screen (Robolectric) |
 | P20 | `StravaUploadWorkerTest` | 18 | screen (Robolectric) |
 | P21 | `PlayListingTest` | 11 | pure |
 | P21 | `PlayPolicyTest` | 5 | screen (Robolectric) |
+| S1 | `WatchLinkTest` | 10 | pure |
+| S1, P19 | `SessionDiscardTest` | 3: 2 in S1, the Strava one in P19 | screen (Robolectric) |
+| — | `ExecutorReleaseTest` | 2 | pure; not ported, iOS frees nothing by hand (S1) |
 
 ## Appendix C · Pull request body
 

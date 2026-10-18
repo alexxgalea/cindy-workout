@@ -9,7 +9,6 @@ public enum ProgressPageBuilder {
     public static let peaksFootnote = "Scores and rounds are compared only with sessions at the same movements. "
         + "Streaks and weeks count everything."
     public static let unrecognisedMovements = "Movements not recognised"
-    public static let clearedToast = "Records cleared"
 
     /// What the page shows for `input` with the athlete's choices so far: the chart's metric and
     /// range, the kind of Cindy the chart and the peaks are about, and the month the calendar is on.
@@ -24,7 +23,7 @@ public enum ProgressPageBuilder {
             peaks: empty ? nil : peaks(input, category),
             calendar: empty ? nil : calendar(input, month),
             leaderboard: leaderboard(input),
-            canClear: !empty)
+            actions: [.done])
     }
 
     // MARK: the habit
@@ -217,7 +216,7 @@ public enum ProgressPageBuilder {
         return Leaderboard(rows: rows, emptyNote: nil)
     }
 
-    // MARK: a day, and CLEAR
+    // MARK: a day
 
     /// The sessions of one trained day, oldest first. Nothing to show, no sheet.
     public static func daySheet(_ input: ProgressInput, _ date: LocalDate) -> DaySheet? {
@@ -237,17 +236,5 @@ public enum ProgressPageBuilder {
         let h = minutes / 60, m = minutes % 60
         if input.is24Hour { return String(format: "%02d:%02d", h, m) }
         return "\(h % 12 == 0 ? 12 : h % 12):\(String(format: "%02d", m)) \(h < 12 ? "AM" : "PM")"
-    }
-
-    /// The one irreversible thing in the app, and it asks twice: the safe answer is the filled one,
-    /// so a reflex second tap in the same place cancels, and the question names the number of
-    /// sessions at stake. Nothing to ask when there is nothing to lose.
-    public static func clearQuestion(_ input: ProgressInput) -> ClearQuestion? {
-        let sessions = input.attempts.count
-        if sessions == 0 { return nil }
-        return ClearQuestion(
-            title: sessions == 1 ? "Delete your 1 session?" : "Delete all \(sessions) sessions?",
-            subtitle: "Every attempt logged on this phone goes, including your best and the badges they earned. "
-                + "Your name and photo stay. This cannot be undone. The benchmark stays.")
     }
 }

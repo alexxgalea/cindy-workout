@@ -73,9 +73,17 @@ class MenuActivity : AppCompatActivity() {
          */
         private const val EXTRA_WORKOUT_LIVE = "workout_live"
 
-        fun intent(context: Context, workoutLive: Boolean): Intent =
+        /**
+         * Whether to open the heart-rate sheet on arrival: the camera screen sends an athlete
+         * here from "Add a heart-rate watch?" and "No heart rate from …", and the answer to both
+         * is on that sheet, not on the menu behind it.
+         */
+        private const val EXTRA_OPEN_HEART_RATE = "open_heart_rate"
+
+        fun intent(context: Context, workoutLive: Boolean, openHeartRate: Boolean = false): Intent =
             Intent(context, MenuActivity::class.java)
                 .putExtra(EXTRA_WORKOUT_LIVE, workoutLive)
+                .putExtra(EXTRA_OPEN_HEART_RATE, openHeartRate)
 
         /** How long each row waits behind the one above it as the list settles in. */
         private const val ROW_STAGGER_MS = 34L
@@ -100,6 +108,10 @@ class MenuActivity : AppCompatActivity() {
         })
         render()
         settleRowsIn()
+        // Only on a fresh start: a recreated screen must not put the sheet back after it was closed.
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_HEART_RATE, false)) {
+            chooseHeartRate()
+        }
     }
 
     /**
@@ -582,12 +594,29 @@ class MenuActivity : AppCompatActivity() {
         if (device == null) chooseHeartRateUnpaired() else chooseHeartRatePaired(device)
     }
 
+    /**
+     * What the heart-rate sheet says about where the reading goes.
+     *
+     * "Nothing is uploaded" was true until Strava: an upload carries the heart-rate trace of a
+     * workout a watch recorded, which the privacy policy, Help's PRIVACY section and the Data
+     * safety answers all say. The Strava half exists only in a build that has Strava, like the
+     * same sentence in Help.
+     */
+    private fun heartRateIntro(): String {
+        val reads = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
+            "for calories."
+        return if (StravaConfig.available) {
+            "$reads It stays on this phone, except in a workout you upload to Strava."
+        } else {
+            "$reads It stays on this phone."
+        }
+    }
+
     private fun chooseHeartRateUnpaired() {
         CindySheet(
             this,
             title = "Heart rate",
-            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
-                "for calories. Nothing is uploaded."
+            subtitle = heartRateIntro()
         ).add(
             sheetNote(
                 "Turn on heart-rate broadcast on your watch first. Garmin: Broadcast Heart " +
@@ -616,8 +645,7 @@ class MenuActivity : AppCompatActivity() {
         val sheet = CindySheet(
             this,
             title = "Heart rate",
-            subtitle = "Reads the heart rate your watch or chest strap broadcasts, and uses it " +
-                "for calories. Nothing is uploaded."
+            subtitle = heartRateIntro()
         )
 
         val statusLine = styledText(R.style.Cindy_Footnote, "Connecting…").apply {

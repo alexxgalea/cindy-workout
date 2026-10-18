@@ -46,7 +46,7 @@ final class ResultsPageTests: XCTestCase {
         XCTAssertEqual(p.scoreReps, "+7")
         XCTAssertEqual(p.level.title, "Advanced")
         XCTAssertEqual(p.level.rung, "4 of 6")
-        XCTAssertTrue(p.offersProgress)
+        XCTAssertTrue(p.actions.contains(.progress))
     }
 
     /// the results screen shows the reps that were counted, not the round tally
@@ -215,16 +215,31 @@ final class ResultsPageTests: XCTestCase {
     // MARK: the other rows
 
     /// A reopened page says nothing of today's streak, and a live one does.
-    /// reopening a saved session shows its date and time, and a single DONE
-    func testReopeningASavedSessionShowsItsDateAndTimeAndASingleDONE() {
+    /// reopening a saved session shows its date and time, with DISCARD beside DONE
+    func testReopeningASavedSessionShowsItsDateAndTimeWithDISCARDBesideDONE() {
         let a = Attempt(rounds: 12, reps: 3, atMillis: now - 2 * day, durationMs: 20 * 60_000, profile: .standard)
         let reopened = page(a, reviewing: true)
         let live = page(a)
 
         XCTAssertTrue(reopened.headline != "TIME" && reopened.headline != "STOPPED", reopened.headline)
-        XCTAssertFalse(reopened.offersProgress, "review mode should offer only DONE")
+        XCTAssertEqual(reopened.actions, [.discard, .done],
+                       "review mode has no PROGRESS, which is the page it came from")
         XCTAssertNil(value(reopened, "Streak"), "the streak row describes today, not the reviewed day")
         XCTAssertNotNil(value(live, "Streak"))
+    }
+
+    /// straight after a workout the page offers DISCARD, because that session is already saved
+    func testStraightAfterAWorkoutThePageOffersDISCARDBecauseThatSessionIsAlreadySaved() {
+        let a = Attempt(rounds: 12, reps: 3, atMillis: now - day, durationMs: 20 * 60_000, profile: .standard)
+
+        XCTAssertEqual(page(a, records: [a]).actions, [.progress, .discard, .done])
+    }
+
+    /// a result that was never saved has nothing to discard
+    func testAResultThatWasNeverSavedHasNothingToDiscard() {
+        let neverSaved = Attempt(rounds: 0, reps: 0, atMillis: 5_000)
+
+        XCTAssertEqual(page(neverSaved, records: []).actions, [.progress, .done])
     }
 
     /// the date and time follow the phone's 12 and 24 hour setting
