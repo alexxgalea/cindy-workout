@@ -170,7 +170,7 @@ struct ContentView: View {
                 workout.enterSetup()
             }
         }
-        .confirmationDialog("End the workout?", isPresented: $showStopConfirm) {
+        .alert("End the workout?", isPresented: $showStopConfirm) {
             Button("End", role: .destructive) { workout.stopEarly() }
             Button("Keep going", role: .cancel) { workout.cancelStop() }
         } message: {
@@ -178,7 +178,7 @@ struct ContentView: View {
         }
         // Dismissing the question any other way is also "keep going", with the clock let go again.
         .onChange(of: showStopConfirm) { _, shown in if !shown { workout.cancelStop() } }
-        .confirmationDialog("Skip the setup check?", isPresented: $showSkipConfirm) {
+        .alert("Skip the setup check?", isPresented: $showSkipConfirm) {
             Button("SKIP", role: .destructive) { workout.skipSetup() }
             Button("KEEP CHECKING", role: .cancel) {}
         } message: {
