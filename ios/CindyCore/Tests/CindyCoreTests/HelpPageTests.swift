@@ -86,7 +86,7 @@ final class HelpPageTests: XCTestCase {
             "PRIVACY",
             "The camera picture is read on the phone and thrown away. It is never saved or sent.",
             "There are no ads, no analytics, no account and no server of Cindy's.",
-            "CLEAR on the Progress screen",
+            "DISCARD on a session's page",
             "REMOVE on the Account screen",
             // iOS: Apple's backup, and where it is switched off.
             "iCloud Backup",
