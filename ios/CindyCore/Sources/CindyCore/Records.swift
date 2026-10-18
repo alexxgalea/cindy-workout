@@ -391,5 +391,18 @@ public final class RecordStore {
         return true
     }
 
+    /// Takes the session filed at `atMillis` off the board, and says whether there was one.
+    ///
+    /// Everything else stays exactly as it was. The files kept beside a session are not this
+    /// store's to remove; `SessionDiscard` is the one call that takes a session whole.
+    @discardableResult
+    public func remove(atMillis: Int64) -> Bool {
+        let before = all()
+        let after = before.filter { $0.atMillis != atMillis }
+        if after.count == before.count { return false }
+        defaults.set(Records.encode(after), forKey: Self.key)
+        return true
+    }
+
     public func clear() { defaults.removeObject(forKey: Self.key) }
 }

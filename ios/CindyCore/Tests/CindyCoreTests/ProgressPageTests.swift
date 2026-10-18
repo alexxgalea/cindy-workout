@@ -46,7 +46,6 @@ final class ProgressPageTests: XCTestCase {
         XCTAssertNil(p.progress)
         XCTAssertNil(p.peaks)
         XCTAssertNil(p.calendar)
-        XCTAssertFalse(p.canClear)
         // The benchmark is always there to chase, and first with nobody to pass it.
         XCTAssertEqual(p.leaderboard.rows.map { $0.name }, ["Tom Holland"])
         XCTAssertEqual(p.leaderboard.rows[0].rank, "1")
@@ -64,9 +63,15 @@ final class ProgressPageTests: XCTestCase {
         XCTAssertNotNil(p.progress)
         XCTAssertNotNil(p.peaks)
         XCTAssertNotNil(p.calendar)
-        XCTAssertTrue(p.canClear)
         XCTAssertEqual(p.leaderboard.rows.count, 4)
         XCTAssertNil(p.leaderboard.emptyNote)
+    }
+
+    /// Progress has no way to delete everything at once
+    func testProgressHasNoWayToDeleteEverythingAtOnce() {
+        // Sessions go one at a time, from their own page, with history on the board or without.
+        XCTAssertEqual(model(history).page.actions, [.done])
+        XCTAssertEqual(model([]).page.actions, [.done])
     }
 
     /// the progress report builds across categories

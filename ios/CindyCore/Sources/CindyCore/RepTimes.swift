@@ -101,6 +101,12 @@ public final class RepTimesStore {
         return RepTimes.decode(text)
     }
 
+    /// The file saved for `atMillis`, gone — the companion to the heart-rate store's `remove`. A
+    /// file that was never saved is not an error.
+    public func remove(atMillis: Int64) {
+        try? FileManager.default.removeItem(at: file(atMillis))
+    }
+
     /// Every saved file, gone — the companion to the heart-rate store's `clear`.
     public func clear() {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []

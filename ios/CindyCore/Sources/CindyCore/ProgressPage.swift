@@ -141,8 +141,14 @@ public struct ProgressPage {
     public let peaks: PeaksSection?
     public let calendar: CalendarSection?
     public let leaderboard: Leaderboard
-    /// CLEAR is offered only when there is something to clear.
-    public let canClear: Bool
+    /// The bottom bar. Sessions are deleted one at a time, from their own page: there is
+    /// deliberately no button here that takes the whole board at once.
+    public let actions: [ProgressButton]
+}
+
+/// A button on the Progress screen's bottom bar, named by its label.
+public enum ProgressButton: String, Equatable, Sendable {
+    case done = "DONE"
 }
 
 /// The sessions of one trained day, in a sheet.
@@ -157,14 +163,4 @@ public struct DaySheet: Equatable, Sendable {
     public let title: String
     public let subtitle: String
     public let rows: [Row]
-}
-
-/// The question CLEAR asks, arranged so that a reflex second tap cancels.
-public struct ClearQuestion: Equatable, Sendable {
-    public let title: String
-    public let subtitle: String
-    /// The filled, safe action.
-    public let keep = "KEEP THEM"
-    /// The quiet one, painted in the alert colour.
-    public let delete = "DELETE"
 }
