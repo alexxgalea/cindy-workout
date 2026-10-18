@@ -186,6 +186,23 @@ Written for the port, with no Kotlin test behind them (20): `StravaUploadQueueTe
 - **Help's upload paragraph** says it is sent when the workout is saved and tried again when Cindy is open or a connection returns, instead of "carries on in the background".
 - **Credentials** come from `ios/Config/Strava.xcconfig`, gitignored, through an optional include; the values reach `Info.plist`. Without the file the build has none.
 
+### Kotlin tests that were ported in P21
+
+| Kotlin test | Kotlin | Swift | In |
+|---|---|---|---|
+| `PlayListingTest` | 11 | 13 | `AppStoreListingTests` |
+| `PlayPolicyTest` | 5 | 5 | `AppStorePolicyTests` |
+| | **16** | **18** | |
+
+`PlayListingTest`'s eleven are all there, held to Apple's limits instead of Google's (name and subtitle 30, promotional text 170, description 4,000, keywords 100, release and review notes 4,000) and to the iOS rules in place of Play's metadata policy (no other platform's name, no prices). The two extra are the keyword list (a comma list with no spaces, no repeats, none the name or subtitle already carries, which Apple indexes) and the review notes (no sign-in, and how to get past the setup check). `PlayPolicyTest` is Robolectric only to read Help's views; Help's words come from `HelpBuilder` here, so all five run on Linux. Beyond Kotlin, `StoreMetadataTests` (9) holds the privacy manifest to the APIs the source uses, both ways; there is no Android counterpart because Play has no such file.
+
+**What iOS does differently, and why:**
+
+- **Two privacy manifests, one build phase.** `PrivacyInfo.xcprivacy` declares no collected data; a build with credentials has a script phase that swaps in `Config/PrivacyInfo.strava.xcprivacy` (Health and Fitness, linked, not tracking). Android's Data safety form is entered by hand, but Apple reads the manifest out of the binary and compares it with the labels, so the build declares its own. The macOS job builds both and reads the manifests back.
+- **A separate policy page** at `.../cindy-privacy/ios/`, rendered from `appstore/privacy-policy.html`. The Android policy talks of Android's backup and Movies/Cindy; this one of iCloud Backup, the Keychain and Photos. Android's page is untouched.
+- **The renderer takes `--store`**, extended rather than copied: the same `{{#strava}}` blocks, the same placeholders, and `--check` renders both stores.
+- **Strava is declared as collected, linked, not shared**, which is a judgement call and is written up as one in `appstore/privacy-labels.md`, as Play's data safety form's three are.
+
 ### Kotlin tests that were ported in S1
 
 The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 30 ported now.
@@ -203,23 +220,6 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 | `HelpScreenTest`, `PlayPolicyTest` (a phrase each) | P14, P21 | Help and the listing do not exist on iOS yet |
 | `StravaUploadsTest`, `reachedStrava` | P19 | Strava |
 | `HeartRateSheetCopyTest` (3) | P15 | The heart-rate sheet is built there |
-
-### Kotlin tests that were ported in P21
-
-| Kotlin test | Kotlin | Swift | In |
-|---|---|---|---|
-| `PlayListingTest` | 11 | 13 | `AppStoreListingTests` |
-| `PlayPolicyTest` | 5 | 5 | `AppStorePolicyTests` |
-| | **16** | **18** | |
-
-`PlayListingTest`'s eleven are all there, held to Apple's limits instead of Google's (name and subtitle 30, promotional text 170, description 4,000, keywords 100, release and review notes 4,000) and to the iOS rules in place of Play's metadata policy (no other platform's name, no prices). The two extra are the keyword list (a comma list with no spaces, no repeats, none the name or subtitle already carries, which Apple indexes) and the review notes (no sign-in, and how to get past the setup check). `PlayPolicyTest` is Robolectric only to read Help's views; Help's words come from `HelpBuilder` here, so all five run on Linux. Beyond Kotlin, `StoreMetadataTests` (9) holds the privacy manifest to the APIs the source uses, both ways; there is no Android counterpart because Play has no such file.
-
-**What iOS does differently, and why:**
-
-- **Two privacy manifests, one build phase.** `PrivacyInfo.xcprivacy` declares no collected data; a build with credentials has a script phase that swaps in `Config/PrivacyInfo.strava.xcprivacy` (Health and Fitness, linked, not tracking). Android's Data safety form is entered by hand, but Apple reads the manifest out of the binary and compares it with the labels, so the build declares its own. The macOS job builds both and reads the manifests back.
-- **A separate policy page** at `.../cindy-privacy/ios/`, rendered from `appstore/privacy-policy.html`. The Android policy talks of Android's backup and Movies/Cindy; this one of iCloud Backup, the Keychain and Photos. Android's page is untouched.
-- **The renderer takes `--store`**, extended rather than copied: the same `{{#strava}}` blocks, the same placeholders, and `--check` renders both stores.
-- **Strava is declared as collected, linked, not shared**, which is a judgement call and is written up as one in `appstore/privacy-labels.md`, as Play's data safety form's three are.
 
 ### Kotlin tests with no Swift counterpart
 
