@@ -81,7 +81,7 @@ struct ResultsView: View {
         // The system's dialog has no filled button: the safe answer is the one with the cancel role,
         // which it sets apart at the bottom, under the thumb that has just tapped DISCARD, while the
         // destructive one is the red row above it.
-        .confirmationDialog(discardQuestion.title, isPresented: $asksToDiscard, titleVisibility: .visible) {
+        .alert(discardQuestion.title, isPresented: $asksToDiscard) {
             Button(discardQuestion.discard, role: .destructive) {
                 // The page closes either way, but only a session that was there was discarded.
                 if vm.discard() { onDiscarded() }
