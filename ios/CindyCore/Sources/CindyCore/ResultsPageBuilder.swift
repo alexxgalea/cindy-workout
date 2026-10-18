@@ -26,8 +26,10 @@ public struct ResultsPage {
     /// What this session is measured against, if anything.
     public let comparison: Attempt?
     public let comparisonKind: Comparisons.Kind?
-    /// A reopened session offers only DONE; a live one offers PROGRESS as well.
-    public let offersProgress: Bool
+    /// The bottom bar, left to right. PROGRESS only on a page that has just ended (a reopened one
+    /// came from Progress, and PROGRESS would be a way back to a page already behind it); DISCARD
+    /// only for a session that is on the board; DONE always.
+    public let actions: [ResultsButton]
 }
 
 public enum ResultsPageBuilder {
@@ -66,7 +68,32 @@ public enum ResultsPageBuilder {
             heart: heart(input),
             comparison: comparison,
             comparisonKind: kind,
-            offersProgress: !input.reviewing)
+            actions: actions(input))
+    }
+
+    /// Only a session on the board can be taken off it. A result with no reps was never filed, and a
+    /// button that discards nothing would only ask a question with no answer. Looked up in every
+    /// record, not the earlier ones the page compares with: the session being looked at is the one
+    /// that matters here.
+    static func actions(_ input: ResultsInput) -> [ResultsButton] {
+        var buttons: [ResultsButton] = []
+        if !input.reviewing { buttons.append(.progress) }
+        if input.records.contains(where: { $0.atMillis == input.attempt.atMillis }) { buttons.append(.discard) }
+        buttons.append(.done)
+        return buttons
+    }
+
+    public static let discardedToast = "Session discarded"
+
+    /// What DISCARD asks. `onStrava` is whether Strava has, or is about to have, this session as an
+    /// activity, in which case the question says that discarding does not take that back.
+    public static func discardQuestion(_ input: ResultsInput, onStrava: Bool) -> DiscardQuestion {
+        let a = input.attempt
+        var subtitle = "\(a.totalReps) reps · \(reviewHeadline(a, input.zone, input.is24Hour))"
+            + "\n\nIts heart-rate trace and rep times go with it, and so does any badge or record only "
+            + "it earned. This cannot be undone."
+        if onStrava { subtitle += " It stays on Strava — remove it there." }
+        return DiscardQuestion(title: "Discard this session?", subtitle: subtitle)
     }
 
     // MARK: the top

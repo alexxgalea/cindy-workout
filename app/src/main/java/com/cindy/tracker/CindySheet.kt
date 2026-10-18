@@ -309,7 +309,7 @@ class CindySheet(
         /**
          * What the secondary is painted in. The alert colour for a destructive action, which is
          * the case where the secondary is the one that does something rather than the one that
-         * gets out — see [RecordsActivity.confirmClear] for why it is arranged that way round.
+         * gets out — see [ResultsActivity.confirmDiscard] for why it is arranged that way round.
          */
         secondaryTint: Int = R.color.label
     ): CindySheet {

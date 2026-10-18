@@ -358,4 +358,53 @@ class StravaScreenTest {
         )
         activity.finish()
     }
+
+    // ---- discarding a session that Strava may already have ------------------------------------
+
+    private fun sheetTexts(): List<String> {
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
+        fun texts(v: android.view.View): List<String> = buildList {
+            if (v is android.widget.TextView) add(v.text.toString())
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) addAll(texts(v.getChildAt(i)))
+        }
+        return texts(dialog.window!!.decorView)
+    }
+
+    private fun discardSheetFor(status: StravaUploadStatus?): List<String> {
+        StravaConfig.availableForTest = true
+        StravaTokenStore(context()).grant = testGrant()
+        val attempt = stravaAttempt(109L)
+        RecordStore(context()).clear()
+        assertTrue(RecordStore(context()).add(attempt))
+        if (status != null) StravaUploads.write(context(), attempt.atMillis, status)
+        val activity = buildResults(attempt)
+        findText(activity.findViewById(android.R.id.content), "DISCARD")!!.performClick()
+        val texts = sheetTexts()
+        activity.finish()
+        RecordStore(context()).clear()
+        return texts
+    }
+
+    @Test
+    fun `the discard sheet says an upload that already reached Strava stays there`() {
+        val texts = discardSheetFor(
+            StravaUploadStatus(StravaUploadState.DONE, uploadId = "u", activityId = 777L)
+        )
+
+        assertTrue(
+            "the sheet kept quiet about the copy on Strava: $texts",
+            texts.any { it.contains("stays on Strava") }
+        )
+    }
+
+    @Test
+    fun `the discard sheet says nothing about Strava while the upload is only queued`() {
+        val texts = discardSheetFor(StravaUploadStatus(StravaUploadState.QUEUED))
+
+        assertTrue(
+            "the sheet warned about a copy that does not exist: $texts",
+            texts.none { it.contains("Strava") }
+        )
+    }
 }
