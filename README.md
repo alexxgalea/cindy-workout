@@ -456,11 +456,19 @@ with one line that is always true and never scolds. Below it, top to bottom:
   (810 reps), the score that prompted this app.
 
 Any session can be reopened on the page it ended on: tap a leaderboard row, a day's session in
-the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it shows a single
-DONE and no streak (that describes today, not the day being looked at), and a **COMPARED WITH**
-card stands in for the usual against-your-best row: your best or last session at the same
-movements, whichever is chosen, and only ever an earlier one — a session cannot honestly be
-measured against something that had not happened yet. Tapping the card opens that one too.
+the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it shows DONE and
+DISCARD but no PROGRESS and no streak (that describes today, not the day being looked at), and a
+**COMPARED WITH** card stands in for the usual against-your-best row: your best or last session at
+the same movements, whichever is chosen, and only ever an earlier one — a session cannot honestly
+be measured against something that had not happened yet. Tapping the card opens that one too.
+
+**DISCARD** takes one session off the board, on a reopened session and on the page straight after
+a workout alike. It asks first, with **KEEP IT** as the filled button so a reflex second tap
+cancels, and it takes the session's heart-rate trace and rep times with it. Badges, the streak and
+records are worked out from the sessions that remain, so whatever only that session earned goes
+too. A Strava upload still queued is cancelled; a copy already on Strava stays there, and the
+sheet says so. A result with no reps was never saved, so it has nothing to discard. Sessions go one
+at a time: there is deliberately no button that deletes them all.
 
 Scores, rounds and paces are only compared between sessions at the same movements; a chip picks
 the category. Volume, streaks and weeks count everything, since a session of any kind is still a

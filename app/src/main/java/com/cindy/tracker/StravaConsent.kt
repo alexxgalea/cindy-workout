@@ -94,7 +94,7 @@ object StravaConsent {
             }
         })
 
-        // The one filled button is the safe one, the way KEEP THEM is on the delete-all sheet.
+        // The one filled button is the safe one, the way KEEP IT is on the discard sheet.
         sheet.actions(primary = "NOT NOW", onPrimary = {}).show()
     }
 }

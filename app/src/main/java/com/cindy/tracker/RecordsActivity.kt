@@ -10,7 +10,6 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.cindy.tracker.databinding.ActivityRecordsBinding
 import java.text.SimpleDateFormat
@@ -38,6 +37,8 @@ class RecordsActivity : AppCompatActivity() {
     /** The kind of Cindy the chart and the peaks are about; follows the latest until chosen. */
     private var category: CindyProfile? = null
     private var categoryChosen = false
+    /** The board as it was last drawn, so [onResume] can tell whether it has changed since. */
+    private var shownAttempts: List<Attempt> = emptyList()
     private lateinit var progressHolder: LinearLayout
     private lateinit var calendarHolder: LinearLayout
 
@@ -47,9 +48,8 @@ class RecordsActivity : AppCompatActivity() {
         setContentView(binding.root)
         store = RecordStore(this)
 
-        binding.actions.addView(glassButton("CLEAR", R.color.state_alert).apply {
-            setOnClickListener { confirmClear() }
-        })
+        // Sessions are deleted one at a time, from their own page: there is deliberately no
+        // button here that takes the whole board at once.
         binding.actions.addView(primaryButton("DONE").apply {
             setOnClickListener { finish() }
         })
@@ -57,47 +57,17 @@ class RecordsActivity : AppCompatActivity() {
     }
 
     /**
-     * The one irreversible thing in the app, and it asks twice.
+     * Redraws when the board changed while this screen was waiting underneath another.
      *
-     * A tester lost their history and the likeliest explanation was this button: the confirmation
-     * put CLEAR in the *filled* slot, which on every other sheet in the app is where the safe,
-     * expected action sits — and which is also where the thumb already is, having just tapped a
-     * filled button to get here. Two taps in the same place wiped the board.
-     *
-     * So the sheet is built the other way round: KEEP THEM is the filled primary, so a reflex
-     * second tap cancels; clearing is the quiet secondary, painted in the alert colour; and the
-     * question names the number of sessions at stake, because "your records" is abstract in a way
-     * that "41 sessions" is not. There is nothing to restore them from afterwards — the store is
-     * one preference string — which is exactly why the ask is this loud.
+     * A session's own page can discard it, and this screen is built from the board once, so
+     * without this the calendar, the chart and the leaderboard would go on showing a session
+     * that no longer exists. Compared rather than redrawn blindly, so coming back from nothing
+     * more than a system dialog costs nothing.
      */
-    private fun confirmClear() {
-        val sessions = store.all().size
-        if (sessions == 0) return
-        CindySheet(
-            this,
-            title = if (sessions == 1) "Delete your 1 session?" else "Delete all $sessions sessions?",
-            subtitle = "Every attempt logged on this phone goes, including your best and the " +
-                "badges they earned. Your name and photo stay. This cannot be undone. The " +
-                "benchmark stays."
-        ).actions(
-            primary = "KEEP THEM",
-            onPrimary = {},
-            secondary = "DELETE",
-            onSecondary = {
-                store.clear()
-                // A trace with nothing left to sit beside is not a record of anything.
-                HeartRateStore(this).clear()
-                RepTimesStore(this).clear()
-                StravaUploads.clear(this)
-                toast("Records cleared")
-                render()
-            },
-            secondaryTint = R.color.state_alert
-        ).show()
+    override fun onResume() {
+        super.onResume()
+        if (store.all() != shownAttempts) render()
     }
-
-    private fun toast(message: String) =
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     /** Reopens a saved attempt on the results screen, as it looked the day it happened. */
     private fun openSession(atMillis: Long) {
@@ -107,6 +77,7 @@ class RecordsActivity : AppCompatActivity() {
     private fun render() {
         binding.rows.removeAllViews()
         val attempts = store.all()
+        shownAttempts = attempts
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
         val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek

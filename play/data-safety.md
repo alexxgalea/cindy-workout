@@ -47,7 +47,7 @@ separately, under App content → Privacy policy: `https://alexxgalea.github.io/
 **Which methods of account creation does your app support?** None. There is no account.
 **Do you provide a way for users to request that their data is deleted?** No. Cindy keeps nothing on
 a server; the copy at Strava is the athlete's own and is removed on Strava. The local data is
-deleted in the app (CLEAR, REMOVE) and the connection is ended with DISCONNECT, all of which the
+deleted in the app (DISCARD, REMOVE) and the connection is ended with DISCONNECT, all of which the
 policy and Help describe. Google does not require this answer for every app: the badge is for
 apps that offer a deletion mechanism.
 
