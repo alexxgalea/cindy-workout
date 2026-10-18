@@ -101,6 +101,13 @@ struct ContentView: View {
                                                                     cameraGranted: CameraModel.permissionHeld))
     }
 
+    /// Whether to be listening for a knocked phone. Not once the app is in the background, nor while
+    /// the menu or the results are open over the camera: Android's `onPause` stops it for both (they
+    /// are activities there), and picking the phone up to use either is not a knock. Only
+    /// `.background`, not `.inactive`: Control Centre or a banner pulled over the screen is not the
+    /// app leaving, and stopping would lose a knock still waiting to settle.
+    private var wantsMotion: Bool { scenePhase != .background && !showMenu && workout.finished == nil }
+
     var body: some View {
         ZStack {
             Group {
@@ -131,6 +138,7 @@ struct ContentView: View {
             workout.onResetCrop = { camera.resetRoi() }
             beginFirstRun()
             workout.syncHeartRate()
+            workout.startWatchingPhone()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
             // when the app is backgrounded.
@@ -140,13 +148,19 @@ struct ContentView: View {
             film.interrupt()
             camera.stop()
             workout.stopHeartRate()
+            workout.stopWatchingPhone()
             UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onChange(of: wantsMotion) { _, wanted in
+            if wanted { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
         // Leaving the app ends a film, with what it caught kept, and drops a count: the camera stops
         // with it, and a film that outlived the picture would be a blank one.
         .onChange(of: scenePhase) { _, phase in if phase != .active { film.interrupt() } }
-        .sheet(item: $workout.finished) { ResultsView($0) }
+        .sheet(item: $workout.finished) { request in
+            ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
+        }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
         }
@@ -347,6 +361,7 @@ struct ContentView: View {
         VStack(spacing: 2) {
             Text("\(camera.sourceName) · inf \(camera.lastInferenceMs) ms · crop \(camera.tracking ? "tracked" : "full frame")")
             Text(workout.counterReadout)
+            Text(workout.lookLine.isEmpty ? "look: not listening" : workout.lookLine)
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }
         .font(.system(size: 11, design: .monospaced))

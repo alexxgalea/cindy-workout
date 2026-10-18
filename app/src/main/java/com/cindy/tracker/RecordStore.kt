@@ -352,6 +352,20 @@ class RecordStore(context: Context) {
         return true
     }
 
+    /**
+     * Takes the session filed at [atMillis] off the board, and says whether there was one.
+     *
+     * Everything else stays exactly as it was. The files kept beside a session are not this
+     * store's to remove; [SessionDiscard] is the one call that takes a session whole.
+     */
+    fun remove(atMillis: Long): Boolean {
+        val before = all()
+        val after = before.filterNot { it.atMillis == atMillis }
+        if (after.size == before.size) return false
+        prefs.edit().putString(KEY, Records.encode(after)).apply()
+        return true
+    }
+
     fun clear() = prefs.edit().remove(KEY).apply()
 
     private companion object {
