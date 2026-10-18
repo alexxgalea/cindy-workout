@@ -78,12 +78,24 @@ public final class ProgressModel {
 
     // MARK: the board
 
-    public var clearQuestion: ClearQuestion? { ProgressPageBuilder.clearQuestion(input) }
-
-    /// The board changed (CLEAR, or a session was saved): build the page again from `attempts`.
+    /// The board changed (a session was saved or discarded): build the page again from `attempts`.
     public func reload(_ attempts: [Attempt]) {
         input.attempts = attempts
         rebuild()
+    }
+
+    /// Builds the page again when the board is not the one it was built from, and says whether it
+    /// did.
+    ///
+    /// A session's own page can discard it, and this screen is built from the board once, so without
+    /// this the calendar, the chart and the leaderboard would go on showing a session that no longer
+    /// exists. Compared rather than rebuilt blindly, so coming back from nothing more than a system
+    /// dialog costs nothing.
+    @discardableResult
+    public func reloadIfChanged(_ attempts: [Attempt]) -> Bool {
+        if attempts == input.attempts { return false }
+        reload(attempts)
+        return true
     }
 
     // MARK: words that follow the finger

@@ -1,6 +1,34 @@
 package com.cindy.tracker
 
 import kotlin.math.abs
+import kotlin.math.asin
+import kotlin.math.atan2
+
+/**
+ * Where the camera is pointing, read from the rotation matrix `SensorManager` fills in.
+ *
+ * Not `SensorManager.getOrientation`. Its azimuth is the compass bearing of the phone's *top
+ * edge*, and a phone propped up to film a workout is standing on its end: the top edge points at
+ * the ceiling, and a bearing of something pointing straight up is not defined. A phone leaning
+ * back by five degrees still has a top edge that is only nine per cent horizontal, so the
+ * tremor of a squat landing nearby turns a degree or two of real movement into tens of degrees
+ * of azimuth. The axis the camera looks along does not have that problem for a phone filming
+ * the horizon, and it is the thing the bar zone is measured against anyway.
+ *
+ * The matrix is row-major, as `SensorManager` writes it: its columns are the device's axes in
+ * East, North, Up, so the camera, which looks out of the back along the device's -Z, is the
+ * negated third column. A front camera looks the opposite way, which shifts every heading by half
+ * a turn and changes no difference between two of them, the only thing the monitor uses.
+ */
+object CameraLook {
+    /** Compass bearing of the camera's axis, in degrees from -180 to 180. */
+    fun heading(matrix: FloatArray): Float =
+        Math.toDegrees(atan2(-matrix[2].toDouble(), -matrix[5].toDouble())).toFloat()
+
+    /** Angle of the camera's axis above the horizon, in degrees: positive looks up. */
+    fun elevation(matrix: FloatArray): Float =
+        Math.toDegrees(asin((-matrix[8]).toDouble().coerceIn(-1.0, 1.0))).toFloat()
+}
 
 /**
  * Notices that the *phone* moved, as opposed to the athlete.
@@ -65,11 +93,12 @@ class CameraStabilityMonitor {
     private var reframed = false
 
     /**
-     * Feeds one orientation reading, in degrees.
+     * Feeds one reading, in degrees: the heading and the elevation of the axis the camera points
+     * along, from [CameraLook].
      *
-     * Yaw and pitch only. Roll is ignored: a phone rotating about the axis it is pointing along
-     * changes which way up the picture is, and the frame the analysis runs on is already rotated
-     * to upright before anything sees it.
+     * Roll does not appear: a phone rotating about the axis it is pointing along changes which
+     * way up the picture is, and the frame the analysis runs on is already rotated to upright
+     * before anything sees it.
      */
     fun update(yaw: Float, pitch: Float, now: Long) {
         if (anchorYaw.isNaN()) {

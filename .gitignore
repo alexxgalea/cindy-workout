@@ -70,3 +70,6 @@ __pycache__/
 # Strava credentials for the iOS build, and the Info.plist xcodegen writes
 ios/Config/Strava.xcconfig
 ios/Config/Info.plist
+# code-review-graph database and superpowers workspaces (local, rebuilt per session)
+.code-review-graph/
+.superpowers/

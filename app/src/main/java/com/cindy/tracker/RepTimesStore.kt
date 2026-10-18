@@ -107,6 +107,11 @@ class RepTimesStore(context: Context) {
         return RepTimes.decode(file.readText())
     }
 
+    /** The file saved for [atMillis], gone — the companion to [HeartRateStore.remove]. */
+    fun remove(atMillis: Long) {
+        File(dir, "$atMillis.reps").delete()
+    }
+
     /** Every saved file, gone — the companion to [HeartRateStore.clear]. */
     fun clear() {
         dir.listFiles { f -> f.name.endsWith(".reps") }?.forEach { it.delete() }

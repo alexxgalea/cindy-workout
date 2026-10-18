@@ -46,14 +46,15 @@ final class ResultsViewModel: ObservableObject {
     @Published private(set) var zoneSelected: Int?
     /// Bumped whenever a chart model was given new data, so its canvas draws again.
     @Published private(set) var revision = 0
+    /// What DISCARD asks. Nothing on iOS uploads to Strava before P20, so there is no copy there for
+    /// the question to say stays; P20 reads the ledger here.
+    let discardQuestion: DiscardQuestion
 
     init(_ request: ResultsRequest, profile: Profile = Profile()) {
         let all = RecordStore().all()
         let zone = Zone(TimeZone.current.identifier)
         let trace = HeartRateStore().load(atMillis: request.attempt.atMillis)
-        let repTimes = RepTimesStore(directory: FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("rep_times", isDirectory: true))
+        let repTimes = RepTimesStore()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let input = ResultsInput(
             attempt: request.attempt, stoppedEarly: request.stoppedEarly, reviewing: request.reviewing,
@@ -67,6 +68,7 @@ final class ResultsViewModel: ObservableObject {
         atMillis = request.attempt.atMillis
         results = ResultsModel(input)
         page = results.page
+        discardQuestion = results.discardQuestion(onStrava: false)
 
         track.onSelect = { [weak self] in self?.trackSelected = $0 }
         splits.onSelect = { [weak self] in self?.splitsSelected = $0 }
@@ -93,6 +95,11 @@ final class ResultsViewModel: ObservableObject {
     func reopen(_ atMillis: Int64) -> ResultsRequest? { ResultsRequest.reopening(atMillis) }
 
     func chooseComparison(_ i: Int) { results.chooseComparison(i) }
+
+    /// Takes this session off the board with the files beside it, after the athlete has said so, and
+    /// says whether it was there to take: a page left open over a session that something else already
+    /// discarded has nothing to report.
+    func discard() -> Bool { results.discard(using: SessionDiscard()) }
 
     /// Builds the page again after the weight, age or sex changed.
     func bodyChanged() {
