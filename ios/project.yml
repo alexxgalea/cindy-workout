@@ -78,6 +78,10 @@ targets:
         # HeartRateAccess.usageDescription is the same words, and a test holds the two together.
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Cindy reads the heart rate your watch or chest strap broadcasts. Nothing is uploaded.
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Saves your workout recording.
+        # Without a launch screen iOS 18 runs the app letterboxed, as on a 3.5-inch phone: a 402 by
+        # 603 window in the middle of the screen, with the bottom of every sheet outside it. An empty
+        # one is enough to get the whole screen.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
