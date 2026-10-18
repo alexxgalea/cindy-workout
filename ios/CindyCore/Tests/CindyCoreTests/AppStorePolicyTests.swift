@@ -102,7 +102,7 @@ final class AppStorePolicyTests: XCTestCase {
         let policy = words(try render(withStrava: false))
         let help = HelpBuilder.build(HelpInput(attempts: [], features: .all, versionName: "1.0.0", versionCode: "1")).text
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        for phrase in ["CLEAR on the Progress screen", "REMOVE on the Account screen", "Videos in Photos are yours to delete"] {
+        for phrase in ["DISCARD on a session's page", "REMOVE on the Account screen", "Videos in Photos are yours to delete"] {
             XCTAssertTrue(policy.contains(phrase), "the policy lacks: \(phrase)")
             XCTAssertTrue(help.contains(phrase), "Help lacks: \(phrase)")
         }
