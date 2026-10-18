@@ -92,6 +92,12 @@ public final class HeartRateStore {
         return HeartRateTraces.decode(text)
     }
 
+    /// The trace saved for `atMillis`, gone: the companion to `RecordStore.remove`. A trace that
+    /// was never saved is not an error.
+    public func remove(atMillis: Int64) {
+        try? FileManager.default.removeItem(at: file(atMillis))
+    }
+
     /// Every saved trace, gone: the companion to `RecordStore`'s clear.
     public func clear() {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []

@@ -19,12 +19,14 @@ struct ProgressScreen: View {
                 if let calendar = page.calendar { calendarCard(calendar) }
                 leaderboard(page.leaderboard)
 
+                // Sessions are deleted one at a time, from their own page: there is deliberately no
+                // button here that takes the whole board at once.
                 HStack(spacing: 10) {
-                    if page.canClear {
-                        Button("CLEAR") { vm.asksToClear = true }
-                            .buttonStyle(GhostButton(tint: .warn))
+                    ForEach(page.actions, id: \.rawValue) { action in
+                        switch action {
+                        case .done: Button(action.rawValue) { dismiss() }.buttonStyle(PrimaryButton())
+                        }
                     }
-                    Button("DONE") { dismiss() }.buttonStyle(PrimaryButton())
                 }
                 .padding(.top, 16)
             }
@@ -36,19 +38,13 @@ struct ProgressScreen: View {
                 Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
             }
         }
-        .sheet(item: $vm.route) { route in
+        // Whichever session was opened from here can discard itself, so the page is built again from
+        // the board when that sheet goes, and only if the board changed.
+        .sheet(item: $vm.route, onDismiss: { vm.boardMayHaveChanged() }) { route in
             switch route {
             case .day(let sheet): DaySheetView(sheet: sheet, open: vm.open(session:))
-            case .session(let request): ResultsView(request)
+            case .session(let request): ResultsView(request, onDiscarded: { vm.discarded() })
             }
-        }
-        // The safe answer is the one that cancels: a reflex second tap where the thumb already is
-        // keeps the records.
-        .confirmationDialog(vm.progress.clearQuestion?.title ?? "", isPresented: $vm.asksToClear, titleVisibility: .visible) {
-            Button("DELETE", role: .destructive) { vm.clear() }
-            Button("KEEP THEM", role: .cancel) {}
-        } message: {
-            Text(vm.progress.clearQuestion?.subtitle ?? "")
         }
     }
 

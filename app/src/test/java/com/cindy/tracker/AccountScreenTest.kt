@@ -511,25 +511,42 @@ class AccountScreenTest {
     }
 
     @Test
-    fun `the clear sheet says the badges go and the name and photo stay`() {
+    fun `Progress has no way to delete everything at once`() {
         record(session(rounds = 10))
         val activity = openRecords()
 
-        findByText(content(activity), "CLEAR")!!.performClick()
-        val sheet = sheetRoot()
-        assertNotNull(textContaining(sheet, "the badges they earned"))
-        assertNotNull(textContaining(sheet, "Your name and photo stay"))
+        val actions = activity.findViewById<ViewGroup>(R.id.actions)
+        val labels = (0 until actions.childCount).map { (actions.getChildAt(it) as TextView).text.toString() }
+        assertEquals(listOf("DONE"), labels)
     }
 
     @Test
-    fun `clearing the records takes the badges with them and leaves the name and photo`() {
+    fun `Progress redraws when it comes back, so a discarded session is gone from it`() {
+        val shown = session(rounds = 10)
+        record(shown)
+        val progress = Robolectric.buildActivity(RecordsActivity::class.java).setup()
+        assertNotNull(findByDescriptionPrefix(content(progress.get()), "2, You, "))
+
+        // What discarding from the session's own page does, while Progress waits underneath it.
+        assertTrue(RecordStore(context).remove(shown.atMillis))
+        progress.pause().resume()
+
+        assertNull(findByDescriptionPrefix(content(progress.get()), "2, You, "))
+    }
+
+    @Test
+    fun `discarding the session that earned a badge takes the badge, and leaves the name and photo`() {
         Profile(context).displayName = "Alex"
         storeAPhoto()
-        record(session(rounds = 10))
-        val activity = openRecords()
+        val earner = session(rounds = 10)
+        record(earner)
+        assertTrue(Badges.earned(RecordStore(context).all(), zone, DayOfWeek.MONDAY).isNotEmpty())
+        val activity = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, earner.atMillis)
+        ).setup().get()
 
-        findByText(content(activity), "CLEAR")!!.performClick()
-        findByText(sheetRoot(), "DELETE")!!.performClick()
+        findByText(content(activity), "DISCARD")!!.performClick()
+        findByText(sheetRoot(), "DISCARD")!!.performClick()
 
         val left = RecordStore(context).all()
         assertTrue(left.isEmpty())

@@ -53,6 +53,10 @@ final class WorkoutViewModel: ObservableObject {
     /// Asks the camera to forget the crop that was following the athlete.
     var onResetCrop: (() -> Void)?
 
+    /// Where the camera points, for the debug readout: its heading, and its elevation from the
+    /// rotation matrix beside the one from gravity. Empty until the readout is on.
+    @Published private(set) var lookLine = ""
+
     /// What the athlete has told the app, edited from the menu. Read again by `applyProfile`
     /// whenever a sheet there is saved, so the workout acts on it without a restart.
     let settings = Profile()
@@ -180,9 +184,9 @@ final class WorkoutViewModel: ObservableObject {
             break
         }
     }
-    private let repTimes = RepTimesStore(directory: FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("rep_times", isDirectory: true))
+    private let repTimes = RepTimesStore()
+    /// Notices a phone that was knocked or turned while the camera screen is up.
+    private let phone = PhoneMotion()
     /// The voice. Held for the sheet that chooses its language too: both talk to the same engine.
     let speaker = Speaker(engine: AVSpeechTtsEngine())
 
@@ -198,7 +202,18 @@ final class WorkoutViewModel: ObservableObject {
             Task { @MainActor in self?.music.duck(speaking) }
         }
         applyProfile()
+        phone.onMoved = { [weak self] in self?.cameraMoved() }
+        phone.onReadout = { [weak self] in self?.lookLine = $0 }
     }
+
+    /// Listens for a knocked phone: the camera screen is up. Stopped again with `stopWatchingPhone`,
+    /// which also forgets where the phone was, so leaving the screen and coming back starts afresh.
+    func startWatchingPhone() { phone.start() }
+    func stopWatchingPhone() { phone.stop() }
+
+    /// The phone was moved and has settled, so what the counter learned no longer describes the
+    /// picture. The session decides what that means in each state; this performs it.
+    func cameraMoved() { perform(session.cameraMoved()) }
 
     var startButtonTitle: String {
         switch phase {
@@ -219,7 +234,11 @@ final class WorkoutViewModel: ObservableObject {
     /// Whether a readout is on the screen, so the demonstrator card stands down.
     var debugReadout: Bool {
         get { session.debugReadout }
-        set { session.debugReadout = newValue }
+        set {
+            session.debugReadout = newValue
+            phone.readoutEnabled = newValue
+            if !newValue { lookLine = "" }
+        }
     }
 
     /// The movements this session is counting.
@@ -388,6 +407,9 @@ final class WorkoutViewModel: ObservableObject {
         default: UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }
+
+    /// A session was discarded from its page, which has closed over this screen.
+    func sessionDiscarded() { show(ResultsPageBuilder.discardedToast) }
 
     func show(_ text: String) {
         toast = text
