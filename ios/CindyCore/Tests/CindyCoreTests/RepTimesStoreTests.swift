@@ -27,6 +27,20 @@ final class RepTimesStoreTests: XCTestCase {
         store.clear()
     }
 
+    /// remove deletes that session's rep times and no other
+    func testRemoveDeletesThatSessionsRepTimesAndNoOther() throws {
+        let store = store()
+        let marks = [RepMark(0, .squat, manual: false)]
+        try store.save(atMillis: 1, marks)
+        try store.save(atMillis: 2, marks)
+
+        store.remove(atMillis: 1)
+
+        XCTAssertNil(store.load(atMillis: 1))
+        XCTAssertEqual(store.load(atMillis: 2), marks)
+        store.clear()
+    }
+
     /// load of a missing file is null
     func testLoadOfAMissingFileIsNull() {
         XCTAssertNil(store().load(atMillis: 999_999))

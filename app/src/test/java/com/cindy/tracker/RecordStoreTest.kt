@@ -40,4 +40,26 @@ class RecordStoreTest {
         assertTrue(saved)
         assertEquals(1, store.all().size)
     }
+
+    @Test
+    fun `removing a session leaves every other one on the board`() {
+        val store = store()
+        store.add(Attempt(rounds = 10, reps = 0, atMillis = 1000L))
+        store.add(Attempt(rounds = 11, reps = 0, atMillis = 2000L))
+        store.add(Attempt(rounds = 12, reps = 0, atMillis = 3000L))
+
+        assertTrue(store.remove(2000L))
+
+        assertEquals(listOf(1000L, 3000L), store.all().map { it.atMillis })
+    }
+
+    @Test
+    fun `removing a time nothing was saved at changes nothing and says so`() {
+        val store = store()
+        store.add(Attempt(rounds = 10, reps = 0, atMillis = 1000L))
+
+        assertFalse(store.remove(9999L))
+
+        assertEquals(listOf(1000L), store.all().map { it.atMillis })
+    }
 }

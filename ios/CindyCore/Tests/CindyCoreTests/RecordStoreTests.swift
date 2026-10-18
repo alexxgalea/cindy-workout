@@ -50,6 +50,28 @@ final class RecordStoreTests: XCTestCase {
         XCTAssertEqual(RecordStore(defaults: UserDefaults(suiteName: suite)!).all(), [a])
     }
 
+    /// removing a session leaves every other one on the board
+    func testRemovingASessionLeavesEveryOtherOneOnTheBoard() {
+        let store = store()
+        store.add(Attempt(rounds: 10, reps: 0, atMillis: 1000))
+        store.add(Attempt(rounds: 11, reps: 0, atMillis: 2000))
+        store.add(Attempt(rounds: 12, reps: 0, atMillis: 3000))
+
+        XCTAssertTrue(store.remove(atMillis: 2000))
+
+        XCTAssertEqual(store.all().map { $0.atMillis }, [1000, 3000])
+    }
+
+    /// removing a time nothing was saved at changes nothing and says so
+    func testRemovingATimeNothingWasSavedAtChangesNothingAndSaysSo() {
+        let store = store()
+        store.add(Attempt(rounds: 10, reps: 0, atMillis: 1000))
+
+        XCTAssertFalse(store.remove(atMillis: 9999))
+
+        XCTAssertEqual(store.all().map { $0.atMillis }, [1000])
+    }
+
     /// the string lives under Android's key, in Android's format
     func testTheStringLivesUnderAndroidsKeyInAndroidsFormat() {
         let defaults = UserDefaults(suiteName: suite)!

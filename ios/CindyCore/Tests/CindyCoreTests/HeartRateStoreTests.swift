@@ -30,6 +30,20 @@ final class HeartRateStoreTests: XCTestCase {
         store.clear()
     }
 
+    /// remove deletes that session's trace and no other
+    func testRemoveDeletesThatSessionsTraceAndNoOther() throws {
+        let store = store()
+        let trace = HeartRateTrace(startedAtMillis: 1000, samples: [HeartRateSample(0, 100)], pauses: [])
+        try store.save(atMillis: 1, trace)
+        try store.save(atMillis: 2, trace)
+
+        store.remove(atMillis: 1)
+
+        XCTAssertNil(store.load(atMillis: 1))
+        XCTAssertEqual(store.load(atMillis: 2), trace)
+        store.clear()
+    }
+
     /// load of a missing file is null
     func testLoadOfAMissingFileIsNull() {
         XCTAssertNil(store().load(atMillis: 999_999))
