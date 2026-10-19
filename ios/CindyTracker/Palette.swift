@@ -19,9 +19,6 @@ extension Color {
 /// what the athlete has earned. Nothing is coloured for decoration. Green is the affirmative: this
 /// rep would count, a tier reached. Red is blocked, unreadable, or stopping. Orange cautions.
 /// Achievement orange means one thing only: you earned this.
-///
-/// The screens written before this existed (the camera screen, Progress, Results, the menu) keep
-/// the colours they have; the screens of P14 are the first to use it.
 enum Palette {
     static let background = Color(argb: 0xFF000000)
 
@@ -49,6 +46,16 @@ enum Palette {
     static let surfaceGlassRaised = Color(argb: 0x17FFFFFF)
     static let hairline = Color(argb: 0x1FFFFFFF)
     static let hairlineStrong = Color(argb: 0x21FFFFFF)
+    /// The lit top edge of a sheet.
+    static let specular = Color(argb: 0x3DFFFFFF)
+    /// A sheet's glass: nearly opaque at the top, opaque black at the bottom.
+    static let sheetMid = Color(argb: 0xF01E2024)
+    static let sheetEnd = Color(argb: 0xF70A0B0D)
+    /// The two translucent bands of the camera screen.
+    static let bandTop = Color(argb: 0xB8000000)
+    static let bandBottom = Color(argb: 0xC4000000)
+    /// What a sheet dims the screen with.
+    static let scrim = Color.black.opacity(0.66)
 
     // the one filled control per screen
     static let primaryFill = Color(argb: 0xFFFFFFFF)
@@ -107,13 +114,14 @@ enum Manrope {
 /// The five sizes of `type.xml`, and the eyebrow and the buttons.
 enum CindyType {
     case title, title2, headline, body, callout, footnote, eyebrow, button, buttonSmall
+    case metricXL, metricL, metricM, metricS
 
     var weight: Manrope.Weight {
         switch self {
-        case .title, .title2: return .extrabold
+        case .title, .title2, .metricXL, .metricL, .metricM: return .extrabold
         case .headline, .buttonSmall: return .semibold
         case .body, .callout, .footnote: return .regular
-        case .eyebrow, .button: return .bold
+        case .eyebrow, .button, .metricS: return .bold
         }
     }
 
@@ -128,6 +136,18 @@ enum CindyType {
         case .eyebrow: return 11
         case .button: return 17
         case .buttonSmall: return 15
+        case .metricXL: return 62
+        case .metricL: return 46
+        case .metricM: return 32
+        case .metricS: return 22
+        }
+    }
+
+    /// Android sets `tnum` on the metric styles, so a number that ticks does not shimmer.
+    var tabular: Bool {
+        switch self {
+        case .metricXL, .metricL, .metricM, .metricS: return true
+        default: return false
         }
     }
 
@@ -140,6 +160,9 @@ enum CindyType {
         case .body, .callout, .footnote: return -0.007
         case .eyebrow: return 0.145
         case .button, .buttonSmall: return 0.018
+        case .metricXL, .metricL: return -0.048
+        case .metricM: return -0.034
+        case .metricS: return -0.023
         }
     }
 
@@ -154,7 +177,8 @@ enum CindyType {
 
     var colour: Color {
         switch self {
-        case .title, .title2, .headline, .button, .buttonSmall: return Palette.label
+        case .title, .title2, .headline, .button, .buttonSmall,
+             .metricXL, .metricL, .metricM, .metricS: return Palette.label
         case .body, .callout: return Palette.labelSecondary
         case .footnote, .eyebrow: return Palette.labelTertiary
         }
@@ -163,7 +187,8 @@ enum CindyType {
     /// What Dynamic Type scales it against.
     var relativeTo: Font.TextStyle {
         switch self {
-        case .title: return .largeTitle
+        case .title, .metricXL, .metricL: return .largeTitle
+        case .metricM, .metricS: return .title
         case .title2: return .title2
         case .headline: return .headline
         case .body, .button, .buttonSmall: return .body
@@ -186,7 +211,8 @@ private struct CindyTextStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(Manrope.font(style.weight, size: size))
+            .font(style.tabular ? Manrope.font(style.weight, size: size).monospacedDigit()
+                                : Manrope.font(style.weight, size: size))
             .tracking(style.tracking * size)
             .lineSpacing(style.extraLeading * size * 1.2)
             .foregroundStyle(colour ?? style.colour)
@@ -231,14 +257,16 @@ struct CindyPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// A control of glass beside the filled one.
+/// A control of glass beside the filled one: Android's `glassButton`, which is as wide as its
+/// words and 20 points of air, and leaves the rest of the row to the filled button.
 struct CindyGlassButtonStyle: ButtonStyle {
+    var tint: Color = Palette.label
     var height: CGFloat = 54
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .cindy(.button)
-            .frame(maxWidth: .infinity)
+            .cindy(.buttonSmall, colour: tint)
+            .padding(.horizontal, 20)
             .frame(minHeight: height)
             .glassCard(radius: Palette.radiusControl, raised: true)
             .opacity(configuration.isPressed ? 0.7 : 1)
