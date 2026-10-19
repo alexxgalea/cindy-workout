@@ -61,8 +61,11 @@ __pycache__/
 # Strava API credentials. Never committed.
 /strava.properties
 
-# Design notes, research briefs and release runbook. Kept locally, never committed.
-/docs/
+# Design notes, research briefs and release runbook. Kept locally, never committed. The
+# architecture decisions and the glossary are the exception: every session needs them.
+/docs/*
+!/docs/adr/
+!/docs/GLOSSARY.md
 
 # Rendered store listing and privacy policy, with the publisher's own details filled in.
 /play/dist/
