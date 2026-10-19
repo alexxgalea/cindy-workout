@@ -57,7 +57,34 @@ jobs:
             -project ios/CindyTracker.xcodeproj \
             -scheme CindyTracker \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath build/Tests.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+      # The UI tests photograph the states a screen was rebuilt for, under the names of their
+      # Android references (ios/ui-parity/android/). Kept even when a test fails, since a capture of
+      # the state it failed in is the quickest way to see why.
+      - name: Collect the captures
+        if: always()
+        run: |
+          test -d build/Tests.xcresult || exit 0
+          xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/attachments
+          mkdir -p build/captures
+          python3 - <<'PY'
+          import json, os, shutil
+          root = "build/attachments"
+          manifest = json.load(open(os.path.join(root, "manifest.json")))
+          for test in manifest:
+              for item in test.get("attachments", []):
+                  name = item["suggestedHumanReadableName"].split("_")[0]
+                  shutil.copy(os.path.join(root, item["exportedFileName"]), f"build/captures/{name}.png")
+          print(sorted(os.listdir("build/captures")))
+          PY
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-captures
+          path: build/captures
+          if-no-files-found: ignore
       # The replay source exists only in debug builds. Build the release configuration, and fail
       # if the app that comes out has any trace of it, so a release build can never be told to
       # ignore its camera.
