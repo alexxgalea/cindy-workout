@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.util.Locale
 
-/** One finished attempt at Cindy. */
+/** One finished session of a [Workout]. */
 data class Attempt(
     val rounds: Int,
     val reps: Int,
@@ -59,8 +59,20 @@ data class Attempt(
      * rather than that nothing happened. Kept beside the round splits because a round is three
      * very different efforts, and only the sets can say which one the time went on.
      */
-    val setSplits: List<SetSplit> = emptyList()
+    val setSplits: List<SetSplit> = emptyList(),
+    /**
+     * The [Workout] this session was, by its id.
+     *
+     * Every attempt written before workouts existed was a Cindy, so that is what one reads as,
+     * without its line being rewritten. An id this build does not know is kept exactly as it was
+     * rather than relabelled: [workout] is null for it, and it is only ever ranked against
+     * sessions filed under the same id.
+     */
+    val workoutId: String = Workouts.CINDY_ID
 ) {
+    /** What [workoutId] names, or null for a workout from a build that knew one this does not. */
+    val workout: Workout? get() = Workouts.byId(workoutId)
+
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
@@ -137,6 +149,7 @@ object Records {
     private const val V5 = "v5"
     private const val V6 = "v6"
     private const val V7 = "v7"
+    private const val V8 = "v8"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -151,7 +164,7 @@ object Records {
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
         listOf(
-            V7,
+            V8,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -168,7 +181,8 @@ object Records {
             a.untrackedMs.toString(),
             a.setSplits.joinToString(",") {
                 "${it.movement.name}:${it.ms}:${it.reps}:${it.manualReps}"
-            }
+            },
+            a.workoutId
         ).joinToString("|")
     }
 
@@ -176,6 +190,9 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V8|") -> decodeV8(line)
+                // Everything below was written before workouts existed, when every session was a
+                // Cindy, so each decodes as one by the field's default rather than by a rewrite.
                 line.startsWith("$V7|") -> decodeV7(line)
                 line.startsWith("$V6|") -> decodeV6(line)
                 line.startsWith("$V5|") -> decodeV5(line)
@@ -189,16 +206,33 @@ object Records {
         }.toList()
     }
 
+    /**
+     * V7 plus the workout the session was.
+     *
+     * The id is kept as written, known to this build or not: a session of a workout this build
+     * has never heard of is still the athlete's, and calling it a Cindy would rank it against
+     * scores it has nothing in common with.
+     */
+    private fun decodeV8(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 15) return null
+        return decodeV7Fields(p)?.copy(workoutId = p[14])
+    }
+
     /** V6 plus the time each set took. */
     private fun decodeV7(line: String): Attempt? {
         val p = line.split("|")
         if (p.size != 14) return null
-        return decodeCommon(p)?.copy(
+        return decodeV7Fields(p)
+    }
+
+    /** The fourteen fields V7 and V8 share, in the same places. */
+    private fun decodeV7Fields(p: List<String>): Attempt? =
+        decodeCommon(p)?.copy(
             countedReps = p[11].toIntOrNull(),
             untrackedMs = p[12].toLongOrNull() ?: 0L,
             setSplits = decodeSets(p[13])
         )
-    }
 
     /** One bad entry costs only itself: the attempt and its other sets are still the athlete's. */
     private fun decodeSets(raw: String): List<SetSplit> =
