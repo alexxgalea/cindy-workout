@@ -226,6 +226,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var profile: Profile
 
     /**
+     * The workout this session is, read from [profile] while no clock is running and held for
+     * the whole of one, so the session is filed under the workout it started as. The menu
+     * refuses a change mid-workout anyway; this is what makes that refusal the rule rather than
+     * the only thing standing between a score and the wrong board.
+     */
+    private var workout: Workout = Workouts.CINDY
+
+    /**
      * Puts whatever [heartSource] hears onto the workout clock.
      *
      * Owned here rather than by the source itself, because the clock it keeps has to be this
@@ -595,6 +603,7 @@ class MainActivity : AppCompatActivity() {
         records = RecordStore(this)
         profile = Profile(this)
         recognitionLine?.useProfile(profile.movements)
+        workout = profile.workout
         music = MusicPlayer(this)
         video = VideoRecorder(this)
         speaker = Speaker(this).apply {
@@ -1925,7 +1934,8 @@ class MainActivity : AppCompatActivity() {
             // two different numbers, and only this one is the work that was done.
             countedReps = snap.totalReps,
             // What the camera could not see is part of the result, not a detail about it.
-            untrackedMs = tracking.lostMs
+            untrackedMs = tracking.lostMs,
+            workoutId = workout.id
         )
         // The trace is only worth keeping beside a record that was actually stored, and the
         // write happens synchronously and right here: ResultsActivity reads it back in its own
@@ -2228,6 +2238,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Takes up the workout the menu has chosen, on every resume, as [syncMovements] does the
+     * movements: coming back from the menu is when it can have changed. Never mid-workout, so a
+     * session stays the workout it started as.
+     */
+    private fun syncWorkout() {
+        if (inWorkout()) return
+        workout = profile.workout
+    }
+
+    /**
      * Picks up a movement change made in [MenuActivity], which is the only place it can be made.
      *
      * The picker moved off this screen with the chip that opened it, so the profile can now
@@ -2290,6 +2310,7 @@ class MainActivity : AppCompatActivity() {
             sensors?.registerListener(rotationListener, it, SensorManager.SENSOR_DELAY_UI)
         }
         closeSessionPage()
+        syncWorkout()
         syncMovements()
         syncVoice()
         syncMusic()

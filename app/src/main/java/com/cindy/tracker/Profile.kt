@@ -33,6 +33,21 @@ class Profile(context: Context) {
     val hasBodyWeight: Boolean get() = bodyWeightKg > 0.0
 
     /**
+     * The workout the next session will be: Cindy until another is chosen.
+     *
+     * Kept as the workout's id and read back through [Workouts.byId], so an id this build does
+     * not know (a choice made in a newer build, restored from a backup) is Cindy rather than an
+     * error. That is the same fallback [movements] makes, for the same reason: a preference makes
+     * no claim about a session that has already happened. A recorded session's id is a claim,
+     * and [Records] keeps it as written instead.
+     */
+    var workout: Workout
+        get() = Workouts.byId(prefs.getString(KEY_WORKOUT, null)) ?: Workouts.CINDY
+        set(value) {
+            prefs.edit().putString(KEY_WORKOUT, value.id).apply()
+        }
+
+    /**
      * The movements this Cindy is made of — standard, or whichever adaptations were chosen.
      *
      * An unrecognised value decodes back to the standard three, because a preference makes no
@@ -246,6 +261,7 @@ class Profile(context: Context) {
 
     companion object {
         private const val KEY_WEIGHT = "body_weight_kg"
+        private const val KEY_WORKOUT = "workout"
         private const val KEY_MOVEMENTS = "movement_profile"
         private const val KEY_SMART_SQUATS = "smart_squats"
         /** The key [MainActivity] used when it owned the track, so existing choices survive. */
