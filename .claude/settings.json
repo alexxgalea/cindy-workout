@@ -2,6 +2,11 @@
   "env": {
     "SUPERPOWERS_DISABLE_TELEMETRY": "1"
   },
+  "attribution": {
+    "commit": false,
+    "pr": false,
+    "sessionUrl": true
+  },
   "enabledMcpjsonServers": [
     "code-review-graph"
   ],

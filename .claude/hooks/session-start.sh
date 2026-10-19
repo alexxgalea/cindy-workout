@@ -1,6 +1,7 @@
 #!/bin/bash
-# Builds the code-review-graph knowledge graph of this repository when a Claude Code cloud
-# session starts, so its MCP server (.mcp.json) and its skills have a graph to answer from.
+# Prepares a Claude Code cloud session: turns on the repository's git hooks, and builds the
+# code-review-graph knowledge graph of this repository, so its MCP server (.mcp.json) and its
+# skills have a graph to answer from.
 #
 # The container is fresh each time, so the graph is rebuilt here: about ten seconds for the whole
 # repository (Kotlin, Swift, Python, shell). The version is pinned, here and in .mcp.json and
@@ -17,6 +18,10 @@ fi
 
 CRG="code-review-graph==2.3.9"
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
+
+# The history carries no attribution trailers. `attribution` in .claude/settings.json stops them
+# being written; the commit-msg hook takes out any that get through another way.
+git config core.hooksPath .githooks
 
 if ! command -v uvx >/dev/null 2>&1; then
   echo "[code-review-graph] uvx is not installed, so there is no graph this session."
