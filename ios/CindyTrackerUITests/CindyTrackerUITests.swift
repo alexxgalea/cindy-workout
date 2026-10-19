@@ -49,6 +49,12 @@ final class CindyTrackerUITests: XCTestCase {
 
     /// Starts a workout without calibrating: the setup check, then SKIP and its confirmation.
     /// Reps are then tapped in, which does not depend on what the body is doing.
+    /// A button of the Cindy sheet, found by its label: the sheet gives its two buttons identifiers
+    /// of their own, and a button with an identifier is not found by its label alone.
+    private func sheetButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+
     private func startSkippingSetup(_ app: XCUIApplication) {
         let start = app.buttons["START"]
         XCTAssertTrue(start.waitForExistence(timeout: 10), "the camera screen opens with START")
@@ -56,9 +62,9 @@ final class CindyTrackerUITests: XCTestCase {
         let skip = app.buttons["SKIP"]
         XCTAssertTrue(skip.waitForExistence(timeout: 5), "START becomes SKIP during the setup check")
         skip.tap()
-        // The confirmation has a SKIP of its own, on top of the HUD's.
-        let sure = app.buttons.matching(NSPredicate(format: "label == 'SKIP'")).allElementsBoundByIndex.last!
-        sure.tap()
+        // The question has a SKIP of its own, on the sheet that covers the HUD's.
+        XCTAssertTrue(app.otherElements["cindySheet"].waitForExistence(timeout: 5), "skipping asks first")
+        sheetButton(app, "SKIP").tap()
         XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "skipping starts the clock")
     }
 
@@ -81,7 +87,7 @@ final class CindyTrackerUITests: XCTestCase {
         waitForLabel(repCount(app), "NOT (label BEGINSWITH '0 / ')", timeout: 40)
 
         app.buttons["STOP"].tap()
-        let end = app.buttons["End"]
+        let end = sheetButton(app, "END")
         XCTAssertTrue(end.waitForExistence(timeout: 5), "stopping asks first")
         end.tap()
 
@@ -97,8 +103,8 @@ final class CindyTrackerUITests: XCTestCase {
         app.buttons["+1"].tap()
         app.buttons["+1"].tap()
         app.buttons["STOP"].tap()
-        XCTAssertTrue(app.buttons["End"].waitForExistence(timeout: 5), "stopping asks first")
-        app.buttons["End"].tap()
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5), "stopping asks first")
+        sheetButton(app, "END").tap()
 
         // Two counted reps are a session on the board, so its page offers DISCARD beside DONE.
         let discard = app.buttons["DISCARD"]
@@ -107,21 +113,57 @@ final class CindyTrackerUITests: XCTestCase {
 
         // KEEP IT is the answer that does nothing: the page is still there.
         discard.tap()
-        XCTAssertTrue(app.buttons["KEEP IT"].waitForExistence(timeout: 5), "DISCARD asks first")
-        app.buttons["KEEP IT"].tap()
+        XCTAssertTrue(sheetButton(app, "KEEP IT").waitForExistence(timeout: 5), "DISCARD asks first")
+        sheetButton(app, "KEEP IT").tap()
         XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5), "keeping the session closed its page")
 
-        // The dialog has a DISCARD of its own, after the page's.
+        // The question has a DISCARD of its own, on the sheet over the page's.
         discard.tap()
-        XCTAssertTrue(app.buttons["KEEP IT"].waitForExistence(timeout: 5))
-        let sure = app.buttons.matching(NSPredicate(format: "label == 'DISCARD'")).allElementsBoundByIndex.last!
-        sure.tap()
+        XCTAssertTrue(sheetButton(app, "KEEP IT").waitForExistence(timeout: 5))
+        sheetButton(app, "DISCARD").tap()
 
         // A finished workout leaves the camera screen on RESET, discarded or not.
         XCTAssertTrue(app.buttons["RESET"].waitForExistence(timeout: 10), "discarding closes the page")
         let toast = app.staticTexts["toast"]
         XCTAssertTrue(toast.waitForExistence(timeout: 5), "the screen underneath says what happened")
         XCTAssertEqual(toast.label, "Session discarded")
+    }
+
+    // MARK: - the questions
+
+    func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
+        let app = launchReplaying("nohands")
+        startSkippingSetup(app)
+        app.buttons["+1"].tap()
+        app.buttons["STOP"].tap()
+        let sheet = app.otherElements["cindySheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "stopping asks first")
+        sheet.swipeDown()
+        XCTAssertFalse(sheetButton(app, "END").waitForExistence(timeout: 2), "the swipe closed the question")
+        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "a swipe is KEEP GOING")
+    }
+
+    func testTheCameraIsHiddenWhileAQuestionIsUp() {
+        let app = launchReplaying("nohands")
+        startSkippingSetup(app)
+        app.buttons["STOP"].tap()
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["+1"].exists, "the controls beneath leave the accessibility tree")
+        sheetButton(app, "KEEP GOING").tap()
+        XCTAssertTrue(app.buttons["+1"].waitForExistence(timeout: 5))
+    }
+
+    func testTheStopQuestionKeepsEndWithinReachAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        startSkippingSetup(app)
+        app.buttons["STOP"].tap()
+        let end = sheetButton(app, "END")
+        XCTAssertTrue(end.waitForExistence(timeout: 5))
+        XCTAssertTrue(end.isHittable)
     }
 
     // MARK: - the placement guide
@@ -159,10 +201,10 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5))
         app.buttons["SKIP"].tap()
         XCTAssertTrue(app.staticTexts["Skip the setup check?"].waitForExistence(timeout: 5)
-                      || app.buttons["KEEP CHECKING"].waitForExistence(timeout: 5),
+                      || sheetButton(app, "KEEP CHECKING").waitForExistence(timeout: 5),
                       "it says what skipping costs before doing it")
-        app.buttons["KEEP CHECKING"].tap()
-        XCTAssertTrue(app.buttons["SKIP"].exists, "keeping on checking leaves the check running")
+        sheetButton(app, "KEEP CHECKING").tap()
+        XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5), "keeping on checking leaves the check running")
         XCTAssertFalse(app.buttons["PAUSE"].exists)
     }
 
