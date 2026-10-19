@@ -13,6 +13,14 @@ public struct RecordedHudText: Equatable, Sendable {
     public let count: String
     /// A line shown for a few seconds after the setup check ends, or `nil` the rest of the time.
     public let banner: String?
+
+    public init(clock: String, round: String, label: String, count: String, banner: String? = nil) {
+        self.clock = clock
+        self.round = round
+        self.label = label
+        self.count = count
+        self.banner = banner
+    }
 }
 
 /// Produces `RecordedHudText` from what the workout screen already knows about the workout and the

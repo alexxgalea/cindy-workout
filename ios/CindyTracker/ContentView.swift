@@ -31,9 +31,10 @@ struct SkeletonOverlay: View {
     let keypoints: [Keypoint]
     let frameSize: CGSize
 
-    private static let minScore: Float = 0.3
-    private static let boneWidth: CGFloat = 0.0045
-    private static let jointRadius: CGFloat = 0.0055
+    // The film draws the same skeleton at the same weight, from the same numbers.
+    private static let minScore = RecordingLayout.minScore
+    private static let boneWidth = CGFloat(RecordingLayout.boneWidthFraction)
+    private static let jointRadius = CGFloat(RecordingLayout.jointRadiusFraction)
 
     var body: some View {
         GeometryReader { geo in
@@ -73,12 +74,13 @@ struct ContentView: View {
 
     @StateObject private var camera = CameraModel()
     @StateObject private var workout = WorkoutViewModel()
+    @StateObject private var film = FilmModel()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showStopConfirm = false
     @State private var showSkipConfirm = false
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showMenu = false
-    @Environment(\.scenePhase) private var scenePhase
     /// Kept across launches: "Don't show this again" on the placement guide. It is also evidence
     /// that the athlete has used the app before, which is why `Onboarding` owns the key.
     @AppStorage(Onboarding.keyPlacementSeen) private var placementSeen = false
@@ -113,6 +115,9 @@ struct ContentView: View {
                 SkeletonOverlay(keypoints: camera.keypoints, frameSize: camera.frameSize)
                     .ignoresSafeArea()
                 hud
+                if film.state == .counting, let digit = film.digit {
+                    CountdownOverlay(digit: digit, into: film.into, label: film.countLabel)
+                }
             }
             // While the tour is showing the screen under it is for nobody: the dim keeps it from
             // sight and from touch, and this keeps it from a screen reader.
@@ -129,8 +134,10 @@ struct ContentView: View {
         .background(Color.appBackground)
         .onAppear {
             camera.onPoseFrame = { workout.onFrame($0) }
+            film.bind(camera: camera, workout: workout)
             workout.onResetCrop = { camera.resetRoi() }
             beginFirstRun()
+            workout.syncHeartRate()
             workout.startWatchingPhone()
             // The athlete is across the room mid-set, not touching the phone, so the display
             // must not sleep. Scoped to this view rather than set globally, so it lifts again
@@ -138,7 +145,10 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
+            film.interrupt()
+            workout.pauseMusic()
             camera.stop()
+            workout.stopHeartRate()
             workout.stopWatchingPhone()
             UIApplication.shared.isIdleTimerDisabled = false
         }
@@ -146,6 +156,17 @@ struct ContentView: View {
             if wanted { workout.startWatchingPhone() } else { workout.stopWatchingPhone() }
         }
         .onChange(of: showDebug) { _, on in workout.debugReadout = on }
+        // Leaving the app ends a film, with what it caught kept, and drops a count: the camera stops
+        // with it, and a film that outlived the picture would be a blank one.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                film.interrupt()
+                workout.pauseMusic()
+            } else {
+                // Back in front: the track carries on if the clock is still running.
+                workout.syncMusic()
+            }
+        }
         .sheet(item: $workout.finished) { request in
             ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
         }
@@ -155,7 +176,7 @@ struct ContentView: View {
         // However the pages end, finished or skipped, the camera comes next, after the movements
         // chosen on the second page have reached the session that START will run.
         .fullScreenCover(isPresented: $showTutorial, onDismiss: { workout.applyProfile(); openCamera() }) {
-            TutorialScreen(replay: false, profile: workout.settings) { _ in showTutorial = false }
+            TutorialScreen(replay: false, profile: workout.settings, stravaAvailable: StravaBuild.available) { _ in showTutorial = false }
         }
         .sheet(isPresented: $showPlacement) {
             PlacementGuideView(dontShowAgain: $placementSeen) {
@@ -163,7 +184,7 @@ struct ContentView: View {
                 workout.enterSetup()
             }
         }
-        .confirmationDialog("End the workout?", isPresented: $showStopConfirm) {
+        .alert("End the workout?", isPresented: $showStopConfirm) {
             Button("End", role: .destructive) { workout.stopEarly() }
             Button("Keep going", role: .cancel) { workout.cancelStop() }
         } message: {
@@ -171,7 +192,7 @@ struct ContentView: View {
         }
         // Dismissing the question any other way is also "keep going", with the clock let go again.
         .onChange(of: showStopConfirm) { _, shown in if !shown { workout.cancelStop() } }
-        .confirmationDialog("Skip the setup check?", isPresented: $showSkipConfirm) {
+        .alert("Skip the setup check?", isPresented: $showSkipConfirm) {
             Button("SKIP", role: .destructive) { workout.skipSetup() }
             Button("KEEP CHECKING", role: .cancel) {}
         } message: {
@@ -195,9 +216,13 @@ struct ContentView: View {
                         // things you settle before the clock starts, and they live in the menu.
                         chipButton("MENU", on: false) { showMenu = true }
                             .tourTarget(.menu)
-                        chipButton(camera.isRecording ? "● REC" : "REC", on: camera.isRecording) {
-                            camera.toggleRecording()
+                        // Red once a tap has bought a count, and lit while it films.
+                        chipButton(FilmFlow.title(for: film.state), on: film.state == .filming,
+                                   tint: film.state == .idle ? nil : Color.warn) {
+                            film.tap()
                         }
+                        .accessibilityLabel(FilmFlow.label(for: film.state))
+                        .accessibilityIdentifier("recButton")
                         .tourTarget(.record)
                     }
                 }
@@ -355,11 +380,12 @@ struct ContentView: View {
         .accessibilityIdentifier("debugReadout")
     }
 
-    private func chipButton(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+    private func chipButton(_ title: String, on: Bool, tint: Color? = nil,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(on ? Color.accent : Color.dim)
+                .foregroundStyle(tint ?? (on ? Color.accent : Color.dim))
         }
         .chip()
     }

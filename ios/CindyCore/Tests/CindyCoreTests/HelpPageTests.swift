@@ -86,7 +86,7 @@ final class HelpPageTests: XCTestCase {
             "PRIVACY",
             "The camera picture is read on the phone and thrown away. It is never saved or sent.",
             "There are no ads, no analytics, no account and no server of Cindy's.",
-            "CLEAR on the Progress screen",
+            "DISCARD on a session's page",
             "REMOVE on the Account screen",
             // iOS: Apple's backup, and where it is switched off.
             "iCloud Backup",
@@ -100,8 +100,16 @@ final class HelpPageTests: XCTestCase {
     func testThePrivacyPolicyRowOpensThePolicyInABrowser() throws {
         let row = try XCTUnwrap(rows(page()).first { $0.spoken.hasPrefix("Privacy policy") }, "no Privacy policy row")
         XCTAssertEqual(row.action, .openLink(AppLinks.privacyPolicy))
-        XCTAssertEqual(AppLinks.privacyPolicy, "https://alexxgalea.github.io/cindy-privacy/")
+        XCTAssertEqual(AppLinks.privacyPolicy, "https://alexxgalea.github.io/cindy-privacy/ios/")
         XCTAssertEqual(row.subtitle, "Opens in your browser")
+    }
+
+    /// Help says an upload may wait until Cindy is next opened, since iOS has nothing to send it while closed
+    func testHelpSaysAnUploadMayWaitUntilCindyIsNextOpened() {
+        let text = page(HelpFeatures.strava).text
+        XCTAssertTrue(text.contains("The upload is sent as soon as the workout is saved, and tried again when you open Cindy"))
+        XCTAssertTrue(text.contains("it may wait until you next open Cindy"))
+        XCTAssertFalse(text.contains("carries on in the background"), "Android's wording promises what iOS cannot")
     }
 
     /// the Strava paragraph of the privacy section is there when the build has Strava, and not otherwise

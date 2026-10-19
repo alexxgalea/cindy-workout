@@ -13,7 +13,20 @@ import CindyCore
 @MainActor
 final class WorkoutViewModel: ObservableObject {
 
-    enum Phase { case idle, setup, running, paused, finished }
+    enum Phase {
+        case idle, setup, running, paused, finished
+
+        /// The session's name for the same thing, which is what the core's rules are written in.
+        var state: WorkoutState {
+            switch self {
+            case .idle: return .idle
+            case .setup: return .setup
+            case .running: return .running
+            case .paused: return .paused
+            case .finished: return .finished
+            }
+        }
+    }
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var clockText = "20:00"
@@ -65,6 +78,8 @@ final class WorkoutViewModel: ObservableObject {
             session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
         }
         sync()
+        syncHeartRate()
+        syncMusic()
     }
 
     /// Rebuilt rather than mutated when the movements change: a session's profile is immutable for
@@ -72,6 +87,103 @@ final class WorkoutViewModel: ObservableObject {
     /// contributes to.
     private var session: WorkoutSession
     private let records = RecordStore()
+
+    // MARK: - music
+
+    /// One track, looped for the workout. Chosen in the menu and remembered by the profile; this is
+    /// the only screen that plays it.
+    private let music = MusicPlayer()
+
+    /// Brings the player in line with what the menu says: on launch, and whenever the menu closes,
+    /// because coming back from it is exactly when the answer can have changed. A track that will
+    /// not load has had its grant lapse, and the choice is cleared rather than retried every time.
+    func syncMusic() {
+        switch MusicFlow.plan(chosen: settings.musicTrack, loaded: music.track) {
+        case .release:
+            music.release()
+        case .keep:
+            break
+        case .load:
+            if let chosen = settings.musicTrack, !music.load(chosen) {
+                settings.musicTrack = nil
+                show(MusicFlow.lapsedText)
+            }
+        }
+        music.volume = settings.musicVolume
+        conduct(MusicFlow.onSync(musicOn: settings.musicOn, running: phase == .running))
+    }
+
+    /// The athlete left the app: do not keep playing over whatever they open next.
+    func pauseMusic() { music.pause() }
+
+    private func conduct(_ action: MusicAction?) {
+        switch action {
+        case .play: music.play()
+        case .pause: music.pause()
+        case .stop: music.stop()
+        case nil: break
+        }
+    }
+
+    // MARK: - heart rate
+
+    /// Puts what the paired watch broadcasts onto the workout clock. A watch does not stop because the
+    /// workout is not running, so readings always arrive; the recorder decides which are kept.
+    private let heartRate = HeartRateRecorder()
+    private var heartSource: HeartRateSource?
+    /// The device `heartSource` was built for, so `syncHeartRate` only rebuilds it on a change.
+    private var heartDevice: HeartRateDevice?
+    /// When the last reading arrived, on the same monotonic clock; 0 for none yet.
+    private var lastHeartRateAt: Int64 = 0
+    /// The one listener a source is ever handed. Status changes have nowhere to go on this screen.
+    private lazy var heartFeed = HeartFeed(owner: self)
+
+    fileprivate func heartRateArrived(bpm: Int, at: Int64) {
+        heartRate.offer(bpm: bpm, atElapsedMs: at)
+        lastHeartRateAt = at
+    }
+
+    /// Brings the heart-rate connection in line with whichever device the menu has paired. Called when
+    /// the camera screen appears and whenever a menu sheet is saved; a heart rate is only wanted while
+    /// this screen is in front.
+    func syncHeartRate() {
+        let device = settings.heartRateDevice
+        if device != heartDevice {
+            heartSource?.stop()
+            heartDevice = device
+            heartSource = device.map { saved in
+                CoreBluetoothHeartRateSource(device: saved, onDeviceMoved: { [settings] moved in
+                    settings.heartRateDevice = moved
+                })
+            }
+        }
+        heartSource?.start(listener: heartFeed)
+    }
+
+    func stopHeartRate() { heartSource?.stop() }
+
+    /// The recorder follows the clock: started with the workout, frozen with a pause, picked up again
+    /// by a resume, and put back by a reset. Its end is `finish`'s, because only a saved attempt keeps
+    /// its trace.
+    private func followHeartRate(from old: Phase, to new: Phase) {
+        guard old != new else { return }
+        switch (old, new) {
+        case (.paused, .running):
+            heartRate.resume(atElapsedMs: now)
+        case (_, .running):
+            heartRate.start(atElapsedMs: now, wallMillis: wallClockMs)
+            if let text = HeartRateSheets.silentWarning(device: heartDevice, sourceRunning: heartSource != nil,
+                                                        nowMs: now, lastReadingAtMs: lastHeartRateAt) {
+                show(text)
+            }
+        case (.running, .paused):
+            heartRate.pause(atElapsedMs: now)
+        case (_, .idle):
+            heartRate.reset()
+        default:
+            break
+        }
+    }
     private let repTimes = RepTimesStore()
     /// Notices a phone that was knocked or turned while the camera screen is up.
     private let phone = PhoneMotion()
@@ -85,6 +197,10 @@ final class WorkoutViewModel: ObservableObject {
 
     init() {
         session = WorkoutSession(profile: settings.movements, smartSquats: settings.smartSquats)
+        // The track drops while the voice is counting over it.
+        speaker.onSpeakingChanged = { [weak self] speaking in
+            Task { @MainActor in self?.music.duck(speaking) }
+        }
         applyProfile()
         phone.onMoved = { [weak self] in self?.cameraMoved() }
         phone.onReadout = { [weak self] in self?.lookLine = $0 }
@@ -234,8 +350,14 @@ final class WorkoutViewModel: ObservableObject {
         timer = nil
         // A workout with nothing counted is someone opening the app and letting the clock run out,
         // so the store drops it; the rep times belong beside a saved attempt and only one.
+        let trace = heartRate.finish(atElapsedMs: now)
         if records.add(done.attempt) {
             try? repTimes.save(atMillis: done.attempt.atMillis, done.marks)
+            if let trace { try? HeartRateStore().save(atMillis: done.attempt.atMillis, trace) }
+            // Today is trained now, so today's reminder goes and the days after it are worded again.
+            ReminderCenter.shared.replan()
+            // Sent to Strava by itself, when the athlete is connected and wants that.
+            StravaCenter.shared.attemptSaved(atMillis: done.attempt.atMillis)
         }
         finished = ResultsRequest(attempt: done.attempt, stoppedEarly: done.stoppedEarly,
                                   heelsFlatSpotted: done.heelsFlatSpotted, reviewing: false)
@@ -254,7 +376,7 @@ final class WorkoutViewModel: ObservableObject {
             case .toast(let text): show(text)
             case .resetCrop: onResetCrop?()
             case .liveWorkout(let live): LiveWorkout.active = live
-            case .calibratedBanner: break   // the recording's banner: filming is a later phase
+            case .calibratedBanner: break   // the session already told the film's HUD
             }
         }
         sync()
@@ -270,8 +392,16 @@ final class WorkoutViewModel: ObservableObject {
         }
     }
 
+    /// Said after what is already being said, and not at all while a screen reader is on: it reads
+    /// the countdown and the toasts itself, and the same sentence from two voices is worse than one.
+    func announceRecording(_ line: VoiceLine) { speak(line, queue: .append) }
+
+    /// What the film shows over the picture at `now` (`now` is the uptime in milliseconds that every
+    /// duration here is measured on).
+    func recordedHud(now: Int64) -> RecordedHudText { session.recordedHud(now: now) }
+
     /// Short per rep, longer per movement, longest per round.
-    private func buzz(_ ms: Int) {
+    func buzz(_ ms: Int) {
         switch ms {
         case ..<40: UIImpactFeedbackGenerator(style: .light).impactOccurred()
         case ..<100: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -283,7 +413,7 @@ final class WorkoutViewModel: ObservableObject {
     /// A session was discarded from its page, which has closed over this screen.
     func sessionDiscarded() { show(ResultsPageBuilder.discardedToast) }
 
-    private func show(_ text: String) {
+    func show(_ text: String) {
         toast = text
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -292,13 +422,17 @@ final class WorkoutViewModel: ObservableObject {
     }
 
     private func sync() {
+        let next: Phase
         switch session.state {
-        case .idle: phase = .idle
-        case .setup: phase = .setup
-        case .running: phase = .running
-        case .paused: phase = .paused
-        case .finished: phase = .finished
+        case .idle: next = .idle
+        case .setup: next = .setup
+        case .running: next = .running
+        case .paused: next = .paused
+        case .finished: next = .finished
         }
+        followHeartRate(from: phase, to: next)
+        conduct(MusicFlow.onWorkout(from: phase.state, to: next.state, musicOn: settings.musicOn))
+        phase = next
         clockText = session.clockText
         exerciseText = session.exerciseText
         repsText = session.repsText
@@ -309,4 +443,18 @@ final class WorkoutViewModel: ObservableObject {
         repProgress = session.repProgress
         coachShowing = session.coachShowing
     }
+}
+
+/// Hands a source's readings to the workout. A class of its own because the protocol is not tied to
+/// the main actor, and a source calls it on the main queue.
+private final class HeartFeed: HeartRateListener {
+    private weak var owner: WorkoutViewModel?
+
+    init(owner: WorkoutViewModel) { self.owner = owner }
+
+    func onHeartRate(bpm: Int, atElapsedMs: Int64) {
+        MainActor.assumeIsolated { owner?.heartRateArrived(bpm: bpm, at: atElapsedMs) }
+    }
+
+    func onStatus(_ status: HeartRateStatus) {}
 }

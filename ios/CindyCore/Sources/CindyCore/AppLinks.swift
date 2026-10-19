@@ -8,7 +8,11 @@ public enum AppLinks {
     /// listing. It is published from its own public repository, because this one is private and
     /// GitHub Pages is not available to a private repository on a free plan, and it says the same
     /// things as the PRIVACY section of Help.
-    public static let privacyPolicy = "https://alexxgalea.github.io/cindy-privacy/"
+    ///
+    /// The iPhone app has its own page beside Android's, at `ios/`, because what it says differs in
+    /// the places the platforms differ (Photos, iCloud Backup, the Keychain, one Bluetooth permission).
+    /// It is rendered from `appstore/privacy-policy.html`. Android's stays at the root.
+    public static let privacyPolicy = "https://alexxgalea.github.io/cindy-privacy/ios/"
 
     /// CrossFit's own page for Cindy, where the workout, the scaled version, the score tiers and the
     /// pacing quotes on the Help screen come from. (`HelpActivity.SOURCE`.)

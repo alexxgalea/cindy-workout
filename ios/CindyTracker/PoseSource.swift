@@ -41,9 +41,23 @@ protocol PoseSource: AnyObject {
     func flip()
     /// Forgets the tracked crop: call when the camera changes or a workout restarts.
     func resetRoi()
-    func toggleRecording()
+
+    /// Whether there is a camera running to film with.
+    var canRecord: Bool { get }
+    /// Starts filming to a file of its own, and says whether it did. The file is reported to
+    /// `onRecordingFinished` once `stopRecording` has closed it.
+    func startRecording() -> Bool
+    func stopRecording()
+    /// What the film shows over the picture from the next frame on.
+    func updateOverlay(_ hud: RecordedHudText)
 }
 
 extension PoseSource {
     var needsCameraPermission: Bool { true }
+
+    // A script playing a body back has no picture to film.
+    var canRecord: Bool { false }
+    func startRecording() -> Bool { false }
+    func stopRecording() {}
+    func updateOverlay(_ hud: RecordedHudText) {}
 }

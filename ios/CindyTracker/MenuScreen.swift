@@ -15,9 +15,9 @@ final class MenuViewModel: ObservableObject {
     @Published private(set) var toast: String?
     private let workoutLive: Bool
 
-    /// What this build can open. The rest arrive with their phases: heart rate (P15), music (P17),
-    /// the daily reminder (P18) and Strava (P20).
-    static let shown: Set<MenuRowID> = [.movements, .progress, .bodyWeight, .voice, .help]
+    /// What this build can open. The Strava row is absent, not greyed out, in a build with no credentials:
+    /// `MenuInput.strava` is nil there.
+    static let shown: Set<MenuRowID> = [.movements, .progress, .reminder, .bodyWeight, .voice, .music, .heartRate, .strava, .help]
 
     init(profile: Profile, workoutLive: Bool) {
         self.profile = profile
@@ -33,7 +33,9 @@ final class MenuViewModel: ObservableObject {
         let format = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
         return MenuBuilder.build(MenuInput(
             profile: profile, attempts: store.all(), zone: zone, firstDayOfWeek: first, today: today,
-            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive, shown: shown))
+            is24Hour: !format.contains("a"), hasPhoto: files.exists, workoutLive: workoutLive,
+            notificationsAllowed: ReminderCenter.shared.access != .refused,
+            trackName: { MusicLibrary.displayName($0) }, strava: StravaCenter.shared.menuStatus, shown: shown))
     }
 
     /// Rebuilt rather than patched, because a row's subtitle is derived from state a sheet may just
@@ -64,7 +66,7 @@ struct MenuScreen: View {
     @State private var path: [Destination] = []
 
     private enum Sheet: Identifiable {
-        case movements, bodyWeight, voice
+        case movements, bodyWeight, voice, music, reminder, heartRate, stravaConsent, stravaConnected
         var id: Int { hashValue }
     }
 
@@ -93,6 +95,10 @@ struct MenuScreen: View {
             if !settled { settled = true }
         }
         .onChange(of: path) { _, _ in vm.refresh() }
+        // The grant, the switch and the uploads change under this screen (the redirect, a refresh), and what
+        // Strava has to say about it is said here.
+        .onReceive(StravaCenter.shared.$revision) { _ in vm.refresh() }
+        .onReceive(StravaCenter.shared.$notice.compactMap { $0 }) { vm.show($0.text) }
         .sheet(item: $sheet, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
             sheetView(which)
         }
@@ -169,6 +175,16 @@ struct MenuScreen: View {
             MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
         case .bodyWeight:
             BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+        case .reminder:
+            ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
+        case .music:
+            MusicSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
+        case .heartRate:
+            HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
+        case .stravaConsent:
+            StravaConsentSheet(origin: .menu)
+        case .stravaConnected:
+            StravaConnectedSheet(show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .voice:
             VoiceSheet(speaker: workout.speaker, profile: vm.profile,
                        save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
@@ -183,7 +199,11 @@ struct MenuScreen: View {
         case .help: path.append(.help)
         case .bodyWeight: sheet = .bodyWeight
         case .voice: sheet = .voice
-        case .reminder, .heartRate, .strava, .music: break
+        case .music: sheet = .music
+        case .reminder: sheet = .reminder
+        case .heartRate: sheet = .heartRate
+        case .strava:
+            sheet = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
         }
     }
 

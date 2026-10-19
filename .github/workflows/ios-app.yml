@@ -62,6 +62,7 @@ jobs:
       # if the app that comes out has any trace of it, so a release build can never be told to
       # ignore its camera.
       - name: Build the release configuration, without the replay source
+        if: success() || failure()  # a failing UI test says nothing about what a release build is
         run: |
           set -o pipefail
           xcodebuild build \
@@ -76,6 +77,33 @@ jobs:
             echo "the release app contains the replay source"; exit 1
           fi
           echo "the release app has no replay source: $app"
+      # What the App Store reads out of the bundle: the version, the encryption declaration, the
+      # icon, and the privacy manifest, which differs between a build with Strava and one without.
+      # Both are built here, the second with stand-in credentials, because the copy that makes the
+      # difference is a build phase and nothing else would notice it stop working.
+      - name: Check the store metadata of a build without Strava, and of one with it
+        if: success() || failure()  # a failing UI test says nothing about what a release build is
+        run: |
+          set -o pipefail
+          check() {  # app, expected collected data types, strava key expected
+            app="$1"
+            test -d "$app" || { echo "no app at $app"; exit 1; }
+            plutil -extract CFBundleShortVersionString raw "$app/Info.plist" | grep -qx '1.0.0'
+            plutil -extract CFBundleVersion raw "$app/Info.plist" | grep -qx '1'
+            plutil -extract ITSAppUsesNonExemptEncryption raw "$app/Info.plist" | grep -qx 'false'
+            ls "$app"/Assets.car > /dev/null
+            collected=$(plutil -extract NSPrivacyCollectedDataTypes raw "$app/PrivacyInfo.xcprivacy")
+            test "$collected" = "$2" || { echo "the manifest lists $collected collected types, expected $2"; exit 1; }
+            plutil -extract NSPrivacyTracking raw "$app/PrivacyInfo.xcprivacy" | grep -qx 'false'
+            id=$(plutil -extract StravaClientID raw "$app/Info.plist")
+            test "$id" = "$3" || { echo "StravaClientID is '$id', expected '$3'"; exit 1; }
+          }
+          check "$(find ~/Library/Developer/Xcode/DerivedData -path '*Release-iphonesimulator/CindyTracker.app' -type d | head -1)" 0 ""
+          xcodebuild build \
+            -project ios/CindyTracker.xcodeproj -scheme CindyTracker -configuration Release \
+            -destination "id=${{ steps.simulator.outputs.udid }}" -derivedDataPath "$RUNNER_TEMP/with-strava" \
+            CODE_SIGNING_ALLOWED=NO STRAVA_CLIENT_ID=12345 STRAVA_CLIENT_SECRET=stand-in 2>&1 | tee -a build.log
+          check "$RUNNER_TEMP/with-strava/Build/Products/Release-iphonesimulator/CindyTracker.app" 2 "12345"
       # The tool that scores recorded clips with Vision. The runner has no clips, so this checks
       # that it builds with the real Vision and AVFoundation, and that with nothing to score it
       # says every scenario was skipped, with a reason, and none passed.

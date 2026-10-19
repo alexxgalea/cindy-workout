@@ -87,7 +87,6 @@ final class ReplayPoseSource: PoseSource {
 
     func flip() {}
     func resetRoi() {}
-    func toggleRecording() {}
 
     private func step() {
         let keypoints: [Keypoint]

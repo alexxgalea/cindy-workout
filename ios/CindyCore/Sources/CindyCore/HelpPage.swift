@@ -572,8 +572,12 @@ public enum HelpBuilder {
               "sends that workout."),
             s("That row shows where the upload has got to: uploading, then a View on Strava ",
               "link to the activity. If it fails it says so and you tap to retry, and if Strava needs ",
-              "you to connect again it says that. The upload carries on in the background, ",
-              "waits for a connection and retries by itself."),
+              "you to connect again it says that. ",
+              // iOS: there is no scheduler that runs an upload while the app is closed. It is sent
+              // as the session is saved, and again whenever Cindy is open or a connection returns.
+              "The upload is sent as soon as the workout is saved, and tried again when you open ",
+              "Cindy or a connection comes back; if it could not be sent at once it may wait until ",
+              "you next open Cindy."),
             s("Sessions from before you connected are not sent on their own; open one and use ",
               "its Strava row. One recorded before reps and sets were banked cannot be ",
               "described honestly, and says it is not available."),
@@ -628,8 +632,8 @@ public enum HelpBuilder {
         }
         // iOS: deleting the app is Android's Clear storage and uninstalling in one.
         out.append(.bullets([
-            s("To delete: CLEAR on the Progress screen removes your sessions with their rep times ",
-              "and heart-rate traces; REMOVE on the Account screen removes the photo; ",
+            s("To delete: DISCARD on a session's page removes that session with its rep times ",
+              "and heart-rate trace; REMOVE on the Account screen removes the photo; ",
               "deleting the app from your iPhone removes everything else.",
               has(.filming) ? " Videos in Photos are yours to delete." : "")
         ]))

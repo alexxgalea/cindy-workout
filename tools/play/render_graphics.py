@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Renders the Google Play store graphics from their SVG sources, and checks them against Play's rules.
+Renders the store graphics from their SVG sources, and checks them against each store's rules.
 
-    tools/play/render_graphics.py
+    tools/play/render_graphics.py              # both stores
+    tools/play/render_graphics.py --store play
+    tools/play/render_graphics.py --store appstore
 
+For Google Play, as follows.
 Reads play/graphics/icon.svg and feature-graphic.svg and writes icon.png and feature-graphic.png
 beside them. Play wants the icon as a 512 x 512 32-bit PNG under 1 MB, and the feature graphic as a
 1024 x 500 PNG or JPEG with no transparency, so the script ends by reading each file's header back
@@ -24,13 +27,20 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-GRAPHICS = ROOT / "play" / "graphics"
 
-# name, width, height, ImageMagick output format, may it be transparent
-ASSETS = [
-    ("icon", 512, 512, "PNG32", True),
-    ("feature-graphic", 1024, 500, "PNG24", False),
-]
+# store -> (folder, [(name, width, height, ImageMagick output format, may it be transparent)])
+#
+# The App Store wants the icon at 1024 x 1024, a PNG with no alpha channel at all, and square: iOS
+# rounds the corners itself. It is the same mark as Play's on the same black.
+STORES = {
+    "play": (ROOT / "play" / "graphics", [
+        ("icon", 512, 512, "PNG32", True),
+        ("feature-graphic", 1024, 500, "PNG24", False),
+    ]),
+    "appstore": (ROOT / "appstore" / "graphics", [
+        ("icon", 1024, 1024, "PNG24", False),
+    ]),
+}
 
 
 def find_chrome() -> str:
@@ -52,9 +62,9 @@ def png_header(path: pathlib.Path):
     return w, h, depth, colour
 
 
-def render(chrome: str, name: str, w: int, h: int, fmt: str) -> pathlib.Path:
-    svg = GRAPHICS / f"{name}.svg"
-    out = GRAPHICS / f"{name}.png"
+def render(chrome: str, folder: pathlib.Path, name: str, w: int, h: int, fmt: str) -> pathlib.Path:
+    svg = folder / f"{name}.svg"
+    out = folder / f"{name}.png"
     with tempfile.TemporaryDirectory() as tmp:
         shot = pathlib.Path(tmp) / "shot.png"
         subprocess.run(
@@ -77,8 +87,8 @@ def render(chrome: str, name: str, w: int, h: int, fmt: str) -> pathlib.Path:
     return out
 
 
-def verify(name: str, w: int, h: int, may_be_transparent: bool) -> list:
-    path = GRAPHICS / f"{name}.png"
+def verify(folder: pathlib.Path, store: str, name: str, w: int, h: int, may_be_transparent: bool) -> list:
+    path = folder / f"{name}.png"
     problems = []
     gw, gh, depth, colour = png_header(path)
     if (gw, gh) != (w, h):
@@ -86,10 +96,10 @@ def verify(name: str, w: int, h: int, may_be_transparent: bool) -> list:
     if depth != 8:
         problems.append(f"{name}.png has bit depth {depth}, expected 8")
     has_alpha = colour in (4, 6)
-    if name == "icon" and not has_alpha:
+    if store == "play" and name == "icon" and not has_alpha:
         problems.append("icon.png should be a 32-bit PNG (RGBA)")
     if not may_be_transparent and has_alpha:
-        problems.append(f"{name}.png has an alpha channel; Play rejects transparency here")
+        problems.append(f"{name}.png has an alpha channel; the {store} store rejects transparency here")
     # Both graphics are drawn on black right out to the edges. A page that came out shorter than
     # asked for left a white band along the bottom and clipped the art, and still passed the format
     # checks above, so look at the pixels the art must not have reached: the corners and the
@@ -113,12 +123,15 @@ def main() -> int:
         sys.exit("render_graphics.py: ImageMagick's `convert` is needed")
     chrome = find_chrome()
     problems = []
-    for name, w, h, fmt, transparent in ASSETS:
-        render(chrome, name, w, h, fmt)
-        found = verify(name, w, h, transparent)
-        size = (GRAPHICS / f"{name}.png").stat().st_size
-        print(f"{name}.png  {w} x {h}  {size:,} bytes  {'ok' if not found else 'FAILED'}")
-        problems += found
+    chosen = sys.argv[sys.argv.index("--store") + 1:][:1] if "--store" in sys.argv else list(STORES)
+    for store in chosen:
+        folder, assets = STORES[store]
+        for name, w, h, fmt, transparent in assets:
+            render(chrome, folder, name, w, h, fmt)
+            found = verify(folder, store, name, w, h, transparent)
+            size = (folder / f"{name}.png").stat().st_size
+            print(f"{store}/{name}.png  {w} x {h}  {size:,} bytes  {'ok' if not found else 'FAILED'}")
+            problems += found
     for p in problems:
         print(f"  {p}", file=sys.stderr)
     return 1 if problems else 0

@@ -16,7 +16,10 @@ final class VisionPoseSource: NSObject, PoseSource {
     var previewSession: AVCaptureSession? { session }
 
     private let videoOutput = AVCaptureVideoDataOutput()
-    private let movieOutput = AVCaptureMovieFileOutput()
+    /// What the film shows over the picture; written on the main queue, read on `queue`.
+    private let overlay = FilmOverlayFeed()
+    /// The film being made, if one is. Touched only on `queue`, which is where frames arrive.
+    private var film: FilmRecorder?
     private let queue = DispatchQueue(label: "cindy.camera")
 
     private var position: AVCaptureDevice.Position = .back
@@ -39,6 +42,8 @@ final class VisionPoseSource: NSObject, PoseSource {
 
     func stop() {
         queue.async { [weak self] in
+            // A film is closed with the camera, so what it caught is kept.
+            self?.endFilm()
             self?.session.stopRunning()
         }
     }
@@ -82,7 +87,6 @@ final class VisionPoseSource: NSObject, PoseSource {
         videoOutput.alwaysDiscardsLateVideoFrames = true
         videoOutput.setSampleBufferDelegate(self, queue: queue)
         if session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
-        if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
         session.commitConfiguration()
         orientConnection()
         // One host clock stamps every frame on an iPhone, so there is nothing to look up.
@@ -98,15 +102,38 @@ final class VisionPoseSource: NSObject, PoseSource {
 
     // MARK: - filming
 
-    func toggleRecording() {
-        if movieOutput.isRecording {
-            movieOutput.stopRecording()
-            return
-        }
-        let name = "cindy-\(Int(Date().timeIntervalSince1970)).mov"
+    var canRecord: Bool { session.isRunning }
+
+    /// Starts a film in a file of its own. The file is made by the first frame that arrives, and a
+    /// writer that cannot be made is reported when the film ends, as Android reports its failures.
+    func startRecording() -> Bool {
+        guard canRecord else { return false }
+        let name = FilmFlow.fileName(atMillis: Int64(Date().timeIntervalSince1970 * 1000)) + ".mp4"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        movieOutput.startRecording(to: url, recordingDelegate: self)
+        queue.async { [weak self] in
+            guard let self, self.film == nil else { return }
+            self.film = FilmRecorder(url: url, feed: self.overlay)
+        }
         DispatchQueue.main.async { self.onRecordingChanged?(true) }
+        return true
+    }
+
+    func stopRecording() {
+        queue.async { [weak self] in self?.endFilm() }
+    }
+
+    func updateOverlay(_ hud: RecordedHudText) { overlay.set(hud) }
+
+    /// On `queue`: closes the film, if there is one, and reports where it is.
+    private func endFilm() {
+        guard let film else { return }
+        self.film = nil
+        film.finish { [weak self] url in
+            DispatchQueue.main.async {
+                self?.onRecordingChanged?(false)
+                self?.onRecordingFinished?(url)
+            }
+        }
     }
 }
 
@@ -125,6 +152,8 @@ extension VisionPoseSource: AVCaptureVideoDataOutputSampleBufferDelegate {
         let points = result.keypoints
         let inferMs = result.inferMs
 
+        film?.append(sampleBuffer, keypoints: points)
+
         let stamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let age = probe.clock.sinceCapture(Int64(CMTimeGetSeconds(stamp) * 1_000_000_000))
         probe.analysed(captureAgeMs: age, convertMs: 0, prepMs: 0, inferMs: inferMs)
@@ -138,19 +167,6 @@ extension VisionPoseSource: AVCaptureVideoDataOutputSampleBufferDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.handoff.drain { self?.onFrame?($0) }
             }
-        }
-    }
-}
-
-extension VisionPoseSource: AVCaptureFileOutputRecordingDelegate {
-
-    func fileOutput(_ output: AVCaptureFileOutput,
-                    didFinishRecordingTo outputFileURL: URL,
-                    from connections: [AVCaptureConnection],
-                    error: Error?) {
-        DispatchQueue.main.async {
-            self.onRecordingChanged?(false)
-            self.onRecordingFinished?(error == nil ? outputFileURL : nil)
         }
     }
 }

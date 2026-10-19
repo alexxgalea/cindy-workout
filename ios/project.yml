@@ -17,6 +17,41 @@ targets:
     platform: iOS
     sources:
       - path: CindyTracker
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    # Keys that need a value from the build settings, or that Xcode's generated plist has no
+    # INFOPLIST_KEY_ for. The rest stay below, where they were.
+    info:
+      path: Config/Info.plist
+      properties:
+        # Strava's own credentials, empty in a build that was not given any (Config/Base.xcconfig).
+        StravaClientID: $(STRAVA_CLIENT_ID)
+        StravaClientSecret: $(STRAVA_CLIENT_SECRET)
+        # Where Strava sends the athlete back to: the bundle identifier as a scheme (D5), as
+        # Android's is the application id. One scheme, so a debug and a release build on one phone
+        # each catch only their own redirect.
+        CFBundleURLTypes:
+          - CFBundleURLName: Strava redirect
+            CFBundleURLSchemes: [$(PRODUCT_BUNDLE_IDENTIFIER)]
+        # Lets the app ask whether the Strava app is installed, to open its consent page there.
+        LSApplicationQueriesSchemes: [strava]
+        # The background refresh that sends an upload that was waiting for the app to be opened.
+        BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).strava-upload]
+        UIBackgroundModes: [fetch]
+        # HTTPS to Strava is the only encryption the app uses, and that is exempt.
+        ITSAppUsesNonExemptEncryption: false
+    # The privacy manifest in CindyTracker/ says nothing is collected, which is true of a build with
+    # no Strava. A build that has Strava collects health and fitness data when the athlete connects
+    # it, and its manifest says so: Config/PrivacyInfo.strava.xcprivacy replaces the first one in
+    # the finished product. The macOS job builds both ways and checks.
+    postBuildScripts:
+      - name: Privacy manifest for a build with Strava
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ -n "${STRAVA_CLIENT_ID}" ] && [ -n "${STRAVA_CLIENT_SECRET}" ]; then
+            cp "${SRCROOT}/Config/PrivacyInfo.strava.xcprivacy" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/PrivacyInfo.xcprivacy"
+          fi
     dependencies:
       - package: CindyCore
         product: CindyCore
@@ -29,13 +64,19 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The post-build script below copies a file into the product, which the script sandbox refuses.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         # The camera is the whole app; without this string iOS kills it on first frame.
         INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
+        # The heart-rate sheets. iOS shows this when Cindy first listens for a watch or chest strap;
+        # HeartRateAccess.usageDescription is the same words, and a test holds the two together.
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Cindy reads the heart rate your watch or chest strap broadcasts. Nothing is uploaded.
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Saves your workout recording.
         # Without a launch screen iOS 18 runs the app letterboxed, as on a 3.5-inch phone: a 402 by
         # 603 window in the middle of the screen, with the bottom of every sheet outside it. An empty

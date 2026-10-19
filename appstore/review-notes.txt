@@ -1,0 +1,11 @@
+There is no sign-in and no account.
+
+The app counts exercise repetitions from the camera, so the camera screen expects a person in frame. To step through a workout without one: tap START, tap SKIP on the setup check and SKIP again to confirm, then tap +1 to book reps by hand. Pressing and holding +1 moves on to the next movement. The MENU button on the camera screen opens Help, Progress and the other screens.
+
+Everything is optional and nothing is needed to try the app: the heart-rate link needs a watch or chest strap that broadcasts a standard Bluetooth heart rate, the daily reminder needs notification permission, and REC saves a video to Photos (add-only access) once the camera is counting.
+
+No data leaves the phone. The app contains no ads, no analytics and no third-party SDKs.
+{{#strava}}
+
+Strava: the app can upload a finished workout to the athlete's own Strava account, after a sheet that says what is sent and a tap on Strava's own Connect button. It needs the reviewer's own Strava account, and Strava only lets this application's owner connect until Strava has raised it to more athletes, so this step cannot be completed from a review device yet. Every other feature works without it.
+{{/strava}}
