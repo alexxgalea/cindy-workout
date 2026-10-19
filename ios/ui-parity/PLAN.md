@@ -128,7 +128,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
 ### U2: session page
 
 - **Presentation.** Full-screen (`fullScreenCover`), closed with DONE.
-- **Content.** Rebuilt from `InsetGroup` and `StatRow` in the card order of `activity_results.xml`, with the charts restyled to the tokens.
+- **Content.** Rebuilt from `InsetGroup` and `ValueRow` in the card order of `activity_results.xml`, with the charts restyled to the tokens.
 - **The heels-flat question.** `HeelsFlatSheet`'s `.alert` becomes a Cindy sheet.
 
 ### U3: Progress

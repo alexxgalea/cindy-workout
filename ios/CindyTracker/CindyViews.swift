@@ -144,7 +144,7 @@ struct NavRow: View {
 }
 
 /// A label and its figure. A tappable row gets a chevron and says so.
-struct StatRow: View {
+struct ValueRow: View {
     let label: String
     let value: String
     var action: (() -> Void)? = nil
@@ -234,7 +234,7 @@ struct Medal: View {
 }
 
 /// A trophy row: medal, what it is and when, and the figure.
-struct PeakRow: View {
+struct TrophyRow: View {
     let rank: Int
     let title: String
     let detail: String
