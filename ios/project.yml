@@ -39,6 +39,19 @@ targets:
         # The background refresh that sends an upload that was waiting for the app to be opened.
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).strava-upload]
         UIBackgroundModes: [fetch]
+        # HTTPS to Strava is the only encryption the app uses, and that is exempt.
+        ITSAppUsesNonExemptEncryption: false
+    # The privacy manifest in CindyTracker/ says nothing is collected, which is true of a build with
+    # no Strava. A build that has Strava collects health and fitness data when the athlete connects
+    # it, and its manifest says so: Config/PrivacyInfo.strava.xcprivacy replaces the first one in
+    # the finished product. The macOS job builds both ways and checks.
+    postBuildScripts:
+      - name: Privacy manifest for a build with Strava
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ -n "${STRAVA_CLIENT_ID}" ] && [ -n "${STRAVA_CLIENT_SECRET}" ]; then
+            cp "${SRCROOT}/Config/PrivacyInfo.strava.xcprivacy" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/PrivacyInfo.xcprivacy"
+          fi
     dependencies:
       - package: CindyCore
         product: CindyCore
@@ -51,14 +64,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cindy.tracker
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
-        # The asset catalog holds Strava's two images and no app icon yet (P21 adds it); without this
-        # the catalog compiler looks for one called AppIcon and fails the build.
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The post-build script below copies a file into the product, which the script sandbox refuses.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         # The camera is the whole app; without this string iOS kills it on first frame.
         INFOPLIST_KEY_NSCameraUsageDescription: Counts your reps from the camera.
         # The heart-rate sheets. iOS shows this when Cindy first listens for a watch or chest strap;
