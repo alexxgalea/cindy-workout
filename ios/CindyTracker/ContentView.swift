@@ -184,20 +184,19 @@ struct ContentView: View {
                 workout.enterSetup()
             }
         }
-        .alert("End the workout?", isPresented: $showStopConfirm) {
-            Button("End", role: .destructive) { workout.stopEarly() }
-            Button("Keep going", role: .cancel) { workout.cancelStop() }
-        } message: {
-            Text("Your score so far will be saved.")
-        }
-        // Dismissing the question any other way is also "keep going", with the clock let go again.
-        .onChange(of: showStopConfirm) { _, shown in if !shown { workout.cancelStop() } }
-        .alert("Skip the setup check?", isPresented: $showSkipConfirm) {
-            Button("SKIP", role: .destructive) { workout.skipSetup() }
-            Button("KEEP CHECKING", role: .cancel) {}
-        } message: {
-            Text("Cindy will start counting straight away, without calibrating to your bar. Reps may be missed or counted twice.")
-        }
+        // Dismissing the question any other way (the dim, a swipe down, the escape gesture) is also
+        // "keep going", with the clock let go again.
+        .cindySheet(isPresented: $showStopConfirm,
+                    title: "End the workout?",
+                    subtitle: "Your score so far will be saved.",
+                    primary: SheetButton(title: "END") { workout.stopEarly() },
+                    secondary: SheetButton(title: "KEEP GOING") {},
+                    onDismiss: { workout.cancelStop() })
+        .cindySheet(isPresented: $showSkipConfirm,
+                    title: "Skip the setup check?",
+                    subtitle: "Cindy will start counting straight away, without calibrating to your bar. Reps may be missed or counted twice.",
+                    primary: SheetButton(title: "SKIP") { workout.skipSetup() },
+                    secondary: SheetButton(title: "KEEP CHECKING") {})
     }
 
     private var hud: some View {

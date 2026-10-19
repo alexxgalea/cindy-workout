@@ -78,19 +78,6 @@ struct ResultsView: View {
         }
         .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
-        // The system's dialog has no filled button: the safe answer is the one with the cancel role,
-        // which it sets apart at the bottom, under the thumb that has just tapped DISCARD, while the
-        // destructive one is the red row above it.
-        .alert(discardQuestion.title, isPresented: $asksToDiscard) {
-            Button(discardQuestion.discard, role: .destructive) {
-                // The page closes either way, but only a session that was there was discarded.
-                if vm.discard() { onDiscarded() }
-                dismiss()
-            }
-            Button(discardQuestion.keep, role: .cancel) {}
-        } message: {
-            Text(discardQuestion.subtitle)
-        }
         // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
         // athlete's own.
         .alert(HeelsFlatSheet.title, isPresented: $heelsFlatExplained) {
@@ -111,6 +98,17 @@ struct ResultsView: View {
                 Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
             }
         }
+        // KEEP IT is the one filled button, where a reflex tap lands after tapping DISCARD to get
+        // here; DISCARD is the red one beside it. Every other way out of the question keeps the session.
+        .cindySheet(isPresented: $asksToDiscard,
+                    title: discardQuestion.title,
+                    subtitle: discardQuestion.subtitle,
+                    primary: SheetButton(title: discardQuestion.keep) {},
+                    secondary: SheetButton(title: discardQuestion.discard, tint: Palette.stateAlert) {
+                        // The page closes either way, but only a session that was there was discarded.
+                        if vm.discard() { onDiscarded() }
+                        dismiss()
+                    })
     }
 
     private func flash(_ text: String) {

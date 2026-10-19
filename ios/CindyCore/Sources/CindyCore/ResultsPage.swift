@@ -65,9 +65,9 @@ public enum ResultsButton: String, Equatable, Sendable {
 /// sheet in the app is where the safe, expected action sits, and where the thumb already is having
 /// just tapped a button to get here, wiped a tester's history with two taps in the same place. So
 /// the safe answer, KEEP IT, goes where a reflex tap lands, and DISCARD is the quiet one, in the
-/// alert colour. On Android that is the filled button of the sheet; on iOS the system's dialog has
-/// no filled button, and KEEP IT is the cancel row it sets apart at the bottom. The session is
-/// named, because "this session" is abstract in a way that a date and a rep count are not.
+/// alert colour. On both platforms that is the Cindy sheet: KEEP IT is its one filled button, and
+/// DISCARD the glass one beside it, in the alert colour. The session is named, because "this
+/// session" is abstract in a way that a date and a rep count are not.
 public struct DiscardQuestion: Equatable, Sendable {
     public let title: String
     public let subtitle: String
