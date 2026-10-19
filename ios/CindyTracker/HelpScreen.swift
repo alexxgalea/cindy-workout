@@ -75,7 +75,7 @@ struct HelpScreen: View {
                     HStack(spacing: 8) {
                         Text(HelpBuilder.crossfitButton)
                         // An arrow, because this one leaves the app.
-                        Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .bold))
+                        Image(CindyIcon.external).resizable().frame(width: 14, height: 14)
                             .foregroundStyle(Palette.labelSecondary)
                     }
                 }
@@ -192,33 +192,9 @@ struct HelpScreen: View {
     }
 
     private func insetGroup(_ rows: [HelpRow]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                Button { perform(row.action) } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.title).cindy(.headline)
-                            Text(row.subtitle).cindy(.footnote)
-                        }
-                        Spacer()
-                        Image(systemName: isLink(row.action) ? "arrow.up.right" : "chevron.right")
-                            .font(.system(size: 11)).foregroundStyle(Palette.labelTertiary)
-                    }
-                    .padding(.horizontal, 18).padding(.vertical, 14)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(row.spoken)
-                .accessibilityAddTraits(.isButton)
-                if i < rows.count - 1 { Divider().overlay(Palette.hairline) }
-            }
+        InsetGroup(rows, id: \.title) { row in
+            NavRow(title: row.title, value: row.subtitle, spoken: row.spoken) { perform(row.action) }
         }
-        .glassCard()
-    }
-
-    private func isLink(_ action: HelpAction) -> Bool {
-        if case .openLink = action { return true }
-        return false
     }
 
     /// CrossFit's words, marked as theirs by attribution rather than by a coloured bar: the credit
@@ -229,7 +205,7 @@ struct HelpScreen: View {
             Text("\u{201C}\(text)\u{201D}").cindy(.body, colour: Palette.labelBody).italic()
             Rectangle().fill(Palette.hairline).frame(height: Palette.hairlineWidth).padding(.top, 14)
             HStack(spacing: 7) {
-                Image(systemName: "link").font(.system(size: 11)).foregroundStyle(Palette.labelTertiary)
+                Image(CindyIcon.link).resizable().frame(width: 11, height: 11).foregroundStyle(Palette.labelTertiary)
                 Text("CROSSFIT.COM").cindy(.eyebrow)
             }
             .padding(.top, 11)
@@ -282,9 +258,9 @@ struct HelpScreen: View {
             }
             Spacer()
             if let reached = tier.reached {
-                Image(systemName: reached ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(reached ? Palette.stateOk : Palette.labelQuaternary)
+                Image(reached ? CindyIcon.checkFilled : CindyIcon.ringEmpty)
+                    .resizable().frame(width: 22, height: 22)
+                    .foregroundStyle(Palette.labelQuaternary)
             } else {
                 Text(HelpTier.notScored).cindy(.eyebrow, colour: Palette.labelQuaternary)
             }
