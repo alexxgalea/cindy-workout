@@ -63,7 +63,7 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(skip.waitForExistence(timeout: 5), "START becomes SKIP during the setup check")
         skip.tap()
         // The question has a SKIP of its own, on the sheet that covers the HUD's.
-        XCTAssertTrue(app.otherElements["cindySheet"].waitForExistence(timeout: 5), "skipping asks first")
+        XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5), "skipping asks first")
         sheetButton(app, "SKIP").tap()
         XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "skipping starts the clock")
     }
@@ -136,9 +136,9 @@ final class CindyTrackerUITests: XCTestCase {
         startSkippingSetup(app)
         app.buttons["+1"].tap()
         app.buttons["STOP"].tap()
-        let sheet = app.otherElements["cindySheet"]
-        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "stopping asks first")
-        sheet.swipeDown()
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5), "stopping asks first")
+        // A swipe that starts on the sheet's own words.
+        app.staticTexts["End the workout?"].swipeDown()
         XCTAssertFalse(sheetButton(app, "END").waitForExistence(timeout: 2), "the swipe closed the question")
         XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "a swipe is KEEP GOING")
     }
