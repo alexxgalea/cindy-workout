@@ -65,7 +65,7 @@ final class CaptureTests: XCTestCase {
         app.buttons["START"].tap()
         XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5))
         app.buttons["SKIP"].tap()
-        XCTAssertTrue(app.otherElements["cindySheet"].waitForExistence(timeout: 5))
+        XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5))
         capture(app, "question-skip")
         sheetButton(app, "SKIP").tap()
 
@@ -74,7 +74,7 @@ final class CaptureTests: XCTestCase {
         app.buttons["+1"].tap()
         app.buttons["+1"].tap()
         app.buttons["STOP"].tap()
-        XCTAssertTrue(app.otherElements["cindySheet"].waitForExistence(timeout: 5))
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
         capture(app, "question-stop")
         sheetButton(app, "KEEP GOING").tap()
 
