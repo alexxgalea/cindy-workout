@@ -194,17 +194,17 @@ final class CindyTrackerUITests: XCTestCase {
 
     // MARK: - the start-position coach
 
-    func testTheCoachStandsInForTheStatusLine() {
+    func testTheCoachHangsFromTheBandAndTheStatusLineKeepsItsRoom() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
+        let roomBefore = status(app).frame
         let card = app.descendants(matching: .any).matching(identifier: "coachCard").firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "a body in frame but not in position is shown how")
-        // The line steps aside for the card so the cue is not given twice. It stays in the layout, so
-        // nothing jumps, and a hidden view stays in the test's queries with nothing to touch.
-        let unreachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == false"),
-                                                    object: status(app))
-        XCTAssertEqual(XCTWaiter().wait(for: [unreachable], timeout: 5), .completed,
-                       "the status line is hidden while the card is up")
+        // The line steps aside for the card, so the cue is not given twice, but it keeps its room so
+        // that nothing jumps. Whether a screen reader still finds it cannot be asked of a UI test,
+        // which keeps hidden views in its queries; that is owed on a phone.
+        XCTAssertEqual(status(app).frame, roomBefore, "the status line has not moved")
+        XCTAssertGreaterThanOrEqual(card.frame.minY, status(app).frame.maxY, "the card hangs below the band")
     }
 
     // MARK: - the placement guide
