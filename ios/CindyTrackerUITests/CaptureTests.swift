@@ -233,8 +233,11 @@ final class CaptureTests: XCTestCase {
         let stop = app.buttons.matching(NSPredicate(
             format: "label CONTAINS 'session before' OR label CONTAINS 'first in this range'")).firstMatch
         XCTAssertTrue(stop.waitForExistence(timeout: 5), "the chart has points")
-        stop.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["OPEN"].waitForExistence(timeout: 5), "a selected point offers OPEN")
+        // The chart is drawn: a point is selected by a touch near it, so the chart's area is tried
+        // across until OPEN appears beside the readout.
+        let chart = stop.frame
+        let selected = app.tapAcross(chart, columns: 9, rows: 5) { app.buttons["OPEN"].waitForExistence(timeout: 0.5) }
+        XCTAssertTrue(selected, "a selected point offers OPEN; the chart's frame is \(chart)")
         capture(app, "progress-point")
 
         let trained = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', trained' OR label CONTAINS ', trained,'")).firstMatch
@@ -244,8 +247,10 @@ final class CaptureTests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(trained.exists, "the calendar has a trained day")
-        trained.tap()
-        XCTAssertTrue(sheetButton(app, "DONE").waitForExistence(timeout: 5), "the day opens a sheet")
+        let grid = trained.frame
+        let body = CGRect(x: grid.minX, y: grid.minY + grid.height / 7, width: grid.width, height: grid.height * 6 / 7)
+        let opened = app.tapAcross(body, columns: 7, rows: 6) { sheetButton(app, "DONE").waitForExistence(timeout: 0.6) }
+        XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")
         capture(app, "progress-day")
     }
 }

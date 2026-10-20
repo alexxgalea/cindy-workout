@@ -311,15 +311,21 @@ final class CindyTrackerUITests: XCTestCase {
         // The calendar's trained days are its buttons, spoken "<date>, trained".
         let trained = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', trained' OR label CONTAINS ', trained,'")).firstMatch
         var swipes = 0
-        while !trained.exists && swipes < 12 {
+        while !(trained.exists && trained.isHittable) && swipes < 12 {
             app.swipeUp()
             swipes += 1
         }
         XCTAssertTrue(trained.exists, "the calendar has a trained day")
-        trained.tap()
+
+        // The calendar is a drawn grid: its stops are buttons for a screen reader, tapped here at the
+        // middle of the whole grid. A day is opened by a touch on its own cell, so the cells below the
+        // weekday row are tried in turn; an untrained day opens nothing.
+        let grid = trained.frame
+        let body = CGRect(x: grid.minX, y: grid.minY + grid.height / 7, width: grid.width, height: grid.height * 6 / 7)
+        let opened = app.tapAcross(body, columns: 7, rows: 6) { sheetButton(app, "DONE").waitForExistence(timeout: 0.6) }
 
         // The day lists its sessions in a Cindy sheet; a row opens its session.
-        XCTAssertTrue(sheetButton(app, "DONE").waitForExistence(timeout: 5), "the day opens a sheet")
+        XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")
         let row = app.buttons["daySession"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the sheet lists the day's sessions")
         row.tap()
