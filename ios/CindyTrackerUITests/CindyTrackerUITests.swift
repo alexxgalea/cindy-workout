@@ -231,6 +231,21 @@ final class CindyTrackerUITests: XCTestCase {
                        "the second page is still over the camera")
     }
 
+    func testTheTimelineAndSplitsAreGlassCards() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+
+        let splits = app.staticTexts["ROUND SPLITS"]
+        var swipes = 0
+        while !splits.exists && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(splits.exists, "the page has its round splits")
+        let note = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Taller is slower.'")).firstMatch
+        XCTAssertTrue(note.exists, "the note under the splits is there")
+    }
+
     // MARK: - the questions
 
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
