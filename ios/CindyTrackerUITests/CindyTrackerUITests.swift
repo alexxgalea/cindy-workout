@@ -234,10 +234,16 @@ final class CindyTrackerUITests: XCTestCase {
             return dones.allElementsBoundByIndex.first(where: { $0.isHittable })
         }
         guard let topDone = scrolledToDone() else { return XCTFail("the first session's page has a DONE") }
+        let window = app.windows.firstMatch.frame
+        let before = dones.allElementsBoundByIndex
+            .map { "\(Int($0.frame.minY))..\(Int($0.frame.maxY))[\($0.isHittable)]" }.joined(separator: " ")
+        let heading = app.staticTexts.allElementsBoundByIndex.prefix(4).map(\.label).joined(separator: " / ")
         topDone.tap()
+        Thread.sleep(forTimeInterval: 2)
+        let texts = app.staticTexts.allElementsBoundByIndex.prefix(8).map(\.label).joined(separator: " / ")
         let back = scrolledToDone()
         let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label)[\($0.isHittable)]" }.joined(separator: " | ")
-        XCTAssertNotNil(back, "DONE came back to the second page; the buttons are: \(buttons)")
+        XCTAssertNotNil(back, "DONE came back to the second page; window \(Int(window.height)) high; DONEs before the tap: \(before); texts before: \(heading); texts after: \(texts); buttons after: \(buttons)")
         XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
                        "the second page is still over the camera")
     }
