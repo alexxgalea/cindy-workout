@@ -127,10 +127,6 @@ public enum FilmFlow {
         }
     }
 
-    /// What the control says on screen. Lit while filming, plain otherwise: the count itself is on
-    /// the picture, so the control only has to say which of the three states REC is in.
-    public static func title(for state: FilmState) -> String { state == .filming ? "● REC" : "REC" }
-
     /// A film's name in the working folder, before the container is added: `cindy-` and the moment
     /// it was started, to the second.
     public static func fileName(atMillis: Int64, timeZone: TimeZone = .current) -> String {

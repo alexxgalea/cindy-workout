@@ -87,14 +87,18 @@ final class FilmFlowTests: XCTestCase {
 
     // MARK: what the control says
 
-    /// the control says which of its three states it is in, to a screen reader and on screen
+    /// the control says which of its three states it is in, to a screen reader
     func testTheControlSaysWhichStateItIsIn() {
         XCTAssertEqual(FilmFlow.label(for: .idle), "Record this workout")
         XCTAssertEqual(FilmFlow.label(for: .counting), "Recording is about to start, tap to cancel")
         XCTAssertEqual(FilmFlow.label(for: .filming), "Stop recording")
-        XCTAssertEqual(FilmFlow.title(for: .idle), "REC")
-        XCTAssertEqual(FilmFlow.title(for: .counting), "REC")
-        XCTAssertEqual(FilmFlow.title(for: .filming), "● REC")
+    }
+
+    /// the icon is red while a count runs or a film is rolling, and lit only while it films
+    func testTheIconIsRedWhileCountingOrFilmingAndLitOnlyWhileFilming() {
+        XCTAssertEqual(FilmFlow.look(for: .idle), RecLook(alert: false, lit: false))
+        XCTAssertEqual(FilmFlow.look(for: .counting), RecLook(alert: true, lit: false))
+        XCTAssertEqual(FilmFlow.look(for: .filming), RecLook(alert: true, lit: true))
     }
 
     // MARK: the name
