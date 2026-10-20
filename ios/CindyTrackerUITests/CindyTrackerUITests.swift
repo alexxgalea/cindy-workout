@@ -235,7 +235,9 @@ final class CindyTrackerUITests: XCTestCase {
         }
         guard let topDone = scrolledToDone() else { return XCTFail("the first session's page has a DONE") }
         topDone.tap()
-        XCTAssertNotNil(scrolledToDone(), "DONE came back to the second page")
+        let back = scrolledToDone()
+        let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label)[\($0.isHittable)]" }.joined(separator: " | ")
+        XCTAssertNotNil(back, "DONE came back to the second page; the buttons are: \(buttons)")
         XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
                        "the second page is still over the camera")
     }
