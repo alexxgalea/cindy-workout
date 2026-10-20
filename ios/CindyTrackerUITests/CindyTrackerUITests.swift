@@ -187,6 +187,50 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
     }
 
+    func testTheSessionPageNamesItsSectionsInAndroidsWords() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+
+        for title in ["ROUND BY ROUND", "MOVEMENTS", "DETAILS"] {
+            let heading = app.staticTexts[title]
+            var swipes = 0
+            while !heading.exists && swipes < 12 {
+                app.swipeUp()
+                swipes += 1
+            }
+            XCTAssertTrue(heading.exists, "the page has a \(title) section")
+        }
+        XCTAssertFalse(app.staticTexts["ROUNDS"].exists, "the old name is gone")
+    }
+
+    func testAComparedSessionOpensOverThePageAndDoneComesBackToIt() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        hud(app, "btnStart", labelled: "Start again").tap()
+        finishTwoRepSession(app)
+
+        // The second session has the first to be compared with: the card opens it.
+        let compared = app.staticTexts["COMPARED WITH"]
+        var swipes = 0
+        while !compared.exists && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(compared.exists, "the second session offers a comparison")
+        let open = app.buttons.matching(NSPredicate(format: "label CONTAINS ' · '")).firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 5), "the comparison card is a button")
+        open.tap()
+
+        // The first session's page is on top: it is dated, and has its own DONE.
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5), "DONE came back to the second page")
+        XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
+                       "the second page is still over the camera")
+    }
+
     // MARK: - the questions
 
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
