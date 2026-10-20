@@ -31,7 +31,6 @@ final class ProgressWordsTests: XCTestCase {
     }
 
     func testTheOldWordsAreGone() throws {
-        try XCTSkipIf(true, "The view's words are replaced in the cards task")
         let view = try read("ios/CindyTracker/ProgressScreen.swift")
         for old in ["sectionTitle(\"THIS WEEK\")", "sectionTitle(\"PROGRESS\")", "sectionTitle(\"PEAKS\")",
                     "sectionTitle(\"LEADERBOARD\")", "\"Previous month\"", "Button(\"OPEN\")"] {
