@@ -322,7 +322,10 @@ final class CindyTrackerUITests: XCTestCase {
         // weekday row are tried in turn; an untrained day opens nothing.
         let grid = trained.frame
         let body = CGRect(x: grid.minX, y: grid.minY + grid.height / 7, width: grid.width, height: grid.height * 6 / 7)
-        let opened = app.tapAcross(body, columns: 7, rows: 6) { sheetButton(app, "DONE").waitForExistence(timeout: 0.6) }
+        let today = XCUIApplication.todaysCell()
+        let opened = app.tapAcross(body, columns: 7, rows: 6, first: [(today.column, today.row)]) {
+            sheetButton(app, "DONE").waitForExistence(timeout: 0.4)
+        }
 
         // The day lists its sessions in a Cindy sheet; a row opens its session.
         XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")

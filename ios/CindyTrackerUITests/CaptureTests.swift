@@ -236,7 +236,9 @@ final class CaptureTests: XCTestCase {
         // The chart is drawn: a point is selected by a touch near it, so the chart's area is tried
         // across until OPEN appears beside the readout.
         let chart = stop.frame
-        let selected = app.tapAcross(chart, columns: 9, rows: 5) { app.buttons["OPEN"].waitForExistence(timeout: 0.5) }
+        let selected = app.tapAcross(chart, columns: 7, rows: 3, first: [(6, 1), (6, 0), (6, 2)]) {
+            app.buttons["OPEN"].waitForExistence(timeout: 0.4)
+        }
         XCTAssertTrue(selected, "a selected point offers OPEN; the chart's frame is \(chart)")
         capture(app, "progress-point")
 
@@ -249,7 +251,10 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(trained.exists, "the calendar has a trained day")
         let grid = trained.frame
         let body = CGRect(x: grid.minX, y: grid.minY + grid.height / 7, width: grid.width, height: grid.height * 6 / 7)
-        let opened = app.tapAcross(body, columns: 7, rows: 6) { sheetButton(app, "DONE").waitForExistence(timeout: 0.6) }
+        let today = XCUIApplication.todaysCell()
+        let opened = app.tapAcross(body, columns: 7, rows: 6, first: [(today.column, today.row)]) {
+            sheetButton(app, "DONE").waitForExistence(timeout: 0.4)
+        }
         XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")
         capture(app, "progress-day")
     }
