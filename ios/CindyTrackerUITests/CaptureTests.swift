@@ -140,4 +140,52 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(sheetButton(app, "KEEP IT").waitForExistence(timeout: 5))
         capture(app, "question-discard")
     }
+
+    /// Starts a workout without calibrating, adds `reps` by hand, ends it, and leaves the session
+    /// page up.
+    private func finishSession(_ app: XCUIApplication, reps: Int) {
+        let start = hud(app, "btnStart", labelled: "Start the workout")
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        start.tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+        hud(app, "btnSkipExercise").tap()
+        XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5))
+        sheetButton(app, "SKIP").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
+        for _ in 0..<reps { hud(app, "btnAddRep").tap() }
+        hud(app, "btnEnd").tap()
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
+        sheetButton(app, "END").tap()
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 10))
+    }
+
+    /// The session page: one ended with nothing counted, then one with reps that has the first to be
+    /// compared with. The heart-rate block needs a watch's trace, which the simulator cannot give.
+    func testSessionPage() {
+        let app = launch("nohands")
+        finishSession(app, reps: 0)
+        capture(app, "session-stopped")
+        app.buttons["DONE"].tap()
+
+        let again = hud(app, "btnStart", labelled: "Start again")
+        XCTAssertTrue(again.waitForExistence(timeout: 10))
+        again.tap()
+        finishSession(app, reps: 2)
+        capture(app, "session-finished")
+
+        let compared = app.staticTexts["COMPARED WITH"]
+        var swipes = 0
+        while !compared.exists && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        if compared.exists {
+            let open = app.buttons.matching(NSPredicate(format: "label CONTAINS ' · '")).firstMatch
+            if open.waitForExistence(timeout: 5) {
+                open.tap()
+                XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
+                capture(app, "session-reopened-compared")
+            }
+        }
+    }
 }
