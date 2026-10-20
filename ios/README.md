@@ -121,7 +121,10 @@ ios/
     ├── PlacementDiagram.swift    where to stand, drawn
     ├── Palette.swift             Android's colours and Manrope, for the screens written from P14 on
     ├── Resources/                Manrope's five files and its licence text
-    └── ResultsView.swift         score, level, splits
+    ├── ResultsView.swift         the session page: its order, its questions
+    ├── ResultsCards.swift        the page's cards: score, level, tiles, movements, lifted, compared with
+    ├── ResultsHeart.swift        the heart-rate block
+    └── ResultsCharts.swift       the four charts
 └── CindyTrackerUITests/  drives the app in the simulator against the scripted body
 ```
 
