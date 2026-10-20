@@ -40,25 +40,3 @@ struct PlacementGuideView: View {
         .accessibilityIdentifier("placementGuide")
     }
 }
-
-/// The demonstrator: what the start position of the movement the athlete cannot start is, in the
-/// movement's own words. Shown once the movement has stayed un-startable for a moment, so a gate
-/// that flickers between reps never brings it up.
-struct CoachCard: View {
-    let exercise: Exercise
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(exercise.label)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Color.accent)
-            Text(exercise.startCue)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityIdentifier("coachCard")
-    }
-}
