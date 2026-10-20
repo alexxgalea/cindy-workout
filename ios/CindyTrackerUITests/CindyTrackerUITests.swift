@@ -140,6 +140,53 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10), "discarding closes the page")
     }
 
+    // MARK: - the session page
+
+    /// A session of two hand-added reps, ended: its page is up when this returns.
+    private func finishTwoRepSession(_ app: XCUIApplication) {
+        startSkippingSetup(app)
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnEnd").tap()
+        XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5), "stopping asks first")
+        sheetButton(app, "END").tap()
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 10), "the session page follows")
+    }
+
+    func testTheSessionPageIsFullScreenAndClosesWithDone() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+
+        // A sheet would go with a swipe down; a full-screen page leaves by DONE alone.
+        let top = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+        top.press(forDuration: 0.05, thenDragTo: app.windows.firstMatch.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+        XCTAssertTrue(app.buttons["DONE"].exists, "swiping down left the session page")
+
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10),
+                      "DONE returns to the camera")
+    }
+
+    func testDoneCanBeReachedAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        finishTwoRepSession(app)
+
+        let done = app.buttons["DONE"]
+        var swipes = 0
+        while !done.isHittable && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(done.isHittable, "DONE can be scrolled to and hit")
+        done.tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+    }
+
     // MARK: - the questions
 
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
