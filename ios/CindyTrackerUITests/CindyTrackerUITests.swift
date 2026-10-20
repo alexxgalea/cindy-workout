@@ -52,7 +52,8 @@ final class CindyTrackerUITests: XCTestCase {
     /// A button of the Cindy sheet, found by its label: the sheet gives its two buttons identifiers
     /// of their own, and a button with an identifier is not found by its label alone.
     private func sheetButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        app.buttons.matching(NSPredicate(
+            format: "identifier IN {'sheetPrimary', 'sheetSecondary'} AND label == %@", label)).firstMatch
     }
 
     private func startSkippingSetup(_ app: XCUIApplication) {
