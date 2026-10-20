@@ -26,9 +26,11 @@ final class CaptureTests: XCTestCase {
         add(attachment)
     }
 
-    /// A button of the Cindy sheet, found by its label.
+    /// A button of the Cindy sheet, found by its label among the sheet's own two buttons: the
+    /// controls beneath it can share a label (SKIP, DISCARD) and are still in the tree while it slides in.
     private func sheetButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        app.buttons.matching(NSPredicate(
+            format: "identifier IN {'sheetPrimary', 'sheetSecondary'} AND label == %@", label)).firstMatch
     }
 
     /// Swipes the screen up until something with this label is there, at most eight times.
