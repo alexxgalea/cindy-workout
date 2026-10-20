@@ -150,7 +150,9 @@ final class CindyTrackerUITests: XCTestCase {
         startSkippingSetup(app)
         app.buttons["STOP"].tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["+1"].exists, "the controls beneath leave the accessibility tree")
+        // The accessibility tree follows the state a moment later, so it is waited for.
+        XCTAssertTrue(app.buttons["+1"].waitForNonExistence(timeout: 5),
+                      "the controls beneath leave the accessibility tree")
         sheetButton(app, "KEEP GOING").tap()
         XCTAssertTrue(app.buttons["+1"].waitForExistence(timeout: 5))
     }
