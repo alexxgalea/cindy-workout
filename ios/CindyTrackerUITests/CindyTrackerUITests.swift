@@ -271,10 +271,15 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testProgressHasItsTitleAndAPinnedDone() {
         let app = launchReplaying("nohands")
+        // With a session on the board the page is longer than the screen, so DONE is within reach only
+        // if it is pinned below the scroll and not at the foot of it.
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
         openProgress(app)
 
         XCTAssertTrue(app.staticTexts["Cindy — AMRAP 20:00"].exists, "the line under the title")
-        // Pinned: it is there without scrolling.
+        XCTAssertEqual(app.navigationBars.count, 0, "the system's bar is hidden: the screen has its own title")
         XCTAssertTrue(app.buttons["DONE"].isHittable, "DONE is within reach")
         app.buttons["DONE"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Progress'")).firstMatch
@@ -290,6 +295,7 @@ final class CindyTrackerUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["LEADERBOARD"].waitForExistence(timeout: 5), "the benchmark is always there")
         XCTAssertTrue(app.staticTexts["No attempts yet. Finish a 20-minute Cindy and it lands here."].exists)
+        XCTAssertFalse(app.buttons["Previous month"].exists, "the calendar needs a session")
         for absent in ["THIS WEEK", "PROGRESS", "PEAKS"] {
             XCTAssertFalse(app.staticTexts[absent].exists, "\(absent) needs a session")
         }
@@ -323,9 +329,55 @@ final class CindyTrackerUITests: XCTestCase {
         guard let done = scrolledToTopDone(app) else { return XCTFail("the session page has a DONE") }
         done.tap()
 
-        // Back on Progress, not on the camera.
-        XCTAssertTrue(app.staticTexts["Progress"].waitForExistence(timeout: 5), "DONE returns to Progress")
+        // Back on Progress: its title can be hit again (a covered page stays in the queries, but not
+        // hittable), and the session page is gone.
+        let title = app.staticTexts["Progress"]
+        var back = false
+        for _ in 0..<10 {
+            if title.exists && title.isHittable { back = true; break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertTrue(back, "DONE returns to Progress")
         XCTAssertFalse(dated.exists, "the session page is gone")
+    }
+
+    func testDiscardingASessionOpenedFromProgressSaysSoAndRemovesItsRow() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        openProgress(app)
+
+        let rows = app.buttons.matching(identifier: "leaderRow")
+        var swipes = 0
+        while !(rows.firstMatch.exists && rows.firstMatch.isHittable) && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(rows.firstMatch.exists, "the leaderboard lists the athlete's sessions")
+        let before = rows.count
+        rows.firstMatch.tap()
+
+        // The reopened session offers DISCARD at the foot of its page.
+        let discard = app.buttons["DISCARD"]
+        swipes = 0
+        while !(discard.exists && discard.isHittable) && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(discard.exists, "a saved session can be discarded from its page")
+        discard.tap()
+        XCTAssertTrue(sheetButton(app, "DISCARD").waitForExistence(timeout: 5), "DISCARD asks first")
+        sheetButton(app, "DISCARD").tap()
+
+        XCTAssertTrue(app.staticTexts["Session discarded"].waitForExistence(timeout: 10),
+                      "Progress says what happened under the page that closed")
+        var gone = false
+        for _ in 0..<10 {
+            if rows.count == before - 1 { gone = true; break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertTrue(gone, "the board is built again without the session: \(before) rows before, \(rows.count) after")
     }
 
     func testProgressNamesItsCardsInAndroidsWords() {
