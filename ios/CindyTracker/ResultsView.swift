@@ -17,7 +17,7 @@ struct ResultsView: View {
     /// Redraws the Strava row as its upload moves through the ledger.
     @ObservedObject private var strava = StravaCenter.shared
     /// Said to whatever is underneath once this page has discarded its session and closed: a
-    /// dismissed sheet takes its own overlay with it, so the screen it was over has to say so.
+    /// dismissed cover takes its own overlay with it, so the screen it was over has to say so.
     private let onDiscarded: () -> Void
 
     private enum Asking: Identifiable {
@@ -34,26 +34,28 @@ struct ResultsView: View {
         let page = vm.page
         let discardQuestion = vm.discardQuestion
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                header(page)
-                if let box = page.celebration { CelebrationCard(box: box) }
-                StatTileGrid(tiles: page.tiles)
-                if let track = page.track {
-                    titled(ResultsWords.trackTitle) { TrackCard(vm: vm, track: track) }
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 24) {
+                    header(page)
+                    if let box = page.celebration { CelebrationCard(box: box) }
+                    StatTileGrid(tiles: page.tiles)
+                    if let track = page.track {
+                        titled(ResultsWords.trackTitle) { TrackCard(vm: vm, track: track) }
+                    }
+                    if let movements = page.movements {
+                        titled(ResultsWords.movementsTitle) { MovementCard(movements: movements) }
+                    }
+                    LevelCard(level: page.level)
+                    lifted(page.lifted)
+                    if let compare = page.compare {
+                        ComparisonCardView(compare: compare, onChoose: { vm.chooseComparison($0) },
+                                           onOpen: { reopened = vm.reopen(compare.card.attemptAtMillis) })
+                    }
+                    if let timeline = page.timeline { timelineCard(timeline) }
+                    if let splits = page.splits { splitsCard(splits) }
+                    if let heart = page.heart { heartCard(heart) }
+                    if !page.stats.isEmpty || stravaRow != nil { details(page.stats) }
                 }
-                if let movements = page.movements {
-                    titled(ResultsWords.movementsTitle) { MovementCard(movements: movements) }
-                }
-                LevelCard(level: page.level)
-                lifted(page.lifted)
-                if let compare = page.compare {
-                    ComparisonCardView(compare: compare, onChoose: { vm.chooseComparison($0) },
-                                       onOpen: { reopened = vm.reopen(compare.card.attemptAtMillis) })
-                }
-                if let timeline = page.timeline { timelineCard(timeline) }
-                if let splits = page.splits { splitsCard(splits) }
-                if let heart = page.heart { heartCard(heart) }
-                if !page.stats.isEmpty || stravaRow != nil { details(page.stats) }
 
                 // The bar is whatever the page says it is: PROGRESS only straight after a workout (a
                 // reopened session came from Progress), DISCARD only for a session on the board.
@@ -141,8 +143,9 @@ struct ResultsView: View {
         return "\(base) and \(reps.dropFirst()) more reps"
     }
 
-    private func titled<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func titled<Content: View>(_ title: String, gap: CGFloat = 10,
+                                       @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: gap) {
             SectionEyebrow(title)
             content()
         }
@@ -180,7 +183,7 @@ struct ResultsView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ValueRow(label: row.label, value: row.value, action: row.action.map { a in { perform(a) } })
                         if let note = row.footnote {
-                            Text(note).cindy(.footnote).padding(.horizontal, 18).padding(.bottom, 12)
+                            Text(note).smallPrint().padding(.horizontal, 18).padding(.bottom, 12)
                         }
                     }
                 case .strava:
@@ -223,38 +226,44 @@ struct ResultsView: View {
     // MARK: splits, timeline and heart rate
 
     private func splitsCard(_ splits: SplitsSection) -> some View {
-        titled(ResultsWords.splitsTitle) {
-            ChartCard(vertical: 16) {
-                if let readout = vm.splitsReadout {
-                    Text(readout.title).cindy(.metricS)
-                        .lineLimit(1).minimumScaleFactor(12.0 / 17.0)
-                    Text(readout.detail).cindy(.callout).padding(.top, 2)
-                    // Kept (empty) while a comparison exists, so the chart under it does not move.
-                    if readout.versusVisibility != .gone {
-                        Text(readout.versus ?? " ")
-                            .cindy(.callout, colour: readout.faster == true ? Palette.stateOk : Palette.labelSecondary)
-                            .opacity(readout.versusVisibility == .visible ? 1 : 0)
+        titled(ResultsWords.splitsTitle, gap: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                ChartCard(top: 16, bottom: 16) {
+                    if let readout = vm.splitsReadout {
+                        Text(readout.title).cindy(.metricS)
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                        // Two lines kept, so the chart does not move under a finger.
+                        Text(readout.detail).cindy(.callout)
+                            .lineLimit(2, reservesSpace: true).padding(.top, 4)
+                        // Kept (empty) while a comparison exists, so the chart under it does not move.
+                        if readout.versusVisibility != .gone {
+                            Text(readout.versus ?? " ")
+                                .cindy(.callout, colour: readout.faster == true ? Palette.stateOk : Palette.labelSecondary)
+                                .lineLimit(1)
+                                .opacity(readout.versusVisibility == .visible ? 1 : 0)
+                                .padding(.top, 2)
+                        }
                     }
+                    RoundSplitsView(vm: vm).padding(.top, 12)
                 }
-                RoundSplitsView(vm: vm).padding(.top, 10)
-                Text(splits.note).cindy(.footnote).padding(.top, 8)
+                Text(splits.note).smallPrint().padding(.leading, 4)
             }
         }
     }
 
     private func timelineCard(_ timeline: TimelineSection) -> some View {
         titled(ResultsWords.timelineTitle) {
-            ChartCard(vertical: 16) {
+            ChartCard(top: 16, bottom: 12) {
                 if let readout = vm.timelineReadout {
                     Text(readout.title).cindy(.metricS)
-                        .lineLimit(1).minimumScaleFactor(12.0 / 18.0)
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     // Two lines kept, so the chart does not move under a finger.
                     Text(readout.detail).cindy(.callout)
                         .lineLimit(2, reservesSpace: true).padding(.top, 2)
                 }
                 SessionTimelineView(vm: vm).padding(.top, 10)
                 if let legend = timeline.legend {
-                    Text(legend).cindy(.footnote).padding(.top, 8)
+                    Text(legend).smallPrint().padding(.top, 8)
                 }
             }
             .accessibilityElement(children: .contain)

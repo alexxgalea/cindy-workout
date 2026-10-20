@@ -21,7 +21,7 @@ struct HeartSection: View {
 
     var body: some View {
         InsetGroup(items, id: \.self, row: row) {
-            Text(heart.footnote).cindy(.footnote)
+            Text(heart.footnote).smallPrint()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18).padding(.bottom, 14)
         }
@@ -35,15 +35,8 @@ struct HeartSection: View {
             NavRow(title: ResultsWords.zonesInviteTitle, value: ResultsWords.zonesInviteValue, action: onInviteAge)
         case .hardest:
             if let hardest = heart.hardestRound {
-                HStack(spacing: 0) {
-                    Text(ResultsWords.hardestRound).cindy(.body).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(hardest).font(Manrope.font(.bold, size: 16).monospacedDigit())
-                        .foregroundStyle(Palette.label)
-                }
-                .padding(.leading, 18).padding(.trailing, 16).padding(.vertical, 14)
-                .frame(minHeight: 52)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(heart.hardestRoundSpoken ?? "\(ResultsWords.hardestRound), \(hardest)")
+                HardestRoundRow(value: hardest,
+                                spoken: heart.hardestRoundSpoken ?? "\(ResultsWords.hardestRound), \(hardest)")
             }
         case .verdict:
             if let verdict = heart.verdict {
@@ -59,29 +52,66 @@ struct HeartSection: View {
             SectionEyebrow(ResultsWords.timeInZone).padding(.horizontal, 18).padding(.top, 14)
             ZoneBarView(vm: vm).padding(.horizontal, 18).padding(.top, 6)
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                HStack(spacing: 10) {
-                    Circle().fill(Palette.heart.opacity(ZoneBarModel.alpha[i])).frame(width: 10, height: 10)
-                    Text(row.name).cindy(.body, colour: Palette.label)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(row.time).font(Manrope.font(.bold, size: 15).monospacedDigit())
-                        .foregroundStyle(Palette.label)
-                        .frame(width: 48, alignment: .trailing)
-                    Text(row.range).font(Manrope.font(.regular, size: 13).monospacedDigit())
-                        .foregroundStyle(Palette.labelTertiary)
-                        .frame(width: 98, alignment: .trailing)
-                }
-                .padding(.horizontal, 18)
-                .frame(minHeight: 40)
-                .background(vm.zoneSelected == i ? Palette.surfaceGlassRaised : Color.clear)
-                .opacity(vm.zoneSelected == nil || vm.zoneSelected == i ? 1 : ZoneBarModel.dim)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.spoken)
+                ZoneRowView(row: row, alpha: ZoneBarModel.alpha[i], held: vm.zoneSelected == i,
+                            dimmed: vm.zoneSelected != nil && vm.zoneSelected != i)
             }
         }
     }
 }
 
-/// Average, peak and the like: a column each, the figure large and its unit beside it.
+/// A time in a zone: the zone's swatch, its name, how long and its range. The figures scale with the
+/// text size as the name does.
+private struct ZoneRowView: View {
+    let row: HeartCard.ZoneRow
+    let alpha: Double
+    let held: Bool
+    let dimmed: Bool
+    @ScaledMetric(relativeTo: .body) private var timeSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var rangeSize: CGFloat = 13
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().fill(Palette.heart.opacity(alpha)).frame(width: 10, height: 10)
+            Text(row.name).cindy(.body, colour: Palette.label)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(row.time).font(Manrope.font(.bold, size: timeSize).monospacedDigit())
+                .foregroundStyle(Palette.label)
+                .lineLimit(1).minimumScaleFactor(0.5)
+                .frame(minWidth: 48, alignment: .trailing)
+            Text(row.range).font(Manrope.font(.regular, size: rangeSize).monospacedDigit())
+                .foregroundStyle(Palette.labelTertiary)
+                .lineLimit(1).minimumScaleFactor(0.5)
+                .frame(minWidth: 98, alignment: .trailing)
+        }
+        .padding(.horizontal, 18)
+        .frame(minHeight: 40)
+        .background(held ? Palette.surfaceGlassRaised : Color.clear)
+        .opacity(dimmed ? ZoneBarModel.dim : 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.spoken)
+    }
+}
+
+/// The hardest round, as a label and its figure.
+private struct HardestRoundRow: View {
+    let value: String
+    let spoken: String
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 16
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(ResultsWords.hardestRound).cindy(.body).frame(maxWidth: .infinity, alignment: .leading)
+            Text(value).font(Manrope.font(.bold, size: size).monospacedDigit())
+                .foregroundStyle(Palette.label)
+        }
+        .padding(.leading, 18).padding(.trailing, 16).padding(.vertical, 14)
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
+    }
+}
+
+/// Covered, average, peak: a column each, the label over the figure over its unit.
 private struct HeartFigures: View {
     let figures: [HeartCard.Figure]
     @ScaledMetric(relativeTo: .title) private var size: CGFloat = 28
@@ -89,14 +119,13 @@ private struct HeartFigures: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             ForEach(Array(figures.enumerated()), id: \.offset) { _, f in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(f.label).cindy(.eyebrow)
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(f.value).font(Manrope.font(.bold, size: size).monospacedDigit())
-                            .foregroundStyle(Palette.label)
-                            .lineLimit(1).minimumScaleFactor(0.5)
-                        Text(f.unit).cindy(.footnote)
-                    }
+                    Text(f.value).font(Manrope.font(.bold, size: size).monospacedDigit())
+                        .foregroundStyle(Palette.label)
+                        .lineLimit(1).minimumScaleFactor(0.4)
+                        .padding(.top, 4)
+                    Text(f.unit).cindy(.footnote)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .ignore)
