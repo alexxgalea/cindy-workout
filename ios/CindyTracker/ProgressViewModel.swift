@@ -2,19 +2,6 @@ import SwiftUI
 import UIKit
 import CindyCore
 
-/// What the Progress screen opens in its sheet: a trained day's sessions, or one session reopened.
-enum ProgressRoute: Identifiable {
-    case day(DaySheet)
-    case session(ResultsRequest)
-
-    var id: String {
-        switch self {
-        case .day(let sheet): return "day \(sheet.title)"
-        case .session(let request): return "session \(request.id)"
-        }
-    }
-}
-
 /// The Progress screen with its state, for SwiftUI: wraps `ProgressModel`, which decides
 /// everything, and the chart and calendar models, which own the touch. It publishes what the views
 /// must redraw for and does nothing of its own to the page.
@@ -28,7 +15,10 @@ final class ProgressViewModel: ObservableObject {
     @Published private(set) var page: ProgressPage
     @Published private(set) var selected: Int?
     @Published private(set) var revision = 0
-    @Published var route: ProgressRoute?
+    /// The trained day whose sessions are listed in a sheet, if one is open.
+    @Published var day: DaySheet?
+    /// The session reopened over this screen, if one is.
+    @Published var reopened: ResultsRequest?
     @Published private(set) var toast: String?
 
     private let store = RecordStore()
@@ -52,7 +42,7 @@ final class ProgressViewModel: ObservableObject {
         chart.onTick = { UISelectionFeedbackGenerator().selectionChanged() }
         calendar.onDayTap = { [weak self] date in
             guard let self, let sheet = self.progress.daySheet(date) else { return }
-            self.route = .day(sheet)
+            self.day = sheet
         }
         progress.onChange = { [weak self] in self?.reload() }
         reload()
@@ -71,11 +61,12 @@ final class ProgressViewModel: ObservableObject {
     /// The session OPEN reopens, when a line point is selected.
     var openTarget: Int64? { progress.openTarget(selected: selected) }
 
-    /// Reopens a saved session on the results page, as it looked the day it happened. The sheet
+    /// Reopens a saved session on the results page, as it looked the day it happened. The day sheet
     /// that was up gets out of the way, rather than leaving the athlete to dismiss a day they are no
     /// longer looking at.
     func open(session atMillis: Int64) {
-        if let request = ResultsRequest.reopening(atMillis) { route = .session(request) }
+        day = nil
+        if let request = ResultsRequest.reopening(atMillis) { reopened = request }
     }
 
     /// A session was discarded from its own page, which has closed over this one.

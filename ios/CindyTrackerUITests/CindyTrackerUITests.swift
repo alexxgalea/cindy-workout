@@ -246,6 +246,88 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertNotNil(scrolledToDone(), "the second page still has its DONE")
     }
 
+    // MARK: - the Progress screen
+
+    /// Opens Progress from the menu, over the camera screen.
+    private func openProgress(_ app: XCUIApplication) {
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Progress'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Progress row")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Progress"].waitForExistence(timeout: 5), "Progress opens")
+    }
+
+    /// The `DONE` of the page on top, scrolled to: covered pages stay in the queries, and a query
+    /// cannot filter on `isHittable`, so the hittable one is chosen here.
+    private func scrolledToTopDone(_ app: XCUIApplication) -> XCUIElement? {
+        let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'"))
+        for _ in 0..<12 {
+            if let done = dones.allElementsBoundByIndex.first(where: { $0.isHittable }) { return done }
+            app.swipeUp()
+        }
+        return dones.allElementsBoundByIndex.first(where: { $0.isHittable })
+    }
+
+    func testProgressHasItsTitleAndAPinnedDone() {
+        let app = launchReplaying("nohands")
+        openProgress(app)
+
+        XCTAssertTrue(app.staticTexts["Cindy — AMRAP 20:00"].exists, "the line under the title")
+        // Pinned: it is there without scrolling.
+        XCTAssertTrue(app.buttons["DONE"].isHittable, "DONE is within reach")
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Progress'")).firstMatch
+            .waitForExistence(timeout: 5), "DONE returns to the menu")
+    }
+
+    func testAnEmptyBoardHasOnlyTheLeaderboard() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", ""]
+        app.launch()
+        openProgress(app)
+
+        XCTAssertTrue(app.staticTexts["LEADERBOARD"].waitForExistence(timeout: 5), "the benchmark is always there")
+        XCTAssertTrue(app.staticTexts["No attempts yet. Finish a 20-minute Cindy and it lands here."].exists)
+        for absent in ["THIS WEEK", "PROGRESS", "PEAKS"] {
+            XCTAssertFalse(app.staticTexts[absent].exists, "\(absent) needs a session")
+        }
+    }
+
+    func testATrainedDayOpensItsSessionAndDoneComesBackToProgress() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        openProgress(app)
+
+        // The calendar's trained days are its buttons, spoken "<date>, trained".
+        let trained = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', trained' OR label CONTAINS ', trained,'")).firstMatch
+        var swipes = 0
+        while !trained.exists && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(trained.exists, "the calendar has a trained day")
+        trained.tap()
+
+        // The day lists its sessions in a Cindy sheet; a row opens its session.
+        XCTAssertTrue(sheetButton(app, "DONE").waitForExistence(timeout: 5), "the day opens a sheet")
+        let row = app.buttons["daySession"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the sheet lists the day's sessions")
+        row.tap()
+
+        let dated = app.staticTexts.matching(NSPredicate(format: "label MATCHES[c] '.*[0-9]{4} · .*'")).firstMatch
+        XCTAssertTrue(dated.waitForExistence(timeout: 5), "the session opens, headed by its date")
+        guard let done = scrolledToTopDone(app) else { return XCTFail("the session page has a DONE") }
+        done.tap()
+
+        // Back on Progress, not on the camera.
+        XCTAssertTrue(app.staticTexts["Progress"].waitForExistence(timeout: 5), "DONE returns to Progress")
+        XCTAssertFalse(dated.exists, "the session page is gone")
+    }
+
     // MARK: - the questions
 
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
