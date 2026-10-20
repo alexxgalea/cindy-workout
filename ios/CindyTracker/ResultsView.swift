@@ -53,7 +53,7 @@ struct ResultsView: View {
                 lifted(page.lifted)
                 if let compare = page.compare {
                     ComparisonCardView(compare: compare, onChoose: { vm.chooseComparison($0) },
-                                       onOpen: { withAnimation(.easeOut(duration: 0.2)) { reopened = vm.reopen(compare.card.attemptAtMillis) } })
+                                       onOpen: { reopened = vm.reopen(compare.card.attemptAtMillis) })
                 }
                 if let timeline = page.timeline { timelineCard(timeline) }
                 if let splits = page.splits { splitsCard(splits) }
@@ -79,7 +79,6 @@ struct ResultsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 24)
         }
-        .accessibilityHidden(reopened != nil)
         .background(Palette.background.ignoresSafeArea())
         .sheet(item: $asking, onDismiss: { vm.bodyChanged() }) { which in
             switch which {
@@ -87,17 +86,9 @@ struct ResultsView: View {
             case .heartRate: HeartRateDetailsSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
             }
         }
-        // A session reopened from COMPARED WITH lies over this page, inside it and not as a second
-        // cover: DONE there takes it away and leaves this page, which is what it was opened from.
-        .overlay {
-            if let request = reopened {
-                ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) },
-                            close: { withAnimation(.easeOut(duration: 0.2)) { reopened = nil } })
-                    .id(request.id)
-                    .background(Palette.background.ignoresSafeArea())
-                    .transition(.opacity)
-                    .accessibilityAddTraits(.isModal)
-            }
+        .fullScreenCover(item: $reopened) { request in
+            ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) },
+                        close: { reopened = nil })
         }
         .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
