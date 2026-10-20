@@ -394,10 +394,11 @@ final class CindyTrackerUITests: XCTestCase {
         tutorialNext(app).tap()
 
         // The pages are done, and the tour of the controls comes next: it opens on the first
-        // control and ends on the last, one step per control the screen has (the iOS camera screen
-        // has no SKIP button, so that step is left out). Read from what is on the screen, so that
-        // it holds the order and the end and not how many taps it took to get there.
-        let steps = 6
+        // control and ends on the last, one step per control the screen has, SKIP's included even
+        // though it is dimmed before the clock starts. Read from what is on the screen, so that it
+        // holds the order and the end and not how many taps it took to get there.
+        let expected = ["Start", "What Cindy sees", "Your reps", "Skip", "Record", "Menu", "Flip"]
+        let steps = expected.count
         let skip = app.buttons["Skip the tour"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour opens")
         XCTAssertTrue(app.staticTexts["tourTitle"].waitForExistence(timeout: 5), "the tour has a title")
@@ -406,13 +407,16 @@ final class CindyTrackerUITests: XCTestCase {
         // so count the taps it takes to put the tour away. One per step, and not one fewer: a NEXT
         // that does nothing leaves the tour up, and one that skips steps ends it early.
         var taps = 0
+        var titles: [String] = []
         while skip.exists && taps < steps + 3 {
+            titles.append(app.staticTexts["tourTitle"].label)
             tapTourNext(app)
             taps += 1
             _ = skip.waitForNonExistence(timeout: 1.5)
         }
         XCTAssertFalse(skip.exists, "the tour was still up after \(taps) taps on NEXT")
         XCTAssertEqual(taps, steps, "one tap on NEXT for each of the \(steps) controls")
+        XCTAssertEqual(titles, expected, "the tour says each control in its order")
         XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
