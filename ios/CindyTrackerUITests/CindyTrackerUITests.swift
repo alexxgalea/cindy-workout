@@ -159,8 +159,9 @@ final class CindyTrackerUITests: XCTestCase {
         startSkippingSetup(app)
         hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
-        // A view hidden from accessibility stays in the test's queries, but with no frame and no
-        // point to touch, so what is checked is that it cannot be reached.
+        // A view hidden from accessibility stays in the test's queries, so what is asked is whether
+        // it can be touched, which the dim over it settles. That a screen reader no longer finds it
+        // is owed on a phone.
         let plusOne = hud(app, "btnAddRep")
         let unreachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == false"),
                                                     object: plusOne)
@@ -197,13 +198,14 @@ final class CindyTrackerUITests: XCTestCase {
     func testTheCoachHangsFromTheBandAndTheStatusLineKeepsItsRoom() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        let roomBefore = status(app).frame
+        let roomBefore = status(app).frame.minY
         let card = app.descendants(matching: .any).matching(identifier: "coachCard").firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "a body in frame but not in position is shown how")
         // The line steps aside for the card, so the cue is not given twice, but it keeps its room so
         // that nothing jumps. Whether a screen reader still finds it cannot be asked of a UI test,
-        // which keeps hidden views in its queries; that is owed on a phone.
-        XCTAssertEqual(status(app).frame, roomBefore, "the status line has not moved")
+        // which keeps views hidden from accessibility in its queries; that is owed on a phone.
+        // Its top, not its whole frame: the words change as the check ends, and the width follows them.
+        XCTAssertEqual(status(app).frame.minY, roomBefore, accuracy: 1, "the status line has not moved")
         XCTAssertGreaterThanOrEqual(card.frame.minY, status(app).frame.maxY, "the card hangs below the band")
     }
 
@@ -323,8 +325,10 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(hud(app, "btnMenu").isHittable)
         let count = repCount(app)
         XCTAssertTrue(count.isHittable, "so is the count")
-        XCTAssertTrue(hud(app, "btnSkipExercise").frame.height > 0)
+        XCTAssertTrue(hud(app, "btnSkipExercise").isHittable, "SKIP too")
         XCTAssertFalse(count.frame.intersects(start.frame), "and the two do not overlap")
+        XCTAssertLessThanOrEqual(app.staticTexts["status"].frame.maxY, exercise(app).frame.minY,
+                                 "the bands do not run into each other")
     }
 
     func testALongStatusLineDoesNotLoseTheClock() {

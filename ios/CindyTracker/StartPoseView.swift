@@ -108,7 +108,10 @@ struct StartPoseView: View {
 /// over the words "Hang from the bar", does not also need to be labelled "start position".
 struct CoachPanel: View {
     let exercise: Exercise
-    @ScaledMetric(relativeTo: .footnote) private var cueSize: CGFloat = 12.5
+    @ScaledMetric(relativeTo: .footnote) private var scaledCueSize: CGFloat = 12.5
+    /// The card is a fixed 132 wide, and sits in the room between the bands: the cue grows to twice
+    /// its size, as Android's text does, and no further.
+    private var cueSize: CGFloat { min(scaledCueSize, 25) }
 
     var body: some View {
         VStack(spacing: 0) {
