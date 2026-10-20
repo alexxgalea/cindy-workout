@@ -65,7 +65,7 @@ private struct StreakView: View {
                         .foregroundStyle(column.value > 0 ? Palette.achievement : Palette.labelTertiary)
                         .padding(.trailing, 6)
                 }
-                Text("\(column.value)").cindy(.metricL).lineLimit(1).minimumScaleFactor(0.4)
+                Text(verbatim: "\(column.value)").cindy(.metricL).lineLimit(1).minimumScaleFactor(0.4)
                 Text(column.unit).cindy(.headline, colour: Palette.labelSecondary)
                     .lineLimit(1).minimumScaleFactor(0.6).padding(.leading, 6)
             }
@@ -186,7 +186,7 @@ struct CalendarCard: View {
         VStack(spacing: 4) {
             HStack(spacing: 0) {
                 arrow(.chevronLeft, ProgressWords.previousMonth, enabled: section.canGoBack) { vm.previousMonth() }
-                Text("\(vm.calendar.monthTitle) \(section.month.year)")
+                Text(verbatim: "\(vm.calendar.monthTitle) \(section.month.year)")
                     .cindy(.headline, colour: Palette.label)
                     .frame(maxWidth: .infinity)
                 arrow(.chevronRight, ProgressWords.nextMonth, enabled: section.canGoForward) { vm.nextMonth() }
