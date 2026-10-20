@@ -30,6 +30,7 @@ final class WorkoutViewModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var clockText = "20:00"
+    @Published private(set) var remainingMs: Int64 = 20 * 60 * 1000
     @Published private(set) var exerciseText = Exercise.pullup.label
     @Published private(set) var repsText = "0"
     @Published private(set) var targetText = "/5"
@@ -226,6 +227,23 @@ final class WorkoutViewModel: ObservableObject {
     }
 
     var statusIsWarning: Bool { dot == .alert }
+
+    /// What each control of the camera screen is, for the state the workout is in.
+    var controls: HudControls { HudControls.of(phase.state) }
+
+    /// The clock, said as the time left rather than as glyphs.
+    var clockSpoken: String { HudSpeech.clock(remainingMs: remainingMs) }
+
+    /// The count against its target, said in words: "2 of 5 PULL-UPS", or the calibration reps while
+    /// the setup check runs and "Setting up" while it cannot yet see the athlete.
+    var repsSpoken: String {
+        let target = Int(targetText.dropFirst()) ?? 0
+        if phase == .setup {
+            guard let reps = Int(repsText) else { return HudSpeech.settingUp }
+            return HudSpeech.setup(reps: reps, of: target)
+        }
+        return HudSpeech.reps(Int(repsText) ?? 0, of: target, movement: exerciseText)
+    }
     var inWorkout: Bool { phase == .running || phase == .paused }
 
     /// What the debug readout says about the counter.
@@ -434,6 +452,7 @@ final class WorkoutViewModel: ObservableObject {
         conduct(MusicFlow.onWorkout(from: phase.state, to: next.state, musicOn: settings.musicOn))
         phase = next
         clockText = session.clockText
+        remainingMs = session.remainingMs
         exerciseText = session.exerciseText
         repsText = session.repsText
         targetText = session.targetText

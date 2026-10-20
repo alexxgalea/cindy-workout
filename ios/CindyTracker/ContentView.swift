@@ -56,7 +56,7 @@ struct SkeletonOverlay: View {
                     var path = Path()
                     path.move(to: point(pa))
                     path.addLine(to: point(pb))
-                    context.stroke(path, with: .color(.accent), lineWidth: unit * Self.boneWidth)
+                    context.stroke(path, with: .color(Palette.label), lineWidth: unit * Self.boneWidth)
                 }
                 let r = unit * Self.jointRadius
                 for k in keypoints where k.score >= Self.minScore {
@@ -115,9 +115,6 @@ struct ContentView: View {
                 SkeletonOverlay(keypoints: camera.keypoints, frameSize: camera.frameSize)
                     .ignoresSafeArea()
                 hud
-                if film.state == .counting, let digit = film.digit {
-                    CountdownOverlay(digit: digit, into: film.into, label: film.countLabel)
-                }
             }
             // While the tour is showing the screen under it is for nobody: the dim keeps it from
             // sight and from touch, and this keeps it from a screen reader.
@@ -128,6 +125,8 @@ struct ContentView: View {
                 SpotlightOverlay(tour: tour, frames: tourFrames, advance: advanceTour, skip: skipTour)
             }
         }
+        // The camera screen is a camera: no status bar over the picture and no home indicator under it.
+        .persistentSystemOverlays(.hidden)
         .coordinateSpace(.named(TourSpace.name))
         .onPreferenceChange(TourFramesKey.self) { tourFrames = $0 }
         .onChange(of: tourFrames) { _, _ in maybeStartTour() }
@@ -202,107 +201,53 @@ struct ContentView: View {
     }
 
     private var hud: some View {
-        VStack {
-            HStack(alignment: .top) {
-                Text(workout.clockText)
-                    .font(.system(size: 34, weight: .bold, design: .monospaced))
-                    .chip()
-                Spacer()
-                VStack(alignment: .trailing, spacing: 6) {
-                    Text("ROUND \(workout.rounds + 1)")
-                        .font(.system(size: 15, weight: .bold))
-                        .chip()
-                    HStack(spacing: 6) {
-                        // What changes state mid-set stays here; navigation and configuration are
-                        // things you settle before the clock starts, and they live in the menu.
-                        chipButton("MENU", on: false) { showMenu = true }
-                            .tourTarget(.menu)
-                        // Red once a tap has bought a count, and lit while it films.
-                        chipButton(FilmFlow.title(for: film.state), on: film.state == .filming,
-                                   tint: film.state == .idle ? nil : Color.warn) {
-                            film.tap()
-                        }
-                        .accessibilityLabel(FilmFlow.label(for: film.state))
-                        .accessibilityIdentifier("recButton")
-                        .tourTarget(.record)
-                    }
-                }
-            }
-
-            HStack(spacing: 8) {
-                Circle().fill(dotColour).frame(width: 9, height: 9).accessibilityHidden(true)
-                Text(workout.status)
-                    .font(.system(size: 13))
-                    .foregroundStyle(workout.statusIsWarning ? Color.warn : Color.dim)
-                    .accessibilityIdentifier("status")
-            }
-            .chip()
-            .tourTarget(.status)
-            // A long press on the status line is the way to the debug readout, as on Android.
-            .onLongPressGesture { showDebug.toggle() }
-
-            if showDebug { debugReadout }
-            if let coaching = workout.coachShowing { CoachCard(exercise: coaching) }
-            if let toast = workout.toast {
-                Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip()
-                    .accessibilityIdentifier("toast")
-            }
-
-            Spacer()
-
-            VStack(spacing: 2) {
-                Text(workout.exerciseText)
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundStyle(Color.accent)
-                    .accessibilityIdentifier("exerciseLabel")
-                Text(repCountLabel)
-                    .font(.system(size: 60, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .accessibilityIdentifier("repCount")
-                ProgressView(value: Double(workout.repProgress), total: 100)
-                    .tint(.accent)
-                    .frame(width: 160)
-                    .accessibilityHidden(true)
-            }
-            .chip()
-            .tourTarget(.reps)
-
-            HStack(spacing: 8) {
-                // The left button is FLIP outside a workout and STOP inside one: flipping the
-                // camera mid-Cindy is not a thing anyone does; ending early is.
-                Button(workout.inWorkout ? "STOP" : "FLIP") {
-                    if workout.inWorkout {
-                        workout.requestStop()
-                        showStopConfirm = true
-                    } else {
-                        camera.flip()
-                        workout.recalibrate()
-                    }
-                }
-                .buttonStyle(GhostButton(tint: workout.inWorkout ? .warn : .white))
-                .tourTarget(.flip)
-
-                Button(workout.startButtonTitle) {
-                    switch workout.phase {
-                    case .idle:
-                        if placementSeen { workout.enterSetup() } else { showPlacement = true }
-                    case .setup:
-                        showSkipConfirm = true
-                    default:
-                        workout.primaryAction()
-                    }
-                }
-                .buttonStyle(PrimaryButton())
-                .tourTarget(.start)
-
-                Button("−1") { workout.undoRep() }.buttonStyle(GhostButton(tint: .white))
-                Button("+1") { workout.manualRep() }
-                    .buttonStyle(GhostButton(tint: .white))
-                    .simultaneousGesture(LongPressGesture().onEnded { _ in workout.skipExercise() })
-            }
-            .padding(.bottom, 8)
+        CameraHud(workout: workout, film: film,
+                  onMenu: { showMenu = true },
+                  onFlip: { camera.flip(); workout.recalibrate() },
+                  onStop: { workout.requestStop(); showStopConfirm = true },
+                  onStart: start,
+                  onSkip: skip,
+                  onToggleDebug: { showDebug.toggle() }) {
+            middle
         }
-        .padding(16)
+    }
+
+    /// The room between the bands, which is for what stands on the picture: the countdown, the debug
+    /// readout, a toast and the start-position coach.
+    private var middle: some View {
+        ZStack(alignment: .top) {
+            if film.state == .counting, let digit = film.digit {
+                CountdownOverlay(digit: digit, into: film.into, label: film.countLabel)
+            }
+            VStack(spacing: 8) {
+                if showDebug { debugReadout }
+                if let toast = workout.toast {
+                    Text(toast).cindy(.headline)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(Palette.bandTop, in: Capsule())
+                        .accessibilityIdentifier("toast")
+                }
+            }
+            .padding(.top, 8)
+            if let coaching = workout.coachShowing {
+                CoachCard(exercise: coaching).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+
+    /// START asks the placement guide first, until the athlete has turned it off; the rest of the
+    /// shutter's jobs are the workout's. It is inert during the setup check, where SKIP is the way out.
+    private func start() {
+        switch workout.phase {
+        case .idle: if placementSeen { workout.enterSetup() } else { showPlacement = true }
+        default: workout.primaryAction()
+        }
+    }
+
+    /// SKIP means the same thing everywhere, leave this movement, but leaving it during the check
+    /// means starting Cindy with no calibration at all, which is worth a question first.
+    private func skip() {
+        if workout.phase == .setup { showSkipConfirm = true } else { workout.skipExercise() }
     }
 
     // MARK: first run
@@ -352,19 +297,6 @@ struct ContentView: View {
     /// Done or skipped: it is taken, and does not come back until Help asks for it.
     private func endTour() { firstRun.hudTourPending = false }
 
-    /// "3 / 5", "1 / 2" during the setup check, or just "—" where nothing counts against a target.
-    private var repCountLabel: String {
-        workout.targetText.isEmpty ? workout.repsText : "\(workout.repsText) / \(workout.targetText.dropFirst())"
-    }
-
-    private var dotColour: Color {
-        switch workout.dot {
-        case .ok: return .accent
-        case .neutral: return .dim
-        case .alert: return .warn
-        }
-    }
-
     /// Where the skeleton comes from and what it cost: source, inference time, whether the crop is
     /// following the body, the counter's signal, range and phase, and the latency probe's lines.
     private var debugReadout: some View {
@@ -379,16 +311,6 @@ struct ContentView: View {
         .multilineTextAlignment(.center)
         .chip()
         .accessibilityIdentifier("debugReadout")
-    }
-
-    private func chipButton(_ title: String, on: Bool, tint: Color? = nil,
-                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(tint ?? (on ? Color.accent : Color.dim))
-        }
-        .chip()
     }
 }
 
