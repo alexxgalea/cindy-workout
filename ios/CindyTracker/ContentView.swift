@@ -191,7 +191,7 @@ struct ContentView: View {
                 workout.syncMusic()
             }
         }
-        .sheet(item: $workout.finished) { request in
+        .fullScreenCover(item: $workout.finished) { request in
             ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
         }
         .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {

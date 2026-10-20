@@ -38,7 +38,7 @@ struct ResultsView: View {
                 header(page)
                 if let box = page.celebration { celebration(box) }
                 tiles(page.tiles)
-                levelPanel(page.level)
+                LevelCard(level: page.level)
                 if let track = page.track { trackCard(track) }
                 if let movements = page.movements { movementCard(movements) }
                 lifted(page.lifted)
@@ -50,53 +50,51 @@ struct ResultsView: View {
 
                 // The bar is whatever the page says it is: PROGRESS only straight after a workout (a
                 // reopened session came from Progress), DISCARD only for a session on the board.
-                HStack(spacing: 10) {
+                ActionBar {
                     ForEach(page.actions, id: \.rawValue) { action in
                         switch action {
                         case .progress:
-                            Button(action.rawValue) { showProgress = true }.buttonStyle(GhostButton(tint: .white))
+                            Button(action.rawValue) { showProgress = true }.buttonStyle(CindyGlassButtonStyle())
                         case .discard:
-                            Button(action.rawValue) { asksToDiscard = true }.buttonStyle(GhostButton(tint: .warn))
+                            Button(action.rawValue) { asksToDiscard = true }
+                                .buttonStyle(CindyGlassButtonStyle(tint: Palette.stateAlert))
                         case .done:
-                            Button(action.rawValue) { dismiss() }.buttonStyle(PrimaryButton())
+                            Button(action.rawValue) { dismiss() }.buttonStyle(CindyPrimaryButtonStyle())
                         }
                     }
                 }
-                .padding(.top, 16)
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 24)
         }
-        .background(Color.appBackground)
+        .background(Palette.background.ignoresSafeArea())
         .sheet(item: $asking, onDismiss: { vm.bodyChanged() }) { which in
             switch which {
             case .weight: BodyWeightSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
             case .heartRate: HeartRateDetailsSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
             }
         }
-        .sheet(item: $reopened) { request in
+        .fullScreenCover(item: $reopened) { request in
             ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
         }
         .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
-        // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
-        // athlete's own.
-        .alert(HeelsFlatSheet.title, isPresented: $heelsFlatExplained) {
-            Button(HeelsFlatSheet.primary) {
-                HeelsFlatSheet.setHeelsFlat(on: vm.profile)
-                toast = HeelsFlatSheet.done
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 2_500_000_000)
-                    toast = nil
-                }
-            }
-            Button(HeelsFlatSheet.secondary, role: .cancel) {}
-        } message: {
-            Text(HeelsFlatSheet.subtitle + "\n\n" + HeelsFlatSheet.note)
-        }
         .overlay(alignment: .bottom) {
             if let toast {
                 Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
             }
+        }
+        // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
+        // athlete's own. Closed any way but the first button, it changes nothing.
+        .cindySheet(isPresented: $heelsFlatExplained,
+                    title: HeelsFlatSheet.title,
+                    subtitle: HeelsFlatSheet.subtitle,
+                    primary: SheetButton(title: HeelsFlatSheet.primary) {
+                        HeelsFlatSheet.setHeelsFlat(on: vm.profile)
+                        flash(HeelsFlatSheet.done)
+                    },
+                    secondary: SheetButton(title: HeelsFlatSheet.secondary) {}) {
+            Text(HeelsFlatSheet.note).cindy(.footnote)
         }
         // KEEP IT is the one filled button, where a reflex tap lands after tapping DISCARD to get
         // here; DISCARD is the red one beside it. Every other way out of the question keeps the session.
@@ -122,28 +120,8 @@ struct ResultsView: View {
     // MARK: the top
 
     private func header(_ page: ResultsPage) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(page.headline)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.dim)
-                .accessibilityAddTraits(.isHeader)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(page.score)
-                    .font(.system(size: 68, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
-                if let reps = page.scoreReps {
-                    Text(reps)
-                        .font(.system(size: 28, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.dim)
-                }
-            }
-            // One stop: "5 rounds plus 12 reps" rather than the two figures read apart.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(scoreSpoken(page))
-            Text(page.scoreDetail)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.dim)
-        }
+        ScoreHeader(headline: page.headline, score: page.score, reps: page.scoreReps,
+                    detail: page.scoreDetail, spoken: scoreSpoken(page))
     }
 
     private func scoreSpoken(_ page: ResultsPage) -> String {
@@ -202,31 +180,6 @@ struct ResultsView: View {
                 .accessibilityLabel(tile.speech)
             }
         }
-    }
-
-    // MARK: level
-
-    private func levelPanel(_ level: LevelPanel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(level.title).font(.system(size: 22, weight: .bold)).foregroundStyle(Color.accent)
-                Spacer()
-                if let rung = level.rung {
-                    Text(rung).font(.system(size: 13, design: .monospaced)).foregroundStyle(Color.dim)
-                }
-            }
-            Text(level.blurb).font(.system(size: 13)).foregroundStyle(Color.dim)
-            // An adaptive session has no bar: an empty one would read as no progress.
-            if let percent = level.progressPercent {
-                ProgressView(value: Double(percent), total: 100).tint(Color.accent)
-                    .accessibilityLabel("Level progress")
-                    .accessibilityValue("\(percent) percent")
-            }
-            Text(level.next).font(.system(size: 12)).foregroundStyle(Color.dim)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: rounds and movements
