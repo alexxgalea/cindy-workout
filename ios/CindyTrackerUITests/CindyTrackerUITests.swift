@@ -328,6 +328,52 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertFalse(dated.exists, "the session page is gone")
     }
 
+    func testProgressNamesItsCardsInAndroidsWords() {
+        let app = launchReplaying("nohands")
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        hud(app, "btnStart", labelled: "Start again").tap()
+        finishTwoRepSession(app)
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        openProgress(app)
+
+        // Two sessions on the board: every card is there.
+        let titles = ["THIS WEEK", "PROGRESS", "PEAKS", "LEADERBOARD"]
+        for title in titles {
+            let heading = app.staticTexts[title]
+            var swipes = 0
+            while !heading.exists && swipes < 12 {
+                app.swipeUp()
+                swipes += 1
+            }
+            XCTAssertTrue(heading.exists, "Progress has a \(title) section")
+        }
+        // The page is not lazy, so every heading has a place at once, and the places run down the page
+        // in the Kotlin's order.
+        let places = titles.map { app.staticTexts[$0].frame.minY }
+        XCTAssertEqual(places, places.sorted(), "THIS WEEK, PROGRESS, PEAKS, LEADERBOARD, top to bottom: \(places)")
+    }
+
+    func testTheStreaksAndDoneSurviveTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        finishTwoRepSession(app)
+        // The session page's DONE is at the foot of its scroll view.
+        guard let done = scrolledToTopDone(app) else { return XCTFail("the session page has a DONE") }
+        done.tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10))
+        openProgress(app)
+
+        let streak = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Daily streak'")).firstMatch
+        XCTAssertTrue(streak.waitForExistence(timeout: 5), "the daily streak is on the page")
+        XCTAssertTrue(app.buttons["DONE"].isHittable, "the pinned DONE stays within reach")
+    }
+
     // MARK: - the questions
 
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
