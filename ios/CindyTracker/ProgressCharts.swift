@@ -75,6 +75,7 @@ struct CalendarGridView: View {
                     Button(stop.spoken) { vm.calendar.activate(stop: i) }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityLabel(vm.calendar.summary)
         }
     }
@@ -155,6 +156,7 @@ struct ProgressChartView: View {
                         .accessibilityAddTraits(vm.selected == i ? .isSelected : [])
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityLabel(vm.page.progress?.spoken ?? "")
         }
     }
