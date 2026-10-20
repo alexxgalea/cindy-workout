@@ -31,10 +31,15 @@ final class ProgressWordsTests: XCTestCase {
     }
 
     func testTheOldWordsAreGone() throws {
-        let view = try read("ios/CindyTracker/ProgressScreen.swift")
-        for old in ["sectionTitle(\"THIS WEEK\")", "sectionTitle(\"PROGRESS\")", "sectionTitle(\"PEAKS\")",
-                    "sectionTitle(\"LEADERBOARD\")", "\"Previous month\"", "Button(\"OPEN\")"] {
-            XCTAssertFalse(view.contains(old), "ProgressScreen.swift still draws: \(old)")
+        // The cards live in ProgressCards.swift now; both files are held to it.
+        for file in ["ios/CindyTracker/ProgressScreen.swift", "ios/CindyTracker/ProgressCards.swift"] {
+            let view = try read(file)
+            for old in ["sectionTitle(\"THIS WEEK\")", "sectionTitle(\"PROGRESS\")", "sectionTitle(\"PEAKS\")",
+                        "sectionTitle(\"LEADERBOARD\")", "SectionTitle(\"THIS WEEK\")", "SectionTitle(\"PROGRESS\")",
+                        "SectionTitle(\"PEAKS\")", "SectionTitle(\"LEADERBOARD\")", "\"Previous month\"",
+                        "Button(\"OPEN\")"] {
+                XCTAssertFalse(view.contains(old), "\(file) still draws: \(old)")
+            }
         }
     }
 }

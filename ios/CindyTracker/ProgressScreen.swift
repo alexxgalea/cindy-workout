@@ -14,7 +14,8 @@ struct ProgressScreen: View {
             Text(ProgressWords.title).cindy(.title).accessibilityAddTraits(.isHeader)
             Text(ProgressWords.subtitle).cindy(.body).padding(.top, 5)
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                // Each card carries the 12 below it that Android gives it; a section's note carries its own 6.
+                VStack(alignment: .leading, spacing: 0) {
                     HabitCard(hero: page.hero, today: page.calendar?.today)
                     if let week = page.thisWeek { ThisWeekCard(week: week) }
                     if let card = page.progress { ProgressChartCard(card: card, vm: vm) }
@@ -38,6 +39,8 @@ struct ProgressScreen: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 24)
         .background(Palette.background.ignoresSafeArea())
+        // Pushed from the menu, this screen has its own title and DONE: the system's bar is not wanted.
+        .navigationBarHidden(true)
         .overlay(alignment: .bottom) {
             if let toast = vm.toast { CindyToast(text: toast).padding(.bottom, 90) }
         }

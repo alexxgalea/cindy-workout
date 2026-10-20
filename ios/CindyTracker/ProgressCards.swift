@@ -46,6 +46,7 @@ struct HabitCard: View {
         .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
+        .padding(.bottom, 12)
     }
 }
 
@@ -194,6 +195,7 @@ struct CalendarCard: View {
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 16)
         .glassCard()
+        .padding(.bottom, 12)
     }
 
     /// A 46-point target, because these are small glyphs on a screen used with wet hands.
@@ -225,6 +227,7 @@ struct LeaderboardGroup: View {
                         mine: row.mine, best: row.best,
                         action: row.opens.map { id in { onOpen(id) } })
                     .accessibilityLabel(row.spoken)
+                    .accessibilityIdentifier(row.opens == nil ? "benchmarkRow" : "leaderRow")
             }
             if let note = board.emptyNote {
                 Text(note).cindy(.footnote)
