@@ -265,9 +265,8 @@ final class TutorialPagesTests: XCTestCase {
         XCTAssertTrue(contains(model, "START checks your framing"))
         XCTAssertTrue(contains(model, "The dot on the status line turns green"))
         XCTAssertTrue(contains(model, "fix a miscount any time"))
-        // iOS: there is no SKIP button on the camera screen; holding +1 is what moves on.
-        XCTAssertTrue(contains(model, "Hold +1 to move on to the next movement."))
-        XCTAssertFalse(contains(model, "SKIP moves on"))
+        XCTAssertTrue(contains(model, "SKIP moves on to the next movement."))
+        XCTAssertFalse(contains(model, "Hold +1"))
     }
 
     /// the last page says nothing leaves the phone, and on a first run that the camera is next

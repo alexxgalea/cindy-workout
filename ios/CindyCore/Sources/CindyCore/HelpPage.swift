@@ -129,8 +129,8 @@ public struct HelpInput {
 /// what it is not shown, and every hint it gives has a specific cause.
 ///
 /// Where the words differ from Android's it is because the app does: Photos for Movies/Cindy,
-/// iCloud Backup for Android's backup, Settings for the speech engine's own screen, a hold on +1
-/// for the SKIP button the iOS camera screen does not have. Each is marked `iOS:` where it is made.
+/// iCloud Backup for Android's backup, Settings for the speech engine's own screen. Each is marked
+/// `iOS:` where it is made.
 public enum HelpBuilder {
 
     public static let tourTitle = "Take the tour"
@@ -264,8 +264,7 @@ public enum HelpBuilder {
               "push-ups is not a squat."),
             s("When a rep will not count, the status line says why, and says it out loud if ",
               "nothing changes. The voice can be turned off under Voice in the menu."),
-            // iOS: the camera screen has no SKIP button; holding +1 does what it does.
-            s("−1 and +1 fix a miscount while the clock is running. Once it has started, holding +1 ",
+            s("−1 and +1 fix a miscount while the clock is running. Once it has started, SKIP ",
               "leaves the movement you are in for the next one: the reps you did in it stay counted, and ",
               "the rest are not made up."),
             s("Once the clock has started, the stop button takes FLIP's place. It asks first, ",

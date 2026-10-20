@@ -235,7 +235,7 @@ public struct TutorialModel: Equatable, Sendable {
                         "range. The clock starts itself once it has."),
                 .bullet("The dot on the status line turns green when the next rep will count. When one " +
                         "won't, the line says why — out loud too."),
-                .bullet("−1 and +1 fix a miscount any time. Hold +1 to move on to the next movement.")
+                .bullet("−1 and +1 fix a miscount any time. SKIP moves on to the next movement.")
             ]
         default:
             var blocks: [TutorialBlock] = [

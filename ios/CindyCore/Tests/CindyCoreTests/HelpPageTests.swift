@@ -34,14 +34,14 @@ final class HelpPageTests: XCTestCase {
             // The scaled movements are counted now.
             "use the +1 and −1 buttons if you are working at the scaled version",
             // Android's own controls and words, which this app does not have.
-            "Android", "Movies/Cindy", "SKIP leaves the movement", "Garmin Connect", "Clear storage"
+            "Android", "Movies/Cindy", "Garmin Connect", "Clear storage",
+            // +1 has no long press; SKIP is a control of its own.
+            "Hold +1", "holding +1"
         ] {
             XCTAssertFalse(text.contains(stale), "Help still says: \(stale)")
         }
-        // On Android +1 has no long press and SKIP is a control of its own (the Kotlin test pins
-        // "Hold +1" as stale). The iOS camera screen has no SKIP button: holding +1 does that, and
-        // Help says so.
-        XCTAssertTrue(text.contains("holding +1 leaves the movement you are in for the next one"))
+        // SKIP is a control of its own, there from the check to the end of the workout.
+        XCTAssertTrue(text.contains("Once it has started, SKIP leaves the movement you are in for the next one"))
     }
 
     /// Help has a section for each part of the app it describes
