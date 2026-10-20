@@ -133,7 +133,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
 
 ### U3: Progress
 
-`ProgressScreen` is rebuilt from the shared components, in Android's order: chips, chart card, calendar, peaks, then the leaderboard of `RankRow`s.
+`ProgressScreen` is rebuilt from the shared components, in the Kotlin's order: the habit, THIS WEEK, the PROGRESS chart card (its chips inside it), PEAKS, the calendar, then the LEADERBOARD of `RankRow`s. It has Android's title and line under it and a DONE pinned below the scroll; a trained day lists its sessions in a Cindy sheet whose rows open the session, and a reopened session is full-screen.
 
 ### U4: Menu and Account
 
