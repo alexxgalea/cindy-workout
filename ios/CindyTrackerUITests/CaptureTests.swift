@@ -224,22 +224,22 @@ final class CaptureTests: XCTestCase {
         // A point of the chart: the chart's stops are spoken as a session before or the first in the
         // range, which no other control's label says.
         let heading = app.staticTexts["PROGRESS"]
+        // The heading is brought up the screen, so the card below it is all in view.
         var swipes = 0
-        while !heading.exists && swipes < 12 {
+        while !(heading.exists && heading.isHittable && heading.frame.minY < 450) && swipes < 12 {
             app.swipeUp()
             swipes += 1
         }
         XCTAssertTrue(heading.exists, "the chart card is there")
-        let stop = app.buttons.matching(NSPredicate(
-            format: "label CONTAINS 'session before' OR label CONTAINS 'first in this range'")).firstMatch
-        XCTAssertTrue(stop.waitForExistence(timeout: 5), "the chart has points")
-        // The chart is drawn: a point is selected by a touch near it, so the chart's area is tried
-        // across until OPEN appears beside the readout.
-        let chart = stop.frame
-        let selected = app.tapAcross(chart, columns: 7, rows: 3, first: [(6, 1), (6, 0), (6, 2)]) {
+        // The chart is drawn: a point is selected by a touch near it. Its place is found from the
+        // heading above it (the card's padding, the metric chips, the readout and its detail come
+        // first), and the area is tried across until OPEN appears beside the readout.
+        let top = heading.frame.maxY + 130
+        let chart = CGRect(x: 16, y: top, width: app.windows.firstMatch.frame.width - 32, height: 230)
+        let selected = app.tapAcross(chart, columns: 7, rows: 4, first: [(6, 1), (6, 2), (6, 0)]) {
             app.buttons["OPEN"].waitForExistence(timeout: 0.4)
         }
-        XCTAssertTrue(selected, "a selected point offers OPEN; the chart's frame is \(chart)")
+        XCTAssertTrue(selected, "a selected point offers OPEN; the heading is at \(heading.frame), the area tried \(chart)")
         capture(app, "progress-point")
 
         let trained = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', trained' OR label CONTAINS ', trained,'")).firstMatch
