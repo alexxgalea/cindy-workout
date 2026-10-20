@@ -69,6 +69,47 @@ final class CaptureTests: XCTestCase {
         capture(app, "help-links")
     }
 
+    /// The camera screen in each of its states. The countdown is not here: it needs a camera that can
+    /// film and the athlete's answer from Photos, which the simulator has neither of.
+    func testCamera() {
+        // The launch view is held up by a debug argument, and given time to draw its whole.
+        var app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-CindyHoldLaunch", "YES"]
+        app.launch()
+        let launchView = app.descendants(matching: .any).matching(identifier: "launchView").firstMatch
+        XCTAssertTrue(launchView.waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 2.5)
+        capture(app, "camera-launch")
+        app.terminate()
+
+        app = launch("nohands")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 10))
+        capture(app, "camera-idle")
+
+        hud(app, "btnStart").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start — available once the setup check finishes")
+            .waitForExistence(timeout: 5))
+        capture(app, "camera-setup")
+
+        hud(app, "btnSkipExercise").tap()
+        XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5))
+        sheetButton(app, "SKIP").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
+        capture(app, "camera-running")
+
+        // A body in frame but not in position is shown how, on a card that stands in for the status line.
+        let card = app.descendants(matching: .any).matching(identifier: "coachCard").firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 1.5)
+        capture(app, "camera-coach")
+
+        hud(app, "btnStart").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Resume").waitForExistence(timeout: 5))
+        capture(app, "camera-paused")
+    }
+
     func testQuestions() {
         // Skipping the setup check.
         var app = launch("nohands")
