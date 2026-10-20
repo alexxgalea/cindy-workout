@@ -180,7 +180,7 @@ final class CaptureTests: XCTestCase {
             swipes += 1
         }
         if compared.exists {
-            let open = app.buttons.matching(NSPredicate(format: "label CONTAINS ' · '")).firstMatch
+            let open = app.buttons["compareCard"]
             if open.waitForExistence(timeout: 5) {
                 open.tap()
                 XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))

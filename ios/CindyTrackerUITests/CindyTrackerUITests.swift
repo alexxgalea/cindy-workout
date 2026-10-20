@@ -218,7 +218,7 @@ final class CindyTrackerUITests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(compared.exists, "the second session offers a comparison")
-        let open = app.buttons.matching(NSPredicate(format: "label CONTAINS ' · '")).firstMatch
+        let open = app.buttons["compareCard"]
         XCTAssertTrue(open.waitForExistence(timeout: 5), "the comparison card is a button")
         open.tap()
 

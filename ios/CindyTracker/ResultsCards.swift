@@ -314,6 +314,7 @@ struct ComparisonCardView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(compare.card.spoken)
             .accessibilityHint("Opens that session")
+            .accessibilityIdentifier("compareCard")
         }
     }
 }
