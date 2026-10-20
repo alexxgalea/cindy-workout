@@ -222,10 +222,13 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 5), "the comparison card is a button")
         open.tap()
 
-        // The first session's page is on top. Covered pages stay in the queries, so it is the
-        // DONE that can be hit that is tapped.
+        // The earlier session's page is on top: its headline is its date, not STOPPED.
+        let dated = app.staticTexts.matching(NSPredicate(format: "label MATCHES[c] '.*[0-9]{4} · .*'")).firstMatch
+        XCTAssertTrue(dated.waitForExistence(timeout: 5), "the reopened page is headed by its date")
+
+        // DONE ends a page, so it is on screen only once the page is scrolled to it. A covered page
+        // stays in the queries, so the DONE that can be hit is the top page's.
         let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'"))
-        // DONE ends the page, so it is only on screen once the page has been scrolled to it.
         func scrolledToDone() -> XCUIElement? {
             for _ in 0..<12 {
                 if let done = dones.allElementsBoundByIndex.first(where: { $0.isHittable }) { return done }
@@ -233,19 +236,14 @@ final class CindyTrackerUITests: XCTestCase {
             }
             return dones.allElementsBoundByIndex.first(where: { $0.isHittable })
         }
-        guard let topDone = scrolledToDone() else { return XCTFail("the first session's page has a DONE") }
-        let window = app.windows.firstMatch.frame
-        let before = dones.allElementsBoundByIndex
-            .map { "\(Int($0.frame.minY))..\(Int($0.frame.maxY))[\($0.isHittable)]" }.joined(separator: " ")
-        let heading = app.staticTexts.allElementsBoundByIndex.prefix(4).map(\.label).joined(separator: " / ")
-        topDone.tap()
-        Thread.sleep(forTimeInterval: 2)
-        let texts = app.staticTexts.allElementsBoundByIndex.prefix(8).map(\.label).joined(separator: " / ")
-        let back = scrolledToDone()
-        let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.label)[\($0.isHittable)]" }.joined(separator: " | ")
-        XCTAssertNotNil(back, "DONE came back to the second page; window \(Int(window.height)) high; DONEs before the tap: \(before); texts before: \(heading); texts after: \(texts); buttons after: \(buttons)")
-        XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
-                       "the second page is still over the camera")
+        guard let done = scrolledToDone() else { return XCTFail("the reopened page has a DONE") }
+        done.tap()
+
+        // Back on the page it was opened from: the second session, stopped, with its own DONE, and
+        // not the camera.
+        XCTAssertTrue(app.staticTexts["STOPPED"].waitForExistence(timeout: 5), "DONE returns to the second page")
+        XCTAssertFalse(dated.exists, "the reopened page is gone")
+        XCTAssertNotNil(scrolledToDone(), "the second page still has its DONE")
     }
 
     // MARK: - the questions

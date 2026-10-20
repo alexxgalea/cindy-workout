@@ -179,13 +179,11 @@ final class CaptureTests: XCTestCase {
             app.swipeUp()
             swipes += 1
         }
-        if compared.exists {
-            let open = app.buttons["compareCard"]
-            if open.waitForExistence(timeout: 5) {
-                open.tap()
-                XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
-                capture(app, "session-reopened-compared")
-            }
-        }
+        XCTAssertTrue(compared.exists, "the second session offers a comparison")
+        let open = app.buttons["compareCard"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5), "the comparison card is a button")
+        open.tap()
+        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
+        capture(app, "session-reopened-compared")
     }
 }

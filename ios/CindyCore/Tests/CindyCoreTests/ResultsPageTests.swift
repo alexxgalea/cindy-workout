@@ -138,6 +138,21 @@ final class ResultsPageTests: XCTestCase {
         XCTAssertTrue(p.tiles.contains { $0.value == "1:40" }, "\(p.tiles.map { $0.value })")
     }
 
+    /// a record with no sets has the tiles, the level and nothing for the sections that need sets or a trace
+    func testARecordWithNoSetsHasOnlyTheTilesTheLevelAndWhatNeedsNoSets() {
+        let a = Attempt(rounds: 12, reps: 3, atMillis: now, durationMs: 20 * 60_000,
+                        roundSplitsMs: Array(repeating: 100_000, count: 12), profile: .standard)
+        let p = page(a)
+
+        XCTAssertNil(p.track)
+        XCTAssertNil(p.movements)
+        XCTAssertNil(p.timeline)
+        XCTAssertNil(p.heart)
+        XCTAssertEqual(p.tiles.count, 6)
+        XCTAssertFalse(p.level.title.isEmpty)
+        XCTAssertFalse(p.level.next.isEmpty)
+    }
+
     /// the results screen uses the adaptive session's own movement names
     func testTheResultsScreenUsesTheAdaptiveSessionsOwnMovementNames() {
         let a = Attempt(rounds: 1, reps: 0, atMillis: now, durationMs: 20 * 60_000, roundSplitsMs: [52_000],

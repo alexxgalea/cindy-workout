@@ -37,6 +37,7 @@ struct ScoreHeader: View {
                         .padding(.leading, 6)
                 }
             }
+            .padding(.top, 8)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(spoken)
             Text(detail).cindy(.callout).padding(.top, 8)
@@ -56,10 +57,10 @@ struct LevelCard: View {
                 Text(level.title).cindy(.title2, colour: Palette.label)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let rung = level.rung {
-                    Text(rung).cindy(.footnote, colour: Palette.labelSecondary)
+                    Text(rung).cindy(.footnote)
                 }
             }
-            Text(level.blurb).cindy(.footnote, colour: Palette.labelSecondary).padding(.top, 5)
+            Text(level.blurb).smallPrint(13, colour: Palette.labelSecondary).padding(.top, 5)
             if let percent = level.progressPercent {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
@@ -92,7 +93,32 @@ struct SectionEyebrow: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).cindy(.eyebrow).accessibilityAddTraits(.isHeader)
+        Text(text).cindy(.eyebrow).padding(.leading, 4).accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The small print under a figure or a card. Android sets these at 11sp (13 for the level's blurb)
+/// where the type scale's footnote is 12, and they grow with the text size as the rest does.
+private struct SmallPrint: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    let colour: Color
+
+    init(size: CGFloat, colour: Color) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: .footnote)
+        self.colour = colour
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .font(Manrope.font(.regular, size: size))
+            .tracking(-0.007 * size)
+            .foregroundStyle(colour)
+    }
+}
+
+extension View {
+    func smallPrint(_ size: CGFloat = 11, colour: Color = Palette.labelTertiary) -> some View {
+        modifier(SmallPrint(size: size, colour: colour))
     }
 }
 
@@ -108,13 +134,14 @@ func movementInk(_ movement: Exercise) -> Color {
 
 /// A glass card with the padding a chart's card has.
 struct ChartCard<Content: View>: View {
-    var vertical: CGFloat = 14
+    var top: CGFloat = 14
+    var bottom: CGFloat = 14
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .padding(.horizontal, 16)
-            .padding(.vertical, vertical)
+            .padding(.top, top).padding(.bottom, bottom)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassCard()
     }
@@ -167,12 +194,14 @@ struct StatTileGrid: View {
                   spacing: 8) {
             ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in
                 VStack(alignment: .leading, spacing: 0) {
+                    // Android's autosize bounds are absolute; these are relative to the text size, so
+                    // the floors are lower to leave room at the largest sizes.
                     Text(tile.label).cindy(.eyebrow)
-                        .lineLimit(1).minimumScaleFactor(8.0 / 11.0)
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     Text(tile.value).cindy(.metricS)
-                        .lineLimit(1).minimumScaleFactor(14.0 / 22.0)
+                        .lineLimit(1).minimumScaleFactor(0.4)
                         .padding(.top, 6)
-                    Text(tile.footnote).cindy(.footnote)
+                    Text(tile.footnote).smallPrint()
                         .lineLimit(3).padding(.top, 2)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
@@ -191,12 +220,12 @@ struct TrackCard: View {
     let track: TrackSection
 
     var body: some View {
-        ChartCard {
+        ChartCard(top: 10, bottom: 14) {
             RoundTrackView(vm: vm)
-            Text(vm.trackCaption).cindy(.callout, colour: Palette.label)
+            Text(vm.trackCaption).cindy(.callout)
                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
                 .padding(.top, 8)
-            Text(track.footnote).cindy(.footnote).padding(.top, 4)
+            Text(track.footnote).smallPrint().padding(.top, 4)
         }
     }
 }
@@ -212,14 +241,14 @@ struct MovementCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Circle().fill(movementInk(column.movement)).frame(width: 6, height: 6)
-                            Text(column.label).cindy(.footnote, colour: Palette.labelSecondary)
+                            Text(column.label).cindy(.footnote)
                                 .lineLimit(2, reservesSpace: movements.tall)
                         }
-                        if column.atLeast { Text("at least").cindy(.footnote) }
+                        if column.atLeast { Text("at least").smallPrint() }
                         Text("\(column.reps)").cindy(.metricS)
-                            .lineLimit(1).minimumScaleFactor(14.0 / 22.0)
+                            .lineLimit(1).minimumScaleFactor(0.4)
                         ForEach(column.lines, id: \.self) { line in
-                            Text(line).cindy(.footnote)
+                            Text(line).smallPrint()
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -229,7 +258,7 @@ struct MovementCard: View {
             }
             .padding(14)
             .glassCard()
-            Text(movements.footnote).cindy(.footnote).padding(.leading, 4)
+            Text(movements.footnote).smallPrint().padding(.leading, 4)
         }
     }
 }
@@ -297,9 +326,8 @@ struct ComparisonCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionEyebrow(ResultsWords.compareTitle)
-            if compare.labels.count > 1 {
-                ChipRow(options: compare.labels, selected: compare.chosen, onSelect: onChoose)
-            }
+            // Drawn for a single option too: the chip is what says which session this is.
+            ChipRow(options: compare.labels, selected: compare.chosen, onSelect: onChoose)
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(compare.card.referenceLine).cindy(.headline)
