@@ -121,7 +121,9 @@ struct ContentView: View {
             }
             // While the tour is showing the screen under it is for nobody: the dim keeps it from
             // sight and from touch, and this keeps it from a screen reader.
-            .accessibilityHidden(tour.hidesScreenBeneath)
+            // A view that sets this itself keeps its own value whatever its parent says, so the
+            // questions, whose sheet hides everything it is attached to, are named here as well.
+            .accessibilityHidden(tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm)
             if tour.isShowing {
                 SpotlightOverlay(tour: tour, frames: tourFrames, advance: advanceTour, skip: skipTour)
             }

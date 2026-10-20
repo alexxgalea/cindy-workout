@@ -123,11 +123,12 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(sheetButton(app, "KEEP IT").waitForExistence(timeout: 5))
         sheetButton(app, "DISCARD").tap()
 
+        // The toast is short-lived and the simulator slow, so it is waited for first.
+        let toast = app.staticTexts["toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 10), "the screen underneath says what happened")
+        XCTAssertEqual(toast.label, "Session discarded")
         // A finished workout leaves the camera screen on RESET, discarded or not.
         XCTAssertTrue(app.buttons["RESET"].waitForExistence(timeout: 10), "discarding closes the page")
-        let toast = app.staticTexts["toast"]
-        XCTAssertTrue(toast.waitForExistence(timeout: 5), "the screen underneath says what happened")
-        XCTAssertEqual(toast.label, "Session discarded")
     }
 
     // MARK: - the questions
@@ -255,8 +256,8 @@ final class CindyTrackerUITests: XCTestCase {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
         app.buttons["STOP"].tap()
-        XCTAssertTrue(app.buttons["Keep going"].waitForExistence(timeout: 5))
-        app.buttons["Keep going"].tap()
+        XCTAssertTrue(sheetButton(app, "KEEP GOING").waitForExistence(timeout: 5))
+        sheetButton(app, "KEEP GOING").tap()
         XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5),
                       "the clock that was parked behind the question is running again")
     }
