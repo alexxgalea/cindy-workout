@@ -53,6 +53,17 @@ final class ProgressPageTests: XCTestCase {
         XCTAssertNil(p.leaderboard.rows[0].opens)
     }
 
+    /// one attempt has the week, the peaks and the calendar, and no chart: it needs two sessions to mean anything
+    func testOneAttemptHasTheWeekThePeaksAndTheCalendarButNoChart() {
+        let p = model([attempt(12, at: now, reps: 3)]).page
+
+        XCTAssertNotNil(p.thisWeek)
+        XCTAssertNotNil(p.peaks)
+        XCTAssertNotNil(p.calendar)
+        XCTAssertNil(p.progress)
+        XCTAssertEqual(p.leaderboard.rows.count, 2, "the benchmark and the one attempt")
+    }
+
     /// the records screen builds with history
     func testTheRecordsScreenBuildsWithHistory() {
         let p = model(history).page
