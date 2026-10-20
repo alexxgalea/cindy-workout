@@ -363,6 +363,17 @@ struct ChipRow: View {
     }
 }
 
+/// What just happened, said for a moment over a screen's foot in a glass capsule.
+struct CindyToast: View {
+    let text: String
+
+    var body: some View {
+        Text(text).cindy(.callout, colour: Palette.label)
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            .glassCard(radius: Palette.radiusControl, raised: true)
+    }
+}
+
 /// The row of actions every secondary screen ends with, in the thumb's reach.
 struct ActionBar<Content: View>: View {
     @ViewBuilder let content: () -> Content

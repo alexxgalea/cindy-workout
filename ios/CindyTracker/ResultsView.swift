@@ -87,13 +87,10 @@ struct ResultsView: View {
             ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
         }
         .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
-        .sheet(isPresented: $showProgress) { ProgressScreen() }
+        .fullScreenCover(isPresented: $showProgress) { ProgressScreen() }
         .overlay(alignment: .bottom) {
             if let toast {
-                Text(toast).cindy(.callout, colour: Palette.label)
-                    .padding(.horizontal, 18).padding(.vertical, 12)
-                    .glassCard(radius: Palette.radiusControl, raised: true)
-                    .padding(.bottom, 90)
+                CindyToast(text: toast).padding(.bottom, 90)
             }
         }
         // Why a standard Cindy came back as an Adaptive one, and a way to make the change the
