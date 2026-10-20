@@ -48,7 +48,10 @@ struct ProgressScreen: View {
         .cindySheet(isPresented: Binding(get: { vm.day != nil }, set: { if !$0 { vm.day = nil } }),
                     title: vm.day?.title ?? "",
                     subtitle: vm.day?.subtitle,
-                    primary: SheetButton(title: "DONE") {}) {
+                    primary: SheetButton(title: "DONE") {},
+                    // Named, because a bare trailing closure whose body is an `if` also fits the
+                    // overload's `onDismiss` and would be taken for it, leaving the sheet without rows.
+                    content: {
             if let sheet = vm.day {
                 InsetGroup(sheet.rows, id: \.opens) { row in
                     NavRow(title: row.time, value: row.value) { vm.open(session: row.opens) }
@@ -56,7 +59,7 @@ struct ProgressScreen: View {
                 }
                 .padding(.top, 16)
             }
-        }
+        })
         // Whichever session was opened from here can discard itself, so the page is built again from
         // the board when that page goes, and only if the board changed.
         .fullScreenCover(item: $vm.reopened, onDismiss: { vm.boardMayHaveChanged() }) { request in

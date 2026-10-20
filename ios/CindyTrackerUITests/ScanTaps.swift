@@ -35,4 +35,13 @@ extension XCUIApplication {
         let index = lead + calendar.component(.day, from: now) - 1
         return (index % 7, index / 7)
     }
+
+    /// Drags the page up by about `points`: a smaller, steadier step than a swipe, which can carry
+    /// the thing being looked for clean off the top.
+    func scrollUp(by points: CGFloat) {
+        let height = max(windows.firstMatch.frame.height, 1)
+        let start = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+        let end = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: max(0.05, 0.8 - points / height)))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
 }

@@ -226,8 +226,8 @@ final class CaptureTests: XCTestCase {
         let heading = app.staticTexts["PROGRESS"]
         // The heading is brought up the screen, so the card below it is all in view.
         var swipes = 0
-        while !(heading.exists && heading.isHittable && heading.frame.minY < 450) && swipes < 12 {
-            app.swipeUp()
+        while heading.exists && heading.frame.minY > 450 && swipes < 20 {
+            app.scrollUp(by: min(300, heading.frame.minY - 300))
             swipes += 1
         }
         XCTAssertTrue(heading.exists, "the chart card is there")
