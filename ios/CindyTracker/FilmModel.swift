@@ -146,7 +146,7 @@ final class FilmModel: ObservableObject {
 /// The three seconds between tapping REC and the camera rolling: a ring that drains, the digit, and
 /// the word RECORDING.
 ///
-/// It draws over the picture and does not dim it. The bright middle is the framing zone, and an
+/// It draws over the picture, between the bands, and does not dim it. The bright middle is the framing zone, and an
 /// athlete who cannot see themselves while they get placed is worse off than one reading a
 /// slightly lower-contrast digit; the legibility comes from a vignette behind the ring, which
 /// darkens the middle of the picture and leaves its edges, where the body is being judged, alone.
@@ -187,7 +187,6 @@ struct CountdownOverlay: View {
             }
             .offset(y: ring + 30)
         }
-        .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
