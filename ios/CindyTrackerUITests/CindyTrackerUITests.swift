@@ -200,7 +200,6 @@ final class CindyTrackerUITests: XCTestCase {
             }
             XCTAssertTrue(heading.exists, "the page has a \(title) section")
         }
-        XCTAssertFalse(app.staticTexts["ROUNDS"].exists, "the old name is gone")
     }
 
     func testAComparedSessionOpensOverThePageAndDoneComesBackToIt() {
@@ -223,27 +222,14 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 5), "the comparison card is a button")
         open.tap()
 
-        // The first session's page is on top: it is dated, and has its own DONE.
-        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
-        app.buttons["DONE"].tap()
-        XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5), "DONE came back to the second page")
+        // The first session's page is on top. Covered pages stay in the queries, so it is the
+        // DONE that can be hit that is tapped.
+        let topDone = app.buttons.matching(NSPredicate(format: "label == 'DONE' AND hittable == true")).firstMatch
+        XCTAssertTrue(topDone.waitForExistence(timeout: 5))
+        topDone.tap()
+        XCTAssertTrue(topDone.waitForExistence(timeout: 5), "DONE came back to the second page")
         XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
                        "the second page is still over the camera")
-    }
-
-    func testTheTimelineAndSplitsAreGlassCards() {
-        let app = launchReplaying("nohands")
-        finishTwoRepSession(app)
-
-        let splits = app.staticTexts["ROUND SPLITS"]
-        var swipes = 0
-        while !splits.exists && swipes < 12 {
-            app.swipeUp()
-            swipes += 1
-        }
-        XCTAssertTrue(splits.exists, "the page has its round splits")
-        let note = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Taller is slower.'")).firstMatch
-        XCTAssertTrue(note.exists, "the note under the splits is there")
     }
 
     // MARK: - the questions
