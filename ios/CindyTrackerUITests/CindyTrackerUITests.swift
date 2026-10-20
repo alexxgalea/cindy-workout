@@ -224,7 +224,7 @@ final class CindyTrackerUITests: XCTestCase {
 
         // The first session's page is on top. Covered pages stay in the queries, so it is the
         // DONE that can be hit that is tapped.
-        let topDone = app.buttons.matching(NSPredicate(format: "label == 'DONE' AND hittable == true")).firstMatch
+        let topDone = app.buttons.matching(NSPredicate(format: "label == 'DONE' AND isHittable == true")).firstMatch
         XCTAssertTrue(topDone.waitForExistence(timeout: 5))
         topDone.tap()
         XCTAssertTrue(topDone.waitForExistence(timeout: 5), "DONE came back to the second page")
