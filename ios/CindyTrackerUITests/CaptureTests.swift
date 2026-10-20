@@ -186,4 +186,66 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(app.buttons["DONE"].waitForExistence(timeout: 5))
         capture(app, "session-reopened-compared")
     }
+
+    /// Opens Progress from the menu, over the camera screen.
+    private func openProgress(_ app: XCUIApplication) {
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Progress'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Progress row")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Progress"].waitForExistence(timeout: 5), "Progress opens")
+    }
+
+    /// The Progress screen with nothing on the board, then with history, a chart point selected and
+    /// a day opened. The empty board is a launch of its own, because the launch argument that empties
+    /// it holds for the whole launch.
+    func testProgress() {
+        let empty = XCUIApplication()
+        empty.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                                 "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", ""]
+        empty.launch()
+        openProgress(empty)
+        XCTAssertTrue(empty.staticTexts["LEADERBOARD"].waitForExistence(timeout: 5))
+        capture(empty, "progress-empty")
+        empty.terminate()
+
+        let app = launch("nohands")
+        for round in 0..<2 {
+            finishSession(app, reps: 2)
+            app.buttons["DONE"].tap()
+            let again = hud(app, "btnStart", labelled: "Start again")
+            XCTAssertTrue(again.waitForExistence(timeout: 10))
+            if round == 0 { again.tap() }
+        }
+        openProgress(app)
+        capture(app, "progress-history")
+
+        // A point of the chart: the chart's stops are spoken as a session before or the first in the
+        // range, which no other control's label says.
+        let heading = app.staticTexts["PROGRESS"]
+        var swipes = 0
+        while !heading.exists && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(heading.exists, "the chart card is there")
+        let stop = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS 'session before' OR label CONTAINS 'first in this range'")).firstMatch
+        XCTAssertTrue(stop.waitForExistence(timeout: 5), "the chart has points")
+        stop.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["OPEN"].waitForExistence(timeout: 5), "a selected point offers OPEN")
+        capture(app, "progress-point")
+
+        let trained = app.buttons.matching(NSPredicate(format: "label ENDSWITH ', trained' OR label CONTAINS ', trained,'")).firstMatch
+        swipes = 0
+        while !(trained.exists && trained.isHittable) && swipes < 12 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(trained.exists, "the calendar has a trained day")
+        trained.tap()
+        XCTAssertTrue(sheetButton(app, "DONE").waitForExistence(timeout: 5), "the day opens a sheet")
+        capture(app, "progress-day")
+    }
 }
