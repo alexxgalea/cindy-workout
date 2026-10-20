@@ -23,22 +23,22 @@ struct WeekStripView: View {
                 let cx = column * (Double(i) + 0.5)
                 // Calendar's symbols start on Sunday; DayOfWeek counts Monday as 1.
                 let initial = initials[day.date.dayOfWeek.rawValue % 7]
-                context.draw(Text(initial).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.tertiary),
+                context.draw(Text(initial).font(Manrope.font(.semibold, size: 11)).foregroundStyle(Palette.labelTertiary),
                              at: CGPoint(x: cx, y: 12))
                 let circle = CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)
                 switch day.state {
                 case .trained(let isToday):
-                    context.fill(Path(ellipseIn: circle), with: .color(Ink.achievement))
+                    context.fill(Path(ellipseIn: circle), with: .color(Palette.achievement))
                     if isToday {
-                        context.stroke(Path(ellipseIn: circle.insetBy(dx: -3, dy: -3)), with: .color(Ink.label), lineWidth: 2)
+                        context.stroke(Path(ellipseIn: circle.insetBy(dx: -3, dy: -3)), with: .color(Palette.label), lineWidth: 2)
                     }
                 case .today:
-                    context.stroke(Path(ellipseIn: circle), with: .color(Ink.label), lineWidth: 2)
+                    context.stroke(Path(ellipseIn: circle), with: .color(Palette.label), lineWidth: 2)
                 case .missed:
-                    context.stroke(Path(ellipseIn: circle), with: .color(Ink.quaternary), lineWidth: 1.5)
+                    context.stroke(Path(ellipseIn: circle), with: .color(Palette.labelQuaternary), lineWidth: 1.5)
                 case .coming:
                     context.fill(Path(ellipseIn: CGRect(x: cx - 2, y: cy - 2, width: 4, height: 4)),
-                                 with: .color(Ink.quaternary))
+                                 with: .color(Palette.labelQuaternary))
                 }
             }
         }
@@ -86,7 +86,7 @@ struct CalendarGridView: View {
         let initials = Calendar.current.veryShortWeekdaySymbols
 
         for (i, day) in m.headerDays().enumerated() {
-            context.draw(Text(initials[day.rawValue % 7]).font(.system(size: 11)).foregroundStyle(Ink.secondary),
+            context.draw(Text(initials[day.rawValue % 7]).font(Manrope.font(.regular, size: 11)).foregroundStyle(Palette.labelSecondary),
                          at: CGPoint(x: cell * (Double(i) + 0.5), y: cell * 0.5))
         }
         for c in m.cells() {
@@ -96,19 +96,19 @@ struct CalendarGridView: View {
             let ink: Color
             switch c.state {
             case .streak:
-                context.fill(Path(ellipseIn: circle), with: .color(Ink.achievement))
-                ink = .black
+                context.fill(Path(ellipseIn: circle), with: .color(Palette.achievement))
+                ink = Palette.onPrimary
             case .trained:
-                context.fill(Path(ellipseIn: circle), with: .color(.white))
-                ink = .black
+                context.fill(Path(ellipseIn: circle), with: .color(Palette.label))
+                ink = Palette.onPrimary
             case .today:
-                context.stroke(Path(ellipseIn: circle), with: .color(.white), lineWidth: 2)
-                ink = .white
-            case .future: ink = Ink.quaternary
-            case .past: ink = .white
+                context.stroke(Path(ellipseIn: circle), with: .color(Palette.label), lineWidth: 2)
+                ink = Palette.label
+            case .future: ink = Palette.labelQuaternary
+            case .past: ink = Palette.label
             }
-            let weight: Font.Weight = c.trained || c.isToday ? .bold : .regular
-            context.draw(Text("\(c.day)").font(.system(size: 13, weight: weight)).foregroundStyle(ink),
+            let weight: Manrope.Weight = c.trained || c.isToday ? .bold : .regular
+            context.draw(Text("\(c.day)").font(Manrope.font(weight, size: 13).monospacedDigit()).foregroundStyle(ink),
                          at: CGPoint(x: cx, y: cy))
         }
     }
@@ -173,14 +173,14 @@ struct ProgressChartView: View {
             var line = Path()
             line.move(to: CGPoint(x: plot.left, y: y))
             line.addLine(to: CGPoint(x: plot.right, y: y))
-            context.stroke(line, with: .color(Ink.hairline), lineWidth: 0.5)
-            context.draw(Text(m.label(forTick: tick)).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.tertiary),
+            context.stroke(line, with: .color(Palette.hairline), lineWidth: 0.5)
+            context.draw(Text(m.label(forTick: tick)).font(Manrope.font(.semibold, size: 11)).foregroundStyle(Palette.labelTertiary),
                          at: CGPoint(x: width, y: y), anchor: .trailing)
         }
         let baseline = height - 8
-        context.draw(Text(m.edgeLabels.first).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.tertiary),
+        context.draw(Text(m.edgeLabels.first).font(Manrope.font(.semibold, size: 11)).foregroundStyle(Palette.labelTertiary),
                      at: CGPoint(x: plot.left, y: baseline), anchor: .leading)
-        context.draw(Text(m.edgeLabels.second).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.tertiary),
+        context.draw(Text(m.edgeLabels.second).font(Manrope.font(.semibold, size: 11)).foregroundStyle(Palette.labelTertiary),
                      at: CGPoint(x: plot.right, y: baseline), anchor: .trailing)
 
         if m.mode == .line {
@@ -193,10 +193,10 @@ struct ProgressChartView: View {
             var cursor = Path()
             cursor.move(to: CGPoint(x: xs[s], y: plot.top))
             cursor.addLine(to: CGPoint(x: xs[s], y: plot.bottom))
-            context.stroke(cursor, with: .color(Ink.tertiary), lineWidth: 1)
+            context.stroke(cursor, with: .color(Palette.labelTertiary), lineWidth: 1)
             let dot = CGRect(x: xs[s] - 6, y: ys[s] - 6, width: 12, height: 12)
-            context.fill(Path(ellipseIn: dot), with: .color(Ink.label))
-            context.stroke(Path(ellipseIn: dot), with: .color(Color.appBackground), lineWidth: 2)
+            context.fill(Path(ellipseIn: dot), with: .color(Palette.label))
+            context.stroke(Path(ellipseIn: dot), with: .color(Palette.background), lineWidth: 2)
         }
     }
 
@@ -210,34 +210,34 @@ struct ProgressChartView: View {
             fill.addLine(to: CGPoint(x: xs[n - 1], y: plot.bottom))
             fill.closeSubpath()
             context.fill(fill, with: .linearGradient(
-                Gradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0)]),
+                Gradient(colors: [Palette.label.opacity(0.18), Palette.label.opacity(0)]),
                 startPoint: CGPoint(x: 0, y: plot.top), endPoint: CGPoint(x: 0, y: plot.bottom)))
         }
         if n > 1 {
             var line = Path()
             line.move(to: CGPoint(x: xs[0], y: ys[0]))
             for i in 1..<n { line.addLine(to: CGPoint(x: xs[i], y: ys[i])) }
-            context.stroke(line, with: .color(Ink.label), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            context.stroke(line, with: .color(Palette.label), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
         }
         let steps = m.bestSteps(width: width, height: height)
         if let first = steps.first {
             var best = Path()
             best.move(to: CGPoint(x: first.x, y: first.y))
             for s in steps.dropFirst() { best.addLine(to: CGPoint(x: s.x, y: s.y)) }
-            context.stroke(best, with: .color(Ink.achievement),
+            context.stroke(best, with: .color(Palette.achievement),
                            style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
         for i in 0..<n {
             switch m.mark(i) {
             case .ring:
                 context.stroke(Path(ellipseIn: CGRect(x: xs[i] - 3.5, y: ys[i] - 3.5, width: 7, height: 7)),
-                               with: .color(Ink.secondary), lineWidth: 1.5)
+                               with: .color(Palette.labelSecondary), lineWidth: 1.5)
             case .record:
                 context.fill(Path(ellipseIn: CGRect(x: xs[i] - 4.5, y: ys[i] - 4.5, width: 9, height: 9)),
-                             with: .color(Ink.achievement))
+                             with: .color(Palette.achievement))
             case .plain:
                 context.fill(Path(ellipseIn: CGRect(x: xs[i] - 3, y: ys[i] - 3, width: 6, height: 6)),
-                             with: .color(Ink.label))
+                             with: .color(Palette.label))
             }
         }
     }
@@ -246,9 +246,9 @@ struct ProgressChartView: View {
         for case let bar? in m.bars(width: width, height: height) {
             let ink: Color
             switch bar.tone {
-            case .selected: ink = Ink.label
-            case .best: ink = Ink.achievement
-            case .other: ink = Ink.tertiary
+            case .selected: ink = Palette.label
+            case .best: ink = Palette.achievement
+            case .other: ink = Palette.labelTertiary
             }
             let r = CGRect(x: bar.left, y: bar.top, width: bar.right - bar.left, height: bar.bottom - bar.top)
             // Only the top corners are rounded; the foot sits flat on the axis.
