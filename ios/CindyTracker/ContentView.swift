@@ -230,7 +230,9 @@ struct ContentView: View {
             }
             .padding(.top, 8)
             if let coaching = workout.coachShowing {
-                CoachCard(exercise: coaching).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                CoachPanel(exercise: coaching)
+                    .padding(.leading, 16).padding(.top, 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }

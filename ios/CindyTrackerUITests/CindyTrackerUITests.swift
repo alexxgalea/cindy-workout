@@ -183,6 +183,21 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(end.isHittable)
     }
 
+    // MARK: - the start-position coach
+
+    func testTheCoachStandsInForTheStatusLine() {
+        let app = launchReplaying("nohands")
+        startSkippingSetup(app)
+        let card = app.descendants(matching: .any).matching(identifier: "coachCard").firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "a body in frame but not in position is shown how")
+        // The line steps aside for the card so the cue is not given twice. It stays in the layout, so
+        // nothing jumps, and a hidden view stays in the test's queries with nothing to touch.
+        let unreachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == false"),
+                                                    object: status(app))
+        XCTAssertEqual(XCTWaiter().wait(for: [unreachable], timeout: 5), .completed,
+                       "the status line is hidden while the card is up")
+    }
+
     // MARK: - the placement guide
 
     func testThePlacementGuideComesFirstAndCanBeTurnedOff() {
