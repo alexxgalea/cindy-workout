@@ -19,15 +19,20 @@ struct ResultsView: View {
     /// Said to whatever is underneath once this page has discarded its session and closed: a
     /// dismissed sheet takes its own overlay with it, so the screen it was over has to say so.
     private let onDiscarded: () -> Void
+    /// How a page opened over another closes itself. The environment's dismiss is left to the page
+    /// that nothing is presented over; a page reopened from COMPARED WITH is closed by the page
+    /// that presented it, so DONE there returns to that page and not past it.
+    private let close: (() -> Void)?
 
     private enum Asking: Identifiable {
         case weight, heartRate
         var id: Int { self == .weight ? 0 : 1 }
     }
 
-    init(_ request: ResultsRequest, onDiscarded: @escaping () -> Void = {}) {
+    init(_ request: ResultsRequest, onDiscarded: @escaping () -> Void = {}, close: (() -> Void)? = nil) {
         _vm = StateObject(wrappedValue: ResultsViewModel(request))
         self.onDiscarded = onDiscarded
+        self.close = close
     }
 
     var body: some View {
@@ -66,7 +71,7 @@ struct ResultsView: View {
                             Button(action.rawValue) { asksToDiscard = true }
                                 .buttonStyle(CindyGlassButtonStyle(tint: Palette.stateAlert))
                         case .done:
-                            Button(action.rawValue) { dismiss() }.buttonStyle(CindyPrimaryButtonStyle())
+                            Button(action.rawValue) { closePage() }.buttonStyle(CindyPrimaryButtonStyle())
                         }
                     }
                 }
@@ -82,7 +87,8 @@ struct ResultsView: View {
             }
         }
         .fullScreenCover(item: $reopened) { request in
-            ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
+            ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) },
+                        close: { reopened = nil })
         }
         .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .sheet(isPresented: $showProgress) { ProgressScreen() }
@@ -115,8 +121,12 @@ struct ResultsView: View {
                     secondary: SheetButton(title: discardQuestion.discard, tint: Palette.stateAlert) {
                         // The page closes either way, but only a session that was there was discarded.
                         if vm.discard() { onDiscarded() }
-                        dismiss()
+                        closePage()
                     })
+    }
+
+    private func closePage() {
+        if let close { close() } else { dismiss() }
     }
 
     private func flash(_ text: String) {
