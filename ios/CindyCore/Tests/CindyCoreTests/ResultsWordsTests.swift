@@ -40,7 +40,6 @@ final class ResultsWordsTests: XCTestCase {
     }
 
     func testTheOldWordsAreGone() throws {
-        try XCTSkipIf(true, "The view's words are replaced in the cards task")
         let view = try read("ios/CindyTracker/ResultsView.swift")
         for old in ["sectionTitle(\"ROUNDS\")", "\"LIFTED\"", "\"BURNED\"",
                     "Add your weight to see what you lifted and burned",

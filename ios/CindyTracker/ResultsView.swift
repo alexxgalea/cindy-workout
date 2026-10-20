@@ -220,107 +220,51 @@ struct ResultsView: View {
         }
     }
 
-    // MARK: splits and timeline
+    // MARK: splits, timeline and heart rate
 
     private func splitsCard(_ splits: SplitsSection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("ROUND SPLITS")
-            if let readout = vm.splitsReadout {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(readout.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                    Text(readout.detail).font(.system(size: 12)).foregroundStyle(Color.dim)
+        titled(ResultsWords.splitsTitle) {
+            ChartCard(vertical: 16) {
+                if let readout = vm.splitsReadout {
+                    Text(readout.title).cindy(.metricS)
+                        .lineLimit(1).minimumScaleFactor(12.0 / 17.0)
+                    Text(readout.detail).cindy(.callout).padding(.top, 2)
                     // Kept (empty) while a comparison exists, so the chart under it does not move.
                     if readout.versusVisibility != .gone {
                         Text(readout.versus ?? " ")
-                            .font(.system(size: 12))
-                            .foregroundStyle(readout.faster == true ? Color.accent : Color.warn)
+                            .cindy(.callout, colour: readout.faster == true ? Palette.stateOk : Palette.labelSecondary)
                             .opacity(readout.versusVisibility == .visible ? 1 : 0)
                     }
                 }
+                RoundSplitsView(vm: vm).padding(.top, 10)
+                Text(splits.note).cindy(.footnote).padding(.top, 8)
             }
-            RoundSplitsView(vm: vm)
-            Text(splits.note).font(.system(size: 12)).foregroundStyle(Color.dim)
         }
     }
 
     private func timelineCard(_ timeline: TimelineSection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("TIMELINE")
-            if let readout = vm.timelineReadout {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(readout.title).font(.system(size: 14, weight: .semibold, design: .monospaced)).foregroundStyle(.white)
-                    Text(readout.detail).font(.system(size: 12)).foregroundStyle(Color.dim)
+        titled(ResultsWords.timelineTitle) {
+            ChartCard(vertical: 16) {
+                if let readout = vm.timelineReadout {
+                    Text(readout.title).cindy(.metricS)
+                        .lineLimit(1).minimumScaleFactor(12.0 / 18.0)
+                    // Two lines kept, so the chart does not move under a finger.
+                    Text(readout.detail).cindy(.callout)
+                        .lineLimit(2, reservesSpace: true).padding(.top, 2)
+                }
+                SessionTimelineView(vm: vm).padding(.top, 10)
+                if let legend = timeline.legend {
+                    Text(legend).cindy(.footnote).padding(.top, 8)
                 }
             }
-            SessionTimelineView(vm: vm)
-            if let legend = timeline.legend {
-                Text(legend).font(.system(size: 12)).foregroundStyle(Color.dim)
-            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(timeline.description)
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(timeline.description)
     }
-
-    // MARK: heart rate
 
     private func heartCard(_ heart: HeartCard) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("HEART RATE")
-            HStack(alignment: .top, spacing: 16) {
-                ForEach(Array(heart.figures.enumerated()), id: \.offset) { _, f in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(f.label).font(.system(size: 10, weight: .bold)).foregroundStyle(Color.dim)
-                        HStack(alignment: .firstTextBaseline, spacing: 3) {
-                            Text(f.value).font(.system(size: 28, weight: .bold, design: .monospaced)).foregroundStyle(.white)
-                            Text(f.unit).font(.system(size: 12)).foregroundStyle(Color.dim)
-                        }
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(f.spoken)
-                }
-            }
-            if let rows = heart.zones {
-                ZoneBarView(vm: vm)
-                ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                    HStack {
-                        Circle().fill(Ink.heart.opacity(ZoneBarModel.alpha[i])).frame(width: 10, height: 10)
-                        Text(row.name).font(.system(size: 13)).foregroundStyle(.white)
-                        Text(row.range).font(.system(size: 11)).foregroundStyle(Color.dim)
-                        Spacer()
-                        Text(row.time).font(.system(size: 13, design: .monospaced)).foregroundStyle(.white)
-                    }
-                    .opacity(vm.zoneSelected == nil || vm.zoneSelected == i ? 1 : ZoneBarModel.dim)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(row.spoken)
-                }
-            } else if heart.invitesAge {
-                Button { asking = .heartRate } label: {
-                    HStack {
-                        Text("Add your birth year to see your heart-rate zones")
-                            .font(.system(size: 14)).foregroundStyle(.white)
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundStyle(Color.dim)
-                    }
-                    .padding(12)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                }
-            }
-            if let hardest = heart.hardestRound {
-                Text(hardest).font(.system(size: 13)).foregroundStyle(.white)
-                    .accessibilityLabel(heart.hardestRoundSpoken ?? hardest)
-            }
-            if let verdict = heart.verdict {
-                Text(verdict).font(.system(size: 13)).foregroundStyle(Color.dim)
-            }
-            Text(heart.footnote).font(.system(size: 11)).foregroundStyle(Color.dim)
+        titled(ResultsWords.heartTitle) {
+            HeartSection(vm: vm, heart: heart, onInviteAge: { asking = .heartRate })
         }
-    }
-
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(Color.dim)
-            .padding(.top, 8)
-            .accessibilityAddTraits(.isHeader)
     }
 }
