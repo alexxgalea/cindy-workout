@@ -316,6 +316,7 @@ final class CindyTrackerUITests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(trained.exists, "the calendar has a trained day")
+        app.scrollGridIntoView(trained)
 
         // The calendar is a drawn grid: its stops are buttons for a screen reader, tapped here at the
         // middle of the whole grid. A day is opened by a touch on its own cell, so the cells below the
@@ -351,7 +352,8 @@ final class CindyTrackerUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.5)
         }
         XCTAssertTrue(back, "DONE returns to Progress")
-        XCTAssertFalse(dated.exists, "the session page is gone")
+        // The date's text can match a row on Progress itself, so the page is told by its DISCARD.
+        XCTAssertFalse(app.buttons["DISCARD"].waitForExistence(timeout: 2), "the session page is gone")
     }
 
     func testDiscardingASessionOpenedFromProgressSaysSoAndRemovesItsRow() {

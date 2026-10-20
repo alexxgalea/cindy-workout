@@ -249,6 +249,7 @@ final class CaptureTests: XCTestCase {
             swipes += 1
         }
         XCTAssertTrue(trained.exists, "the calendar has a trained day")
+        app.scrollGridIntoView(trained)
         let grid = trained.frame
         let body = CGRect(x: grid.minX, y: grid.minY + grid.height / 7, width: grid.width, height: grid.height * 6 / 7)
         let today = XCUIApplication.todaysCell()
