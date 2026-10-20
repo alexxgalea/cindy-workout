@@ -133,7 +133,7 @@ struct ContentView: View {
             // sight and from touch, and this keeps it from a screen reader.
             // A view that sets this itself keeps its own value whatever its parent says, so the
             // questions, whose sheet hides everything it is attached to, are named here as well.
-            .accessibilityHidden(tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm)
+            .accessibilityHidden(screenIsCovered)
             if tour.isShowing {
                 SpotlightOverlay(tour: tour, frames: tourFrames, advance: advanceTour, skip: skipTour)
             }
@@ -223,6 +223,12 @@ struct ContentView: View {
                     secondary: SheetButton(title: "KEEP CHECKING") {})
     }
 
+    /// Something stands over the camera screen and takes the touches: the tour, a question, or the
+    /// launch view. A screen reader is kept off what is beneath.
+    private var screenIsCovered: Bool {
+        tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm || launching
+    }
+
     private var hud: some View {
         CameraHud(workout: workout, film: film,
                   onMenu: { showMenu = true },
@@ -230,7 +236,8 @@ struct ContentView: View {
                   onStop: { workout.requestStop(); showStopConfirm = true },
                   onStart: start,
                   onSkip: skip,
-                  onToggleDebug: { showDebug.toggle() }) {
+                  onToggleDebug: { showDebug.toggle() },
+                  hiddenBeneath: screenIsCovered) {
             middle
         }
     }

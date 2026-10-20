@@ -23,12 +23,20 @@ struct CameraHud<Middle: View>: View {
     let onStart: () -> Void
     let onSkip: () -> Void
     let onToggleDebug: () -> Void
+    /// Whether something stands over the whole screen (a question, the tour, the launch view) and
+    /// the HUD is to be hidden from a screen reader. Passed in rather than left to the screen above,
+    /// because a view that sets `accessibilityHidden` itself keeps its own value whatever its parent
+    /// says: the status line sets one for the coach, and would otherwise be heard under all of them.
+    var hiddenBeneath = false
     @ViewBuilder let middle: () -> Middle
 
     // Dynamic Type grows the bands rather than clipping them; the digits shrink to fit before they
     // would wrap, as Android's autosize does.
     @ScaledMetric(relativeTo: .title) private var clockSize: CGFloat = 30
     @ScaledMetric(relativeTo: .footnote) private var statusSize: CGFloat = 14
+    /// Android lets its text grow to twice its size and no further, and so does this: past that the
+    /// words would spill out of the band, not read better.
+    private let statusCeiling: CGFloat = 28
     @ScaledMetric(relativeTo: .largeTitle) private var repsSize: CGFloat = 56
     @ScaledMetric(relativeTo: .title) private var targetSize: CGFloat = 30
 
@@ -87,10 +95,10 @@ struct CameraHud<Middle: View>: View {
         HStack(spacing: 8) {
             Circle().fill(dotColour).frame(width: 7, height: 7).accessibilityHidden(true)
             Text(workout.status)
-                .font(Manrope.font(.semibold, size: statusSize))
-                .tracking(-0.0125 * statusSize)
+                .font(Manrope.font(.semibold, size: min(statusSize, statusCeiling)))
+                .tracking(-0.0125 * min(statusSize, statusCeiling))
                 .foregroundStyle(Palette.label)
-                .lineLimit(2)
+                .lineLimit(3)
                 .minimumScaleFactor(0.8)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("status")
@@ -99,7 +107,7 @@ struct CameraHud<Middle: View>: View {
         .padding(.horizontal, 20)
         .padding(.top, 4)
         .opacity(workout.coachShowing == nil ? 1 : 0)
-        .accessibilityHidden(workout.coachShowing != nil)
+        .accessibilityHidden(workout.coachShowing != nil || hiddenBeneath)
         // A long press on the status line is the way to the debug readout, as on Android.
         .onLongPressGesture { onToggleDebug() }
         .tourTarget(.status)
