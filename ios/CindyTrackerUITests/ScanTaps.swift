@@ -44,4 +44,15 @@ extension XCUIApplication {
         let end = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: max(0.05, 0.8 - points / height)))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
     }
+
+    /// Scrolls until the whole of `grid` is on the screen, above the pinned DONE: a touch on a cell
+    /// below the screen's edge lands on nothing, and a grid only just hittable has its lower rows there.
+    func scrollGridIntoView(_ grid: XCUIElement) {
+        let limit = windows.firstMatch.frame.height - 120
+        var steps = 0
+        while grid.frame.maxY > limit && steps < 6 {
+            scrollUp(by: min(300, grid.frame.maxY - limit + 20))
+            steps += 1
+        }
+    }
 }
