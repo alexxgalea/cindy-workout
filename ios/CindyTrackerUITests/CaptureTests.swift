@@ -26,6 +26,15 @@ final class CaptureTests: XCTestCase {
         add(attachment)
     }
 
+    /// A control of the camera screen, found by the Android view's id, since the controls are marks
+    /// with no word to find them by. `labelled` narrows it by its spoken name, which is how a state
+    /// of the shutter is told from another.
+    private func hud(_ app: XCUIApplication, _ id: String, labelled label: String? = nil) -> XCUIElement {
+        var query = app.buttons.matching(identifier: id)
+        if let label { query = query.matching(NSPredicate(format: "label == %@", label)) }
+        return query.firstMatch
+    }
+
     /// A button of the Cindy sheet, found by its label among the sheet's own two buttons: the
     /// controls beneath it can share a label (SKIP, DISCARD) and are still in the tree while it slides in.
     private func sheetButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
@@ -47,8 +56,8 @@ final class CaptureTests: XCTestCase {
 
     func testHelp() {
         let app = launch("pullups")
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
         let help = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Help'")).firstMatch
         XCTAssertTrue(help.waitForExistence(timeout: 5), "the menu has a Help row")
         help.tap()
@@ -63,26 +72,26 @@ final class CaptureTests: XCTestCase {
     func testQuestions() {
         // Skipping the setup check.
         var app = launch("nohands")
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 10))
-        app.buttons["START"].tap()
-        XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5))
-        app.buttons["SKIP"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 10))
+        hud(app, "btnStart", labelled: "Start the workout").tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+        hud(app, "btnSkipExercise").tap()
         XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5))
         capture(app, "question-skip")
         sheetButton(app, "SKIP").tap()
 
         // Stopping, then keeping going.
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5))
-        app.buttons["+1"].tap()
-        app.buttons["+1"].tap()
-        app.buttons["STOP"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
         capture(app, "question-stop")
         sheetButton(app, "KEEP GOING").tap()
 
         // Ending, then discarding the saved session.
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5))
-        app.buttons["STOP"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
         sheetButton(app, "END").tap()
         XCTAssertTrue(app.buttons["DISCARD"].waitForExistence(timeout: 10))

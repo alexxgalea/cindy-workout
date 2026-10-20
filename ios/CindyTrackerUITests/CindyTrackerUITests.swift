@@ -49,6 +49,15 @@ final class CindyTrackerUITests: XCTestCase {
 
     /// Starts a workout without calibrating: the setup check, then SKIP and its confirmation.
     /// Reps are then tapped in, which does not depend on what the body is doing.
+    /// A control of the camera screen, found by the Android view's id, since the controls are marks
+    /// with no word to find them by. `labelled` narrows it by its spoken name, which is how a state
+    /// of the shutter is told from another.
+    private func hud(_ app: XCUIApplication, _ id: String, labelled label: String? = nil) -> XCUIElement {
+        var query = app.buttons.matching(identifier: id)
+        if let label { query = query.matching(NSPredicate(format: "label == %@", label)) }
+        return query.firstMatch
+    }
+
     /// A button of the Cindy sheet, found by its label: the sheet gives its two buttons identifiers
     /// of their own, and a button with an identifier is not found by its label alone.
     private func sheetButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
@@ -57,16 +66,16 @@ final class CindyTrackerUITests: XCTestCase {
     }
 
     private func startSkippingSetup(_ app: XCUIApplication) {
-        let start = app.buttons["START"]
+        let start = hud(app, "btnStart", labelled: "Start the workout")
         XCTAssertTrue(start.waitForExistence(timeout: 10), "the camera screen opens with START")
         start.tap()
-        let skip = app.buttons["SKIP"]
+        let skip = hud(app, "btnSkipExercise")
         XCTAssertTrue(skip.waitForExistence(timeout: 5), "START becomes SKIP during the setup check")
         skip.tap()
         // The question has a SKIP of its own, on the sheet that covers the HUD's.
         XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5), "skipping asks first")
         sheetButton(app, "SKIP").tap()
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "skipping starts the clock")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5), "skipping starts the clock")
     }
 
     // MARK: - a whole session
@@ -74,20 +83,20 @@ final class CindyTrackerUITests: XCTestCase {
     func testReplayedPullUpsAreCountedAndSaved() {
         let app = launchReplaying("pullups")
 
-        let start = app.buttons["START"]
+        let start = hud(app, "btnStart", labelled: "Start the workout")
         XCTAssertTrue(start.waitForExistence(timeout: 10), "the camera screen opens with START")
         start.tap()
 
         // The setup check reads the first two pull-ups as calibration, then starts the workout
         // by itself, which is when SKIP turns into PAUSE.
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 30),
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 30),
                       "two calibration reps get the workout going")
 
         // After calibration the count restarts at zero; a scored pull-up moves it on.
         XCTAssertTrue(repCount(app).waitForExistence(timeout: 5), "the rep count is on screen")
-        waitForLabel(repCount(app), "NOT (label BEGINSWITH '0 / ')", timeout: 40)
+        waitForLabel(repCount(app), "NOT (label BEGINSWITH '0 of ')", timeout: 40)
 
-        app.buttons["STOP"].tap()
+        hud(app, "btnEnd").tap()
         let end = sheetButton(app, "END")
         XCTAssertTrue(end.waitForExistence(timeout: 5), "stopping asks first")
         end.tap()
@@ -101,9 +110,9 @@ final class CindyTrackerUITests: XCTestCase {
     func testASessionCanBeDiscardedFromItsPage() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        app.buttons["+1"].tap()
-        app.buttons["+1"].tap()
-        app.buttons["STOP"].tap()
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5), "stopping asks first")
         sheetButton(app, "END").tap()
 
@@ -128,7 +137,7 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(toast.waitForExistence(timeout: 10), "the screen underneath says what happened")
         XCTAssertEqual(toast.label, "Session discarded")
         // A finished workout leaves the camera screen on RESET, discarded or not.
-        XCTAssertTrue(app.buttons["RESET"].waitForExistence(timeout: 10), "discarding closes the page")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start again").waitForExistence(timeout: 10), "discarding closes the page")
     }
 
     // MARK: - the questions
@@ -136,29 +145,29 @@ final class CindyTrackerUITests: XCTestCase {
     func testSwipingTheStopQuestionAwayKeepsTheWorkoutGoing() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        app.buttons["+1"].tap()
-        app.buttons["STOP"].tap()
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5), "stopping asks first")
         // A swipe that starts on the sheet's own words.
         app.staticTexts["End the workout?"].swipeDown()
         XCTAssertFalse(sheetButton(app, "END").waitForExistence(timeout: 2), "the swipe closed the question")
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5), "a swipe is KEEP GOING")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5), "a swipe is KEEP GOING")
     }
 
     func testTheCameraIsHiddenWhileAQuestionIsUp() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        app.buttons["STOP"].tap()
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
         // A view hidden from accessibility stays in the test's queries, but with no frame and no
         // point to touch, so what is checked is that it cannot be reached.
-        let plusOne = app.buttons["+1"]
+        let plusOne = hud(app, "btnAddRep")
         let unreachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == false"),
                                                     object: plusOne)
         XCTAssertEqual(XCTWaiter().wait(for: [unreachable], timeout: 5), .completed,
                        "the controls beneath cannot be reached while the question is up")
         sheetButton(app, "KEEP GOING").tap()
-        XCTAssertTrue(app.buttons["+1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(hud(app, "btnAddRep").waitForExistence(timeout: 5))
     }
 
     func testTheStopQuestionKeepsEndWithinReachAtTheLargestText() {
@@ -168,7 +177,7 @@ final class CindyTrackerUITests: XCTestCase {
                                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
         startSkippingSetup(app)
-        app.buttons["STOP"].tap()
+        hud(app, "btnEnd").tap()
         let end = sheetButton(app, "END")
         XCTAssertTrue(end.waitForExistence(timeout: 5))
         XCTAssertTrue(end.isHittable)
@@ -178,20 +187,20 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testThePlacementGuideComesFirstAndCanBeTurnedOff() {
         let app = launchReplaying("nohands", seenGuide: false)
-        app.buttons["START"].tap()
+        hud(app, "btnStart", labelled: "Start the workout").tap()
         XCTAssertTrue(app.otherElements["placementGuide"].waitForExistence(timeout: 5)
                       || app.staticTexts["Where to put the phone"].waitForExistence(timeout: 5),
                       "the guide opens before the first setup check")
         XCTAssertTrue(app.staticTexts["Stand the phone up rather than laying it flat."].exists)
         app.buttons["CONTINUE"].tap()
-        XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5), "and then the check begins")
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "and then the check begins")
     }
 
     // MARK: - the setup check's outcomes
 
     func testTheSetupCheckNamesWhatItCannotSee() {
         let app = launchReplaying("nohands")
-        app.buttons["START"].tap()
+        hud(app, "btnStart", labelled: "Start the workout").tap()
         XCTAssertTrue(status(app).waitForExistence(timeout: 10))
         waitForLabel(status(app), "label CONTAINS[c] \"Can't see your\"")
         XCTAssertEqual(exercise(app).label, "SET UP")
@@ -199,21 +208,21 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testTheSetupCheckSaysWhenTheMovementBarelyRegisters() {
         let app = launchReplaying("barely")
-        app.buttons["START"].tap()
+        hud(app, "btnStart", labelled: "Start the workout").tap()
         waitForLabel(status(app), "label CONTAINS 'barely registers'", timeout: 60)
     }
 
     func testTheSetupCheckCanBeSkippedAfterBeingTold() {
         let app = launchReplaying("nohands")
-        app.buttons["START"].tap()
-        XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5))
-        app.buttons["SKIP"].tap()
+        hud(app, "btnStart", labelled: "Start the workout").tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+        hud(app, "btnSkipExercise").tap()
         XCTAssertTrue(app.staticTexts["Skip the setup check?"].waitForExistence(timeout: 5)
                       || sheetButton(app, "KEEP CHECKING").waitForExistence(timeout: 5),
                       "it says what skipping costs before doing it")
         sheetButton(app, "KEEP CHECKING").tap()
-        XCTAssertTrue(app.buttons["SKIP"].waitForExistence(timeout: 5), "keeping on checking leaves the check running")
-        XCTAssertFalse(app.buttons["PAUSE"].exists)
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "keeping on checking leaves the check running")
+        XCTAssertFalse(hud(app, "btnStart", labelled: "Pause").exists)
     }
 
     // MARK: - the buttons
@@ -221,50 +230,109 @@ final class CindyTrackerUITests: XCTestCase {
     func testPlusOneCountsARepAndMinusOneTakesItBack() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        XCTAssertTrue(repCount(app).label.hasPrefix("0 / 5"))
-        app.buttons["+1"].tap()
-        waitForLabel(repCount(app), "label BEGINSWITH '1 / 5'")
-        app.buttons["−1"].tap()
-        waitForLabel(repCount(app), "label BEGINSWITH '0 / 5'")
+        XCTAssertTrue(repCount(app).label.hasPrefix("0 of 5"))
+        hud(app, "btnAddRep").tap()
+        waitForLabel(repCount(app), "label BEGINSWITH '1 of 5'")
+        hud(app, "btnUndo").tap()
+        waitForLabel(repCount(app), "label BEGINSWITH '0 of 5'")
     }
 
     func testMinusOneStepsBackAcrossAMovementBoundary() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        for _ in 0..<5 { app.buttons["+1"].tap() }
+        for _ in 0..<5 { hud(app, "btnAddRep").tap() }
         waitForLabel(exercise(app), "label == 'PUSH-UPS'")
-        XCTAssertTrue(repCount(app).label.hasPrefix("0 / 10"))
-        app.buttons["−1"].tap()
+        XCTAssertTrue(repCount(app).label.hasPrefix("0 of 10"))
+        hud(app, "btnUndo").tap()
         waitForLabel(exercise(app), "label == 'PULL-UPS'")
-        waitForLabel(repCount(app), "label BEGINSWITH '4 / 5'")
+        waitForLabel(repCount(app), "label BEGINSWITH '4 of 5'")
     }
 
-    func testALongPressOnPlusOneSkipsToTheNextMovement() {
+    func testSkipLeavesTheMovementAndTheEditorsAreDimmedBeforeTheClockStarts() {
         let app = launchReplaying("nohands")
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 10), "SKIP is there before the clock")
+        XCTAssertFalse(hud(app, "btnSkipExercise").isEnabled, "and dimmed, with no movement to leave")
+        XCTAssertFalse(hud(app, "btnAddRep").isEnabled, "the editors wait for the clock")
         startSkippingSetup(app)
-        app.buttons["+1"].tap()
-        app.buttons["+1"].press(forDuration: 1.2)
+        XCTAssertTrue(hud(app, "btnAddRep").isEnabled)
+        XCTAssertTrue(hud(app, "btnSkipExercise").isEnabled)
+        hud(app, "btnAddRep").tap()
+        hud(app, "btnSkipExercise").tap()
         waitForLabel(exercise(app), "label == 'PUSH-UPS'")
+    }
+
+    func testTheLeftSlotChangesHands() {
+        let app = launchReplaying("nohands")
+        XCTAssertTrue(hud(app, "btnFlip").waitForExistence(timeout: 10), "FLIP before the clock")
+        XCTAssertFalse(hud(app, "btnEnd").exists)
+        startSkippingSetup(app)
+        XCTAssertTrue(hud(app, "btnEnd").waitForExistence(timeout: 5), "END once it runs")
+        XCTAssertTrue(hud(app, "btnFlip").waitForNonExistence(timeout: 5))
+        hud(app, "btnEnd").tap()
+        sheetButton(app, "END").tap()
+        XCTAssertTrue(hud(app, "btnFlip").waitForExistence(timeout: 10), "and FLIP again once it is over")
+    }
+
+    func testTheShutterNamesTheState() {
+        let app = launchReplaying("nohands")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 10))
+        hud(app, "btnStart").tap()
+        let inCheck = hud(app, "btnStart", labelled: "Start — available once the setup check finishes")
+        XCTAssertTrue(inCheck.waitForExistence(timeout: 5), "the shutter says why it is inert")
+        XCTAssertFalse(inCheck.isEnabled)
+        hud(app, "btnSkipExercise").tap()
+        sheetButton(app, "SKIP").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
+        hud(app, "btnStart").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Resume").waitForExistence(timeout: 5))
+    }
+
+    func testTheBandsKeepTheControlsReachableAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let start = hud(app, "btnStart")
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.isHittable, "the shutter is on screen")
+        XCTAssertTrue(hud(app, "btnMenu").isHittable)
+        let count = repCount(app)
+        XCTAssertTrue(count.isHittable, "so is the count")
+        XCTAssertTrue(hud(app, "btnSkipExercise").frame.height > 0)
+        XCTAssertFalse(count.frame.intersects(start.frame), "and the two do not overlap")
+    }
+
+    func testALongStatusLineDoesNotLoseTheClock() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "barely", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(hud(app, "btnStart").waitForExistence(timeout: 10))
+        hud(app, "btnStart").tap()
+        waitForLabel(status(app), "label CONTAINS 'barely registers'", timeout: 60)
+        XCTAssertTrue(app.staticTexts["clock"].isHittable, "the clock is still on its band")
     }
 
     func testPausingParksTheClockAndResumingRestartsIt() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        app.buttons["PAUSE"].tap()
-        XCTAssertTrue(app.buttons["RESUME"].waitForExistence(timeout: 5))
+        hud(app, "btnStart", labelled: "Pause").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Resume").waitForExistence(timeout: 5))
         waitForLabel(status(app), "label == 'Paused'")
-        app.buttons["RESUME"].tap()
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5))
+        hud(app, "btnStart", labelled: "Resume").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5))
         waitForLabel(status(app), "label != 'Paused'")
     }
 
     func testKeepingGoingAfterStopLetsTheClockRunAgain() {
         let app = launchReplaying("nohands")
         startSkippingSetup(app)
-        app.buttons["STOP"].tap()
+        hud(app, "btnEnd").tap()
         XCTAssertTrue(sheetButton(app, "KEEP GOING").waitForExistence(timeout: 5))
         sheetButton(app, "KEEP GOING").tap()
-        XCTAssertTrue(app.buttons["PAUSE"].waitForExistence(timeout: 5),
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5),
                       "the clock that was parked behind the question is running again")
     }
 
@@ -321,7 +389,7 @@ final class CindyTrackerUITests: XCTestCase {
         }
         XCTAssertFalse(skip.exists, "the tour was still up after \(taps) taps on NEXT")
         XCTAssertEqual(taps, steps, "one tap on NEXT for each of the \(steps) controls")
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5), "the camera screen is back")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 5), "the camera screen is back")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
 
@@ -333,23 +401,23 @@ final class CindyTrackerUITests: XCTestCase {
         let skip = app.buttons["Skip the tour"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "skipping the pages still leads to the tour")
         skip.tap()
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5))
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 5))
 
         // The same install again: what was written when the pages and the tour ended is all there is.
         app.terminate()
         app.launchArguments = ["-CindyReplay", "pullups", "-placement_guide_dismissed", "NO"]
         app.launch()
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 10),
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 10),
                       "neither the pages nor the tour come back for the same install")
         XCTAssertFalse(app.buttons["Skip the tour"].exists)
     }
 
     func testHelpTakesTheTourAgainAndReturnsToTheCameraWithTheTourNext() {
         let app = launchReplaying("pullups", tour: true)
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
         // A tour left pending by an earlier test is taken first: it would swallow the tap.
         if app.buttons["Skip the tour"].waitForExistence(timeout: 3) { app.buttons["Skip the tour"].tap() }
-        app.buttons["MENU"].tap()
+        hud(app, "btnMenu").tap()
 
         let help = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Help'")).firstMatch
         XCTAssertTrue(help.waitForExistence(timeout: 5), "the menu has a Help row")
@@ -365,15 +433,15 @@ final class CindyTrackerUITests: XCTestCase {
         let skip = app.buttons["Skip the tour"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "the tour follows the replayed pages")
         skip.tap()
-        XCTAssertTrue(app.buttons["START"].waitForExistence(timeout: 5))
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 5))
     }
 
     // MARK: - heart rate
 
     func testTheMenuOffersHeartRateAndTheSheetSaysHowToFindAWatch() {
         let app = launchReplaying("pullups")
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
 
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Heart rate row")
@@ -392,23 +460,23 @@ final class CindyTrackerUITests: XCTestCase {
         // A replayed body has no picture, as a camera that cannot film has none: the tap is answered
         // at once and no count starts. Nothing here asks Photos for anything.
         let app = launchReplaying("pullups")
-        let rec = app.buttons["Record this workout"]
+        let rec = hud(app, "btnRec", labelled: "Record this workout")
         XCTAssertTrue(rec.waitForExistence(timeout: 10), "REC is on the camera screen")
         rec.tap()
 
         let toast = app.staticTexts["toast"]
         XCTAssertTrue(toast.waitForExistence(timeout: 5), "the tap is answered")
         XCTAssertEqual(toast.label, "Recording is not available on this camera")
-        XCTAssertTrue(app.buttons["Record this workout"].exists, "REC is still offering to record")
-        XCTAssertFalse(app.buttons["Recording is about to start, tap to cancel"].exists, "no count started")
+        XCTAssertTrue(hud(app, "btnRec", labelled: "Record this workout").exists, "REC is still offering to record")
+        XCTAssertFalse(hud(app, "btnRec", labelled: "Recording is about to start, tap to cancel").exists, "no count started")
     }
 
     // MARK: - music
 
     func testTheMenuOffersMusicAndTheSheetSaysWhatTheTrackDoes() {
         let app = launchReplaying("pullups")
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
 
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Music'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Music row")
@@ -426,8 +494,8 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testTheMenuOffersTheDailyReminderAndTheSheetSaysWhatItDoes() {
         let app = launchReplaying("pullups")
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
 
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Daily reminder'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Daily reminder row")
@@ -446,8 +514,8 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testABuildWithNoStravaCredentialsHasNoStravaAnywhereOnTheMenu() {
         let app = launchReplaying("pullups")
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
             .waitForExistence(timeout: 5), "the menu is up")
 
@@ -458,8 +526,8 @@ final class CindyTrackerUITests: XCTestCase {
 
     func testTheStravaRowAsksFirstAndNOTNOWStartsNothing() {
         let app = launchReplaying("pullups", strava: true)
-        XCTAssertTrue(app.buttons["MENU"].waitForExistence(timeout: 10))
-        app.buttons["MENU"].tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
 
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strava'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Strava row")
