@@ -329,8 +329,10 @@ final class CindyTrackerUITests: XCTestCase {
 
         // The day lists its sessions in a Cindy sheet; a row opens its session.
         XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")
-        let row = app.buttons["daySession"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "the sheet lists the day's sessions")
+        let row = app.descendants(matching: .any).matching(identifier: "daySession").firstMatch
+        let found = row.waitForExistence(timeout: 5)
+        let seen = app.buttons.allElementsBoundByIndex.map { "\($0.identifier)|\($0.label)" }.joined(separator: " ; ")
+        XCTAssertTrue(found, "the sheet lists the day's sessions; the buttons are: \(seen)")
         row.tap()
 
         let dated = app.staticTexts.matching(NSPredicate(format: "label MATCHES[c] '.*[0-9]{4} · .*'")).firstMatch
