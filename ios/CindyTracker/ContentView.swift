@@ -87,17 +87,30 @@ struct ContentView: View {
     /// The first-launch pages, shown before the camera is asked for. Decided when the screen is
     /// made, so the pages are there from the first frame and the camera never gets the chance to
     /// ask first.
-    @State private var showTutorial: Bool
+    @State private var showTutorial = false
+    /// The pages are owed, and come when the launch view has gone, as Android sends for them once its
+    /// arcs have played out: `showTutorial` is what is on screen, this is what is due.
+    @State private var tutorialDue: Bool
+    /// The launch view stands over everything until the camera has a frame, or the pages are due.
+    @State private var launching = true
     /// Whether the camera's permission has been answered, either way. The tour of the controls
     /// waits behind it, so the athlete is not shown a dimmed screen with a system dialog on top.
     @State private var cameraAnswered = false
     @State private var tour = SpotlightTour()
     @State private var tourFrames: [HudTour.Target: CGRect] = [:]
     private let firstRun = FirstRun()
+    /// A debug build can be told to keep the launch view up, for its screenshot.
+    private var holdLaunch: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "CindyHoldLaunch")
+        #else
+        return false
+        #endif
+    }
 
     init() {
         let flags = FirstRun()
-        _showTutorial = State(initialValue: flags.shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
+        _tutorialDue = State(initialValue: flags.shouldShowTutorial(hasHistory: !RecordStore().all().isEmpty,
                                                                     cameraGranted: CameraModel.permissionHeld))
     }
 
@@ -123,6 +136,16 @@ struct ContentView: View {
             .accessibilityHidden(tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm)
             if tour.isShowing {
                 SpotlightOverlay(tour: tour, frames: tourFrames, advance: advanceTour, skip: skipTour)
+            }
+            // Over everything, and gone as soon as the camera has a frame.
+            if launching {
+                LaunchView(ready: camera.frameSize.width > 0 || tutorialDue, hold: holdLaunch) {
+                    launching = false
+                    if tutorialDue {
+                        tutorialDue = false
+                        showTutorial = true
+                    }
+                }
             }
         }
         // The camera screen is a camera: no status bar over the picture and no home indicator under it.
@@ -258,7 +281,7 @@ struct ContentView: View {
     /// them so that clearing their records later does not make them look new. A new install waits
     /// behind the pages: the camera opens when they end (`openCamera`, from the cover's dismissal).
     private func beginFirstRun() {
-        guard !showTutorial else { return }
+        guard !showTutorial, !tutorialDue else { return }
         if !firstRun.tutorialSeen { firstRun.tutorialSeen = true }
         openCamera()
     }
@@ -280,7 +303,7 @@ struct ContentView: View {
     /// pending until the clock is idle. It waits for a layout before lighting anything, because the
     /// hole is cut from where the controls actually are.
     private func maybeStartTour() {
-        guard !tour.isShowing, cameraAnswered, !showMenu, !showTutorial, !showPlacement,
+        guard !tour.isShowing, cameraAnswered, !showMenu, !showTutorial, !tutorialDue, !showPlacement,
               workout.phase == .idle, workout.finished == nil,
               firstRun.hudTourPending, !tourFrames.isEmpty else { return }
         // Nothing lit yet is not the same as nothing to light: it stays pending, and the next layout

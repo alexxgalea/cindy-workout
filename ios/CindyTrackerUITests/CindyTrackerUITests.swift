@@ -183,6 +183,15 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(end.isHittable)
     }
 
+    // MARK: - the launch view
+
+    func testTheLaunchViewGivesWayToTheCamera() {
+        let app = launchReplaying("nohands")
+        let launch = app.descendants(matching: .any).matching(identifier: "launchView").firstMatch
+        XCTAssertTrue(launch.waitForNonExistence(timeout: 15), "the arcs go once the camera has a frame")
+        XCTAssertTrue(hud(app, "btnStart").isHittable, "and the camera screen is under them")
+    }
+
     // MARK: - the start-position coach
 
     func testTheCoachStandsInForTheStatusLine() {
