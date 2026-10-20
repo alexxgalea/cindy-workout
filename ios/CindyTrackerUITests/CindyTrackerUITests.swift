@@ -150,9 +150,13 @@ final class CindyTrackerUITests: XCTestCase {
         startSkippingSetup(app)
         app.buttons["STOP"].tap()
         XCTAssertTrue(sheetButton(app, "END").waitForExistence(timeout: 5))
-        // The accessibility tree follows the state a moment later, so it is waited for.
-        XCTAssertTrue(app.buttons["+1"].waitForNonExistence(timeout: 5),
-                      "the controls beneath leave the accessibility tree")
+        // A view hidden from accessibility stays in the test's queries, but with no frame and no
+        // point to touch, so what is checked is that it cannot be reached.
+        let plusOne = app.buttons["+1"]
+        let unreachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == false"),
+                                                    object: plusOne)
+        XCTAssertEqual(XCTWaiter().wait(for: [unreachable], timeout: 5), .completed,
+                       "the controls beneath cannot be reached while the question is up")
         sheetButton(app, "KEEP GOING").tap()
         XCTAssertTrue(app.buttons["+1"].waitForExistence(timeout: 5))
     }
