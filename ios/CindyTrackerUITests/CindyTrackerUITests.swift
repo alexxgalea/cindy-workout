@@ -225,17 +225,17 @@ final class CindyTrackerUITests: XCTestCase {
         // The first session's page is on top. Covered pages stay in the queries, so it is the
         // DONE that can be hit that is tapped.
         let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'"))
-        func hittableDone() -> XCUIElement? { dones.allElementsBoundByIndex.first { $0.isHittable } }
-        func waitForHittableDone() -> XCUIElement? {
-            for _ in 0..<10 {
-                if let done = hittableDone() { return done }
-                Thread.sleep(forTimeInterval: 0.5)
+        // DONE ends the page, so it is only on screen once the page has been scrolled to it.
+        func scrolledToDone() -> XCUIElement? {
+            for _ in 0..<12 {
+                if let done = dones.allElementsBoundByIndex.first(where: { $0.isHittable }) { return done }
+                app.swipeUp()
             }
-            return nil
+            return dones.allElementsBoundByIndex.first(where: { $0.isHittable })
         }
-        guard let topDone = waitForHittableDone() else { return XCTFail("the first session's page has a DONE") }
+        guard let topDone = scrolledToDone() else { return XCTFail("the first session's page has a DONE") }
         topDone.tap()
-        XCTAssertNotNil(waitForHittableDone(), "DONE came back to the second page")
+        XCTAssertNotNil(scrolledToDone(), "DONE came back to the second page")
         XCTAssertFalse(hud(app, "btnStart", labelled: "Start again").isHittable,
                        "the second page is still over the camera")
     }
