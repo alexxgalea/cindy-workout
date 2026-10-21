@@ -512,15 +512,92 @@ final class CindyTrackerUITests: XCTestCase {
 
     // MARK: - the placement guide
 
-    func testThePlacementGuideComesFirstAndCanBeTurnedOff() {
+    /// Opens the placement guide: a launch that has not dismissed it, and a tap on START.
+    private func openThePlacementGuide(_ app: XCUIApplication) {
+        let start = hud(app, "btnStart", labelled: "Start the workout")
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "the camera screen opens with START")
+        start.tap()
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForExistence(timeout: 5), "START asks where to stand first")
+    }
+
+    /// The switch on the guide, which sits at the right end of its row: a tap in the middle of the
+    /// row lands on the words.
+    private func dontShowAgainSwitch(_ app: XCUIApplication) -> XCUIElement {
+        app.switches["Don't show this again"]
+    }
+
+    private func switchOn(_ element: XCUIElement) {
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
+        XCTAssertEqual(element.value as? String, "1", "the switch is on")
+    }
+
+    func testThePlacementGuideIsACindySheetOverTheCamera() {
         let app = launchReplaying("nohands", seenGuide: false)
-        hud(app, "btnStart", labelled: "Start the workout").tap()
-        XCTAssertTrue(app.otherElements["placementGuide"].waitForExistence(timeout: 5)
-                      || app.staticTexts["Where to put the phone"].waitForExistence(timeout: 5),
-                      "the guide opens before the first setup check")
-        XCTAssertTrue(app.staticTexts["Stand the phone up rather than laying it flat."].exists)
-        app.buttons["CONTINUE"].tap()
+        openThePlacementGuide(app)
+        XCTAssertTrue(app.otherElements["cindySheet"].exists, "it is the Cindy sheet, not a system one")
+        XCTAssertTrue(app.staticTexts["The one thing you have to get right before the camera can help."].exists)
+        for fact in ["Stand the phone up rather than laying it flat.",
+                     "Keep your head and your feet both in shot.",
+                     "Then leave it there — moving it mid-workout resets what it has learned."] {
+            XCTAssertTrue(app.staticTexts[fact].exists, fact)
+        }
+        XCTAssertTrue(dontShowAgainSwitch(app).exists)
+        XCTAssertTrue(sheetButton(app, "NOT NOW").exists)
+        sheetButton(app, "START SETUP").tap()
         XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "and then the check begins")
+    }
+
+    func testNotNowLeavesTheClockIdleAndTheGuideComesBack() {
+        let app = launchReplaying("nohands", seenGuide: false)
+        openThePlacementGuide(app)
+        sheetButton(app, "NOT NOW").tap()
+        XCTAssertFalse(app.staticTexts["Where to stand"].waitForExistence(timeout: 2), "the guide closes")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").exists, "the clock is still idle")
+        XCTAssertFalse(hud(app, "btnSkipExercise").exists, "and no check began")
+        hud(app, "btnStart", labelled: "Start the workout").tap()
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForExistence(timeout: 5), "the guide is back at the next START")
+    }
+
+    func testDismissingTheGuideWithTheDimDoesNothingAndForgetsTheSwitch() {
+        let app = launchReplaying("nohands", seenGuide: false)
+        openThePlacementGuide(app)
+        switchOn(dontShowAgainSwitch(app))
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+        XCTAssertFalse(app.staticTexts["Where to stand"].waitForExistence(timeout: 2), "the dim closes the guide")
+        XCTAssertFalse(hud(app, "btnSkipExercise").exists, "and no check began")
+
+        hud(app, "btnStart", labelled: "Start the workout").tap()
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForExistence(timeout: 5), "so the guide is back")
+        XCTAssertEqual(dontShowAgainSwitch(app).value as? String, "0", "with the switch off again")
+    }
+
+    func testDontShowAgainIsKeptOnlyByStartingSetup() {
+        let app = launchReplaying("nohands", seenGuide: false)
+        openThePlacementGuide(app)
+        switchOn(dontShowAgainSwitch(app))
+        sheetButton(app, "START SETUP").tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+
+        // The same install again, with no argument to shadow what was written.
+        app.terminate()
+        app.launchArguments = ["-CindyReplay", "nohands", "-tutorial_seen", "YES", "-hud_tour_pending", "NO"]
+        app.launch()
+        let start = hud(app, "btnStart", labelled: "Start the workout")
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        start.tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "START goes straight to the check")
+        XCTAssertFalse(app.staticTexts["Where to stand"].exists, "without the guide")
+    }
+
+    func testTheGuideKeepsStartSetupOnScreenAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "NO",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        openThePlacementGuide(app)
+        XCTAssertTrue(sheetButton(app, "START SETUP").isHittable, "START SETUP is on the screen, without scrolling")
     }
 
     // MARK: - the setup check's outcomes
