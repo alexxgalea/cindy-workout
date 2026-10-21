@@ -29,7 +29,23 @@ private struct CloseCindySheetKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
+/// What a drag on a panel does to its sheet: the presenter moves the sheet and decides whether the
+/// drag was a dismissal. The panel starts one from the places a drag cannot be a scroll.
+struct SheetDrag {
+    var changed: (_ down: CGFloat) -> Void = { _ in }
+    var ended: (_ down: CGFloat, _ predicted: CGFloat) -> Void = { _, _ in }
+}
+
+private struct SheetDragKey: EnvironmentKey {
+    static let defaultValue = SheetDrag()
+}
+
 extension EnvironmentValues {
+    var sheetDrag: SheetDrag {
+        get { self[SheetDragKey.self] }
+        set { self[SheetDragKey.self] = newValue }
+    }
+
     /// Closes the Cindy sheet this view is in. Set by the presenter; a panel's buttons call it.
     var closeCindySheet: () -> Void {
         get { self[CloseCindySheetKey.self] }
@@ -92,23 +108,6 @@ extension View {
 /// What the `isPresented` form presents: the one sheet there is.
 private struct Presented: Identifiable { let id = 0 }
 
-/// Where a panel's handle and title end, in the presenter's own space: a drag that begins above this
-/// line is a dismissal on any sheet.
-private struct SheetHeaderBottomKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-/// Whether a panel's content is taller than its cap, and so scrolls.
-private struct SheetScrollsKey: PreferenceKey {
-    static let defaultValue = false
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
-}
-
-/// The presenter's own coordinate space, which does not move with the sheet it carries: a drag
-/// measured inside the sheet would be measured against a view that is following the finger.
-private let sheetSpace = "cindySheetPresenter"
-
 private struct SheetContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
@@ -125,11 +124,6 @@ private struct CindySheetPresenter<Item: Identifiable, Panel: View>: ViewModifie
     @ViewBuilder let panel: (Item) -> Panel
 
     @State private var drag: CGFloat = 0
-    @State private var scrolls = false
-    @State private var headerBottom: CGFloat = 0
-    /// Whether the drag in progress began somewhere that counts, decided once when it began.
-    @State private var dragging = false
-    @State private var dragCounts = false
 
     func body(content base: Content) -> some View {
         base
@@ -147,28 +141,16 @@ private struct CindySheetPresenter<Item: Identifiable, Panel: View>: ViewModifie
                         panel(current)
                             .id(current.id)
                             .environment(\.closeCindySheet, { close() })
-                            .offset(y: drag)
-                            // On a sheet whose content scrolls only a drag that began on the handle or
-                            // the title counts: the rest is the content being scrolled, and scrolling it
-                            // back down must not take the sheet with it.
-                            .simultaneousGesture(
-                                DragGesture(coordinateSpace: .named(sheetSpace))
-                                    .onChanged { value in
-                                        if !dragging {
-                                            dragging = true
-                                            dragCounts = !scrolls || value.startLocation.y <= headerBottom
-                                        }
-                                        if dragCounts { drag = max(0, value.translation.height) }
+                            .environment(\.sheetDrag, SheetDrag(
+                                changed: { drag = max(0, $0) },
+                                ended: { down, predicted in
+                                    if down > 100 || predicted > 200 {
+                                        close()
+                                    } else {
+                                        withAnimation(sheetCurve) { drag = 0 }
                                     }
-                                    .onEnded { value in
-                                        defer { dragging = false }
-                                        guard dragCounts else { return }
-                                        if value.translation.height > 100 || value.predictedEndTranslation.height > 200 {
-                                            close()
-                                        } else {
-                                            withAnimation(sheetCurve) { drag = 0 }
-                                        }
-                                    })
+                                }))
+                            .offset(y: drag)
                             .accessibilityElement(children: .contain)
                             .accessibilityIdentifier("cindySheet")
                             .accessibilityAddTraits(.isModal)
@@ -177,9 +159,6 @@ private struct CindySheetPresenter<Item: Identifiable, Panel: View>: ViewModifie
                     }
                 }
                 .animation(sheetCurve, value: item?.id)
-                .coordinateSpace(name: sheetSpace)
-                .onPreferenceChange(SheetHeaderBottomKey.self) { headerBottom = $0 }
-                .onPreferenceChange(SheetScrollsKey.self) { scrolls = $0 }
             }
             .onChange(of: item?.id) { was, now in
                 if now != nil { drag = 0 }
@@ -201,6 +180,7 @@ struct CindyPanel<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.closeCindySheet) private var close
+    @Environment(\.sheetDrag) private var sheetDrag
     @State private var bodyHeight: CGFloat = 0
 
     init(title: String, subtitle: String? = nil, primary: SheetButton, secondary: SheetButton? = nil,
@@ -220,6 +200,17 @@ struct CindyPanel<Content: View>: View {
     /// Whether the content is taller than its cap, so a drag over it is a scroll and not a dismissal.
     private var scrolls: Bool { bodyHeight > Self.bodyCap }
 
+    /// A drag on the sheet, for the panel that does (`scrolling`) or does not scroll its content. Two of
+    /// these are always attached, one on the handle and the title and one on the whole panel, and each
+    /// acts only for its own case: a sheet that does not scroll is dragged from anywhere, one that
+    /// does only from its header, so scrolling the content back down cannot be taken for a dismissal.
+    /// Measured against the screen, which does not move with the sheet the drag is carrying.
+    private func drag(scrolling: Bool) -> some Gesture {
+        DragGesture(coordinateSpace: .global)
+            .onChanged { if scrolls == scrolling { sheetDrag.changed($0.translation.height) } }
+            .onEnded { if scrolls == scrolling { sheetDrag.ended($0.translation.height, $0.predictedEndTranslation.height) } }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // The handle and the title: where a drag always dismisses, whatever is below them.
@@ -234,9 +225,7 @@ struct CindyPanel<Content: View>: View {
                     .accessibilityAddTraits(.isHeader)
             }
             .contentShape(Rectangle())
-            .background(GeometryReader { proxy in
-                Color.clear.preference(key: SheetHeaderBottomKey.self, value: proxy.frame(in: .named(sheetSpace)).maxY)
-            })
+            .gesture(drag(scrolling: true))
             scrollingBody
             buttons.padding(.top, 18)
         }
@@ -250,7 +239,7 @@ struct CindyPanel<Content: View>: View {
                                    .init(color: Palette.sheetEnd, location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea(.container, edges: .bottom))
-        .preference(key: SheetScrollsKey.self, value: scrolls)
+        .simultaneousGesture(drag(scrolling: false))
     }
 
     /// The subtitle and the content, 18 below the title's line, capped at 60% of the height.
