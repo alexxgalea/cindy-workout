@@ -137,8 +137,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
 
 ### U4: Menu and Account
 
-- **Menu.** Full-screen with DONE at the bottom, built from the profile row (`AvatarRow`) and `NavRow`s. Each row opens its sheet the way Android does for that row: by push or by a Cindy sheet.
-- **Account.** Follows `activity_account.xml`, with its badges drawn by `BadgeDisc`.
+`MenuScreen` is a full-screen cover with Android's title and line under it, the profile row (`AvatarRow`) and the rows (`NavRow`) in grouped cards, the live-workout footnote, and a DONE pinned below the scroll. `AccountScreen` has the same shell, the header card, the badge families three to a row drawn by `BadgeDisc`, and a badge opening a Cindy sheet. The avatar's figure is drawn as Android draws it. The menu's own sheets, the name sheet and the photo dialog are U5's and are still the system's.
 
 ### U5: the menu's sheets
 
