@@ -22,22 +22,18 @@ struct AvatarView: View {
                 if let photo {
                     Image(uiImage: photo).resizable().scaledToFill().frame(width: side, height: side).clipShape(Circle())
                 } else {
-                    Circle().fill(Color.white.opacity(0.09))
+                    Circle().fill(Palette.surfaceGlassRaised)
                     let letters = Avatar.initials(name)
                     if letters.isEmpty {
-                        // A head over a pair of shoulders, cut off by the disc: the sign for "somebody".
-                        Image(systemName: "person.fill")
-                            .resizable().scaledToFit().frame(width: side * 0.5, height: side * 0.5)
-                            .offset(y: side * 0.08)
-                            .foregroundStyle(Ink.tertiary)
-                            .frame(width: side, height: side).clipShape(Circle())
+                        figure(side)
                     } else {
                         Text(letters)
-                            .font(.system(size: side * (letters.count > 1 ? 0.36 : 0.42), weight: .heavy))
-                            .foregroundStyle(.white)
+                            .font(Manrope.font(.extrabold, size: side * (letters.count > 1 ? 0.36 : 0.42)))
+                            .foregroundStyle(Palette.label)
                     }
                 }
-                Circle().strokeBorder(Color.white.opacity(0.13), lineWidth: 0.5)
+                // Drawn inside the edge, so the stroke is not half clipped away.
+                Circle().strokeBorder(Palette.hairlineStrong, lineWidth: Palette.hairlineWidth)
             }
             .frame(width: side, height: side)
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
@@ -45,6 +41,22 @@ struct AvatarView: View {
         .aspectRatio(1, contentMode: .fit)
         // Decoration by default: a row that holds one already says what it is.
         .accessibilityHidden(true)
+    }
+
+    /// A head over a pair of shoulders, cut off by the disc: the sign for "somebody". Drawn, not
+    /// a symbol: the head's radius is 17% of the side, centred 50% across and 38% down, and the
+    /// shoulders an oval from 20% to 80% across and 62% to 110% down.
+    private func figure(_ side: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            Circle().fill(Palette.labelTertiary)
+                .frame(width: side * 0.34, height: side * 0.34)
+                .offset(x: side * 0.33, y: side * 0.21)
+            Ellipse().fill(Palette.labelTertiary)
+                .frame(width: side * 0.6, height: side * 0.48)
+                .offset(x: side * 0.2, y: side * 0.62)
+        }
+        .frame(width: side, height: side, alignment: .topLeading)
+        .clipShape(Circle())
     }
 }
 
