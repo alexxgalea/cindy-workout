@@ -44,14 +44,15 @@ final class LanguageSheetModel: ObservableObject {
     }
 }
 
-/// The voice sheet: whether it counts, how loud, and in which language. The language list is one row
-/// each, saying where that language stands on this phone, with a button to hear it and a tap to
-/// choose it. What each row says and what a tap does is `LanguageGroupModel`'s, which the Kotlin
-/// `LanguageGroup` decided in the same way; what is kept, and when, is `VoiceForm`'s.
+/// The voice sheet (`chooseVoice`): whether it counts, how loud, and in which language. The language
+/// list is one row each, saying where that language stands on this phone, with a button to hear it
+/// and a tap to choose it. What each row says and what a tap does is `LanguageGroupModel`'s, which the
+/// Kotlin `LanguageGroup` decided in the same way; what is kept, and when, is `VoiceForm`'s.
+///
+/// SAVE keeps it all. Closing any other way, CANCEL's way, puts the speaker back as it was.
 struct VoiceSheet: View {
 
     @StateObject private var sheet: LanguageSheetModel
-    @Environment(\.dismiss) private var dismiss
     private let speaker: Speaker
     private let save: (VoiceForm) -> Void
     private let cancel: () -> Void
@@ -70,120 +71,129 @@ struct VoiceSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle(VoiceForm.toggleTitle, isOn: $form.on)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Volume").font(.subheadline)
-                        // Spoken only once the grip is let go: restarting the utterance on every
-                        // pixel of the drag would stutter rather than demonstrate.
-                        Slider(value: Binding(get: { Double(form.volume) }, set: {
-                            form.volume = Float($0)
-                            speaker.volume = form.volume
-                        }), in: 0...1) { editing in
-                            if !editing { speaker.preview(.volumeCheck) }
-                        }
-                        .accessibilityLabel("Volume")
-                        .accessibilityValue(MenuBuilder.percent(form.volume))
-                    }
-                } header: {
-                    Text(VoiceForm.title.uppercased())
-                } footer: {
-                    Text(VoiceForm.subtitle + " " + VoiceForm.note)
-                }
-
-                Section {
-                    ForEach(sheet.rows, id: \.tag) { row in
-                        HStack(spacing: 0) {
-                            Button { sheet.choose(row.tag) } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.nativeName).font(.headline)
-                                        Text(row.caption).font(.footnote).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                        .opacity(row.chosen ? 1 : 0)
-                                        .accessibilityHidden(true)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(row.description)
-                            .accessibilityAddTraits(.isButton)
-
-                            Button { sheet.preview(row.tag) } label: {
-                                Image(systemName: "play.circle")
-                                    .font(.title2)
-                                    .frame(width: 48, height: 48)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(row.previewDescription)
-                        }
-                        .opacity(row.dimmed ? 0.45 : 1)
-                    }
-                } header: {
-                    Text("LANGUAGE")
-                } footer: {
-                    Text("Counting uses a voice stored on the phone, so it works offline. "
-                        + "A language that isn't ready is counted in English until it is.")
-                }
-
-                Section {
-                    Button { sheet.model.manageVoices() } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Manage voices").font(.headline)
-                            Text("Add or remove voices in Settings").font(.footnote).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Voice")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Save") {
-                        saved = true
-                        form.language = sheet.chosen
-                        save(form)
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    Button("HEAR IT") { sheet.previewChosen() }
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if let text = sheet.toast {
-                    Text(text)
-                        .font(.footnote)
-                        .padding(10)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                        .padding(.bottom, 56)
-                        .transition(.opacity)
-                        .accessibilityAddTraits(.updatesFrequently)
-                }
-            }
-            .alert("Manage voices", isPresented: $sheet.explainingVoices) {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                }
-                Button("Not now", role: .cancel) {}
-            } message: {
-                Text("iOS can't be asked to download a voice for the app. Most languages ship a compact voice. "
-                    + "For a better one, go to Settings → Accessibility → Spoken Content → Voices, download it there, "
-                    + "and it appears here the next time this list refreshes.")
-            }
+        Group {
+            if sheet.explainingVoices { manageVoices } else { voice }
         }
         .onAppear { sheet.start() }
         .onDisappear {
             sheet.stop()
             if !saved { cancel() }
         }
+    }
+
+    private var voice: some View {
+        CindyPanel(title: VoiceForm.title, subtitle: VoiceForm.subtitle,
+                   primary: SheetButton(title: SheetWords.save) {
+                       saved = true
+                       form.language = sheet.chosen
+                       save(form)
+                   },
+                   // The sample is heard against the sliders that are still on screen.
+                   secondary: SheetButton(title: SheetWords.hearIt) { sheet.previewChosen() },
+                   secondaryDismisses: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetToggle(VoiceForm.toggleTitle, isOn: $form.on)
+                // Spoken only once the grip is let go: restarting the utterance on every pixel of
+                // the drag would stutter rather than demonstrate.
+                SheetSlider(SheetWords.volume,
+                            value: Binding(get: { Double(form.volume) }, set: {
+                                form.volume = Float($0)
+                                speaker.volume = form.volume
+                            }),
+                            onSettled: { _ in speaker.preview(.volumeCheck) })
+                SheetNote(VoiceForm.note)
+                languages
+            }
+        }
+        .overlay(alignment: .top) {
+            if let text = sheet.toast {
+                CindyToast(text: text).offset(y: -64).accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+    }
+
+    /// One entry of the language list: a language, or the way to the engine's own voices.
+    private enum Entry: Identifiable {
+        case language(LanguageGroupModel.Row), manage
+
+        var id: String {
+            switch self {
+            case .language(let row): return row.tag
+            case .manage: return "manage"
+            }
+        }
+    }
+
+    private var languages: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(SheetWords.language).cindy(.eyebrow)
+                .padding(.leading, 4).padding(.top, 18).padding(.bottom, 8)
+                .accessibilityAddTraits(.isHeader)
+            InsetGroup(sheet.rows.map(Entry.language) + [.manage], id: \.id) { entry in
+                switch entry {
+                case .language(let row): languageRow(row)
+                case .manage:
+                    NavRow(title: "Manage voices", value: "Add or remove voices in Settings") { sheet.model.manageVoices() }
+                }
+            }
+            SheetNote("Counting uses a voice stored on the phone, so it works offline. "
+                + "A language that isn't ready is counted in English until it is.")
+        }
+    }
+
+    /// Two targets, so a screen reader gets two stops it can name and a thumb aiming for one cannot
+    /// hit the other: the row chooses, the play button previews.
+    private func languageRow(_ row: LanguageGroupModel.Row) -> some View {
+        HStack(spacing: 0) {
+            Button { sheet.choose(row.tag) } label: {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.nativeName).cindy(.headline)
+                        Text(row.caption).cindy(.footnote)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(CindyIcon.check)
+                        .resizable()
+                        .frame(width: 19, height: 19)
+                        .foregroundStyle(Palette.label)
+                        .opacity(row.chosen ? 1 : 0)
+                        .padding(.leading, 12)
+                        .accessibilityHidden(true)
+                }
+                .padding(.leading, 18).padding(.trailing, 8).padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.description)
+            .accessibilityAddTraits(.isButton)
+
+            Button { sheet.preview(row.tag) } label: {
+                Image(CindyIcon.play)
+                    .resizable()
+                    .frame(width: 20, height: 20)
+                    .foregroundStyle(Palette.labelSecondary)
+                    .frame(width: 48, height: 48)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+            .accessibilityLabel(row.previewDescription)
+        }
+        .frame(minHeight: 56)
+        .opacity(row.dimmed ? 0.45 : 1)
+    }
+
+    /// iOS cannot be asked to fetch a voice, so the way to them is said, with Settings to open.
+    private var manageVoices: some View {
+        CindyPanel(title: "Manage voices",
+                   subtitle: "iOS can't be asked to download a voice for the app. Most languages ship a compact voice. "
+                       + "For a better one, go to Settings → Accessibility → Spoken Content → Voices, download it there, "
+                       + "and it appears here the next time this list refreshes.",
+                   primary: SheetButton(title: SheetWords.openSettings) {
+                       if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                       sheet.explainingVoices = false
+                   }.keepingOpen { true },
+                   secondary: SheetButton(title: SheetWords.notNow) { sheet.explainingVoices = false }
+                       .keepingOpen { true })
     }
 }
