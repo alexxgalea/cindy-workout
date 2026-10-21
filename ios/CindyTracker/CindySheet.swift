@@ -108,6 +108,11 @@ extension View {
 /// What the `isPresented` form presents: the one sheet there is.
 private struct Presented: Identifiable { let id = 0 }
 
+private struct SheetHeaderBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct SheetContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
@@ -182,6 +187,8 @@ struct CindyPanel<Content: View>: View {
     @Environment(\.closeCindySheet) private var close
     @Environment(\.sheetDrag) private var sheetDrag
     @State private var bodyHeight: CGFloat = 0
+    /// Where the handle and the title end, from the top of the panel.
+    @State private var headerBottom: CGFloat = 0
 
     init(title: String, subtitle: String? = nil, primary: SheetButton, secondary: SheetButton? = nil,
          secondaryDismisses: Bool = true, @ViewBuilder content: @escaping () -> Content) {
@@ -200,11 +207,18 @@ struct CindyPanel<Content: View>: View {
     /// Whether the content is taller than its cap, so a drag over it is a scroll and not a dismissal.
     private var scrolls: Bool { bodyHeight > Self.bodyCap }
 
+    /// A drag on the sheet. On one whose content scrolls, only a drag that began on the handle or the
+    /// title counts: the rest is the content being scrolled, and scrolling it back down must not take
+    /// the sheet with it. One gesture, always attached, decides by where the drag began.
     private var drag: some Gesture {
-        DragGesture()
-            .onChanged { sheetDrag.changed($0.translation.height) }
-            .onEnded { sheetDrag.ended($0.translation.height, $0.predictedEndTranslation.height) }
+        DragGesture(coordinateSpace: .named(Self.space))
+            .onChanged { if counts($0) { sheetDrag.changed($0.translation.height) } }
+            .onEnded { if counts($0) { sheetDrag.ended($0.translation.height, $0.predictedEndTranslation.height) } }
     }
+
+    private func counts(_ drag: DragGesture.Value) -> Bool { !scrolls || drag.startLocation.y <= headerBottom }
+
+    private static var space: String { "cindySheetPanel" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -220,7 +234,9 @@ struct CindyPanel<Content: View>: View {
                     .accessibilityAddTraits(.isHeader)
             }
             .contentShape(Rectangle())
-            .gesture(drag, including: scrolls ? .all : .none)
+            .background(GeometryReader { proxy in
+                Color.clear.preference(key: SheetHeaderBottomKey.self, value: proxy.frame(in: .named(Self.space)).maxY)
+            })
             scrollingBody
             buttons.padding(.top, 18)
         }
@@ -234,9 +250,9 @@ struct CindyPanel<Content: View>: View {
                                    .init(color: Palette.sheetEnd, location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea(.container, edges: .bottom))
-        // A sheet whose content does not scroll is dragged from anywhere on it; one that scrolls only
-        // from its header, so scrolling back up cannot be taken for the dismissal.
-        .simultaneousGesture(drag, including: scrolls ? .none : .all)
+        .coordinateSpace(name: Self.space)
+        .onPreferenceChange(SheetHeaderBottomKey.self) { headerBottom = $0 }
+        .simultaneousGesture(drag)
     }
 
     /// The subtitle and the content, 18 below the title's line, capped at 60% of the height.
