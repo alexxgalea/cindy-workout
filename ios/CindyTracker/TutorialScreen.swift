@@ -88,7 +88,7 @@ struct TutorialScreen: View {
         .onChange(of: model.index) { _, _ in
             UIAccessibility.post(notification: .announcement, argument: model.announcement)
         }
-        .sheet(isPresented: $chooseMovements) {
+        .cindySheet(isPresented: $chooseMovements) {
             MovementsSheet(profile: profile) { chosen in
                 show(TutorialModel.choose(chosen, in: profile))
             }

@@ -60,13 +60,24 @@ final class AccountViewModel: ObservableObject {
 
 struct AccountScreen: View {
     @StateObject private var vm: AccountViewModel
-    @State private var choosingPhoto = false
     @State private var pickingPhoto = false
     @State private var picked: PhotosPickerItem?
-    @State private var naming = false
-    /// The tile, not only its sheet: the disc in the sheet carries the badge's face, as Android's does.
-    @State private var badge: BadgeTile?
+    @State private var sheet: AccountSheet?
     @Environment(\.dismiss) private var dismiss
+
+    /// What the screen opens. A badge carries its tile, not only its sheet: the disc in the sheet
+    /// carries the badge's face, as Android's does.
+    private enum AccountSheet: Identifiable {
+        case badge(BadgeTile), name, photo
+
+        var id: String {
+            switch self {
+            case .badge(let tile): return "badge-\(tile.title)"
+            case .name: return "name"
+            case .photo: return "photo"
+            }
+        }
+    }
 
     init(profile: Profile) {
         _vm = StateObject(wrappedValue: AccountViewModel(profile: profile))
@@ -109,42 +120,38 @@ struct AccountScreen: View {
             if let item { vm.importPhoto(item) }
             picked = nil
         }
-        .sheet(isPresented: $naming) { NameSheet(profile: vm.profile, onSaved: { vm.refresh() }) }
-        // A badge says what it asks for and how far along it is. Closed any way, it changes nothing.
-        .cindySheet(isPresented: Binding(get: { badge != nil }, set: { if !$0 { badge = nil } }),
-                    title: badge?.sheet.title ?? "",
-                    subtitle: badge?.sheet.requirement,
-                    primary: SheetButton(title: "DONE") {},
-                    // Named, because a bare trailing closure whose body is an `if` also fits the
-                    // overload's `onDismiss` and would be taken for it, leaving the sheet without content.
-                    content: {
-            if let tile = badge {
-                HStack(spacing: 16) {
-                    BadgeDisc(face: tile.face, earned: tile.earned, size: 56)
-                    Text(tile.sheet.status).cindy(.headline, colour: Palette.label)
+        // A badge says what it asks for and how far along it is. The name and the photo are asked for
+        // here too. Closed any way but a button, each changes nothing.
+        .cindySheet(item: $sheet) { which in
+            switch which {
+            case .badge(let tile):
+                CindyPanel(title: tile.sheet.title, subtitle: tile.sheet.requirement,
+                           primary: SheetButton(title: SheetWords.done) {}) {
+                    HStack(spacing: 16) {
+                        BadgeDisc(face: tile.face, earned: tile.earned, size: 56)
+                        Text(tile.sheet.status).cindy(.headline, colour: Palette.label)
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(.top, 4)
+            case .name:
+                NameSheet(profile: vm.profile, onSaved: { vm.refresh() })
+            case .photo:
+                PhotoChoiceSheet(hasPhoto: vm.page.header.hasPhoto,
+                                 choose: { pickingPhoto = true }, remove: { vm.removePhoto() })
             }
-        })
-        .confirmationDialog(PhotoSheet.title, isPresented: $choosingPhoto, titleVisibility: .visible) {
-            Button("CHOOSE PHOTO") { pickingPhoto = true }
-            if vm.page.header.hasPhoto { Button("REMOVE", role: .destructive) { vm.removePhoto() } }
-            Button("CANCEL", role: .cancel) {}
-        } message: {
-            Text(PhotoSheet.subtitle)
         }
     }
 
     private func header(_ header: AccountHeader) -> some View {
         VStack(spacing: 0) {
-            Button { choosingPhoto = true } label: {
+            Button { sheet = .photo } label: {
                 AvatarView(photo: vm.photo, name: header.name).frame(width: 88, height: 88)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(header.photoSpoken)
             .accessibilityAddTraits(.isButton)
 
-            Button { naming = true } label: {
+            Button { sheet = .name } label: {
                 Text(header.title)
                     .cindy(.title2, colour: header.name == nil ? Palette.labelSecondary : Palette.label)
                     .frame(minHeight: 48)
@@ -167,7 +174,7 @@ struct AccountScreen: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0, alignment: .top),
                                  count: AccountPage.columns), spacing: 0) {
             ForEach(family.tiles, id: \.badge) { tile in
-                Button { badge = tile } label: { tileView(tile) }
+                Button { sheet = .badge(tile) } label: { tileView(tile) }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(tile.spoken)
