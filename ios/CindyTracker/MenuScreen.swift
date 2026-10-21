@@ -70,12 +70,12 @@ struct MenuScreen: View {
 
     /// The sheets that are Cindy sheets, in the one presenter below. The rest are still the system's.
     private enum PanelSheet: Identifiable {
-        case movements, bodyWeight, voice, music
+        case movements, bodyWeight, voice, music, reminder, stravaConsent, stravaConnected
         var id: Int { hashValue }
     }
 
     private enum Sheet: Identifiable {
-        case reminder, heartRate, stravaConsent, stravaConnected
+        case heartRate
         var id: Int { hashValue }
     }
 
@@ -129,6 +129,12 @@ struct MenuScreen: View {
             case .music:
                 MusicSheet(profile: vm.profile, choose: { pickingTrack = true }, show: { vm.show($0) },
                            onChanged: { vm.refresh() })
+            case .reminder:
+                ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
+            case .stravaConsent:
+                StravaConsentSheet(origin: .menu)
+            case .stravaConnected:
+                StravaConnectedSheet(show: { vm.show($0) }, onChanged: { vm.refresh() })
             }
         }
         // The system's picker, held here because the sheet that asked for it is gone by the time it opens.
@@ -195,14 +201,8 @@ struct MenuScreen: View {
 
     @ViewBuilder private func sheetView(_ which: Sheet) -> some View {
         switch which {
-        case .reminder:
-            ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .heartRate:
             HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
-        case .stravaConsent:
-            StravaConsentSheet(origin: .menu)
-        case .stravaConnected:
-            StravaConnectedSheet(show: { vm.show($0) }, onChanged: { vm.refresh() })
         }
     }
 
@@ -229,10 +229,10 @@ struct MenuScreen: View {
         case .bodyWeight: panel = .bodyWeight
         case .voice: panel = .voice
         case .music: panel = .music
-        case .reminder: sheet = .reminder
+        case .reminder: panel = .reminder
         case .heartRate: sheet = .heartRate
         case .strava:
-            sheet = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
+            panel = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
         }
     }
 }
