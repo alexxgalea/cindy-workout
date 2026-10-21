@@ -327,7 +327,7 @@ final class CaptureTests: XCTestCase {
             .waitForExistence(timeout: 5), "the menu says why Movements is refused")
         // The footnote is under the rows: it is scrolled to, so the capture shows it.
         let footnote = app.staticTexts["Movements can only be changed between workouts — they have to mean one thing for the whole score."]
-        var swipes = 0
+        swipes = 0
         while !footnote.isHittable && swipes < 6 {
             app.swipeUp()
             swipes += 1
