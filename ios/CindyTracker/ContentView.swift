@@ -194,7 +194,7 @@ struct ContentView: View {
         .fullScreenCover(item: $workout.finished) { request in
             ResultsView(request, onDiscarded: { workout.sessionDiscarded() })
         }
-        .sheet(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
+        .fullScreenCover(isPresented: $showMenu, onDismiss: { workout.applyProfile(); maybeStartTour() }) {
             MenuScreen(workout: workout, workoutLive: workout.inWorkout, onReturnToCamera: { showMenu = false })
         }
         // However the pages end, finished or skipped, the camera comes next, after the movements
