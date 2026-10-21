@@ -1074,8 +1074,14 @@ final class CindyTrackerUITests: XCTestCase {
         drag(from: 0.5, to: 0.9)
         Thread.sleep(forTimeInterval: 1)
 
-        XCTAssertTrue(sheetButton(app, "SAVE").exists && sheetButton(app, "SAVE").isHittable,
-                      "scrolling the list back down did not take the sheet with it")
+        // Kept whether the test passes or not, so a failure can be looked at.
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "scroll-sheet-after"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let save = sheetButton(app, "SAVE")
+        XCTAssertTrue(save.exists && save.isHittable,
+                      "scrolling the list back down did not take the sheet with it: SAVE exists \(save.exists), the sheet \(app.otherElements["cindySheet"].exists), the list moved from \(before) to \(scrolled) and is now at \(pull.frame.minY)")
         sheetButton(app, "CANCEL").tap()
     }
 
