@@ -334,4 +334,67 @@ final class CaptureTests: XCTestCase {
         }
         capture(app, "menu-live")
     }
+
+    /// A tap on the dim above a Cindy sheet, which closes it as CANCEL does.
+    private func tapTheDim(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
+    }
+
+    /// Opens the menu's row that begins with `title`, photographs its sheet as `name` once `ready` is
+    /// there, and closes it as CANCEL does: nothing is saved, so the next row starts from the same phone.
+    private func photographSheet(_ app: XCUIApplication, row title: String, as name: String, ready: String) {
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a \(title) row")
+        row.tap()
+        XCTAssertTrue(sheetButton(app, ready).waitForExistence(timeout: 5), "the \(title) sheet is up")
+        capture(app, name)
+        tapTheDim(app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu is back after \(title)")
+        XCTAssertTrue(sheetButton(app, ready).waitForNonExistence(timeout: 5), "the \(title) sheet is gone")
+    }
+
+    /// The menu's sheets, one after another over an empty phone, each closed without saving; the Strava
+    /// consent is a launch of its own, because the Strava row exists only when the build has credentials.
+    func testMenuSheets() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", "",
+                               "-display_name", ""]
+        app.launch()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+
+        photographSheet(app, row: "Movements", as: "sheet-movements", ready: "SAVE")
+
+        // The weight sheet brings its keyboard up with it, and SAVE stays above it.
+        let weight = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Body weight'")).firstMatch
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+        weight.tap()
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the body-weight sheet is up")
+        capture(app, "sheet-body-weight")
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        XCTAssertTrue(sheetButton(app, "SAVE").isHittable, "SAVE is above the keyboard")
+        capture(app, "sheet-body-weight-keyboard")
+        sheetButton(app, "CANCEL").tap()
+        XCTAssertTrue(weight.waitForExistence(timeout: 5))
+
+        photographSheet(app, row: "Daily reminder", as: "sheet-reminder", ready: "SAVE")
+        photographSheet(app, row: "Heart rate", as: "sheet-heart-rate", ready: "FIND MY WATCH")
+        photographSheet(app, row: "Voice", as: "sheet-voice", ready: "SAVE")
+        photographSheet(app, row: "Music", as: "sheet-music", ready: "CHOOSE A TRACK")
+        app.terminate()
+
+        let strava = XCUIApplication()
+        strava.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                                  "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-CindyStrava"]
+        strava.launch()
+        XCTAssertTrue(hud(strava, "btnMenu").waitForExistence(timeout: 10))
+        hud(strava, "btnMenu").tap()
+        let row = strava.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strava'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a Strava row")
+        row.tap()
+        XCTAssertTrue(sheetButton(strava, "NOT NOW").waitForExistence(timeout: 5), "the consent sheet is up")
+        capture(strava, "sheet-strava")
+        sheetButton(strava, "NOT NOW").tap()
+    }
 }
