@@ -1076,9 +1076,15 @@ final class CindyTrackerUITests: XCTestCase {
         row.tap()
 
         // Not tapped: looking for a watch asks iOS for Bluetooth, and the simulator has none.
-        XCTAssertTrue(app.buttons["findMyWatch"].waitForExistence(timeout: 5), "the sheet offers FIND MY WATCH")
+        XCTAssertTrue(sheetButton(app, "FIND MY WATCH").waitForExistence(timeout: 5), "the sheet offers FIND MY WATCH")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists, "and CANCEL")
         let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Broadcast Heart Rate'")).firstMatch
         XCTAssertTrue(advice.exists, "the sheet says to turn the broadcast on first")
+
+        // CANCEL is the way out that does nothing: still no watch.
+        sheetButton(app, "CANCEL").tap()
+        let again = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
+        XCTAssertTrue(again.waitForExistence(timeout: 5) && again.label.contains("No watch paired"), again.label)
     }
 
     // MARK: - filming
