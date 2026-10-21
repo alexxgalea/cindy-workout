@@ -982,7 +982,9 @@ final class CindyTrackerUITests: XCTestCase {
         let strict = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strict pull-up'")).firstMatch
         XCTAssertTrue(strict.isSelected, "the standard pull-up is chosen to begin with")
 
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Band-assisted'")).firstMatch.tap()
+        let band = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Band-assisted'")).firstMatch
+        band.tap()
+        XCTAssertTrue(band.isSelected, "the other option was chosen")
         tapTheDim(app)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movements'")).firstMatch
             .waitForExistence(timeout: 5), "the menu is back")
@@ -1040,6 +1042,7 @@ final class CindyTrackerUITests: XCTestCase {
         let before = counting.value as? String
 
         flip(counting)
+        XCTAssertNotEqual(app.switches["Count reps out loud"].value as? String, before, "the switch turned over")
         tapTheDim(app)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Voice'")).firstMatch
             .waitForExistence(timeout: 5), "the menu is back")
@@ -1049,6 +1052,20 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5))
         XCTAssertEqual(app.switches["Count reps out loud"].value as? String, before, "dismissing kept the old setting")
         sheetButton(app, "CANCEL").exists ? sheetButton(app, "CANCEL").tap() : tapTheDim(app)
+    }
+
+    func testScrollingASheetsContentBackDownDoesNotDismissIt() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Movements")
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the movements sheet is up")
+
+        // Its three groups are taller than the sheet's cap: up, and back down, over the content.
+        app.swipeUp()
+        app.swipeDown()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(sheetButton(app, "SAVE").exists && sheetButton(app, "SAVE").isHittable,
+                      "scrolling the list back down did not take the sheet with it")
+        sheetButton(app, "CANCEL").tap()
     }
 
     func testTheVoiceSheetKeepsSaveReachableAtTheLargestText() {
@@ -1154,6 +1171,7 @@ final class CindyTrackerUITests: XCTestCase {
         let before = remind.value as? String
         // Turning it on and leaving by the dim saves nothing, and so asks iOS for nothing.
         flip(remind)
+        XCTAssertNotEqual(app.switches["Remind me"].value as? String, before, "the switch turned over")
         tapTheDim(app)
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Daily reminder'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu is back")

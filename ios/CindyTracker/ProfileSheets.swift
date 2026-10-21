@@ -62,6 +62,7 @@ struct BodyWeightSheet: View {
             onSaved()
         case .refused(let message):
             problem = message
+            SheetVoiceOver.announce(message)
         }
     }
 }
@@ -111,6 +112,7 @@ struct HeartRateDetailsSheet: View {
             onFinished?()
         case .refused(let message):
             problem = message
+            SheetVoiceOver.announce(message)
         }
     }
 }
