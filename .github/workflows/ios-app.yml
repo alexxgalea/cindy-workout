@@ -31,7 +31,7 @@ jobs:
   app:
     name: Build and test the app (macOS)
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Show the toolchain

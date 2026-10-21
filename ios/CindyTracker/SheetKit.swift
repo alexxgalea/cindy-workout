@@ -118,3 +118,15 @@ struct SheetField: View {
             .accessibilityIdentifier("sheetField")
     }
 }
+
+/// What a screen reader would otherwise miss on a sheet: that a save was refused, where Android's toast
+/// is read out, and that the sheet now shows something else, where the element it was on has gone.
+enum SheetVoiceOver {
+    static func announce(_ text: String) {
+        UIAccessibility.post(notification: .announcement, argument: text)
+    }
+
+    static func panelChanged() {
+        UIAccessibility.post(notification: .screenChanged, argument: nil)
+    }
+}

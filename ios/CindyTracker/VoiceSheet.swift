@@ -75,6 +75,7 @@ struct VoiceSheet: View {
         ZStack {
             if sheet.explainingVoices { manageVoices } else { voice }
         }
+        .onChange(of: sheet.explainingVoices) { _, _ in SheetVoiceOver.panelChanged() }
         .onAppear { sheet.start() }
         .onDisappear {
             sheet.stop()

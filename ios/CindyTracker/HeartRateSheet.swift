@@ -166,8 +166,17 @@ struct HeartRateSheet: View {
                 unpaired
             }
         }
+        .onChange(of: panel) { _, _ in SheetVoiceOver.panelChanged() }
         .onAppear { model.appear() }
         .onDisappear { model.disappear() }
+    }
+
+    /// Which panel the sheet is showing, for telling a screen reader when it changes.
+    private var panel: String {
+        if model.blocked != nil, model.scanning { return "blocked" }
+        if model.scanning { return "scan" }
+        if model.askDetails { return "details" }
+        return model.device == nil ? "unpaired" : "paired"
     }
 
     // MARK: the main panels

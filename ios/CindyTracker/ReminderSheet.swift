@@ -37,7 +37,10 @@ struct ReminderSheet: View {
     }
 
     var body: some View {
-        if notificationsOff { off } else { reminder }
+        Group {
+            if notificationsOff { off } else { reminder }
+        }
+        .onChange(of: notificationsOff) { _, _ in SheetVoiceOver.panelChanged() }
     }
 
     private var reminder: some View {
