@@ -86,7 +86,7 @@ struct ResultsView: View {
         .fullScreenCover(item: $reopened) { request in
             ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
         }
-        .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
+        .cindySheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .fullScreenCover(isPresented: $showProgress) { ProgressScreen() }
         .overlay(alignment: .bottom) {
             if let toast {

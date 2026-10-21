@@ -1133,9 +1133,30 @@ final class CindyTrackerUITests: XCTestCase {
         // Nothing is switched on: that asks iOS for notifications, which the simulator would answer
         // with a dialog the test does not drive.
         XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5), "the sheet has the switch")
-        XCTAssertTrue(app.buttons["reminderTry"].exists, "and TRY IT")
+        XCTAssertTrue(sheetButton(app, "TRY IT").exists, "and TRY IT")
+        XCTAssertTrue(sheetButton(app, "SAVE").exists, "beside SAVE")
         let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "none on days you've already trained")).firstMatch
         XCTAssertTrue(note.exists, "the sheet says it stays quiet on a day already trained")
+    }
+
+    func testTheReminderSheetTakesTheDimAsCancel() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Daily reminder")
+
+        let remind = app.switches["Remind me"]
+        XCTAssertTrue(remind.waitForExistence(timeout: 5), "the sheet has the switch")
+        let before = remind.value as? String
+        // Turning it on and leaving by the dim saves nothing, and so asks iOS for nothing.
+        flip(remind)
+        tapTheDim(app)
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Daily reminder'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu is back")
+        XCTAssertTrue(row.label.contains("Off"), row.label)
+
+        row.tap()
+        XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["Remind me"].value as? String, before, "the switch went back with the sheet")
+        tapTheDim(app)
     }
 
     // MARK: - strava
@@ -1166,7 +1187,7 @@ final class CindyTrackerUITests: XCTestCase {
         let promise = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Nothing is sent until you connect.'")).firstMatch
         XCTAssertTrue(promise.waitForExistence(timeout: 5), "the consent sheet says nothing is sent until you connect")
         XCTAssertTrue(app.buttons["Connect with Strava"].exists, "Strava's own button")
-        let notNow = app.buttons["NOT NOW"]
+        let notNow = sheetButton(app, "NOT NOW")
         XCTAssertTrue(notNow.exists)
         notNow.tap()
 
