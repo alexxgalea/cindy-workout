@@ -54,6 +54,20 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(target.exists, "Help has \(text)")
     }
 
+    /// The placement guide over the camera, as START opens it on an install that has not dismissed it.
+    func testPlacementGuide() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "NO",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO"]
+        app.launch()
+        let start = hud(app, "btnStart", labelled: "Start the workout")
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        start.tap()
+        XCTAssertTrue(sheetButton(app, "START SETUP").waitForExistence(timeout: 5))
+        capture(app, "placement-guide")
+        sheetButton(app, "NOT NOW").tap()
+    }
+
     func testHelp() {
         let app = launch("pullups")
         XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
