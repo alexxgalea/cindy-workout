@@ -800,6 +800,8 @@ final class CindyTrackerUITests: XCTestCase {
                       "tapping it says the same in a toast")
 
         app.buttons["DONE"].tap()
+        // Android pauses a running workout when the menu opens (its screen goes to the background);
+        // here the clock runs on under the menu, as it did under the sheet.
         XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5),
                       "the workout kept its clock")
     }
@@ -891,6 +893,41 @@ final class CindyTrackerUITests: XCTestCase {
         }
         XCTAssertTrue(gone, "DONE closes the sheet")
         XCTAssertTrue(app.staticTexts["You"].firstMatch.exists, "and the You screen is still there")
+    }
+
+    func testTheYouScreenKeepsItsBadgesAndDoneAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", "",
+                               "-display_name", "",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        openYou(app)
+
+        let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'")).allElementsBoundByIndex
+        XCTAssertTrue(dones.contains(where: { $0.isHittable }), "the pinned DONE stays within reach")
+        let tile = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'First Cindy, locked'")).firstMatch
+        var swipes = 0
+        while !(tile.exists && tile.isHittable) && swipes < 8 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(tile.isHittable, "a badge can be reached by scrolling")
+    }
+
+    func testTheYouScreenGoesBackWithASwipeFromTheEdge() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        // The screen draws its own title and DONE with the system's bar hidden; the swipe back stays.
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5))
+        from.press(forDuration: 0.1, thenDragTo: to)
+        XCTAssertTrue(app.staticTexts["Everything that isn't needed mid-workout"].waitForExistence(timeout: 5),
+                      "the menu is back")
+        let leaves = NSPredicate(format: "exists == false")
+        let gone = expectation(for: leaves, evaluatedWith: app.staticTexts["Add your name"], handler: nil)
+        wait(for: [gone], timeout: 5)
     }
 
     // MARK: - heart rate
