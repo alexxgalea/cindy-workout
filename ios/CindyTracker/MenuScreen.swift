@@ -80,13 +80,23 @@ struct MenuScreen: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView { content }
-                .background(Color.appBackground)
-                .overlay(alignment: .bottom) { toastView }
-                .navigationBarHidden(true)
-                .navigationDestination(for: Destination.self) { destination in
-                    destinationView(destination)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(MenuWords.menuTitle).cindy(.title).accessibilityAddTraits(.isHeader)
+                Text(MenuWords.menuSubtitle).cindy(.body).padding(.top, 5)
+                ScrollView { content }.padding(.top, 24)
+                // Pinned below the scroll, so it does not go with the rows.
+                ActionBar {
+                    Button("DONE") { dismiss() }.buttonStyle(CindyPrimaryButtonStyle())
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 24)
+            .background(Palette.background.ignoresSafeArea())
+            .overlay(alignment: .bottom) { toastView }
+            .navigationBarHidden(true)
+            .navigationDestination(for: Destination.self) { destination in
+                destinationView(destination)
+            }
         }
         .onAppear {
             vm.refresh()
@@ -105,38 +115,27 @@ struct MenuScreen: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            profileButton
-            rowsList
+        VStack(alignment: .leading, spacing: 0) {
+            profileGroup.padding(.bottom, 12)
+            rowsGroup
             footnote
-            Button("DONE") { dismiss() }.buttonStyle(PrimaryButton()).padding(.top, 16)
         }
-        .padding(20)
     }
 
-    private var profileButton: some View {
-        Button { path.append(.account) } label: { profileCard(vm.page.card) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(vm.page.card.spoken)
-            .accessibilityAddTraits(.isButton)
-            .dealt(0, settled: settled, still: reduceMotion)
-    }
-
-    private var rowsList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(vm.page.rows.enumerated()), id: \.element.id) { i, row in
-                menuRow(i, row)
+    private var profileGroup: some View {
+        InsetGroup([vm.page.card], id: \.title) { card in
+            AvatarRow(photo: vm.photo, name: card.name, title: card.title, value: card.value) {
+                path.append(.account)
             }
         }
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .dealt(0, settled: settled, still: reduceMotion)
     }
 
-    private func menuRow(_ index: Int, _ row: MenuRow) -> some View {
-        Button { open(row.id) } label: { rowView(row) }
-            .buttonStyle(.plain)
-            .accessibilityLabel(row.spoken)
-            .accessibilityAddTraits(.isButton)
-            .dealt(index + 1, settled: settled, still: reduceMotion)
+    private var rowsGroup: some View {
+        InsetGroup(vm.page.rows, id: \.id) { row in
+            NavRow(title: row.title, value: row.subtitle, spoken: row.spoken) { open(row.id) }
+                .dealt((vm.page.rows.firstIndex { $0.id == row.id } ?? 0) + 1, settled: settled, still: reduceMotion)
+        }
     }
 
     /// Said here rather than only when the row is tapped, because it explains why the row will
@@ -144,21 +143,14 @@ struct MenuScreen: View {
     @ViewBuilder private var footnote: some View {
         if let note = vm.page.footnote {
             Text(note)
-                .font(.system(size: 12))
-                .foregroundStyle(Color.dim)
+                .cindy(.footnote)
                 .padding(.horizontal, 4)
                 .padding(.top, 14)
         }
     }
 
     @ViewBuilder private var toastView: some View {
-        if let toast = vm.toast {
-            Text(toast)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .chip()
-                .padding(.bottom, 90)
-        }
+        if let toast = vm.toast { CindyToast(text: toast).padding(.bottom, 90) }
     }
 
     @ViewBuilder private func destinationView(_ destination: Destination) -> some View {
@@ -205,33 +197,6 @@ struct MenuScreen: View {
         case .strava:
             sheet = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
         }
-    }
-
-    private func profileCard(_ card: MenuProfileCard) -> some View {
-        HStack(spacing: 14) {
-            AvatarView(photo: vm.photo, name: card.name).frame(width: 56, height: 56)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(card.title).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                Text(card.value).font(.system(size: 13)).foregroundStyle(Color.dim)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Color.dim)
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    private func rowView(_ row: MenuRow) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                Text(row.subtitle).font(.system(size: 12)).foregroundStyle(Color.dim)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(Color.dim)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .contentShape(Rectangle())
     }
 }
 

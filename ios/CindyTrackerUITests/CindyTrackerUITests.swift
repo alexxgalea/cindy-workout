@@ -769,6 +769,55 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").waitForExistence(timeout: 5))
     }
 
+    // MARK: - the menu
+
+    func testTheMenuHasItsTitleAndAPinnedDone() {
+        let app = launchReplaying("nohands")
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+
+        XCTAssertTrue(app.staticTexts["Menu"].waitForExistence(timeout: 5), "the menu has its title")
+        XCTAssertTrue(app.staticTexts["Everything that isn't needed mid-workout"].exists, "and the line under it")
+        // DONE sits below the rows, outside their scroll, so it is within reach without scrolling.
+        let done = app.buttons["DONE"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5) && done.isHittable, "DONE is pinned")
+        done.tap()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 5) && hud(app, "btnMenu").isHittable,
+                      "DONE returns to the camera")
+    }
+
+    func testTheMenuOverALiveWorkoutRefusesMovementsAndSaysWhy() {
+        let app = launchReplaying("nohands")
+        startSkippingSetup(app)
+        hud(app, "btnMenu").tap()
+
+        XCTAssertTrue(app.staticTexts["Movements can only be changed between workouts — they have to mean one thing for the whole score."]
+            .waitForExistence(timeout: 5), "the menu says why Movements is refused")
+        let movements = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movements'")).firstMatch
+        XCTAssertTrue(movements.exists)
+        movements.tap()
+        XCTAssertTrue(app.staticTexts["Reset the workout first to change movements"].waitForExistence(timeout: 5),
+                      "tapping it says the same in a toast")
+
+        app.buttons["DONE"].tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5),
+                      "the workout kept its clock")
+    }
+
+    func testTheMenuKeepsItsRowsAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+
+        let progress = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Progress'")).firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5), "the Progress row is there")
+        XCTAssertTrue(app.buttons["DONE"].isHittable, "the pinned DONE stays within reach")
+    }
+
     // MARK: - heart rate
 
     func testTheMenuOffersHeartRateAndTheSheetSaysHowToFindAWatch() {
