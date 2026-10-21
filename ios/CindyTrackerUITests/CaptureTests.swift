@@ -337,7 +337,7 @@ final class CaptureTests: XCTestCase {
 
     /// A tap on the dim above a Cindy sheet, which closes it as CANCEL does.
     private func tapTheDim(_ app: XCUIApplication) {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
     }
 
     /// Opens the menu's row that begins with `title`, photographs its sheet as `name` once `ready` is
