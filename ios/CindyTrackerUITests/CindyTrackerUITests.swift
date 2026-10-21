@@ -534,7 +534,7 @@ final class CindyTrackerUITests: XCTestCase {
     func testThePlacementGuideIsACindySheetOverTheCamera() {
         let app = launchReplaying("nohands", seenGuide: false)
         openThePlacementGuide(app)
-        XCTAssertTrue(app.otherElements["cindySheet"].exists, "it is the Cindy sheet, not a system one")
+        XCTAssertTrue(app.descendants(matching: .any)["cindySheet"].exists, "it is the Cindy sheet, not a system one")
         XCTAssertTrue(app.staticTexts["The one thing you have to get right before the camera can help."].exists)
         for fact in ["Stand the phone up rather than laying it flat.",
                      "Keep your head and your feet both in shot.",
@@ -544,16 +544,16 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(dontShowAgainSwitch(app).exists)
         XCTAssertTrue(sheetButton(app, "NOT NOW").exists)
         sheetButton(app, "START SETUP").tap()
-        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "and then the check begins")
+        waitForLabel(exercise(app), "label == 'SET UP'")
     }
 
     func testNotNowLeavesTheClockIdleAndTheGuideComesBack() {
         let app = launchReplaying("nohands", seenGuide: false)
         openThePlacementGuide(app)
         sheetButton(app, "NOT NOW").tap()
-        XCTAssertFalse(app.staticTexts["Where to stand"].waitForExistence(timeout: 2), "the guide closes")
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForNonExistence(timeout: 5), "the guide closes")
         XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").exists, "the clock is still idle")
-        XCTAssertFalse(hud(app, "btnSkipExercise").exists, "and no check began")
+        XCTAssertNotEqual(exercise(app).label, "SET UP", "and no check began")
         hud(app, "btnStart", labelled: "Start the workout").tap()
         XCTAssertTrue(app.staticTexts["Where to stand"].waitForExistence(timeout: 5), "the guide is back at the next START")
     }
@@ -563,9 +563,9 @@ final class CindyTrackerUITests: XCTestCase {
         openThePlacementGuide(app)
         switchOn(dontShowAgainSwitch(app))
 
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
-        XCTAssertFalse(app.staticTexts["Where to stand"].waitForExistence(timeout: 2), "the dim closes the guide")
-        XCTAssertFalse(hud(app, "btnSkipExercise").exists, "and no check began")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForNonExistence(timeout: 5), "the dim closes the guide")
+        XCTAssertNotEqual(exercise(app).label, "SET UP", "and no check began")
 
         hud(app, "btnStart", labelled: "Start the workout").tap()
         XCTAssertTrue(app.staticTexts["Where to stand"].waitForExistence(timeout: 5), "so the guide is back")
@@ -577,7 +577,7 @@ final class CindyTrackerUITests: XCTestCase {
         openThePlacementGuide(app)
         switchOn(dontShowAgainSwitch(app))
         sheetButton(app, "START SETUP").tap()
-        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+        waitForLabel(exercise(app), "label == 'SET UP'")
 
         // The same install again, with no argument to shadow what was written.
         app.terminate()
@@ -586,8 +586,18 @@ final class CindyTrackerUITests: XCTestCase {
         let start = hud(app, "btnStart", labelled: "Start the workout")
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         start.tap()
-        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5), "START goes straight to the check")
+        waitForLabel(exercise(app), "label == 'SET UP'")
         XCTAssertFalse(app.staticTexts["Where to stand"].exists, "without the guide")
+    }
+
+    func testSwipingTheGuideAwayDoesNothing() {
+        let app = launchReplaying("nohands", seenGuide: false)
+        openThePlacementGuide(app)
+        // A swipe that starts on the sheet's own words.
+        app.staticTexts["Where to stand"].swipeDown()
+        XCTAssertTrue(app.staticTexts["Where to stand"].waitForNonExistence(timeout: 5), "the swipe closed the guide")
+        XCTAssertNotEqual(exercise(app).label, "SET UP", "and no check began")
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Start the workout").exists, "the clock is still idle")
     }
 
     func testTheGuideKeepsStartSetupOnScreenAtTheLargestText() {
