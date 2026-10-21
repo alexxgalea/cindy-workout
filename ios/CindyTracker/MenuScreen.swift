@@ -63,10 +63,17 @@ struct MenuScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settled = false
     @State private var sheet: Sheet?
+    @State private var panel: PanelSheet?
     @State private var path: [Destination] = []
 
+    /// The sheets that are Cindy sheets, in the one presenter below. The rest are still the system's.
+    private enum PanelSheet: Identifiable {
+        case movements, bodyWeight
+        var id: Int { hashValue }
+    }
+
     private enum Sheet: Identifiable {
-        case movements, bodyWeight, voice, music, reminder, heartRate, stravaConsent, stravaConnected
+        case voice, music, reminder, heartRate, stravaConsent, stravaConnected
         var id: Int { hashValue }
     }
 
@@ -109,6 +116,14 @@ struct MenuScreen: View {
         // Strava has to say about it is said here.
         .onReceive(StravaCenter.shared.$revision) { _ in vm.refresh() }
         .onReceive(StravaCenter.shared.$notice.compactMap { $0 }) { vm.show($0.text) }
+        .cindySheet(item: $panel, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
+            switch which {
+            case .movements:
+                MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
+            case .bodyWeight:
+                BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+            }
+        }
         .sheet(item: $sheet, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
             sheetView(which)
         }
@@ -163,10 +178,6 @@ struct MenuScreen: View {
 
     @ViewBuilder private func sheetView(_ which: Sheet) -> some View {
         switch which {
-        case .movements:
-            MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
-        case .bodyWeight:
-            BodyWeightSheet(profile: vm.profile) { vm.refresh() }
         case .reminder:
             ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
         case .music:
@@ -186,10 +197,10 @@ struct MenuScreen: View {
     private func open(_ id: MenuRowID) {
         switch id {
         case .movements:
-            if vm.page.movementsRefused { vm.show(MovementsForm.refusedWhileLive) } else { sheet = .movements }
+            if vm.page.movementsRefused { vm.show(MovementsForm.refusedWhileLive) } else { panel = .movements }
         case .progress: path.append(.progress)
         case .help: path.append(.help)
-        case .bodyWeight: sheet = .bodyWeight
+        case .bodyWeight: panel = .bodyWeight
         case .voice: sheet = .voice
         case .music: sheet = .music
         case .reminder: sheet = .reminder

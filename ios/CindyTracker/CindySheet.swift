@@ -53,14 +53,21 @@ extension View {
                                    primary: SheetButton, secondary: SheetButton? = nil,
                                    secondaryDismisses: Bool = true, onDismiss: @escaping () -> Void = {},
                                    @ViewBuilder content: @escaping () -> Content) -> some View {
+        cindySheet(isPresented: isPresented, onDismiss: onDismiss) {
+            CindyPanel(title: title, subtitle: subtitle, primary: primary, secondary: secondary,
+                       secondaryDismisses: secondaryDismisses, content: content)
+        }
+    }
+
+    /// A sheet that is a view of its own, shown while `isPresented` holds: `panel` builds its
+    /// `CindyPanel`. For the one sheet a screen has; a screen with several uses the `item` form.
+    func cindySheet<Panel: View>(isPresented: Binding<Bool>, onDismiss: @escaping () -> Void = {},
+                                 @ViewBuilder panel: @escaping () -> Panel) -> some View {
         modifier(CindySheetPresenter(
             item: Binding(get: { isPresented.wrappedValue ? Presented() : nil },
                           set: { if $0 == nil { isPresented.wrappedValue = false } }),
             onDismiss: onDismiss,
-            panel: { _ in
-                CindyPanel(title: title, subtitle: subtitle, primary: primary, secondary: secondary,
-                           secondaryDismisses: secondaryDismisses, content: content)
-            }))
+            panel: { _ in panel() }))
     }
 
     /// A sheet that is only words: a question.
@@ -305,5 +312,14 @@ struct SheetSlider: View {
         .padding(14)
         .glassCard()
         .padding(.top, 14)
+    }
+}
+
+extension CindyPanel where Content == EmptyView {
+    /// A panel that is only words: a question.
+    init(title: String, subtitle: String? = nil, primary: SheetButton, secondary: SheetButton? = nil,
+         secondaryDismisses: Bool = true) {
+        self.init(title: title, subtitle: subtitle, primary: primary, secondary: secondary,
+                  secondaryDismisses: secondaryDismisses, content: { EmptyView() })
     }
 }
