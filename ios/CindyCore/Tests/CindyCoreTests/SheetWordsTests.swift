@@ -31,7 +31,6 @@ final class SheetWordsTests: XCTestCase {
     func testTheOldWordsAreGone() throws {
         let files = ["MenuScreen", "AccountScreen", "ProfileSheets", "VoiceSheet", "MusicSheet", "HeartRateSheet",
                      "ReminderSheet", "StravaSheets", "ResultsView", "TutorialScreen"]
-        try XCTSkipIf(true, "the menu's sheets are still the system's")
         for file in files {
             let view = try read("ios/CindyTracker/\(file).swift")
             for old in [".sheet(", ".alert(", ".confirmationDialog(", ".presentationDetents(", "Form {",

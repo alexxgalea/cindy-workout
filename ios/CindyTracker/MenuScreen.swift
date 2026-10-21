@@ -63,19 +63,13 @@ struct MenuScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settled = false
-    @State private var sheet: Sheet?
     @State private var panel: PanelSheet?
     @State private var pickingTrack = false
     @State private var path: [Destination] = []
 
-    /// The sheets that are Cindy sheets, in the one presenter below. The rest are still the system's.
+    /// What the menu opens, in the one presenter below.
     private enum PanelSheet: Identifiable {
-        case movements, bodyWeight, voice, music, reminder, stravaConsent, stravaConnected
-        var id: Int { hashValue }
-    }
-
-    private enum Sheet: Identifiable {
-        case heartRate
+        case movements, bodyWeight, voice, music, reminder, heartRate, stravaConsent, stravaConnected
         var id: Int { hashValue }
     }
 
@@ -131,6 +125,8 @@ struct MenuScreen: View {
                            onChanged: { vm.refresh() })
             case .reminder:
                 ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
+            case .heartRate:
+                HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
             case .stravaConsent:
                 StravaConsentSheet(origin: .menu)
             case .stravaConnected:
@@ -140,9 +136,6 @@ struct MenuScreen: View {
         // The system's picker, held here because the sheet that asked for it is gone by the time it opens.
         .fileImporter(isPresented: $pickingTrack, allowedContentTypes: [.audio]) { result in
             if case .success(let url) = result { adoptTrack(url) }
-        }
-        .sheet(item: $sheet, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
-            sheetView(which)
         }
         // Above the sheets: a sheet is where the athlete is looking when a toast has something to say.
         .overlay(alignment: sheetIsUp ? .top : .bottom) { toastView }
@@ -183,7 +176,7 @@ struct MenuScreen: View {
         }
     }
 
-    private var sheetIsUp: Bool { panel != nil || sheet != nil }
+    private var sheetIsUp: Bool { panel != nil }
 
     @ViewBuilder private var toastView: some View {
         if let toast = vm.toast {
@@ -196,13 +189,6 @@ struct MenuScreen: View {
         case .account: AccountScreen(profile: vm.profile)
         case .progress: ProgressScreen()
         case .help: HelpScreen(profile: vm.profile, onReturnToCamera: onReturnToCamera)
-        }
-    }
-
-    @ViewBuilder private func sheetView(_ which: Sheet) -> some View {
-        switch which {
-        case .heartRate:
-            HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
         }
     }
 
@@ -230,7 +216,7 @@ struct MenuScreen: View {
         case .voice: panel = .voice
         case .music: panel = .music
         case .reminder: panel = .reminder
-        case .heartRate: sheet = .heartRate
+        case .heartRate: panel = .heartRate
         case .strava:
             panel = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
         }

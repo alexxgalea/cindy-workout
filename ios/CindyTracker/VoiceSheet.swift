@@ -71,7 +71,8 @@ struct VoiceSheet: View {
     }
 
     var body: some View {
-        Group {
+        // One container, so swapping the panels is not this sheet appearing or leaving.
+        ZStack {
             if sheet.explainingVoices { manageVoices } else { voice }
         }
         .onAppear { sheet.start() }
