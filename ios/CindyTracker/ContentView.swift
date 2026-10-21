@@ -81,6 +81,8 @@ struct ContentView: View {
     @State private var showPlacement = false
     @State private var showDebug = false
     @State private var showMenu = false
+    /// Set when the menu's cover took this view off the screen, so that its return is not a fresh arrival.
+    @State private var coveredByMenu = false
     /// Kept across launches: "Don't show this again" on the placement guide. It is also evidence
     /// that the athlete has used the app before, which is why `Onboarding` owns the key.
     @AppStorage(Onboarding.keyPlacementSeen) private var placementSeen = false
@@ -157,6 +159,8 @@ struct ContentView: View {
         .onChange(of: workout.phase) { _, _ in maybeStartTour() }
         .background(Color.appBackground)
         .onAppear {
+            // Back from the menu's cover: nothing was torn down, so there is nothing to set up again.
+            if coveredByMenu { coveredByMenu = false; return }
             camera.onPoseFrame = { workout.onFrame($0) }
             film.bind(camera: camera, workout: workout)
             workout.onResetCrop = { camera.resetRoi() }
@@ -169,6 +173,10 @@ struct ContentView: View {
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear {
+            // The menu is a full-screen cover, which takes this view off the screen where a sheet did
+            // not. It is not the camera screen going away: a film, the count, the heart rate and the
+            // music carry on under it, as they did under the sheet.
+            if showMenu { coveredByMenu = true; return }
             film.interrupt()
             workout.pauseMusic()
             camera.stop()
