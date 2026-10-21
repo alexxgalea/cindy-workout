@@ -1058,11 +1058,22 @@ final class CindyTrackerUITests: XCTestCase {
         let app = launchReplaying("pullups")
         openMenuRow(app, "Movements")
         XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the movements sheet is up")
+        let pull = app.staticTexts["PULL"]
+        XCTAssertTrue(pull.waitForExistence(timeout: 5))
+        let before = pull.frame.minY
 
-        // Its three groups are taller than the sheet's cap: up, and back down, over the content.
-        app.swipeUp()
-        app.swipeDown()
+        // Its three groups are taller than the sheet's cap. Both drags are over the content, in the
+        // middle of the screen: a drag that began on the handle or the title would dismiss it.
+        func drag(from: CGFloat, to: CGFloat) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+        }
+        drag(from: 0.75, to: 0.45)
+        let scrolled = pull.frame.minY
+        XCTAssertLessThan(scrolled, before, "the list scrolled up")
+        drag(from: 0.5, to: 0.9)
         Thread.sleep(forTimeInterval: 1)
+
         XCTAssertTrue(sheetButton(app, "SAVE").exists && sheetButton(app, "SAVE").isHittable,
                       "scrolling the list back down did not take the sheet with it")
         sheetButton(app, "CANCEL").tap()
