@@ -25,9 +25,6 @@ final class MenuWordsTests: XCTestCase {
     }
 
     func testTheOldWordsAreGone() throws {
-        // Both screens are repainted from the shared vocabulary over two tasks; the check starts
-        // holding when the second leaves the old styling.
-        try XCTSkipIf(true, "the You screen still draws with the old styling")
         for file in ["ios/CindyTracker/MenuScreen.swift", "ios/CindyTracker/AccountScreen.swift"] {
             let view = try read(file)
             for old in ["Color.dim", "Ink.", ".system(size:"] {

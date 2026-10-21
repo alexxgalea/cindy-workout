@@ -818,6 +818,81 @@ final class CindyTrackerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["DONE"].isHittable, "the pinned DONE stays within reach")
     }
 
+    // MARK: - the You screen
+
+    /// A phone with nothing on it: no sessions, and no name for this launch (a name an earlier test
+    /// saved is shadowed by the empty argument).
+    private func launchEmptyHanded() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", "",
+                               "-display_name", ""]
+        app.launch()
+        return app
+    }
+
+    /// Opens the You screen from the menu's profile row, over the camera screen.
+    private func openYou(_ app: XCUIApplication) {
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+        let profile = app.buttons["You, Add your name and photo"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5), "the menu's profile row invites the athlete in")
+        profile.tap()
+        XCTAssertTrue(app.staticTexts["You"].firstMatch.waitForExistence(timeout: 5), "the You screen opens")
+    }
+
+    func testTheYouScreenHasItsTitleAndAPinnedDone() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        XCTAssertTrue(app.staticTexts["Your name, photo and badges. They stay on this phone."].exists,
+                      "the line under the title says what the screen is")
+        let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'")).allElementsBoundByIndex
+        XCTAssertTrue(dones.contains(where: { $0.isHittable }), "DONE is pinned, within reach without scrolling")
+    }
+
+    func testAYouScreenWithNothingInItInvitesAndLocksEveryBadge() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        XCTAssertTrue(app.buttons["Add a photo"].exists, "the header invites a photo")
+        XCTAssertTrue(app.buttons["Add your name"].exists, "and a name")
+        XCTAssertTrue(app.staticTexts["Finish a session and your badges start here."].exists,
+                      "the training line says the badges start with the first session")
+        let title = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'BADGES · 0 OF'")).firstMatch
+        XCTAssertTrue(title.exists, "no badge is earned yet")
+        let tiles = app.buttons.matching(NSPredicate(format: "label CONTAINS ', locked'"))
+        XCTAssertGreaterThan(tiles.count, 0, "the badges are all there, locked")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS ', earned '")).count, 0,
+                       "and none is earned")
+    }
+
+    func testABadgeOpensACindySheetAndDoneClosesIt() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        let tile = app.buttons.matching(NSPredicate(format: "label CONTAINS ', locked'")).firstMatch
+        var swipes = 0
+        while !(tile.exists && tile.isHittable) && swipes < 6 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(tile.isHittable, "a badge can be tapped")
+        tile.tap()
+
+        // The Cindy sheet's own DONE has an identifier; the screen's has none.
+        let done = sheetButton(app, "DONE")
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "a badge opens a Cindy sheet, not the system's")
+        done.tap()
+        var gone = false
+        for _ in 0..<10 {
+            if !sheetButton(app, "DONE").exists { gone = true; break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertTrue(gone, "DONE closes the sheet")
+        XCTAssertTrue(app.staticTexts["You"].firstMatch.exists, "and the You screen is still there")
+    }
+
     // MARK: - heart rate
 
     func testTheMenuOffersHeartRateAndTheSheetSaysHowToFindAWatch() {

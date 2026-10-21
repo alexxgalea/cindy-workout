@@ -64,7 +64,8 @@ struct AccountScreen: View {
     @State private var pickingPhoto = false
     @State private var picked: PhotosPickerItem?
     @State private var naming = false
-    @State private var badge: BadgeSheet?
+    /// The tile, not only its sheet: the disc in the sheet carries the badge's face, as Android's does.
+    @State private var badge: BadgeTile?
     @Environment(\.dismiss) private var dismiss
 
     init(profile: Profile) {
@@ -73,36 +74,34 @@ struct AccountScreen: View {
 
     var body: some View {
         let page = vm.page
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                header(page.header)
-                Text(page.badgesTitle).font(.system(size: 12, weight: .bold)).foregroundStyle(Color.dim)
-                    .padding(.top, 10).padding(.leading, 4).accessibilityAddTraits(.isHeader)
-                ForEach(page.families, id: \.heading) { family in
-                    Text(family.heading).font(.system(size: 12, weight: .bold)).foregroundStyle(Color.dim)
-                        .padding(.top, 14).padding(.leading, 4).accessibilityAddTraits(.isHeader)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0, alignment: .top),
-                                             count: AccountPage.columns), spacing: 0) {
-                        ForEach(family.tiles, id: \.badge) { tile in
-                            Button { badge = tile.sheet } label: { tileView(tile) }
-                                .buttonStyle(.plain)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(tile.spoken)
-                                .accessibilityAddTraits(.isButton)
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            Text(MenuWords.youTitle).cindy(.title).accessibilityAddTraits(.isHeader)
+            Text(MenuWords.youSubtitle).cindy(.body).padding(.top, 5)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header(page.header).padding(.bottom, 12)
+                    SectionTitle(page.badgesTitle)
+                    ForEach(page.families, id: \.heading) { family in
+                        Text(family.heading).cindy(.eyebrow)
+                            .padding(.leading, 4).padding(.top, 14).padding(.bottom, 8)
+                            .accessibilityAddTraits(.isHeader)
+                        grid(family).padding(.bottom, 4)
                     }
-                    .padding(6)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                 }
-                Button("DONE") { dismiss() }.buttonStyle(PrimaryButton()).padding(.top, 16)
             }
-            .padding(20)
+            .padding(.top, 24)
+            // Pinned below the scroll, so it does not go with the badges.
+            ActionBar {
+                Button("DONE") { dismiss() }.buttonStyle(CindyPrimaryButtonStyle())
+            }
         }
-        .background(Color.appBackground)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 24)
+        .background(Palette.background.ignoresSafeArea())
+        // Pushed from the menu, this screen has its own title and DONE: the system's bar is not wanted.
+        .navigationBarHidden(true)
         .overlay(alignment: .bottom) {
-            if let toast = vm.toast {
-                Text(toast).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).chip().padding(.bottom, 90)
-            }
+            if let toast = vm.toast { CindyToast(text: toast).padding(.bottom, 90) }
         }
         .onAppear { vm.refresh() }
         .photosPicker(isPresented: $pickingPhoto, selection: $picked, matching: .images)
@@ -111,7 +110,22 @@ struct AccountScreen: View {
             picked = nil
         }
         .sheet(isPresented: $naming) { NameSheet(profile: vm.profile, onSaved: { vm.refresh() }) }
-        .sheet(item: $badge) { sheet in BadgeSheetView(sheet: sheet) }
+        // A badge says what it asks for and how far along it is. Closed any way, it changes nothing.
+        .cindySheet(isPresented: Binding(get: { badge != nil }, set: { if !$0 { badge = nil } }),
+                    title: badge?.sheet.title ?? "",
+                    subtitle: badge?.sheet.requirement,
+                    primary: SheetButton(title: "DONE") {},
+                    // Named, because a bare trailing closure whose body is an `if` also fits the
+                    // overload's `onDismiss` and would be taken for it, leaving the sheet without content.
+                    content: {
+            if let tile = badge {
+                HStack(spacing: 16) {
+                    BadgeDisc(face: tile.face, earned: tile.earned, size: 56)
+                    Text(tile.sheet.status).cindy(.headline, colour: Palette.label)
+                }
+                .padding(.top, 4)
+            }
+        })
         .confirmationDialog(PhotoSheet.title, isPresented: $choosingPhoto, titleVisibility: .visible) {
             Button("CHOOSE PHOTO") { pickingPhoto = true }
             if vm.page.header.hasPhoto { Button("REMOVE", role: .destructive) { vm.removePhoto() } }
@@ -122,7 +136,7 @@ struct AccountScreen: View {
     }
 
     private func header(_ header: AccountHeader) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             Button { choosingPhoto = true } label: {
                 AvatarView(photo: vm.photo, name: header.name).frame(width: 88, height: 88)
             }
@@ -132,70 +146,52 @@ struct AccountScreen: View {
 
             Button { naming = true } label: {
                 Text(header.title)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(header.name == nil ? Ink.secondary : Color.white)
+                    .cindy(.title2, colour: header.name == nil ? Palette.labelSecondary : Palette.label)
                     .frame(minHeight: 48)
                     .padding(.horizontal, 12)
             }
             .buttonStyle(.plain)
+            .padding(.top, 14)
             .accessibilityLabel(header.nameSpoken)
             .accessibilityAddTraits(.isButton)
 
-            Text(header.trainingLine).font(.system(size: 12)).foregroundStyle(Color.dim)
+            Text(header.trainingLine).cindy(.footnote)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22).padding(.horizontal, 20)
-        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.top, 22).padding(.bottom, 20).padding(.horizontal, 20)
+        .glassCard()
+    }
+
+    /// Three to a row, which leaves each tile room for a two-line title.
+    private func grid(_ family: BadgeFamilySection) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0, alignment: .top),
+                                 count: AccountPage.columns), spacing: 0) {
+            ForEach(family.tiles, id: \.badge) { tile in
+                Button { badge = tile } label: { tileView(tile) }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(tile.spoken)
+                    .accessibilityAddTraits(.isButton)
+            }
+        }
+        .padding(6)
+        .glassCard()
     }
 
     private func tileView(_ tile: BadgeTile) -> some View {
-        VStack(spacing: 2) {
-            Text(tile.face)
-                .font(.system(size: tile.face.count >= 4 ? 12 : 14, weight: .heavy))
-                .foregroundStyle(tile.earned ? Color.black : Ink.tertiary)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(tile.earned ? Ink.achievement : Color.clear))
-                .overlay(Circle().strokeBorder(tile.earned ? Color.clear : Color.white.opacity(0.13), lineWidth: 1))
-            Text(tile.title).font(.system(size: 11)).multilineTextAlignment(.center).lineLimit(2)
-                .foregroundStyle(tile.earned ? Color.white : Ink.secondary).padding(.top, 6)
+        VStack(spacing: 0) {
+            BadgeDisc(face: tile.face, earned: tile.earned, size: 44)
+            Text(tile.title)
+                .cindy(.footnote, colour: tile.earned ? Palette.label : Palette.labelSecondary)
+                .multilineTextAlignment(.center).lineLimit(2)
+                .padding(.top, 8)
             if let progress = tile.progress {
-                Text(progress).font(.system(size: 11)).multilineTextAlignment(.center).lineLimit(2)
-                    .foregroundStyle(Color.dim)
+                Text(progress).cindy(.footnote).multilineTextAlignment(.center).lineLimit(2)
+                    .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 4).padding(.vertical, 12)
         .contentShape(Rectangle())
-    }
-}
-
-extension BadgeSheet: Identifiable {
-    public var id: String { title }
-}
-
-/// A badge: what it asks for, and when it was earned or how far along it is.
-struct BadgeSheetView: View {
-    let sheet: BadgeSheet
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(sheet.title).font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                Text(sheet.requirement).font(.system(size: 14)).foregroundStyle(Color.dim)
-            }
-            HStack(spacing: 16) {
-                Circle().fill(sheet.earned ? Ink.achievement : Color.clear)
-                    .overlay(Circle().strokeBorder(sheet.earned ? Color.clear : Color.white.opacity(0.13), lineWidth: 1))
-                    .frame(width: 56, height: 56)
-                    .accessibilityHidden(true)
-                Text(sheet.status).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
-            }
-            Spacer()
-            Button("DONE") { dismiss() }.buttonStyle(PrimaryButton())
-        }
-        .padding(20)
-        .background(Color.appBackground)
-        .presentationDetents([.medium])
     }
 }
