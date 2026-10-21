@@ -259,4 +259,72 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(opened, "the day opens a sheet; the calendar's frame is \(grid)")
         capture(app, "progress-day")
     }
+
+    /// The DONE of the page on top: covered pages stay in the queries, so the hittable one is chosen.
+    private func tapTopDone(_ app: XCUIApplication) {
+        let dones = app.buttons.matching(NSPredicate(format: "label == 'DONE'")).allElementsBoundByIndex
+        guard let done = dones.first(where: { $0.isHittable }) else { return XCTFail("a DONE is within reach") }
+        done.tap()
+    }
+
+    /// The menu and the You screen: the menu on an empty phone, the You screen with nothing in it, then
+    /// with badges, and the menu over a live workout. The empty phone is a launch of its own, because
+    /// the launch arguments that empty the records and the name hold for the whole launch.
+    func testMenuAndAccount() {
+        let empty = XCUIApplication()
+        empty.launchArguments = ["-CindyReplay", "nohands", "-placement_guide_dismissed", "YES",
+                                 "-tutorial_seen", "YES", "-hud_tour_pending", "NO", "-attempts", "",
+                                 "-display_name", ""]
+        empty.launch()
+        XCTAssertTrue(hud(empty, "btnMenu").waitForExistence(timeout: 10))
+        hud(empty, "btnMenu").tap()
+        let profile = empty.buttons["You, Add your name and photo"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5), "the menu invites the athlete in")
+        capture(empty, "menu-idle")
+        profile.tap()
+        XCTAssertTrue(empty.buttons["Add your name"].waitForExistence(timeout: 5), "the You screen invites a name")
+        capture(empty, "account-empty")
+        empty.terminate()
+
+        let app = launch("nohands")
+        for round in 0..<2 {
+            finishSession(app, reps: 2)
+            app.buttons["DONE"].tap()
+            let again = hud(app, "btnStart", labelled: "Start again")
+            XCTAssertTrue(again.waitForExistence(timeout: 10))
+            if round == 0 { again.tap() }
+        }
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+        let you = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'You, '")).firstMatch
+        XCTAssertTrue(you.waitForExistence(timeout: 5), "the menu's profile row is there")
+        you.tap()
+        let tile = app.buttons.matching(NSPredicate(format: "label CONTAINS ', locked' OR label CONTAINS ', earned '")).firstMatch
+        var swipes = 0
+        while !(tile.exists && tile.isHittable) && swipes < 6 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(tile.isHittable, "the first family's badges are in view")
+        capture(app, "account-badges")
+        tapTopDone(app)
+        tapTopDone(app)
+
+        // The menu over a live workout: the camera screen is back, a workout started and skipped into.
+        let again = hud(app, "btnStart", labelled: "Start again")
+        XCTAssertTrue(again.waitForExistence(timeout: 10))
+        again.tap()
+        let start = hud(app, "btnStart", labelled: "Start the workout")
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        start.tap()
+        XCTAssertTrue(hud(app, "btnSkipExercise").waitForExistence(timeout: 5))
+        hud(app, "btnSkipExercise").tap()
+        XCTAssertTrue(sheetButton(app, "SKIP").waitForExistence(timeout: 5))
+        sheetButton(app, "SKIP").tap()
+        XCTAssertTrue(hud(app, "btnStart", labelled: "Pause").waitForExistence(timeout: 5), "the workout is live")
+        hud(app, "btnMenu").tap()
+        XCTAssertTrue(app.staticTexts["Movements can only be changed between workouts — they have to mean one thing for the whole score."]
+            .waitForExistence(timeout: 5), "the menu says why Movements is refused")
+        capture(app, "menu-live")
+    }
 }
