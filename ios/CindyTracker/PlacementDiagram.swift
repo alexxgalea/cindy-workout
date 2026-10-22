@@ -115,21 +115,28 @@ struct PlacementDiagram: View {
     }
 }
 
-/// The three placement facts, one per row, in the type of the first-launch pages. They come from
-/// `PlacementFacts`, which the sheet that opens before the first setup check also draws, so the
-/// two cannot give different advice about the one thing the athlete has to get right.
+/// The three placement facts, one per row, as `placementFacts()` draws them: a mark 17 across, 2
+/// below the top of its line, then the sentence 11 after it, 13 between rows and 18 above the first.
+/// They come from `PlacementFacts`, which the guide's sheet and the first-launch pages both draw, so
+/// the two cannot give different advice about the one thing the athlete has to get right.
 struct PlacementFactRows: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 13) {
             ForEach(PlacementFacts.all, id: \.text) { fact in
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: fact.symbol)
-                        .foregroundStyle(fact.warning ? Palette.stateAlert : Palette.labelSecondary)
-                        .frame(width: 22)
-                        .accessibilityHidden(true)
-                    Text(fact.text).cindy(.body, colour: Palette.labelBody)
+                HStack(alignment: .top, spacing: 11) {
+                    if let icon = CindyIcon(rawValue: fact.icon) {
+                        Image(icon)
+                            .resizable()
+                            .frame(width: 17, height: 17)
+                            .foregroundStyle(fact.warning ? Palette.stateCaution : Palette.labelTertiary)
+                            .padding(.top, 2)
+                            .accessibilityHidden(true)
+                    }
+                    Text(fact.text).cindy(.callout, colour: Palette.labelBody)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        .padding(.top, 18)
     }
 }

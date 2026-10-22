@@ -210,12 +210,7 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showTutorial, onDismiss: { workout.applyProfile(); openCamera() }) {
             TutorialScreen(replay: false, profile: workout.settings, stravaAvailable: StravaBuild.available) { _ in showTutorial = false }
         }
-        .sheet(isPresented: $showPlacement) {
-            PlacementGuideView(dontShowAgain: $placementSeen) {
-                showPlacement = false
-                workout.enterSetup()
-            }
-        }
+        .placementGuide(isPresented: $showPlacement) { workout.enterSetup() }
         // Dismissing the question any other way (the dim, a swipe down, the escape gesture) is also
         // "keep going", with the clock let go again.
         .cindySheet(isPresented: $showStopConfirm,
@@ -234,7 +229,7 @@ struct ContentView: View {
     /// Something stands over the camera screen and takes the touches: the tour, a question, or the
     /// launch view. A screen reader is kept off what is beneath.
     private var screenIsCovered: Bool {
-        tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm || launching
+        tour.hidesScreenBeneath || showStopConfirm || showSkipConfirm || showPlacement || launching
     }
 
     private var hud: some View {
