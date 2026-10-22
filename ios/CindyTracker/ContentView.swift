@@ -157,7 +157,7 @@ struct ContentView: View {
         .onChange(of: tourFrames) { _, _ in maybeStartTour() }
         // A tour that was waiting for the clock to be idle starts when it is.
         .onChange(of: workout.phase) { _, _ in maybeStartTour() }
-        .background(Color.appBackground)
+        .background(Palette.background)
         .onAppear {
             // Back from the menu's cover: nothing was torn down, so there is nothing to set up again.
             if coveredByMenu { coveredByMenu = false; return }
@@ -348,26 +348,5 @@ struct ContentView: View {
         .padding(.vertical, 6)
         .background(Color.black.opacity(0.6), in: Capsule())
         .accessibilityIdentifier("debugReadout")
-    }
-}
-
-// MARK: - styling
-
-extension Color {
-    static let appBackground = Color(red: 0.043, green: 0.051, blue: 0.063)
-    static let accent = Color(red: 0, green: 0.898, blue: 0.627)
-    static let warn = Color(red: 1, green: 0.353, blue: 0.373)
-    static let dim = Color.white.opacity(0.6)
-}
-
-struct PrimaryButton: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 17, weight: .bold))
-            .foregroundStyle(Color.appBackground)
-            .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .background(Color.accent, in: Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

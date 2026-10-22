@@ -107,7 +107,7 @@ ios/
     ├── ReplayPoseSource.swift    a scripted body for the simulator (debug builds only)
     ├── CameraModel.swift         what the screens watch, fed by a PoseSource
     ├── WorkoutViewModel.swift    clock, setup, score, voice
-    ├── LanguageSheet.swift       the voice's language list
+    ├── VoiceSheet.swift          the voice sheet, and its language list
     ├── ContentView.swift         camera, skeleton, and the first run (pages, camera, tour)
     ├── CameraHud.swift           the two bands of the camera screen, and HudButtons.swift its marks
     ├── StartPoseView.swift       the start-position figure and the coach card
@@ -120,7 +120,7 @@ ios/
     ├── HeartRateSheet.swift      the Heart rate sheet and the search sheet
     ├── PlacementDiagram.swift    where to stand, drawn, and the three facts under it
     ├── PlacementGuideView.swift  the sheet that asks where to stand before the first setup check
-    ├── Palette.swift             Android's colours and Manrope, for the screens written from P14 on
+    ├── Palette.swift             Android's colours and Manrope, which every screen draws from
     ├── ProgressScreen.swift      the record board: its title, its order, its sheets
     ├── ProgressCards.swift       its cards: the habit, this week, the chart card, peaks, the calendar, the leaderboard
     ├── ProgressCharts.swift      the week strip, the month grid and the chart
