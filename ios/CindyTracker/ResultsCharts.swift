@@ -4,34 +4,6 @@ import CindyCore
 // The results page's four charts, drawn in `Canvas` over the models in CindyCore. The models own
 // the geometry and the touch; these only paint what they say and pass the finger through.
 
-/// The page's old inks. The session page now paints from `Palette`; the screens that still read
-/// these are Progress's charts and the menu.
-enum Ink {
-    static let label = Color.white
-    static let secondary = Color.white.opacity(0.62)
-    static let tertiary = Color.white.opacity(0.32)
-    static let quaternary = Color.white.opacity(0.18)
-    static let hairline = Color.white.opacity(0.12)
-    static let heart = Color(red: 1, green: 0.216, blue: 0.373)
-    static let achievement = Color(red: 0.988, green: 0.298, blue: 0.008)
-
-    static func movement(_ m: Exercise) -> Color {
-        switch m {
-        case .pullup: return label
-        case .pushup: return secondary
-        case .squat: return tertiary
-        }
-    }
-
-    static func tint(_ t: TimelineTint) -> Color {
-        switch t {
-        case .reps: return label
-        case .heart: return heart
-        case .energy: return secondary
-        }
-    }
-}
-
 /// Hands a finger's down, move and up to a chart model. A vertical gesture never becomes a drag in
 /// the model, so the scroll view around the chart keeps it.
 struct ChartTouch: ViewModifier {
