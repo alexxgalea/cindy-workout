@@ -141,12 +141,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
 
 ### U5: the menu's sheets
 
-- **Become Cindy sheets**, with Android's toggles, sliders and fields:
-  - every `NavigationStack`/`Form` sheet with Save and Cancel;
-  - the `.alert`s in `ReminderSheet` and `VoiceSheet`;
-  - the photo `confirmationDialog`.
-- **Strava.** `StravaConsentSheet` loses its system fonts, and `StravaConnectedSheet` loses its `List`.
-- **The pickers stay the system's.**
+Every sheet the menu opens is a Cindy sheet with Android's content and buttons: movements, body weight, daily reminder, heart rate (its scan and "Your details" inside the one sheet), voice with its language list, music, and Strava's consent and connected sheets, which the results page also presents. The You screen's name and photo sheets are Cindy sheets too. The system's `Form` sheets, the `.alert`s of the reminder and the voice, and the photo `confirmationDialog` are gone from the files this phase owns. The pickers stay the system's. `CindySheet` is split into a presenter and a `CindyPanel`, so a sheet is a view that builds its own panel and is presented by item.
 
 ### U6: placement guide
 
@@ -163,6 +158,8 @@ A Cindy sheet over the live preview, as on Android, not a system sheet.
 Bugs the port exposed. Each is fixed in a pull request of its own on Android, not in a phase.
 
 - **`MainActivity.confirmStop` leaves the clock parked after the back gesture.** It parks the clock and resumes it only from KEEP GOING, so closing the question with the back gesture leaves the workout paused, with nothing on screen saying so. On iOS, every way out of the question is KEEP GOING. A one-line `onDismiss` fixes it.
+
+- **`askBodyWeight` and `askHeartRateDetails` close the sheet after a refused entry.** `CindySheet.actions` dismisses after `onPrimary` whatever it did, so a weight of 5 shows its toast and the sheet is gone with what was typed. On iOS a refused SAVE keeps the sheet up and says why under the field. Android could keep the sheet by letting `onPrimary` return whether to dismiss.
 
 ## After U7
 

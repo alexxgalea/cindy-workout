@@ -342,9 +342,11 @@ struct ContentView: View {
             if !camera.latencyLine.isEmpty { Text(camera.latencyLine) }
         }
         .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(Color.dim)
+        .foregroundStyle(Palette.labelSecondary)
         .multilineTextAlignment(.center)
-        .chip()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.6), in: Capsule())
         .accessibilityIdentifier("debugReadout")
     }
 }
@@ -358,19 +360,6 @@ extension Color {
     static let dim = Color.white.opacity(0.6)
 }
 
-private struct Chip: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(Color.black.opacity(0.6), in: Capsule())
-    }
-}
-
-extension View {
-    func chip() -> some View { modifier(Chip()) }
-}
-
 struct PrimaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -379,20 +368,6 @@ struct PrimaryButton: ButtonStyle {
             .frame(maxWidth: .infinity)
             .frame(height: 54)
             .background(Color.accent, in: Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
-    }
-}
-
-struct GhostButton: ButtonStyle {
-    let tint: Color
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 16, weight: .bold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 16)
-            .frame(height: 54)
-            .background(Color.black.opacity(0.6), in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.25)))
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

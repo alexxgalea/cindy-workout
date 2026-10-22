@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import CindyCore
 
 /// Everything the athlete does not need while they are on the bar. `MenuBuilder` decides which rows
@@ -62,10 +63,12 @@ struct MenuScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settled = false
-    @State private var sheet: Sheet?
+    @State private var panel: PanelSheet?
+    @State private var pickingTrack = false
     @State private var path: [Destination] = []
 
-    private enum Sheet: Identifiable {
+    /// What the menu opens, in the one presenter below.
+    private enum PanelSheet: Identifiable {
         case movements, bodyWeight, voice, music, reminder, heartRate, stravaConsent, stravaConnected
         var id: Int { hashValue }
     }
@@ -92,7 +95,6 @@ struct MenuScreen: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 24)
             .background(Palette.background.ignoresSafeArea())
-            .overlay(alignment: .bottom) { toastView }
             .navigationBarHidden(true)
             .navigationDestination(for: Destination.self) { destination in
                 destinationView(destination)
@@ -109,9 +111,34 @@ struct MenuScreen: View {
         // Strava has to say about it is said here.
         .onReceive(StravaCenter.shared.$revision) { _ in vm.refresh() }
         .onReceive(StravaCenter.shared.$notice.compactMap { $0 }) { vm.show($0.text) }
-        .sheet(item: $sheet, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
-            sheetView(which)
+        .cindySheet(item: $panel, onDismiss: { workout.applyProfile(); vm.refresh() }) { which in
+            switch which {
+            case .movements:
+                MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
+            case .bodyWeight:
+                BodyWeightSheet(profile: vm.profile) { vm.refresh() }
+            case .voice:
+                VoiceSheet(speaker: workout.speaker, profile: vm.profile,
+                           save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
+            case .music:
+                MusicSheet(profile: vm.profile, choose: { pickingTrack = true }, show: { vm.show($0) },
+                           onChanged: { vm.refresh() })
+            case .reminder:
+                ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
+            case .heartRate:
+                HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
+            case .stravaConsent:
+                StravaConsentSheet(origin: .menu)
+            case .stravaConnected:
+                StravaConnectedSheet(show: { vm.show($0) }, onChanged: { vm.refresh() })
+            }
         }
+        // The system's picker, held here because the sheet that asked for it is gone by the time it opens.
+        .fileImporter(isPresented: $pickingTrack, allowedContentTypes: [.audio]) { result in
+            if case .success(let url) = result { adoptTrack(url) }
+        }
+        // Above the sheets: a sheet is where the athlete is looking when a toast has something to say.
+        .overlay(alignment: sheetIsUp ? .top : .bottom) { toastView }
     }
 
     private var content: some View {
@@ -149,8 +176,12 @@ struct MenuScreen: View {
         }
     }
 
+    private var sheetIsUp: Bool { panel != nil }
+
     @ViewBuilder private var toastView: some View {
-        if let toast = vm.toast { CindyToast(text: toast).padding(.bottom, 90) }
+        if let toast = vm.toast {
+            CindyToast(text: toast).padding(sheetIsUp ? .top : .bottom, sheetIsUp ? 60 : 90)
+        }
     }
 
     @ViewBuilder private func destinationView(_ destination: Destination) -> some View {
@@ -161,41 +192,33 @@ struct MenuScreen: View {
         }
     }
 
-    @ViewBuilder private func sheetView(_ which: Sheet) -> some View {
-        switch which {
-        case .movements:
-            MovementsSheet(profile: vm.profile) { _ in vm.show(MenuBuilder.movementsSubtitle(vm.profile)) }
-        case .bodyWeight:
-            BodyWeightSheet(profile: vm.profile) { vm.refresh() }
-        case .reminder:
-            ReminderSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
-        case .music:
-            MusicSheet(profile: vm.profile, show: { vm.show($0) }, onChanged: { vm.refresh() })
-        case .heartRate:
-            HeartRateSheet(profile: vm.profile, onChanged: { vm.refresh() })
-        case .stravaConsent:
-            StravaConsentSheet(origin: .menu)
-        case .stravaConnected:
-            StravaConnectedSheet(show: { vm.show($0) }, onChanged: { vm.refresh() })
-        case .voice:
-            VoiceSheet(speaker: workout.speaker, profile: vm.profile,
-                       save: { $0.save(to: vm.profile) }, cancel: { workout.restoreLanguage() })
+    /// Takes the long-lived grant that lets the track survive a restart, then remembers it. The
+    /// track is not loaded here: the workout picks it up when the menu closes, and clears the choice
+    /// itself if it turns out not to play.
+    private func adoptTrack(_ url: URL) {
+        guard let stored = MusicLibrary.store(url) else {
+            vm.show(MusicFlow.lapsedText)
+            return
         }
+        vm.profile.musicTrack = stored
+        vm.profile.musicOn = true
+        vm.show(MusicFlow.adoptedText(name: MusicLibrary.displayName(stored)))
+        vm.refresh()
     }
 
     private func open(_ id: MenuRowID) {
         switch id {
         case .movements:
-            if vm.page.movementsRefused { vm.show(MovementsForm.refusedWhileLive) } else { sheet = .movements }
+            if vm.page.movementsRefused { vm.show(MovementsForm.refusedWhileLive) } else { panel = .movements }
         case .progress: path.append(.progress)
         case .help: path.append(.help)
-        case .bodyWeight: sheet = .bodyWeight
-        case .voice: sheet = .voice
-        case .music: sheet = .music
-        case .reminder: sheet = .reminder
-        case .heartRate: sheet = .heartRate
+        case .bodyWeight: panel = .bodyWeight
+        case .voice: panel = .voice
+        case .music: panel = .music
+        case .reminder: panel = .reminder
+        case .heartRate: panel = .heartRate
         case .strava:
-            sheet = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
+            panel = StravaMenu.tap(grant: StravaCenter.shared.tokens.grant) == .askConsent ? .stravaConsent : .stravaConnected
         }
     }
 }

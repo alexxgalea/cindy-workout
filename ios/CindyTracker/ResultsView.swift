@@ -77,7 +77,7 @@ struct ResultsView: View {
             .padding(.vertical, 24)
         }
         .background(Palette.background.ignoresSafeArea())
-        .sheet(item: $asking, onDismiss: { vm.bodyChanged() }) { which in
+        .cindySheet(item: $asking, onDismiss: { vm.bodyChanged() }) { which in
             switch which {
             case .weight: BodyWeightSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
             case .heartRate: HeartRateDetailsSheet(profile: vm.profile, onSaved: { vm.bodyChanged() })
@@ -86,7 +86,7 @@ struct ResultsView: View {
         .fullScreenCover(item: $reopened) { request in
             ResultsView(request, onDiscarded: { flash(ResultsPageBuilder.discardedToast) })
         }
-        .sheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
+        .cindySheet(isPresented: $askingStrava) { StravaConsentSheet(origin: .results(atMillis: vm.atMillis)) }
         .fullScreenCover(isPresented: $showProgress) { ProgressScreen() }
         .overlay(alignment: .bottom) {
             if let toast {

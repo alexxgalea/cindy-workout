@@ -135,141 +135,146 @@ final class HeartRateModel: ObservableObject, HeartRateListener {
     }
 }
 
-/// Everything heart rate: pairing a watch, or, once one is paired, a live status line and the age
-/// and sex the formula still needs.
+/// Everything heart rate (`chooseHeartRate`): pairing a watch, or, once one is paired, a live status line
+/// and the age and sex the formula still needs.
+///
+/// One presented sheet whose panel follows the model: the main one, the scan (`openScanSheet`), "Your
+/// details" (the panel the results page also opens, here a step of this sheet) and the step a blocked
+/// scan stops at. CANCEL on the scan ends the sheet, as on Android, and so does every way out that is
+/// not a button; the live connection and the scan end with it.
 struct HeartRateSheet: View {
     @StateObject private var model: HeartRateModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeCindySheet) private var close
 
     init(profile: Profile, onChanged: @escaping () -> Void) {
         _model = StateObject(wrappedValue: HeartRateModel(profile: profile, onChanged: onChanged))
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text(HeartRateSheets.subtitle).font(.footnote).foregroundStyle(.secondary)
-                }
-                if let device = model.device {
-                    pairedSections(device)
-                } else {
-                    Section { Text(HeartRateSheets.unpairedNote).font(.footnote) }
-                    Section {
-                        Button(HeartRateSheets.findMyWatch) { model.findMyWatch() }
-                            .accessibilityIdentifier("findMyWatch")
-                    }
-                }
-            }
-            .sheet(isPresented: $model.askDetails) {
-                HeartRateDetailsSheet(profile: model.profile, onSaved: { model.detailsChanged() })
-            }
-            .navigationTitle(HeartRateSheets.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) { Button("Done") { dismiss() } }
+        // One container, so swapping the panels is not this sheet appearing or leaving.
+        ZStack {
+            if let step = model.blocked, model.scanning {
+                blocked(step)
+            } else if model.scanning {
+                scan
+            } else if model.askDetails {
+                HeartRateDetailsSheet(profile: model.profile, onSaved: { model.detailsChanged() },
+                                      onFinished: { model.askDetails = false })
+            } else if let device = model.device {
+                paired(device)
+            } else {
+                unpaired
             }
         }
-        .sheet(isPresented: $model.scanning, onDismiss: { model.cancelScan() }) {
-            HeartRateScanSheet(model: model)
-        }
+        .onChange(of: panel) { _, _ in SheetVoiceOver.panelChanged() }
         .onAppear { model.appear() }
         .onDisappear { model.disappear() }
-        .accessibilityIdentifier("heartRateSheet")
     }
 
-    @ViewBuilder private func pairedSections(_ device: HeartRateDevice) -> some View {
-        Section {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(device.name).font(.headline)
-                Text(model.statusText)
-                    .font(.footnote)
-                    .foregroundStyle(model.isReading ? Color.green : Color.secondary)
-                    .accessibilityIdentifier("heartRateStatus")
-            }
-            .accessibilityElement(children: .combine)
-        }
-        Section {
-            Button { model.askDetails = true } label: {
-                row(HeartRateSheets.yourDetails, model.detailsSubtitle)
-            }
-            Button { model.findMyWatch() } label: {
-                row(HeartRateSheets.findAnother, HeartRateSheets.findAnotherSubtitle)
-            }
-        }
-        Section {
-            Button(HeartRateSheets.forget, role: .destructive) { model.forget() }
+    /// Which panel the sheet is showing, for telling a screen reader when it changes.
+    private var panel: String {
+        if model.blocked != nil, model.scanning { return "blocked" }
+        if model.scanning { return "scan" }
+        if model.askDetails { return "details" }
+        return model.device == nil ? "unpaired" : "paired"
+    }
+
+    // MARK: the main panels
+
+    private var unpaired: some View {
+        CindyPanel(title: HeartRateSheets.title, subtitle: HeartRateSheets.subtitle,
+                   primary: SheetButton(title: HeartRateSheets.findMyWatch) { model.findMyWatch() }
+                       .keepingOpen { true },
+                   secondary: SheetButton(title: SheetWords.cancel) {}) {
+            SheetNote(HeartRateSheets.unpairedNote)
         }
     }
 
-    private func row(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).foregroundStyle(.primary)
-            Text(subtitle).font(.footnote).foregroundStyle(.secondary)
-        }
-    }
-}
-
-/// A 12-second search for nearby heart-rate broadcasters. The rows update in place as matches
-/// arrive and hold their order, so a tap lands on the device the finger was over.
-struct HeartRateScanSheet: View {
-    @ObservedObject var model: HeartRateModel
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                if let step = model.blocked {
-                    blockedSection(step)
-                } else {
-                    Section {
-                        if model.found.isEmpty {
-                            Text(HeartRateSheets.nothingYet).foregroundStyle(.secondary)
-                        } else {
-                            ForEach(model.found, id: \.address) { found in
-                                Button { model.adopt(found) } label: { deviceRow(found) }
-                                    .accessibilityLabel(HeartRateSheets.spoken(found))
-                            }
+    private func paired(_ device: HeartRateDevice) -> some View {
+        CindyPanel(title: HeartRateSheets.title, subtitle: HeartRateSheets.subtitle,
+                   primary: SheetButton(title: SheetWords.done) {},
+                   secondary: SheetButton(title: SheetWords.forget, tint: Palette.stateAlert) { model.forget() }) {
+            VStack(alignment: .leading, spacing: 12) {
+                InsetGroup([0], id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(device.name).cindy(.headline)
+                        Text(model.statusText)
+                            .cindy(.footnote, colour: model.isReading ? Palette.stateOk : Palette.labelSecondary)
+                            .accessibilityIdentifier("heartRateStatus")
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                }
+                InsetGroup(PairedRow.allCases, id: \.self) { row in
+                    switch row {
+                    case .details:
+                        NavRow(title: HeartRateSheets.yourDetails, value: model.detailsSubtitle) { model.askDetails = true }
+                    case .another:
+                        NavRow(title: HeartRateSheets.findAnother, value: HeartRateSheets.findAnotherSubtitle) {
+                            model.findMyWatch()
                         }
                     }
                 }
             }
-            .navigationTitle(HeartRateSheets.scanTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.scanning = false } }
-                ToolbarItem(placement: .primaryAction) {
-                    if model.scanDone || model.blocked != nil {
-                        Button(HeartRateSheets.scanAgain) { model.findMyWatch() }
-                    }
+        }
+    }
+
+    private enum PairedRow: CaseIterable { case details, another }
+
+    // MARK: the scan
+
+    /// A 12-second search for nearby heart-rate broadcasters. The rows update in place as matches
+    /// arrive and hold their order, so a tap lands on the device the finger was over.
+    private var scan: some View {
+        CindyPanel(title: HeartRateSheets.scanTitle,
+                   primary: model.scanDone
+                       ? SheetButton(title: HeartRateSheets.scanAgain) { model.findMyWatch() }.keepingOpen { true }
+                       : SheetButton(title: SheetWords.cancel) { model.cancelScan() },
+                   secondary: model.scanDone ? SheetButton(title: SheetWords.cancel) { model.cancelScan() } : nil) {
+            InsetGroup(scanRows, id: \.id) { entry in
+                switch entry {
+                case .nothing:
+                    Text(HeartRateSheets.nothingYet).cindy(.callout)
+                        .padding(.leading, 18).padding(.trailing, 16).padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .device(let found):
+                    NavRow(title: found.name, value: HeartRateSheets.foundLabel(found),
+                           spoken: HeartRateSheets.spoken(found)) { model.adopt(found) }
                 }
             }
         }
-        .accessibilityIdentifier("heartRateScan")
     }
 
-    private func deviceRow(_ found: FoundDevice) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(found.name).font(.headline).foregroundStyle(.primary)
-            let label = HeartRateSheets.foundLabel(found)
-            if !label.isEmpty { Text(label).font(.footnote).foregroundStyle(.secondary) }
+    private enum ScanRow: Identifiable {
+        case nothing, device(FoundDevice)
+
+        var id: String {
+            switch self {
+            case .nothing: return "nothing"
+            case .device(let found): return found.address
+            }
         }
     }
 
-    @ViewBuilder private func blockedSection(_ step: FindWatchStep) -> some View {
+    private var scanRows: [ScanRow] {
+        model.found.isEmpty ? [.nothing] : model.found.map(ScanRow.device)
+    }
+
+    // MARK: a scan that cannot start
+
+    @ViewBuilder private func blocked(_ step: FindWatchStep) -> some View {
         switch step {
         case .openSettings:
-            Section {
-                Text(HeartRateAccess.deniedTitle).font(.headline)
-                Text(HeartRateAccess.deniedSubtitle).font(.footnote).foregroundStyle(.secondary)
-                Button("OPEN SETTINGS") { model.openSettings() }
-            }
+            CindyPanel(title: HeartRateAccess.deniedTitle, subtitle: HeartRateAccess.deniedSubtitle,
+                       primary: SheetButton(title: SheetWords.openSettings) { model.openSettings() },
+                       secondary: SheetButton(title: SheetWords.notNow) {})
         case .bluetoothOff:
-            Section {
-                Text(HeartRateAccess.bluetoothOffTitle).font(.headline)
-                Text(HeartRateAccess.bluetoothOffSubtitle).font(.footnote).foregroundStyle(.secondary)
-            }
+            CindyPanel(title: HeartRateAccess.bluetoothOffTitle, subtitle: HeartRateAccess.bluetoothOffSubtitle,
+                       primary: SheetButton(title: SheetWords.done) {})
         case .unsupported:
-            Section { Text(HeartRateAccess.unsupportedToast) }
+            CindyPanel(title: HeartRateSheets.title, subtitle: HeartRateAccess.unsupportedToast,
+                       primary: SheetButton(title: SheetWords.done) {})
         case .scan, .askPermission, .wait:
             EmptyView()
         }

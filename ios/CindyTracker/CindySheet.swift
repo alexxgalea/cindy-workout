@@ -2,11 +2,55 @@ import SwiftUI
 import UIKit
 
 /// One of a sheet's two buttons. Only the secondary uses `tint`: the primary is the one filled
-/// control.
+/// control. A button closes the sheet after its action runs, unless `keepingOpen` says not to:
+/// true leaves the sheet up, for a button that refused what it was asked to keep or that only
+/// steps the sheet on to another panel.
 struct SheetButton {
     let title: String
-    var tint: Color = Palette.label
+    var tint: Color
     let action: () -> Void
+    private(set) var keepsOpen: () -> Bool = { false }
+
+    init(title: String, tint: Color = Palette.label, action: @escaping () -> Void) {
+        self.title = title
+        self.tint = tint
+        self.action = action
+    }
+
+    /// The same button, asked after its action has run whether to leave the sheet up.
+    func keepingOpen(_ when: @escaping () -> Bool) -> SheetButton {
+        var copy = self
+        copy.keepsOpen = when
+        return copy
+    }
+}
+
+private struct CloseCindySheetKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+/// What a drag on a panel does to its sheet: the presenter moves the sheet and decides whether the
+/// drag was a dismissal. The panel starts one from the places a drag cannot be a scroll.
+struct SheetDrag {
+    var changed: (_ down: CGFloat) -> Void = { _ in }
+    var ended: (_ down: CGFloat, _ predicted: CGFloat) -> Void = { _, _ in }
+}
+
+private struct SheetDragKey: EnvironmentKey {
+    static let defaultValue = SheetDrag()
+}
+
+extension EnvironmentValues {
+    var sheetDrag: SheetDrag {
+        get { self[SheetDragKey.self] }
+        set { self[SheetDragKey.self] = newValue }
+    }
+
+    /// Closes the Cindy sheet this view is in. Set by the presenter; a panel's buttons call it.
+    var closeCindySheet: () -> Void {
+        get { self[CloseCindySheetKey.self] }
+        set { self[CloseCindySheetKey.self] = newValue }
+    }
 }
 
 extension View {
@@ -25,83 +69,163 @@ extension View {
                                    primary: SheetButton, secondary: SheetButton? = nil,
                                    secondaryDismisses: Bool = true, onDismiss: @escaping () -> Void = {},
                                    @ViewBuilder content: @escaping () -> Content) -> some View {
-        modifier(CindySheetModifier(isPresented: isPresented, title: title, subtitle: subtitle,
-                                    primary: primary, secondary: secondary,
-                                    secondaryDismisses: secondaryDismisses, onDismiss: onDismiss,
-                                    content: content))
+        cindySheet(isPresented: isPresented, onDismiss: onDismiss) {
+            CindyPanel(title: title, subtitle: subtitle, primary: primary, secondary: secondary,
+                       secondaryDismisses: secondaryDismisses, content: content)
+        }
+    }
+
+    /// A sheet that is a view of its own, shown while `isPresented` holds: `panel` builds its
+    /// `CindyPanel`. For the one sheet a screen has; a screen with several uses the `item` form.
+    func cindySheet<Panel: View>(isPresented: Binding<Bool>, onDismiss: @escaping () -> Void = {},
+                                 @ViewBuilder panel: @escaping () -> Panel) -> some View {
+        modifier(CindySheetPresenter(
+            item: Binding(get: { isPresented.wrappedValue ? Presented() : nil },
+                          set: { if $0 == nil { isPresented.wrappedValue = false } }),
+            onDismiss: onDismiss,
+            panel: { _ in panel() }))
     }
 
     /// A sheet that is only words: a question.
     func cindySheet(isPresented: Binding<Bool>, title: String, subtitle: String? = nil,
                     primary: SheetButton, secondary: SheetButton? = nil,
                     secondaryDismisses: Bool = true, onDismiss: @escaping () -> Void = {}) -> some View {
-        modifier(CindySheetModifier(isPresented: isPresented, title: title, subtitle: subtitle,
-                                    primary: primary, secondary: secondary,
-                                    secondaryDismisses: secondaryDismisses, onDismiss: onDismiss,
-                                    content: { EmptyView() }))
+        cindySheet(isPresented: isPresented, title: title, subtitle: subtitle, primary: primary,
+                   secondary: secondary, secondaryDismisses: secondaryDismisses, onDismiss: onDismiss,
+                   content: { EmptyView() })
+    }
+
+    /// A sheet that is a view of its own: `panel` builds the `CindyPanel` for whichever item is up,
+    /// and a different item replaces the one showing. The panel's buttons close it through
+    /// `closeCindySheet`, and so does a tap on the dim, a swipe down or the escape gesture, after
+    /// which `onDismiss` runs once. Whatever the panel started stops in its own `onDisappear`.
+    func cindySheet<Item: Identifiable, Panel: View>(item: Binding<Item?>, onDismiss: @escaping () -> Void = {},
+                                                    @ViewBuilder panel: @escaping (Item) -> Panel) -> some View {
+        modifier(CindySheetPresenter(item: item, onDismiss: onDismiss, panel: panel))
     }
 }
+
+/// What the `isPresented` form presents: the one sheet there is.
+private struct Presented: Identifiable { let id = 0 }
 
 private struct SheetContentHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-private struct CindySheetModifier<SheetContent: View>: ViewModifier {
-    @Binding var isPresented: Bool
-    let title: String
-    let subtitle: String?
-    let primary: SheetButton
-    let secondary: SheetButton?
-    let secondaryDismisses: Bool
+/// Android's `decelerate_quint`, 300 ms.
+private let sheetCurve = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)
+
+/// The dim, the slide, the drag, the escape gesture, and the isolation of what is beneath: everything
+/// a sheet is except what it says.
+private struct CindySheetPresenter<Item: Identifiable, Panel: View>: ViewModifier {
+    @Binding var item: Item?
     let onDismiss: () -> Void
-    @ViewBuilder let content: () -> SheetContent
+    @ViewBuilder let panel: (Item) -> Panel
 
     @State private var drag: CGFloat = 0
-    @State private var bodyHeight: CGFloat = 0
-
-    /// Android's `decelerate_quint`, 300 ms.
-    private static var curve: Animation { .timingCurve(0.22, 1, 0.36, 1, duration: 0.3) }
-    /// A long sheet must not push its own buttons off the screen: its words and content scroll
-    /// inside 60% of the height.
-    private static var bodyCap: CGFloat { UIScreen.main.bounds.height * 0.6 }
 
     func body(content base: Content) -> some View {
         base
-            .accessibilityHidden(isPresented)
-            .allowsHitTesting(!isPresented)
+            .accessibilityHidden(item != nil)
+            .allowsHitTesting(item == nil)
             .overlay {
                 ZStack(alignment: .bottom) {
-                    if isPresented {
+                    if let current = item {
                         Palette.scrim
                             .ignoresSafeArea(.container)
                             .contentShape(Rectangle())
                             .onTapGesture { close() }
                             .accessibilityHidden(true)
                             .transition(.opacity)
-                        sheet.transition(.move(edge: .bottom))
+                        panel(current)
+                            .id(current.id)
+                            .environment(\.closeCindySheet, { close() })
+                            .environment(\.sheetDrag, SheetDrag(
+                                changed: { drag = max(0, $0) },
+                                ended: { down, predicted in
+                                    if down > 100 || predicted > 200 {
+                                        close()
+                                    } else {
+                                        withAnimation(sheetCurve) { drag = 0 }
+                                    }
+                                }))
+                            .offset(y: drag)
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("cindySheet")
+                            .accessibilityAddTraits(.isModal)
+                            .accessibilityAction(.escape) { close() }
+                            .transition(.move(edge: .bottom))
                     }
                 }
-                .animation(Self.curve, value: isPresented)
+                .animation(sheetCurve, value: item?.id)
             }
-            .onChange(of: isPresented) { was, now in
-                if now { drag = 0 }
-                if was && !now { onDismiss() }
+            .onChange(of: item?.id) { was, now in
+                if now != nil { drag = 0 }
+                if was != nil && now == nil { onDismiss() }
             }
     }
 
-    private func close() { isPresented = false }
+    private func close() { item = nil }
+}
 
-    private var sheet: some View {
+/// A sheet's own view: the handle, the title, the words and content that scroll inside 60% of the
+/// height, and the two buttons. A sheet is a view whose body is one of these, presented by item.
+struct CindyPanel<Content: View>: View {
+    let title: String
+    let subtitle: String?
+    let primary: SheetButton
+    let secondary: SheetButton?
+    let secondaryDismisses: Bool
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.closeCindySheet) private var close
+    @Environment(\.sheetDrag) private var sheetDrag
+    @State private var bodyHeight: CGFloat = 0
+
+    init(title: String, subtitle: String? = nil, primary: SheetButton, secondary: SheetButton? = nil,
+         secondaryDismisses: Bool = true, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.primary = primary
+        self.secondary = secondary
+        self.secondaryDismisses = secondaryDismisses
+        self.content = content
+    }
+
+    /// A long sheet must not push its own buttons off the screen: its words and content scroll
+    /// inside 60% of the height.
+    private static var bodyCap: CGFloat { UIScreen.main.bounds.height * 0.6 }
+
+    /// Whether the content is taller than its cap, so a drag over it is a scroll and not a dismissal.
+    private var scrolls: Bool { bodyHeight > Self.bodyCap }
+
+    /// A drag on the sheet, for the panel that does (`scrolling`) or does not scroll its content. Two of
+    /// these are always attached, one on the handle and the title and one on the whole panel, and each
+    /// acts only for its own case: a sheet that does not scroll is dragged from anywhere, one that
+    /// does only from its header, so scrolling the content back down cannot be taken for a dismissal.
+    /// Measured against the screen, which does not move with the sheet the drag is carrying.
+    private func drag(scrolling: Bool) -> some Gesture {
+        DragGesture(coordinateSpace: .global)
+            .onChanged { if scrolls == scrolling { sheetDrag.changed($0.translation.height) } }
+            .onEnded { if scrolls == scrolling { sheetDrag.ended($0.translation.height, $0.predictedEndTranslation.height) } }
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(argb: 0x33FFFFFF))
-                .frame(width: 38, height: 4)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 20)
-                .accessibilityHidden(true)
-            Text(title).cindy(.title2)
-                .accessibilityAddTraits(.isHeader)
+            // The handle and the title: where a drag always dismisses, whatever is below them.
+            VStack(alignment: .leading, spacing: 0) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(argb: 0x33FFFFFF))
+                    .frame(width: 38, height: 4)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 20)
+                    .accessibilityHidden(true)
+                Text(title).cindy(.title2)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .contentShape(Rectangle())
+            .gesture(drag(scrolling: true))
             scrollingBody
             buttons.padding(.top, 18)
         }
@@ -115,32 +239,18 @@ private struct CindySheetModifier<SheetContent: View>: ViewModifier {
                                    .init(color: Palette.sheetEnd, location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea(.container, edges: .bottom))
-        .offset(y: drag)
-        .simultaneousGesture(
-            DragGesture()
-                .onChanged { drag = max(0, $0.translation.height) }
-                .onEnded { value in
-                    if value.translation.height > 100 || value.predictedEndTranslation.height > 200 {
-                        close()
-                    } else {
-                        withAnimation(Self.curve) { drag = 0 }
-                    }
-                })
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("cindySheet")
-        .accessibilityAddTraits(.isModal)
-        .accessibilityAction(.escape) { close() }
+        .simultaneousGesture(drag(scrolling: false))
     }
 
     /// The subtitle and the content, 18 below the title's line, capped at 60% of the height.
     @ViewBuilder private var scrollingBody: some View {
-        if subtitle != nil || SheetContent.self != EmptyView.self {
+        if subtitle != nil || Content.self != EmptyView.self {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if let subtitle {
                         Text(subtitle).cindy(.callout).padding(.top, 5)
                     }
-                    content().padding(.top, SheetContent.self == EmptyView.self ? 0 : 18)
+                    content().padding(.top, Content.self == EmptyView.self ? 0 : 18)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(GeometryReader { proxy in
@@ -148,7 +258,8 @@ private struct CindySheetModifier<SheetContent: View>: ViewModifier {
                 })
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(max(bodyHeight, 1), Self.bodyCap))
+            // Up to its content and the cap, and less where the keyboard leaves less room.
+            .frame(maxHeight: min(max(bodyHeight, 1), Self.bodyCap))
             .onPreferenceChange(SheetContentHeightKey.self) { bodyHeight = $0 }
         }
     }
@@ -171,7 +282,7 @@ private struct CindySheetModifier<SheetContent: View>: ViewModifier {
     private var primaryButton: some View {
         Button(primary.title) {
             primary.action()
-            close()
+            if !primary.keepsOpen() { close() }
         }
         .buttonStyle(CindyPrimaryButtonStyle())
         .accessibilityIdentifier("sheetPrimary")
@@ -180,7 +291,7 @@ private struct CindySheetModifier<SheetContent: View>: ViewModifier {
     private func secondaryButton(_ button: SheetButton) -> some View {
         Button(button.title) {
             button.action()
-            if secondaryDismisses { close() }
+            if secondaryDismisses && !button.keepsOpen() { close() }
         }
         .buttonStyle(CindyGlassButtonStyle(tint: button.tint))
         .accessibilityIdentifier("sheetSecondary")
@@ -238,5 +349,14 @@ struct SheetSlider: View {
         .padding(14)
         .glassCard()
         .padding(.top, 14)
+    }
+}
+
+extension CindyPanel where Content == EmptyView {
+    /// A panel that is only words: a question.
+    init(title: String, subtitle: String? = nil, primary: SheetButton, secondary: SheetButton? = nil,
+         secondaryDismisses: Bool = true) {
+        self.init(title: title, subtitle: subtitle, primary: primary, secondary: secondary,
+                  secondaryDismisses: secondaryDismisses, content: { EmptyView() })
     }
 }

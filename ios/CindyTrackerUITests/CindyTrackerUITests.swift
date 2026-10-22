@@ -1017,6 +1017,173 @@ final class CindyTrackerUITests: XCTestCase {
         wait(for: [gone], timeout: 5)
     }
 
+    // MARK: - the profile sheets
+
+    /// Opens the menu over the camera and taps the row that begins with `title`.
+    private func openMenuRow(_ app: XCUIApplication, _ title: String) {
+        XCTAssertTrue(hud(app, "btnMenu").waitForExistence(timeout: 10))
+        hud(app, "btnMenu").tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu has a \(title) row")
+        row.tap()
+    }
+
+    /// A tap on the dim above a Cindy sheet, which closes it as CANCEL does.
+    private func tapTheDim(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+    }
+
+    func testBodyWeightIsACindySheetAndARefusedSaveKeepsIt() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Body weight")
+
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the weight is asked for on a Cindy sheet")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists)
+        let field = app.textFields["sheetField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "the sheet has its field")
+        field.typeText("5")
+        // With the keyboard up, SAVE is still within reach.
+        XCTAssertTrue(sheetButton(app, "SAVE").isHittable, "SAVE stays above the keyboard")
+        sheetButton(app, "SAVE").tap()
+
+        // 5 kg is not a weight: the sheet says so and stays, where Android would have closed it.
+        let refusal = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Enter a weight between'")).firstMatch
+        XCTAssertTrue(refusal.waitForExistence(timeout: 5), "the refusal is said under the field")
+        XCTAssertTrue(sheetButton(app, "SAVE").exists, "and the sheet is still up")
+
+        sheetButton(app, "CANCEL").tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Body weight'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("Not set"), "nothing was saved: \(row.label)")
+    }
+
+    func testMovementsChoosesAcrossThreeGroupsAndDismissingSavesNothing() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Movements")
+
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "movements are chosen on a Cindy sheet")
+        for heading in ["PULL", "PUSH", "SQUAT"] {
+            XCTAssertTrue(app.staticTexts[heading].exists, "the sheet has the \(heading) group")
+        }
+        XCTAssertTrue(app.switches["Spot heels-flat squats"].exists, "and the heels-flat setting")
+        let strict = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strict pull-up'")).firstMatch
+        XCTAssertTrue(strict.isSelected, "the standard pull-up is chosen to begin with")
+
+        let band = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Band-assisted'")).firstMatch
+        band.tap()
+        XCTAssertTrue(band.isSelected, "the other option was chosen")
+        tapTheDim(app)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movements'")).firstMatch
+            .waitForExistence(timeout: 5), "the menu is back")
+
+        // The tap on the dim was CANCEL: the choice went with the sheet.
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Movements'")).firstMatch.tap()
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Strict pull-up'")).firstMatch.isSelected,
+                      "dismissing the sheet kept the old choice")
+        sheetButton(app, "CANCEL").tap()
+    }
+
+    func testTheNameSheetOpensWithItsFieldAndCancelSavesNothing() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        app.buttons["Add your name"].tap()
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the name is asked for on a Cindy sheet")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists)
+        XCTAssertTrue(app.textFields["sheetField"].exists, "the sheet has its field")
+
+        sheetButton(app, "CANCEL").tap()
+        XCTAssertTrue(app.buttons["Add your name"].waitForExistence(timeout: 5), "no name was saved")
+        XCTAssertFalse(app.textFields["sheetField"].exists, "and the sheet is gone")
+    }
+
+    func testThePhotoSheetOffersChooseAndCancel() {
+        let app = launchEmptyHanded()
+        openYou(app)
+
+        app.buttons["Add a photo"].tap()
+        XCTAssertTrue(sheetButton(app, "CHOOSE PHOTO").waitForExistence(timeout: 5), "the photo is offered on a Cindy sheet")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists, "with nothing to remove, CANCEL")
+        sheetButton(app, "CANCEL").tap()
+        XCTAssertTrue(app.buttons["Add a photo"].waitForExistence(timeout: 5))
+    }
+
+    // MARK: - the voice
+
+    /// Turns a sheet's switch over by its own end: the middle of the row is the label, which does not.
+    private func flip(_ toggle: XCUIElement) {
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+    }
+
+    func testTheVoiceSheetListsLanguagesAndDismissingKeepsTheOldSettings() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Voice")
+
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the voice is set on a Cindy sheet")
+        XCTAssertTrue(sheetButton(app, "HEAR IT").exists, "with HEAR IT beside SAVE")
+        XCTAssertTrue(app.staticTexts["Volume"].exists)
+        XCTAssertTrue(app.staticTexts["LANGUAGE"].exists, "the language list is under its heading")
+        let counting = app.switches["Count reps out loud"]
+        XCTAssertTrue(counting.exists)
+        let before = counting.value as? String
+
+        flip(counting)
+        XCTAssertNotEqual(app.switches["Count reps out loud"].value as? String, before, "the switch turned over")
+        tapTheDim(app)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Voice'")).firstMatch
+            .waitForExistence(timeout: 5), "the menu is back")
+
+        // The tap on the dim was CANCEL: the switch went back with it.
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Voice'")).firstMatch.tap()
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["Count reps out loud"].value as? String, before, "dismissing kept the old setting")
+        sheetButton(app, "CANCEL").exists ? sheetButton(app, "CANCEL").tap() : tapTheDim(app)
+    }
+
+    func testScrollingASheetsContentBackDownDoesNotDismissIt() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Movements")
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the movements sheet is up")
+        let pull = app.staticTexts["PULL"]
+        XCTAssertTrue(pull.waitForExistence(timeout: 5))
+        let before = pull.frame.minY
+
+        // Its three groups are taller than the sheet's cap. Both drags are over the content, in the
+        // middle of the screen: a drag that began on the handle or the title would dismiss it.
+        func drag(from: CGFloat, to: CGFloat) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+        }
+        drag(from: 0.75, to: 0.45)
+        let scrolled = pull.frame.minY
+        XCTAssertLessThan(scrolled, before, "the list scrolled up")
+        drag(from: 0.5, to: 0.9)
+        Thread.sleep(forTimeInterval: 1)
+
+        // Kept whether the test passes or not, so a failure can be looked at.
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "scroll-sheet-after"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let save = sheetButton(app, "SAVE")
+        XCTAssertTrue(save.exists && save.isHittable,
+                      "scrolling the list back down did not take the sheet with it: SAVE exists \(save.exists), the sheet \(app.otherElements["cindySheet"].exists), the list moved from \(before) to \(scrolled) and is now at \(pull.exists ? "\(pull.frame.minY)" : "nowhere: the sheet is gone")")
+        sheetButton(app, "CANCEL").tap()
+    }
+
+    func testTheVoiceSheetKeepsSaveReachableAtTheLargestText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CindyReplay", "pullups", "-placement_guide_dismissed", "YES",
+                               "-tutorial_seen", "YES", "-hud_tour_pending", "NO",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        openMenuRow(app, "Voice")
+
+        XCTAssertTrue(sheetButton(app, "SAVE").waitForExistence(timeout: 5), "the voice sheet opens")
+        XCTAssertTrue(sheetButton(app, "SAVE").isHittable, "SAVE stays within reach however long the list is")
+    }
+
     // MARK: - heart rate
 
     func testTheMenuOffersHeartRateAndTheSheetSaysHowToFindAWatch() {
@@ -1030,9 +1197,15 @@ final class CindyTrackerUITests: XCTestCase {
         row.tap()
 
         // Not tapped: looking for a watch asks iOS for Bluetooth, and the simulator has none.
-        XCTAssertTrue(app.buttons["findMyWatch"].waitForExistence(timeout: 5), "the sheet offers FIND MY WATCH")
+        XCTAssertTrue(sheetButton(app, "FIND MY WATCH").waitForExistence(timeout: 5), "the sheet offers FIND MY WATCH")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists, "and CANCEL")
         let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Broadcast Heart Rate'")).firstMatch
         XCTAssertTrue(advice.exists, "the sheet says to turn the broadcast on first")
+
+        // CANCEL is the way out that does nothing: still no watch.
+        sheetButton(app, "CANCEL").tap()
+        let again = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Heart rate'")).firstMatch
+        XCTAssertTrue(again.waitForExistence(timeout: 5) && again.label.contains("No watch paired"), again.label)
     }
 
     // MARK: - filming
@@ -1065,7 +1238,8 @@ final class CindyTrackerUITests: XCTestCase {
         row.tap()
 
         // Not tapped: choosing a track opens the system's file picker, which the test cannot drive.
-        XCTAssertTrue(app.buttons["musicChoose"].waitForExistence(timeout: 5), "the sheet offers CHOOSE A TRACK")
+        XCTAssertTrue(sheetButton(app, "CHOOSE A TRACK").waitForExistence(timeout: 5), "the sheet offers CHOOSE A TRACK")
+        XCTAssertTrue(sheetButton(app, "CANCEL").exists, "and CANCEL, with no track to listen to")
         let advice = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'drops in volume while the voice'")).firstMatch
         XCTAssertTrue(advice.exists, "the sheet says the track ducks under the voice")
         XCTAssertEqual(app.staticTexts["musicTrack"].label, "No track chosen")
@@ -1086,9 +1260,31 @@ final class CindyTrackerUITests: XCTestCase {
         // Nothing is switched on: that asks iOS for notifications, which the simulator would answer
         // with a dialog the test does not drive.
         XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5), "the sheet has the switch")
-        XCTAssertTrue(app.buttons["reminderTry"].exists, "and TRY IT")
+        XCTAssertTrue(sheetButton(app, "TRY IT").exists, "and TRY IT")
+        XCTAssertTrue(sheetButton(app, "SAVE").exists, "beside SAVE")
         let note = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "none on days you've already trained")).firstMatch
         XCTAssertTrue(note.exists, "the sheet says it stays quiet on a day already trained")
+    }
+
+    func testTheReminderSheetTakesTheDimAsCancel() {
+        let app = launchReplaying("pullups")
+        openMenuRow(app, "Daily reminder")
+
+        let remind = app.switches["Remind me"]
+        XCTAssertTrue(remind.waitForExistence(timeout: 5), "the sheet has the switch")
+        let before = remind.value as? String
+        // Turning it on and leaving by the dim saves nothing, and so asks iOS for nothing.
+        flip(remind)
+        XCTAssertNotEqual(app.switches["Remind me"].value as? String, before, "the switch turned over")
+        tapTheDim(app)
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Daily reminder'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the menu is back")
+        XCTAssertTrue(row.label.contains("Off"), row.label)
+
+        row.tap()
+        XCTAssertTrue(app.switches["Remind me"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["Remind me"].value as? String, before, "the switch went back with the sheet")
+        tapTheDim(app)
     }
 
     // MARK: - strava
@@ -1119,7 +1315,7 @@ final class CindyTrackerUITests: XCTestCase {
         let promise = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Nothing is sent until you connect.'")).firstMatch
         XCTAssertTrue(promise.waitForExistence(timeout: 5), "the consent sheet says nothing is sent until you connect")
         XCTAssertTrue(app.buttons["Connect with Strava"].exists, "Strava's own button")
-        let notNow = app.buttons["NOT NOW"]
+        let notNow = sheetButton(app, "NOT NOW")
         XCTAssertTrue(notNow.exists)
         notNow.tap()
 

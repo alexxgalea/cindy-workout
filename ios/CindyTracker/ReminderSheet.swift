@@ -1,16 +1,18 @@
 import SwiftUI
 import CindyCore
 
-/// Whether the daily reminder is on, and when. TRY IT sends one now, so the athlete can see it.
+/// Whether the daily reminder is on, and when (`chooseReminder`). TRY IT sends one now, so the athlete
+/// can see it.
 ///
 /// `ReminderPlan` decides what SAVE does about notification permission: turning it on asks iOS once,
-/// and a refusal leaves it off and says why, so the switch never claims a reminder that cannot arrive.
+/// and a refusal leaves it off and says why, in the sheet's second panel (`notificationsOff`), so the
+/// switch never claims a reminder that cannot arrive. SAVE closes the sheet itself, once it knows.
 struct ReminderSheet: View {
     let profile: Profile
     /// Said on the menu once it is set.
     let show: (String) -> Void
     let onChanged: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeCindySheet) private var close
     @State private var on: Bool
     @State private var time: Date
     @State private var notificationsOff = false
@@ -35,42 +37,51 @@ struct ReminderSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Toggle(ReminderPlan.toggleLabel, isOn: $on)
-                    DatePicker(ReminderPlan.timeLabel, selection: $time, displayedComponents: .hourAndMinute)
-                        .accessibilityLabel(ReminderPlan.timeDescription(Reminder.formatTime(minuteOfDay, is24Hour: is24Hour)))
-                } header: {
-                    Text(ReminderPlan.sheetTitle.uppercased())
-                } footer: {
-                    Text(ReminderPlan.sheetSubtitle + " " + ReminderPlan.sheetNote)
-                }
-                Section {
-                    Button(ReminderPlan.tryItLabel) { tryIt() }
-                        .accessibilityIdentifier("reminderTry")
-                }
-            }
-            .navigationTitle(ReminderPlan.sheetTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(ReminderPlan.saveLabel.capitalized) { save(asked: false) }
-                }
-            }
-            .alert(ReminderPlan.offTitle, isPresented: $notificationsOff) {
-                Button(ReminderPlan.openSettingsLabel) {
-                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Button(ReminderPlan.notNowLabel, role: .cancel) {}
-            } message: {
-                Text(ReminderPlan.offSubtitle)
+        Group {
+            if notificationsOff { off } else { reminder }
+        }
+        .onChange(of: notificationsOff) { _, _ in SheetVoiceOver.panelChanged() }
+    }
+
+    private var reminder: some View {
+        CindyPanel(title: ReminderPlan.sheetTitle, subtitle: ReminderPlan.sheetSubtitle,
+                   // Closes itself: asking iOS for notifications answers later than the tap.
+                   primary: SheetButton(title: ReminderPlan.saveLabel) { save(asked: false) }.keepingOpen { true },
+                   secondary: SheetButton(title: ReminderPlan.tryItLabel) { tryIt() },
+                   secondaryDismisses: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetToggle(ReminderPlan.toggleLabel, isOn: $on)
+                timeRow
+                SheetNote(ReminderPlan.sheetNote)
             }
         }
-        .presentationDetents([.medium, .large])
+    }
+
+    /// A glass row, at least 52 high: `Time` and the time, which is the system's own picker.
+    private var timeRow: some View {
+        HStack(spacing: 0) {
+            Text(ReminderPlan.timeLabel).cindy(.callout, colour: Palette.label)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(true)
+            DatePicker("", selection: $time, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .accessibilityLabel(ReminderPlan.timeDescription(Reminder.formatTime(minuteOfDay, is24Hour: is24Hour)))
+        }
+        .padding(.leading, 16).padding(.trailing, 12).padding(.vertical, 8)
+        .frame(minHeight: 52)
+        .glassCard()
+        .padding(.top, 12)
+    }
+
+    /// Why nothing was set, and the way to Settings, where a refused permission is changed.
+    private var off: some View {
+        CindyPanel(title: ReminderPlan.offTitle, subtitle: ReminderPlan.offSubtitle,
+                   primary: SheetButton(title: ReminderPlan.openSettingsLabel) {
+                       if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                           UIApplication.shared.open(url)
+                       }
+                   },
+                   secondary: SheetButton(title: ReminderPlan.notNowLabel) {})
     }
 
     private func save(asked: Bool) {
@@ -98,7 +109,7 @@ struct ReminderSheet: View {
     private func finish() {
         ReminderCenter.shared.replan()
         onChanged()
-        dismiss()
+        close()
     }
 
     private func tryIt() {

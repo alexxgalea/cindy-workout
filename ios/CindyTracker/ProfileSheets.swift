@@ -1,32 +1,29 @@
 import SwiftUI
 import CindyCore
 
-// The sheets that change what the athlete has told the app. What each asks, refuses and keeps is
-// decided in CindyCore (`ProfileForms.swift`); these are the fields and lists.
+// The sheets that change what the athlete has told the app, as Cindy sheets: `Dialogs.kt`'s
+// `chooseMovements`, `askBodyWeight` and `askHeartRateDetails`, and `AccountActivity.kt`'s `askName`
+// and `choosePhoto`. What each asks, refuses and keeps is decided in CindyCore (`ProfileForms.swift`);
+// these are the fields and lists. Each is a view whose body is one panel, presented by whichever
+// screen opens it.
 
-/// A sheet's Save and Cancel, in the toolbar where an iPhone athlete looks for them.
-private struct SaveCancel: ViewModifier {
-    let title: String
-    let save: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    func body(content: Content) -> some View {
-        NavigationStack {
-            content
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) { Button("Save", action: save) }
-                }
-        }
-        .presentationDetents([.medium, .large])
+/// Brings the keyboard up with a sheet: the athlete opened it to type.
+private extension View {
+    func focusingOnAppear(_ focused: FocusState<Bool>.Binding) -> some View {
+        onAppear { DispatchQueue.main.async { focused.wrappedValue = true } }
     }
 }
 
-private extension View {
-    func saveCancel(_ title: String, save: @escaping () -> Void) -> some View {
-        modifier(SaveCancel(title: title, save: save))
+/// What a refused entry says, under the field, in the colour for something that did not work.
+private struct Refusal: View {
+    let message: String?
+
+    var body: some View {
+        if let message {
+            Text(message).cindy(.footnote, colour: Palette.stateAlert)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
+        }
     }
 }
 
@@ -35,7 +32,6 @@ private extension View {
 struct BodyWeightSheet: View {
     let profile: Profile
     let onSaved: () -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var text: String
     @State private var problem: String?
     @FocusState private var focused: Bool
@@ -47,28 +43,27 @@ struct BodyWeightSheet: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                TextField(BodyWeightForm.hint, text: $text)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
-                    .focused($focused)
-            } footer: {
-                if let problem { Text(problem).foregroundStyle(Color.warn) } else { Text(BodyWeightForm.subtitle) }
+        CindyPanel(title: BodyWeightForm.title, subtitle: BodyWeightForm.subtitle,
+                   primary: SheetButton(title: SheetWords.save) { save() }.keepingOpen { problem != nil },
+                   secondary: SheetButton(title: SheetWords.cancel) {}) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetField(BodyWeightForm.hint, text: $text, keyboard: .decimalPad, focused: $focused)
+                Refusal(message: problem)
             }
         }
-        .saveCancel(BodyWeightForm.title) {
-            switch BodyWeightForm.save(text, to: profile) {
-            case .saved:
-                onSaved()
-                dismiss()
-            case .refused(let message):
-                problem = message
-            }
+        .focusingOnAppear($focused)
+    }
+
+    /// A refusal keeps the sheet up with what was typed, where Android closes it and loses it.
+    private func save() {
+        switch BodyWeightForm.save(text, to: profile) {
+        case .saved:
+            problem = nil
+            onSaved()
+        case .refused(let message):
+            problem = message
+            SheetVoiceOver.announce(message)
         }
-        // The athlete opened this to type, so the keyboard comes up with it.
-        .onAppear { focused = true }
     }
 }
 
@@ -77,61 +72,48 @@ struct BodyWeightSheet: View {
 struct HeartRateDetailsSheet: View {
     let profile: Profile
     let onSaved: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    /// Set when this panel is one step of a longer sheet: called in place of closing it.
+    let onFinished: (() -> Void)?
     @State private var year: String
     @State private var sex: Sex?
     @State private var problem: String?
     @FocusState private var focused: Bool
 
-    init(profile: Profile, onSaved: @escaping () -> Void) {
+    init(profile: Profile, onSaved: @escaping () -> Void, onFinished: (() -> Void)? = nil) {
         self.profile = profile
         self.onSaved = onSaved
+        self.onFinished = onFinished
         _year = State(initialValue: HeartRateDetailsForm.initialYear(profile))
         _sex = State(initialValue: profile.sex)
     }
 
     var body: some View {
-        Form {
-            Section {
-                TextField(HeartRateDetailsForm.hint, text: $year)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
-                    .focused($focused)
-            } footer: {
-                if let problem { Text(problem).foregroundStyle(Color.warn) } else { Text(HeartRateDetailsForm.subtitle) }
-            }
-            Section(HeartRateDetailsForm.sexTitle) {
-                ForEach(Sex.allCases, id: \.self) { option in
-                    Button { sex = option } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(option.label)
-                                if let note = HeartRateDetailsForm.note(for: option) {
-                                    Text(note).font(.footnote).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            Image(systemName: "checkmark").opacity(sex == option ? 1 : 0).accessibilityHidden(true)
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel(option.label + (HeartRateDetailsForm.note(for: option).map { ", \($0)" } ?? ""))
-                    .accessibilityAddTraits(sex == option ? [.isButton, .isSelected] : .isButton)
-                }
+        CindyPanel(title: HeartRateDetailsForm.title, subtitle: HeartRateDetailsForm.subtitle,
+                   primary: SheetButton(title: SheetWords.save) { save() }
+                       .keepingOpen { problem != nil || onFinished != nil },
+                   secondary: SheetButton(title: SheetWords.cancel) { onFinished?() }
+                       .keepingOpen { onFinished != nil }) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetField(HeartRateDetailsForm.hint, text: $year, keyboard: .numberPad, focused: $focused)
+                Refusal(message: problem)
+                SheetChoiceGroup(HeartRateDetailsForm.sexTitle, options: Sex.allCases, selected: $sex,
+                                 label: { $0.label }, note: { HeartRateDetailsForm.note(for: $0) })
             }
         }
-        .saveCancel(HeartRateDetailsForm.title) {
-            let nowYear = Calendar.current.component(.year, from: Date())
-            switch HeartRateDetailsForm.save(year: year, sex: sex, nowYear: nowYear, to: profile) {
-            case .saved:
-                onSaved()
-                dismiss()
-            case .refused(let message):
-                problem = message
-            }
+        .focusingOnAppear($focused)
+    }
+
+    private func save() {
+        let nowYear = Calendar.current.component(.year, from: Date())
+        switch HeartRateDetailsForm.save(year: year, sex: sex, nowYear: nowYear, to: profile) {
+        case .saved:
+            problem = nil
+            onSaved()
+            onFinished?()
+        case .refused(let message):
+            problem = message
+            SheetVoiceOver.announce(message)
         }
-        .onAppear { focused = true }
     }
 }
 
@@ -141,7 +123,6 @@ struct HeartRateDetailsSheet: View {
 struct MovementsSheet: View {
     let profile: Profile
     let onSaved: (CindyProfile) -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var form: MovementsForm
 
     init(profile: Profile, onSaved: @escaping (CindyProfile) -> Void) {
@@ -151,43 +132,25 @@ struct MovementsSheet: View {
     }
 
     var body: some View {
-        Form {
-            Section { Text(MovementsForm.subtitle).font(.footnote).foregroundStyle(.secondary) }
-            group("PULL", PullVariant.allCases, MovementsForm.pullOptions, form.pull) { form.pull = $0 }
-            group("PUSH", PushVariant.allCases, MovementsForm.pushOptions, form.push) { form.push = $0 }
-            group("SQUAT", SquatVariant.allCases, MovementsForm.squatOptions, form.squat) { form.squat = $0 }
-            Section {
-                Toggle(MovementsForm.spotTitle, isOn: $form.smart)
-                    .accessibilityLabel(form.spotSpoken)
-            } footer: {
-                Text(MovementsForm.spotNote)
+        CindyPanel(title: MovementsForm.title, subtitle: MovementsForm.subtitle,
+                   primary: SheetButton(title: SheetWords.save) { onSaved(form.save(to: profile)) },
+                   secondary: SheetButton(title: SheetWords.cancel) {}) {
+            VStack(alignment: .leading, spacing: 0) {
+                group("PULL", PullVariant.allCases, MovementsForm.pullOptions, $form.pull)
+                group("PUSH", PushVariant.allCases, MovementsForm.pushOptions, $form.push)
+                group("SQUAT", SquatVariant.allCases, MovementsForm.squatOptions, $form.squat)
+                SheetToggle(MovementsForm.spotTitle, isOn: $form.smart)
+                SheetNote(MovementsForm.spotNote)
             }
-        }
-        .saveCancel(MovementsForm.title) {
-            onSaved(form.save(to: profile))
-            dismiss()
         }
     }
 
-    private func group<T: Equatable>(_ title: String, _ all: [T], _ options: [MovementsForm.Option], _ selected: T,
-                                     choose: @escaping (T) -> Void) -> some View {
-        Section(title) {
-            ForEach(Array(all.enumerated()), id: \.offset) { i, value in
-                Button { choose(value) } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(options[i].label)
-                            if let note = options[i].note { Text(note).font(.footnote).foregroundStyle(.secondary) }
-                        }
-                        Spacer()
-                        Image(systemName: "checkmark").opacity(value == selected ? 1 : 0).accessibilityHidden(true)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .accessibilityLabel(options[i].spoken)
-                .accessibilityAddTraits(value == selected ? [.isButton, .isSelected] : .isButton)
-            }
-        }
+    private func group<T: Hashable>(_ title: String, _ all: [T], _ options: [MovementsForm.Option],
+                                    _ selection: Binding<T>) -> some View {
+        func option(_ value: T) -> MovementsForm.Option { options[all.firstIndex(of: value) ?? 0] }
+        return SheetChoiceGroup(title, options: all, selection: selection,
+                                label: { option($0).label }, note: { option($0).note },
+                                spoken: { option($0).spokenNote })
     }
 }
 
@@ -196,7 +159,6 @@ struct MovementsSheet: View {
 struct NameSheet: View {
     let profile: Profile
     let onSaved: () -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var text: String
     @FocusState private var focused: Bool
 
@@ -207,27 +169,40 @@ struct NameSheet: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                TextField(NameForm.hint, text: $text)
-                    .textContentType(.name)
-                    .textInputAutocapitalization(.words)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 22, weight: .semibold))
-                    .focused($focused)
-                    .onChange(of: text) { _, new in
-                        let limited = NameForm.limited(new)
-                        if limited != new { text = limited }
-                    }
-            } footer: {
-                Text(NameForm.subtitle)
-            }
+        CindyPanel(title: NameForm.title, subtitle: NameForm.subtitle,
+                   primary: SheetButton(title: SheetWords.save) {
+                       NameForm.save(text, to: profile)
+                       onSaved()
+                   },
+                   secondary: SheetButton(title: SheetWords.cancel) {}) {
+            SheetField(NameForm.hint, text: $text, style: .title2, focused: $focused)
+                .textContentType(.name)
+                .textInputAutocapitalization(.words)
+                .onChange(of: text) { _, new in
+                    let limited = NameForm.limited(new)
+                    if limited != new { text = limited }
+                }
         }
-        .saveCancel(NameForm.title) {
-            NameForm.save(text, to: profile)
-            onSaved()
-            dismiss()
-        }
-        .onAppear { focused = true }
+        .focusingOnAppear($focused)
+    }
+}
+
+// MARK: - the photo
+
+/// "Your photo": choose one, and take it back where there is one. The picker itself is the system's.
+struct PhotoChoiceSheet: View {
+    let hasPhoto: Bool
+    let choose: () -> Void
+    let remove: () -> Void
+
+    var body: some View {
+        let actions = PhotoSheet.actions(hasPhoto: hasPhoto)
+        let second = actions[1]
+        CindyPanel(title: PhotoSheet.title, subtitle: PhotoSheet.subtitle,
+                   primary: SheetButton(title: actions[0].title) { choose() },
+                   secondary: SheetButton(title: second.title,
+                                          tint: second.destructive ? Palette.stateAlert : Palette.label) {
+                       if second.destructive { remove() }
+                   })
     }
 }
