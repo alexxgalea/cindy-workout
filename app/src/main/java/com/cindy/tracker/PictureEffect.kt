@@ -108,6 +108,9 @@ class PictureEffect(
         handler.postDelayed(tick, waitMs.coerceAtLeast(0L))
     }
 
+    private var loggedMapping: Triple<Boolean, Boolean, Int>? = null
+    private var drawn = 0
+    private var drawnBare = 0
     private var shown = 0
     private var withSkeleton = 0
     private var notFound = 0
@@ -121,7 +124,8 @@ class PictureEffect(
         Log.i(
             "CindyPicture",
             "shown=$shown withSkeleton=$withSkeleton capped=${sync.cappedCount} " +
-                "dropped=${sync.droppedCount} notFound=$notFound"
+                "dropped=${sync.droppedCount} notFound=$notFound drawn=$drawn bare=$drawnBare " +
+                "mapping=$loggedMapping"
         )
     }
 
@@ -152,14 +156,16 @@ class PictureEffect(
     /** Runs on the handler thread, once per frame asked for. */
     private fun draw(frame: Frame): Boolean {
         val skeleton = drawing.remove(frame.timestampNanos)
+        drawn++
+        if (skeleton == null) drawnBare++
         val canvas = frame.overlayCanvas
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
         if (skeleton == null || skeleton.width <= 0 || skeleton.height <= 0) return true
-        canvas.save()
-        // The keypoints are mirrored for the selfie camera and the buffer never is: whatever
-        // mirroring the screen needs, the preview applies to the whole buffer after this draws.
-        // So unlike the film, the buffer's own flag does not enter into it.
-        canvas.concat(analysisToBuffer(frame, skeleton.width, skeleton.height, skeleton.mirrored))
+        loggedMapping = Triple(skeleton.mirrored, frame.isMirroring, frame.rotationDegrees)
+        // The keypoints are already in the space the picture is shown in: on the selfie lens
+        // the preview buffer is mirrored for the screen, the same way the keypoints are. So
+        // nothing is flipped here, unlike the film, whose buffer is not mirrored.
+        canvas.concat(analysisToBuffer(frame, skeleton.width, skeleton.height, mirror = false))
         painter.paint(canvas, skeleton.keypoints, skeleton.height, skeleton.guide)
         canvas.restore()
         return true
