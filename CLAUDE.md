@@ -15,6 +15,20 @@ A cloud session runs on Linux with Docker, JDK 21 and Python, and without Swift,
 - **The iOS app, its UI tests, and the Android build and tests** run only in CI. Push the branch, open the pull request, and read its checks (`Build Cindy iOS`, `Test Cindy iOS`, `Test Cindy`) with `gh api repos/alexxgalea/cindy-workout/commits/<sha>/check-runs`.
 - **Opening a pull request:** `gh pr` is blocked here (it uses GraphQL). Use `gh api repos/alexxgalea/cindy-workout/pulls -f title=… -f head=<branch> -f base=main -f body=…`, or the Create PR button on claude.ai.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `alexxgalea/cindy-workout`, through `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named after its role: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one glossary at `docs/GLOSSARY.md` and the decisions in `docs/adr/`. See `docs/agents/domain.md`.
+
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
