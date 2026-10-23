@@ -279,4 +279,15 @@ class SkeletonSyncTest {
         assertEquals(1, delays.toSet().size)
         assertEquals(1_000, delays.size)
     }
+
+    @Test
+    fun `a frame passed over by a newer one is counted as dropped`() {
+        val s = sync()
+        s.frameKnown(stamp(1))
+        s.frameKnown(stamp(2))
+
+        s.skeletonReady(stamp(2), skeleton())
+
+        assertEquals(1, s.droppedCount)
+    }
 }

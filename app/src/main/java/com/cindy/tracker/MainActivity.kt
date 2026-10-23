@@ -600,7 +600,10 @@ class MainActivity : AppCompatActivity() {
                 )
                 // The effect is a use case on the camera, so changing the picture is a rebind,
                 // not an app restart.
-                if (wantsSyncedPicture != (picture != null)) bindUseCases()
+                if (wantsSyncedPicture != (picture != null)) {
+                    // A rebind would cut the film in two.
+                    if (video.isRecording) toast("Picture mode applies once the recording stops") else bindUseCases()
+                }
                 true
             }
         }

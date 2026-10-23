@@ -51,7 +51,7 @@ class SkeletonSync(
     var cappedCount = 0
         private set
 
-    /** Frames that will never be shown: pushed out by capacity, or gone from the effect. */
+    /** Frames that will never be shown: pushed out by capacity, passed over, or gone from the effect. */
     var droppedCount = 0
         private set
 
@@ -75,6 +75,7 @@ class SkeletonSync(
         if (index < 0) return emptyList()
         // Showing a frame discards every older one the picture still holds, so an older frame
         // still waiting is gone either way. Dropping it here keeps the order strict.
+        droppedCount += index
         waiting.subList(0, index + 1).clear()
         return listOf(Released(captureNanos, skeleton))
     }
