@@ -97,6 +97,7 @@ class PictureEffect(
             if (closed) return@post
             work()
             scheduleTick()
+            report()
         }
     }
 
@@ -107,8 +108,27 @@ class PictureEffect(
         handler.postDelayed(tick, waitMs.coerceAtLeast(0L))
     }
 
+    private var shown = 0
+    private var withSkeleton = 0
+    private var notFound = 0
+    private var lastLogMs = 0L
+
+    /** One line every five seconds on the CindyPicture tag, until the readout shows these. */
+    private fun report() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastLogMs < 5_000L) return
+        lastLogMs = now
+        Log.i(
+            "CindyPicture",
+            "shown=$shown withSkeleton=$withSkeleton capped=${sync.cappedCount} " +
+                "dropped=${sync.droppedCount} notFound=$notFound"
+        )
+    }
+
     private fun show(released: List<SkeletonSync.Released>) {
         for (r in released) {
+            shown++
+            if (r.skeleton != null) withSkeleton++
             drawing[r.captureNanos] = r.skeleton
             val result = overlay.drawFrameAsync(r.captureNanos)
             result.addListener({
@@ -121,7 +141,10 @@ class PictureEffect(
                 // instead of leaving anything waiting on it.
                 if (closed) return@addListener
                 if (outcome != OverlayEffect.RESULT_SUCCESS) drawing.remove(r.captureNanos)
-                if (outcome == OverlayEffect.RESULT_FRAME_NOT_FOUND) sync.frameLost(r.captureNanos)
+                if (outcome == OverlayEffect.RESULT_FRAME_NOT_FOUND) {
+                    notFound++
+                    sync.frameLost(r.captureNanos)
+                }
             }, handler::post)
         }
     }
@@ -133,10 +156,10 @@ class PictureEffect(
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
         if (skeleton == null || skeleton.width <= 0 || skeleton.height <= 0) return true
         canvas.save()
-        // The keypoints are mirrored for the selfie camera; the buffer may not be.
-        canvas.concat(
-            analysisToBuffer(frame, skeleton.width, skeleton.height, skeleton.mirrored != frame.isMirroring)
-        )
+        // The keypoints are mirrored for the selfie camera and the buffer never is: whatever
+        // mirroring the screen needs, the preview applies to the whole buffer after this draws.
+        // So unlike the film, the buffer's own flag does not enter into it.
+        canvas.concat(analysisToBuffer(frame, skeleton.width, skeleton.height, skeleton.mirrored))
         painter.paint(canvas, skeleton.keypoints, skeleton.height, skeleton.guide)
         canvas.restore()
         return true
