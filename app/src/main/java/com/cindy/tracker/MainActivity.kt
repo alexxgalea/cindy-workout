@@ -479,6 +479,14 @@ class MainActivity : AppCompatActivity() {
         // LaunchView is invisible.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        SyncProbe.mode = intent.getStringExtra("probe") ?: "none"
+        Log.i(SyncProbe.TAG, "probe mode=${SyncProbe.mode}")
+        object : Runnable {
+            override fun run() {
+                Log.i(SyncProbe.TAG, "LATENCY " + latencyLine().replace("\n", " | "))
+                ui.postDelayed(this, 2000)
+            }
+        }.also { ui.postDelayed(it, 2000) }
         sensors = getSystemService(SENSOR_SERVICE) as? SensorManager
         // TYPE_ROTATION_VECTOR is fused and absolute, so it does not drift the way a raw
         // gyroscope integrates itself off over twenty minutes. Absent on some cheap hardware,
@@ -784,7 +792,7 @@ class MainActivity : AppCompatActivity() {
     private fun bindUseCases() {
         val provider = cameraProvider ?: return
 
-        val preview = Preview.Builder().build().also {
+        val preview = Preview.Builder().also { SyncProbe.instrument(it) }.build().also {
             it.setSurfaceProvider(binding.preview.surfaceProvider)
         }
 
@@ -813,7 +821,8 @@ class MainActivity : AppCompatActivity() {
         // Preview + analysis + recording is more than some cameras will bind at once, and the
         // overlay effect is another surface on top of that. Rep counting is the point of the
         // app, so the recording features are what get dropped, in order.
-        val bound = bindWithOverlay(provider, selector, preview, analysis) ||
+        val bound = (SyncProbe.active && probeBind(provider, selector, preview, analysis)) ||
+            bindWithOverlay(provider, selector, preview, analysis) ||
             bindPlainRecording(provider, selector, preview, analysis) ||
             bindCountingOnly(provider, selector, preview, analysis)
         if (!bound) status.text = "Could not open the camera"
@@ -823,6 +832,63 @@ class MainActivity : AppCompatActivity() {
         camera?.cameraInfo?.let { latency.clock.resolve(it) }
         latency.reset()
         renderChips()
+    }
+
+    /** PROBE (#106): which effect/analysis/video combinations the phone accepts. */
+    private fun probeBind(
+        provider: ProcessCameraProvider,
+        selector: CameraSelector,
+        preview: Preview,
+        analysis: ImageAnalysis
+    ): Boolean {
+        val combos = listOf(
+            "F preview-fx+video-fx+analysis+video" to 0b1111,
+            "G preview-fx+analysis+video(no video-fx)" to 0b0111,
+            "H preview-fx+analysis" to 0b0011,
+            "I preview-fx+video-fx+video(no analysis)" to 0b1101
+        )
+        val testAll = SyncProbe.mode == "bindtest"
+        fun bindOne(label: String, bits: Int): Boolean = try {
+            provider.unbindAll()
+            val group = UseCaseGroup.Builder().addUseCase(preview)
+            SyncProbe.buildEffect()?.let { group.addEffect(it) }
+            if (bits and 0b0010 != 0) group.addUseCase(analysis)
+            if (bits and 0b0100 != 0) group.addUseCase(video.buildUseCase())
+            if (bits and 0b1000 != 0) video.buildEffect()?.let { group.addEffect(it) }
+            camera = provider.bindToLifecycle(this, selector, group.build())
+            Log.i(SyncProbe.TAG, "BIND $label: bindToLifecycle ok")
+            camera?.cameraInfo?.let { SyncProbe.logClock(it) }
+            true
+        } catch (t: Throwable) {
+            Log.i(SyncProbe.TAG, "BIND $label: REJECTED ${t.javaClass.simpleName}: ${t.message}")
+            false
+        }
+        if (!testAll) {
+            for ((label, bits) in combos) if (bindOne(label, bits)) return true
+            return false
+        }
+        // One combination at a time, without blocking the main thread: the camera session opens
+        // asynchronously, so "bound" is only believed once the state is OPEN and frames reach
+        // the effect.
+        fun step(i: Int) {
+            if (i >= combos.size) {
+                Log.i(SyncProbe.TAG, "BINDTEST done")
+                return
+            }
+            val (label, bits) = combos[i]
+            if (!bindOne(label, bits)) { step(i + 1); return }
+            val cam = camera
+            ui.postDelayed({
+                Log.i(
+                    SyncProbe.TAG,
+                    "BIND $label: after 3s cameraState=${cam?.cameraInfo?.cameraState?.value}"
+                )
+                SyncProbe.report()
+                step(i + 1)
+            }, 3000)
+        }
+        step(0)
+        return true
     }
 
     private fun bindWithOverlay(
@@ -908,6 +974,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val mirrored = lensFacing == CameraSelector.LENS_FACING_FRONT
             val captureNanos = proxy.imageInfo.timestamp
+            SyncProbe.onAnalysed(captureNanos)
             val tEntry = System.nanoTime()
             readPlanes(proxy)
             val tConverted = System.nanoTime()
