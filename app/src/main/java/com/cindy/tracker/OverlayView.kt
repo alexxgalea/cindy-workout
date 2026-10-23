@@ -72,6 +72,17 @@ class OverlayView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
+    /**
+     * Whether this view draws the skeleton and the gate. Off while the synced picture is on:
+     * that draws both into the picture itself, and a second copy here would be the lagging one.
+     */
+    @Volatile
+    var live: Boolean = true
+        set(value) {
+            field = value
+            postInvalidateOnAnimation()
+        }
+
     /** Draw rate, for the latency readout. Counted here because this is what the athlete sees. */
     val drawRate = RateMeter()
 
@@ -149,6 +160,7 @@ class OverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (!live) return
         val history = frames
         val newest = history.lastOrNull() ?: return
         if (newest.srcW == 0 || newest.srcH == 0) return

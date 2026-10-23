@@ -1,0 +1,154 @@
+package com.cindy.tracker
+
+import android.content.Context
+import android.graphics.Color
+import android.graphics.DashPathEffect
+import android.graphics.PorterDuff
+import android.os.Handler
+import android.os.HandlerThread
+import android.util.Log
+import androidx.camera.core.CameraEffect
+import androidx.camera.effects.Frame
+import androidx.camera.effects.OverlayEffect
+import androidx.core.content.ContextCompat
+
+/**
+ * The picture on screen, drawn by the app so each frame can wait for its own skeleton.
+ *
+ * A queued [OverlayEffect] on the preview holds the camera's frames until they are asked for by
+ * timestamp. [SkeletonSync] says which to ask for and with which skeleton, and this draws the
+ * skeleton and the bar zone into that frame through [SkeletonPainter], on the frame's own
+ * buffer. A frame that is never asked for is never shown.
+ *
+ * Drawing a queued frame discards every older one, which is why [SkeletonSync] releases in
+ * capture order and why nothing here ever goes back for an older frame.
+ *
+ * Every call may come from any thread. The sync belongs to the effect's handler thread, so each
+ * one is posted there.
+ */
+class PictureEffect(
+    context: Context,
+    mode: SkeletonSync.Mode
+) {
+    private val thread = HandlerThread("cindy-picture").also { it.start() }
+    private val handler = Handler(thread.looper)
+
+    private val sync = SkeletonSync(mode) { System.nanoTime() }
+
+    private val painter = SkeletonPainter(
+        boneColor = ContextCompat.getColor(context, R.color.label),
+        zoneOkColor = ContextCompat.getColor(context, R.color.state_ok),
+        zoneAlertColor = ContextCompat.getColor(context, R.color.state_alert),
+        resetLinePathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
+    )
+
+    /** What each released frame is to be drawn with, until the effect calls back for it. */
+    private val drawing = HashMap<Long, SyncSkeleton?>()
+
+    @Volatile
+    private var closed = false
+
+    private val tick = Runnable {
+        show(sync.due())
+        scheduleTick()
+    }
+
+    private val overlay = OverlayEffect(
+        CameraEffect.PREVIEW,
+        QUEUE_DEPTH,
+        handler
+    ) { t -> Log.e(TAG, "picture effect failed", t) }.also { built ->
+        built.setOnDrawListener { frame -> draw(frame) }
+    }
+
+    /** The effect to add to the use case group. */
+    val effect: CameraEffect get() = overlay
+
+    /** The model is about to analyse the frame stamped [captureNanos]. */
+    fun frameKnown(captureNanos: Long) = post { show(sync.frameKnown(captureNanos)) }
+
+    /** The skeleton computed from the frame stamped [captureNanos]. Never coalesced. */
+    fun skeletonReady(captureNanos: Long, skeleton: SyncSkeleton) =
+        post { show(sync.skeletonReady(captureNanos, skeleton)) }
+
+    /** Lens flip, pause, ending the workout: show what waits, without skeletons, and stop. */
+    fun releaseAll() = post { show(sync.releaseAll()) }
+
+    /** Leaving the screen. Whatever waits is let go, and nothing more is drawn. */
+    fun close() {
+        if (closed) return
+        closed = true
+        handler.removeCallbacksAndMessages(null)
+        try {
+            overlay.close()
+        } catch (t: Throwable) {
+            Log.w(TAG, "closing the picture effect failed", t)
+        }
+        thread.quitSafely()
+    }
+
+    /** Frames the cap released without a skeleton, and frames that never reached the screen. */
+    val cappedCount: Int get() = sync.cappedCount
+    val droppedCount: Int get() = sync.droppedCount
+
+    private fun post(work: () -> Unit) {
+        if (closed) return
+        handler.post {
+            if (closed) return@post
+            work()
+            scheduleTick()
+        }
+    }
+
+    private fun scheduleTick() {
+        handler.removeCallbacks(tick)
+        val deadline = sync.nextDeadlineNanos() ?: return
+        val waitMs = (deadline - System.nanoTime()) / 1_000_000L + 1L
+        handler.postDelayed(tick, waitMs.coerceAtLeast(0L))
+    }
+
+    private fun show(released: List<SkeletonSync.Released>) {
+        for (r in released) {
+            drawing[r.captureNanos] = r.skeleton
+            val result = overlay.drawFrameAsync(r.captureNanos)
+            result.addListener({
+                val outcome = try {
+                    result.get()
+                } catch (t: Throwable) {
+                    null
+                }
+                // The effect no longer holds the frame, so it can never be shown. Count it
+                // instead of leaving anything waiting on it.
+                if (closed) return@addListener
+                if (outcome != OverlayEffect.RESULT_SUCCESS) drawing.remove(r.captureNanos)
+                if (outcome == OverlayEffect.RESULT_FRAME_NOT_FOUND) sync.frameLost(r.captureNanos)
+            }, handler::post)
+        }
+    }
+
+    /** Runs on the handler thread, once per frame asked for. */
+    private fun draw(frame: Frame): Boolean {
+        val skeleton = drawing.remove(frame.timestampNanos)
+        val canvas = frame.overlayCanvas
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        if (skeleton == null || skeleton.width <= 0 || skeleton.height <= 0) return true
+        canvas.save()
+        // The keypoints are mirrored for the selfie camera; the buffer may not be.
+        canvas.concat(
+            analysisToBuffer(frame, skeleton.width, skeleton.height, skeleton.mirrored != frame.isMirroring)
+        )
+        painter.paint(canvas, skeleton.keypoints, skeleton.height, skeleton.guide)
+        canvas.restore()
+        return true
+    }
+
+    private companion object {
+        const val TAG = "Cindy"
+
+        /**
+         * Frames the effect holds. The cap is 250 ms, which is eight camera frames, and a
+         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Twelve is 400 ms.
+         */
+        const val QUEUE_DEPTH = 12
+    }
+}
