@@ -55,15 +55,7 @@ class RecordingOverlay {
     @Volatile
     private var state: State? = null
 
-    private val bone = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ACCENT
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val joint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        style = Paint.Style.FILL
-    }
+    private val skeleton = SkeletonPainter()
     private val panel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(150, 0, 0, 0)
         style = Paint.Style.FILL
@@ -138,7 +130,7 @@ class RecordingOverlay {
         canvas.save()
         canvas.concat(transform(frame, s, mirror = bodyMirrored))
         if (s.debug) drawFrameBorder(canvas, s, safe)
-        drawSkeleton(canvas, s)
+        skeleton.paint(canvas, s.keypoints, s.height)
         canvas.restore()
 
         // Text follows the buffer, never the keypoints, so it reads forwards in the file.
@@ -188,22 +180,6 @@ class RecordingOverlay {
         canvas.drawRect(0f, 0f, s.width.toFloat(), s.height.toFloat(), edge)
         edge.color = Color.RED
         canvas.drawRect(safe.left, safe.top, safe.right, safe.bottom, edge)
-    }
-
-    private fun drawSkeleton(canvas: Canvas, s: State) {
-        // Stroke widths are relative to the frame, so they survive the scale into the buffer.
-        bone.strokeWidth = s.height * BONE_WIDTH_FRACTION
-        val jointRadius = s.height * JOINT_RADIUS_FRACTION
-        for ((a, b) in KP.SKELETON) {
-            val pa = s.keypoints[a]
-            val pb = s.keypoints[b]
-            if (pa.score < MIN_SCORE || pb.score < MIN_SCORE) continue
-            canvas.drawLine(pa.x, pa.y, pb.x, pb.y, bone)
-        }
-        for (p in s.keypoints) {
-            if (p.score < MIN_SCORE) continue
-            canvas.drawCircle(p.x, p.y, jointRadius, joint)
-        }
     }
 
     /** Every measurement is against [safe], never the frame: the frame's edges are cropped. */
@@ -289,22 +265,7 @@ class RecordingOverlay {
     }
 
     private companion object {
-        const val MIN_SCORE = 0.30f
         /** The HUD's secondary label. Burned into the file, so it follows the app's palette. */
         val ACCENT = Color.argb(168, 255, 255, 255)
-
-        /**
-         * Bone stroke width, as a fraction of frame height.
-         *
-         * Matches the live overlay's own weight: [OverlayView] draws 7 px bones and 9 px joint
-         * radii in view pixels, which on its roughly 2.25x preview scale is about 3.1 and 4
-         * analysis-frame pixels. This file used to draw 0.010 and 0.008 of the frame height
-         * instead — about twice that — so the filmed skeleton read as heavier and less faithful
-         * to the body than the one the athlete actually watched while training.
-         */
-        const val BONE_WIDTH_FRACTION = 0.0045f
-
-        /** Joint radius, as a fraction of frame height. See [BONE_WIDTH_FRACTION]. */
-        const val JOINT_RADIUS_FRACTION = 0.0055f
     }
 }
