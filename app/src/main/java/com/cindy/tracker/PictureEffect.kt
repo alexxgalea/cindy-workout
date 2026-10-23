@@ -49,8 +49,13 @@ class PictureEffect(
     private var closed = false
 
     private val tick = Runnable {
-        show(sync.due())
-        scheduleTick()
+        if (closed) return@Runnable
+        try {
+            show(sync.due())
+            scheduleTick()
+        } catch (t: Throwable) {
+            Log.e(TAG, "picture sync failed", t)
+        }
     }
 
     private val overlay = OverlayEffect(
@@ -74,17 +79,25 @@ class PictureEffect(
     /** Lens flip, pause, ending the workout: show what waits, without skeletons, and stop. */
     fun releaseAll() = post { show(sync.releaseAll()) }
 
-    /** Leaving the screen. Whatever waits is let go, and nothing more is drawn. */
+    /**
+     * Leaving the screen, or a lens flip. Whatever waits is let go and nothing more is drawn.
+     *
+     * The teardown runs on the handler thread, behind any frame it is drawing, so the effect is
+     * never closed under a draw call. Closing it from here raced with that and could throw on
+     * the handler thread, which takes the whole app down.
+     */
     fun close() {
         if (closed) return
         closed = true
-        handler.removeCallbacksAndMessages(null)
-        try {
-            overlay.close()
-        } catch (t: Throwable) {
-            Log.w(TAG, "closing the picture effect failed", t)
+        handler.post {
+            handler.removeCallbacksAndMessages(null)
+            try {
+                overlay.close()
+            } catch (t: Throwable) {
+                Log.w(TAG, "closing the picture effect failed", t)
+            }
+            thread.quitSafely()
         }
-        thread.quitSafely()
     }
 
     /** Frames the cap released without a skeleton, and frames that never reached the screen. */
@@ -95,9 +108,14 @@ class PictureEffect(
         if (closed) return
         handler.post {
             if (closed) return@post
-            work()
-            scheduleTick()
-            report()
+            // Whatever goes wrong here costs the picture a frame, never the app.
+            try {
+                work()
+                scheduleTick()
+                report()
+            } catch (t: Throwable) {
+                Log.e(TAG, "picture sync failed", t)
+            }
         }
     }
 
@@ -162,6 +180,7 @@ class PictureEffect(
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
         if (skeleton == null || skeleton.width <= 0 || skeleton.height <= 0) return true
         loggedMapping = Triple(skeleton.mirrored, frame.isMirroring, frame.rotationDegrees)
+        canvas.save()
         // The keypoints are already in the space the picture is shown in: on the selfie lens
         // the preview buffer is mirrored for the screen, the same way the keypoints are. So
         // nothing is flipped here, unlike the film, whose buffer is not mirrored.
