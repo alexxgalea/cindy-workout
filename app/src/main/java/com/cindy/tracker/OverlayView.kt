@@ -34,7 +34,6 @@ class OverlayView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     private companion object {
-        const val MIN_SCORE = 0.30f
         /** Alpha of the wash inside the bar zone: enough to read as a region, not as a mask. */
         const val ZONE_FILL_ALPHA = 26
 
@@ -187,7 +186,7 @@ class OverlayView @JvmOverloads constructor(
 
         val k = newest.keypoints
         for ((a, b) in KP.SKELETON) {
-            if (k[a].score < MIN_SCORE || k[b].score < MIN_SCORE) continue
+            if (!PoseGeometry.ok(k[a]) || !PoseGeometry.ok(k[b])) continue
             canvas.drawLine(
                 sx(drawn[a * 2]), sy(drawn[a * 2 + 1]),
                 sx(drawn[b * 2]), sy(drawn[b * 2 + 1]),
@@ -195,7 +194,7 @@ class OverlayView @JvmOverloads constructor(
             )
         }
         for (i in 0 until KP.COUNT) {
-            if (k[i].score < MIN_SCORE) continue
+            if (!PoseGeometry.ok(k[i])) continue
             canvas.drawCircle(sx(drawn[i * 2]), sy(drawn[i * 2 + 1]), 9f, jointPaint)
         }
 
