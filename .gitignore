@@ -62,9 +62,11 @@ __pycache__/
 /strava.properties
 
 # Design notes, research briefs and release runbook. Kept locally, never committed. The
-# architecture decisions and the glossary are the exception: every session needs them.
+# architecture decisions, the glossary and the agent skills' settings are the exception:
+# every session needs them.
 /docs/*
 !/docs/adr/
+!/docs/agents/
 !/docs/GLOSSARY.md
 
 # Rendered store listing and privacy policy, with the publisher's own details filled in.
