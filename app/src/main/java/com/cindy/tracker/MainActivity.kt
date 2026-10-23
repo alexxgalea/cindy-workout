@@ -288,11 +288,20 @@ class MainActivity : AppCompatActivity() {
      * band and will not hold both, and because they answer different questions: [COUNTING] is
      * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third mode
      * is the second one with the predicted skeleton switched on, so the numbers and the thing
-     * they are meant to explain can be read at the same time.
+     * they are meant to explain can be read at the same time. The fourth shows the latency
+     * numbers with the synced picture on: each analysed frame held until its own skeleton, and
+     * drawn with it into the picture.
      */
-    private enum class Readout { OFF, COUNTING, LATENCY, LATENCY_PREDICT }
+    private enum class Readout { OFF, COUNTING, LATENCY, LATENCY_PREDICT, LATENCY_SYNCED }
 
     private var readout = Readout.OFF
+
+    /** Debug builds only: release builds keep the live picture until the owner's verdict. */
+    private val wantsSyncedPicture: Boolean
+        get() = BuildConfig.DEBUG && readout == Readout.LATENCY_SYNCED
+
+    /** The effect drawing the picture, while it is bound. Null means the live picture. */
+    @Volatile private var picture: PictureEffect? = null
     /** Kept as the old flag so the recording overlay and the coaching suppressions read the same. */
     private val debug: Boolean get() = readout != Readout.OFF
     /** Decides what the voice says about the athlete's position. Tested on its own.  */
@@ -586,8 +595,15 @@ class MainActivity : AppCompatActivity() {
                         Readout.COUNTING -> "Counting readout"
                         Readout.LATENCY -> "Latency readout"
                         Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
+                        Readout.LATENCY_SYNCED -> "Latency readout · synced picture, analysed frames only"
                     }
                 )
+                // The effect is a use case on the camera, so changing the picture is a rebind,
+                // not an app restart.
+                if (wantsSyncedPicture != (picture != null)) {
+                    // A rebind would cut the film in two.
+                    if (video.isRecording) toast("Picture mode applies once the recording stops") else bindUseCases()
+                }
                 true
             }
         }
@@ -810,35 +826,61 @@ class MainActivity : AppCompatActivity() {
         val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
 
         provider.unbindAll()
-        // Preview + analysis + recording is more than some cameras will bind at once, and the
+        releasePicture()
+        // Preview + analysis + recording is more than some cameras will bind at once, and each
         // overlay effect is another surface on top of that. Rep counting is the point of the
-        // app, so the recording features are what get dropped, in order.
-        val bound = bindWithOverlay(provider, selector, preview, analysis) ||
-            bindPlainRecording(provider, selector, preview, analysis) ||
-            bindCountingOnly(provider, selector, preview, analysis)
+        // app, so the extras are what get dropped, in order:
+        //   1. synced picture and film with skeleton
+        //   2. synced picture and plain film
+        //   3. synced picture, no film
+        //   4. live picture (film with skeleton, plain film, then counting only)
+        val synced = if (wantsSyncedPicture) PictureEffect(this, SkeletonSync.Mode.ANALYSED_ONLY) else null
+        val bound = (synced != null && (
+            bindWithOverlay(provider, selector, preview, analysis, synced) ||
+                bindPlainRecording(provider, selector, preview, analysis, synced) ||
+                bindCountingOnly(provider, selector, preview, analysis, synced)
+            )) ||
+            bindWithOverlay(provider, selector, preview, analysis, null) ||
+            bindPlainRecording(provider, selector, preview, analysis, null) ||
+            bindCountingOnly(provider, selector, preview, analysis, null)
         if (!bound) status.text = "Could not open the camera"
+        // A synced picture that did not make it through the binding is not on screen, so the
+        // on-screen overlay goes back to drawing the skeleton itself.
+        if (synced != null && picture !== synced) synced.close()
+        binding.overlay.live = picture == null
         // Which clock this camera stamps frames with, so capture age can be stated or honestly
-        // withheld rather than guessed. Re-asked on every bind because flipping the lens can
+        // withheld rather than guessed at. Re-asked on every bind because flipping the lens can
         // change the answer.
         camera?.cameraInfo?.let { latency.clock.resolve(it) }
         latency.reset()
         renderChips()
     }
 
+    private fun releasePicture() {
+        picture?.close()
+        picture = null
+    }
+
     private fun bindWithOverlay(
         provider: ProcessCameraProvider,
         selector: CameraSelector,
         preview: Preview,
-        analysis: ImageAnalysis
+        analysis: ImageAnalysis,
+        pictureEffect: PictureEffect?
     ): Boolean = try {
+        provider.unbindAll()
         val effect = video.buildEffect()
         val group = UseCaseGroup.Builder()
             .addUseCase(preview)
             .addUseCase(analysis)
             .addUseCase(video.buildUseCase())
-            .apply { effect?.let { addEffect(it) } }
+            .apply {
+                effect?.let { addEffect(it) }
+                pictureEffect?.let { addEffect(it.effect) }
+            }
             .build()
         camera = provider.bindToLifecycle(this, selector, group)
+        adoptPicture(pictureEffect)
         true
     } catch (t: Throwable) {
         Log.w(TAG, "could not bind the overlay effect, recording without it", t)
@@ -849,10 +891,18 @@ class MainActivity : AppCompatActivity() {
         provider: ProcessCameraProvider,
         selector: CameraSelector,
         preview: Preview,
-        analysis: ImageAnalysis
+        analysis: ImageAnalysis,
+        pictureEffect: PictureEffect?
     ): Boolean = try {
         provider.unbindAll()
-        camera = provider.bindToLifecycle(this, selector, preview, analysis, video.buildUseCase())
+        val group = UseCaseGroup.Builder()
+            .addUseCase(preview)
+            .addUseCase(analysis)
+            .addUseCase(video.buildUseCase())
+            .apply { pictureEffect?.let { addEffect(it.effect) } }
+            .build()
+        camera = provider.bindToLifecycle(this, selector, group)
+        adoptPicture(pictureEffect)
         true
     } catch (t: Throwable) {
         Log.w(TAG, "could not bind the recorder, continuing without it", t)
@@ -863,15 +913,26 @@ class MainActivity : AppCompatActivity() {
         provider: ProcessCameraProvider,
         selector: CameraSelector,
         preview: Preview,
-        analysis: ImageAnalysis
+        analysis: ImageAnalysis,
+        pictureEffect: PictureEffect?
     ): Boolean = try {
         provider.unbindAll()
         video.forgetUseCase()
-        camera = provider.bindToLifecycle(this, selector, preview, analysis)
+        val group = UseCaseGroup.Builder()
+            .addUseCase(preview)
+            .addUseCase(analysis)
+            .apply { pictureEffect?.let { addEffect(it.effect) } }
+            .build()
+        camera = provider.bindToLifecycle(this, selector, group)
+        adoptPicture(pictureEffect)
         true
     } catch (t: Throwable) {
         Log.e(TAG, "bindToLifecycle failed", t)
         false
+    }
+
+    private fun adoptPicture(pictureEffect: PictureEffect?) {
+        picture = pictureEffect
     }
 
     private fun flipCamera() {
@@ -908,6 +969,10 @@ class MainActivity : AppCompatActivity() {
         try {
             val mirrored = lensFacing == CameraSelector.LENS_FACING_FRONT
             val captureNanos = proxy.imageInfo.timestamp
+            // Read once: if the lens flips mid-frame, this frame's skeleton goes to the effect
+            // that holds its picture, which is by then closed, and so shows nothing.
+            val syncedPicture = picture
+            syncedPicture?.frameKnown(captureNanos)
             val tEntry = System.nanoTime()
             readPlanes(proxy)
             val tConverted = System.nanoTime()
@@ -954,6 +1019,10 @@ class MainActivity : AppCompatActivity() {
             // it and the camera — see OverlayView's note on why that queue is the bug.
             binding.overlay.submit(
                 keypoints, frameW, frameH, guide, pipelineAgeMs.toFloat()
+            )
+            // Never coalesced: this is the only skeleton the frame it came from will get.
+            syncedPicture?.skeletonReady(
+                captureNanos, SyncSkeleton(keypoints, frameW, frameH, mirrored, guide)
             )
 
             latency.analysed(
@@ -1409,6 +1478,7 @@ class MainActivity : AppCompatActivity() {
             }
             State.RUNNING -> {
                 state = State.PAUSED
+                picture?.releaseAll()
                 coach.interrupted()
                 val now = SystemClock.elapsedRealtime()
                 pauseStartedAt = now
@@ -1593,6 +1663,7 @@ class MainActivity : AppCompatActivity() {
         // A recording that has not begun has nothing left to film.
         binding.countdown.cancel()
         music.stop()
+        picture?.releaseAll()
         renderClock()
         renderControls()
 
@@ -2001,6 +2072,8 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         sensors?.unregisterListener(rotationListener)
         stability.reset()
+        // Leaving the screen: whatever waits for a skeleton is let go, none of it replays.
+        picture?.releaseAll()
         // The three seconds were for walking to the bar, not for leaving the app.
         if (binding.countdown.isRunning) {
             binding.countdown.cancel()
@@ -2017,6 +2090,7 @@ class MainActivity : AppCompatActivity() {
         LiveWorkout.active = false // No screen, no workout on the clock.
         ui.removeCallbacks(ticker)
         handoff.clear()
+        releasePicture()
         // The analysis thread owns the detector, and may be mid-frame right now: close it from
         // there, after that frame, not from here under it.
         analysisExecutor.releaseAfterPending { detector?.close() }

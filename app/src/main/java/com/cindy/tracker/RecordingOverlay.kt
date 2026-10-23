@@ -156,17 +156,8 @@ class RecordingOverlay {
      * fit is the same FILL_CENTER the preview uses, so the recording is framed like the screen
      * and nothing is stretched.
      */
-    private fun transform(frame: Frame, s: State, mirror: Boolean): Matrix {
-        val affine = OverlayTransform.build(
-            srcWidth = s.width,
-            srcHeight = s.height,
-            bufferWidth = frame.size.width,
-            bufferHeight = frame.size.height,
-            rotationDegrees = frame.rotationDegrees,
-            mirror = mirror
-        )
-        return Matrix().apply { setValues(affine.values()) }
-    }
+    private fun transform(frame: Frame, s: State, mirror: Boolean): Matrix =
+        analysisToBuffer(frame, s.width, s.height, mirror)
 
     /**
      * Outlines the mapped frame, so a misaligned overlay is obvious in the recording.
