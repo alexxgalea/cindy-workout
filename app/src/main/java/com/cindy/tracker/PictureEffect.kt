@@ -196,8 +196,9 @@ class PictureEffect(
 
         /**
          * Frames the effect holds. The cap is 250 ms, which is eight camera frames, and a
-         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Twelve is 400 ms.
+         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Every-frame mode
+         * then paces a release over about one analysis interval, so sixteen: 533 ms.
          */
-        const val QUEUE_DEPTH = 12
+        const val QUEUE_DEPTH = 16
     }
 }

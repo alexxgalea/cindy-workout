@@ -295,6 +295,16 @@ class SkeletonSyncTest {
 
     private fun everyFrame() = sync(SkeletonSync.Mode.EVERY_FRAME)
 
+    /** [first], then every paced frame as the clock moves on, until none is left to pace. */
+    private fun SkeletonSync.drain(first: List<SkeletonSync.Released>): List<SkeletonSync.Released> {
+        val all = first.toMutableList()
+        repeat(300) {
+            advance(1)
+            all += due()
+        }
+        return all
+    }
+
     /** A skeleton whose every joint sits at ([x], [x]) and is fully seen. */
     private fun at(x: Float, score: Float = 0.9f) =
         SyncSkeleton(Array(17) { Keypoint(x, x, score) }, 480, 640, mirrored = false, guide = null)
@@ -308,7 +318,7 @@ class SkeletonSyncTest {
         s.frameKnown(stamp(2))
         assertTrue(s.frameKnown(stamp(3)).isEmpty())
 
-        val shown = s.skeletonReady(stamp(3), at(130f))
+        val shown = s.drain(s.skeletonReady(stamp(3), at(130f)))
 
         assertEquals(listOf(stamp(1), stamp(2), stamp(3)), shown.stamps())
         assertEquals(110f, shown[0].skeleton!!.keypoints[0].x, 0.001f)
@@ -329,7 +339,7 @@ class SkeletonSyncTest {
             s.frameKnown(stamp(1))
             s.frameKnown(stamp(2))
 
-            val shown = s.skeletonReady(stamp(2), withJoint0(second, 120f))
+            val shown = s.drain(s.skeletonReady(stamp(2), withJoint0(second, 120f)))
 
             assertTrue(shown[0].skeleton!!.keypoints[0].score < PoseGeometry.MIN_SCORE)
             assertTrue(shown[0].skeleton!!.keypoints[1].score >= PoseGeometry.MIN_SCORE)
@@ -347,7 +357,7 @@ class SkeletonSyncTest {
         s.frameKnown(stamp(1))
         s.frameKnown(stamp(2))
 
-        val shown = s.skeletonReady(stamp(2), SyncSkeleton(at(130f).keypoints, 480, 640, false, later))
+        val shown = s.drain(s.skeletonReady(stamp(2), SyncSkeleton(at(130f).keypoints, 480, 640, false, later)))
 
         assertSame(earlier, shown[0].skeleton!!.guide)
         assertSame(later, shown[1].skeleton!!.guide)
@@ -360,7 +370,7 @@ class SkeletonSyncTest {
         s.skeletonReady(stamp(0), at(100f))
         for (f in 1..5) s.frameKnown(stamp(f))
 
-        val shown = s.skeletonReady(stamp(5), at(70f))
+        val shown = s.drain(s.skeletonReady(stamp(5), at(70f)))
 
         for (r in shown) assertTrue(r.skeleton!!.keypoints[0].x in 70f..100f)
         assertEquals(70f, shown.last().skeleton!!.keypoints[0].x, 0f)
@@ -371,14 +381,14 @@ class SkeletonSyncTest {
         val s = everyFrame()
         s.frameKnown(stamp(0))
         s.frameKnown(stamp(1))
-        val first = s.skeletonReady(stamp(1), at(100f))
+        val first = s.drain(s.skeletonReady(stamp(1), at(100f)))
         assertNull(first[0].skeleton)
         assertEquals(100f, first[1].skeleton!!.keypoints[0].x, 0f)
 
         s.releaseAll()
         s.frameKnown(stamp(2))
         s.frameKnown(stamp(3))
-        val after = s.skeletonReady(stamp(3), at(130f))
+        val after = s.drain(s.skeletonReady(stamp(3), at(130f)))
         assertNull(after[0].skeleton)
     }
 
@@ -410,17 +420,25 @@ class SkeletonSyncTest {
         val capturedAt = HashMap<Long, Long>()
         val start = now
         val frames = 30 * 180
+        // Events in time order: each frame's capture, and its skeleton's arrival when analysed.
+        val events = sortedMapOf<Long, MutableList<() -> List<SkeletonSync.Released>>>()
         for (f in 0 until frames) {
-            now = start + f * frameMs * ms
-            capturedAt[stamp(f)] = now
-            s.frameKnown(stamp(f))
+            val captured = start + f * frameMs * ms
+            capturedAt[stamp(f)] = captured
+            events.getOrPut(captured) { mutableListOf() }.add { s.frameKnown(stamp(f)) }
             if (f % analysisEvery == 0) {
-                // The skeleton of this frame is ready after the analysis time.
-                val readyAt = now + analysisMs * ms
-                now = readyAt
-                for (r in s.skeletonReady(stamp(f), at(f.toFloat()))) shownAt[r.captureNanos] = now
-                now = start + f * frameMs * ms
+                events.getOrPut(captured + analysisMs * ms) { mutableListOf() }
+                    .add { s.skeletonReady(stamp(f), at(f.toFloat())) }
             }
+        }
+        // Walk the clock a millisecond at a time, as the effect's ticks would.
+        var t = start
+        val end = events.lastKey() + 500 * ms
+        while (t <= end) {
+            now = t
+            for (e in events[t].orEmpty()) for (r in e()) shownAt[r.captureNanos] = now
+            for (r in s.due()) shownAt[r.captureNanos] = now
+            t += ms
         }
         for (f in 0 until frames) {
             val shown = shownAt[stamp(f)] ?: continue
@@ -440,7 +458,7 @@ class SkeletonSyncTest {
         s.frameKnown(stamp(1))
         s.frameKnown(stamp(2))
 
-        val shown = s.skeletonReady(stamp(3), at(130f))
+        val shown = s.drain(s.skeletonReady(stamp(3), at(130f)))
 
         assertEquals(listOf(stamp(1), stamp(2)), shown.stamps())
         assertEquals(110f, shown[0].skeleton!!.keypoints[0].x, 0.001f)
@@ -453,10 +471,12 @@ class SkeletonSyncTest {
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(2))
         s.skeletonReady(stamp(2), at(120f))
+        advance(100)
+        s.due()
 
         assertTrue(s.frameKnown(stamp(1)).isEmpty())
         s.frameKnown(stamp(3))
-        val shown = s.skeletonReady(stamp(4), at(140f))
+        val shown = s.drain(s.skeletonReady(stamp(4), at(140f)))
 
         assertEquals(listOf(stamp(3)), shown.stamps())
         assertEquals(1, s.droppedCount)
@@ -467,6 +487,7 @@ class SkeletonSyncTest {
         val s = everyFrame()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
+        advance(100)
         s.skeletonReady(stamp(2), at(120f))
 
         val shown = s.frameKnown(stamp(2))
@@ -485,8 +506,29 @@ class SkeletonSyncTest {
         s.due()
         s.frameKnown(stamp(40))
 
-        val shown = s.skeletonReady(stamp(41), at(300f))
+        val shown = s.drain(s.skeletonReady(stamp(41), at(300f)))
 
         assertNull(shown[0].skeleton)
+    }
+
+    @Test
+    fun `the frames of one release reach the screen a capture gap apart, not all at once`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        for (f in 1..3) s.frameKnown(stamp(f))
+        advance(200)
+
+        val atOnce = s.skeletonReady(stamp(3), at(130f))
+        assertEquals(listOf(stamp(1)), atOnce.stamps())
+
+        // Each next frame follows a little sooner than its capture gap, so a late picture
+        // catches up instead of keeping the delay it was given once.
+        advance(27)
+        assertTrue(s.due().isEmpty())
+        advance(2)
+        assertEquals(listOf(stamp(2)), s.due().stamps())
+        advance(29)
+        assertEquals(listOf(stamp(3)), s.due().stamps())
     }
 }
