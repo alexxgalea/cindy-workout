@@ -25,7 +25,9 @@ abstract class SyncedEffect(
     target: Int,
     val mode: SkeletonSync.Mode,
     private val tag: String,
-    threadName: String
+    threadName: String,
+    /** Told the capture stamp of each frame as it is drawn, on the handler thread. */
+    private val onShown: ((captureNanos: Long) -> Unit)? = null
 ) {
     private val thread = HandlerThread(threadName).also { it.start() }
     private val handler = Handler(thread.looper)
@@ -172,6 +174,7 @@ abstract class SyncedEffect(
         val skeleton = drawing.remove(frame.timestampNanos)
         drawn++
         if (skeleton == null) drawnBare++
+        onShown?.invoke(frame.timestampNanos)
         paint(frame, skeleton)
         return true
     }

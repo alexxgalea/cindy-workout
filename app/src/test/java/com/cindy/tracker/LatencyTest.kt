@@ -90,4 +90,53 @@ class LatencyTest {
         assertTrue("age leads the first line, was: $line", line.startsWith("age 210ms"))
         assertTrue("the model names the second, was: $line", line.contains("\nthndr"))
     }
+
+    @Test
+    fun `a synced readout gives the median picture delay and the timed out count`() {
+        val probe = LatencyProbe()
+        listOf(150L, 160L, 170L, 900L, 155L).forEach { probe.pictureShown(it) }
+        val line = probe.line("thndr", null, timedOut = 3)
+        assertTrue("median of the window, was: $line", line.contains("pic 160ms"))
+        assertTrue("the cap count, was: $line", line.contains("3 timed out"))
+    }
+
+    @Test
+    fun `live mode says the picture delay is not measured instead of guessing`() {
+        val probe = LatencyProbe()
+        val line = probe.line("thndr", 60f)
+        assertTrue("was: $line", line.contains("pic not measured"))
+        assertTrue("no cap count in live mode, was: $line", !line.contains("timed out"))
+    }
+
+    @Test
+    fun `the picture delay is withheld when the camera clock is unresolved`() {
+        val probe = LatencyProbe()
+        // What the effect reports when FrameLatency.sinceCapture refuses: no sample at all.
+        probe.pictureShown(probe.clock.sinceCapture(0L))
+        val line = probe.line("thndr", null, timedOut = 0)
+        assertTrue("was: $line", line.contains("pic n/a (clock)"))
+        assertTrue("was: $line", line.contains("0 timed out"))
+    }
+
+    @Test
+    fun `a synced readout before any frame is shown has a dash, not a zero`() {
+        val probe = LatencyProbe()
+        // Clock resolved is private to the camera; with none resolved this is the n/a case, so
+        // only the reset behaviour is checked here.
+        probe.pictureShown(200L)
+        probe.reset()
+        assertTrue(probe.line("thndr", null, timedOut = 0).contains("pic n/a (clock)"))
+    }
+
+    @Test
+    fun `both readouts still fit two short lines`() {
+        val probe = LatencyProbe()
+        probe.analysed(captureAgeMs = 210L, convertMs = 12L, prepMs = 20L, inferMs = 130L)
+        probe.posted(replacedUnrendered = true)
+        probe.pictureShown(180L)
+        for (line in listOf(probe.line("thndr", 58f), probe.line("thndr", 58f, timedOut = 12))) {
+            assertEquals(1, line.count { it == '\n' })
+            line.lines().forEach { assertTrue("too long for the band: '$it'", it.length <= 64) }
+        }
+    }
 }

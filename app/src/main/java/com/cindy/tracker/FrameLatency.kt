@@ -174,12 +174,14 @@ class LatencyProbe {
     private val prep = Rolling()
     private val infer = Rolling()
     private val uiDelay = Rolling()
+    private val pictureDelay = Rolling()
 
     private var posted = 0
     private var coalesced = 0
 
     fun reset() {
         age.reset(); convert.reset(); prep.reset(); infer.reset(); uiDelay.reset()
+        synchronized(pictureDelay) { pictureDelay.reset() }
         analysisRate.reset()
         posted = 0
         coalesced = 0
@@ -203,6 +205,23 @@ class LatencyProbe {
     fun uiRan(delayMs: Long) = uiDelay.add(delayMs)
 
     /**
+     * A picture frame was shown, [delayMs] after the sensor captured it, or null when the camera's
+     * clock cannot be resolved. Called from the synced effect's thread, hence the lock.
+     */
+    fun pictureShown(delayMs: Long?) {
+        delayMs?.let { synchronized(pictureDelay) { pictureDelay.add(it) } }
+    }
+
+    /** The synced picture's two figures: what the wait costs, and how often it gave up. */
+    private fun pictureText(timedOut: Int?): String {
+        if (timedOut == null) return "pic not measured"
+        val median = synchronized(pictureDelay) { pictureDelay.median() }
+        val delay = median?.let { "pic ${it}ms" }
+            ?: if (clock.resolved) "pic —" else "pic n/a (clock)"
+        return "$delay · $timedOut timed out"
+    }
+
+    /**
      * Share of snapshots that were superseded before the main thread rendered them.
      *
      * This is the retroactive evidence for whether the old post-per-frame arrangement was
@@ -213,8 +232,14 @@ class LatencyProbe {
     private fun coalescedShare(): Int? =
         if (posted == 0) null else coalesced * 100 / posted
 
-    /** Two lines, because one 14sp row will not hold this and still be readable. */
-    fun line(model: String, drawnPerSecond: Float?): String {
+    /**
+     * Two lines, because one 14sp row will not hold this and still be readable.
+     *
+     * [timedOut] is the synced picture's count of frames shown without their skeleton, and null
+     * in live mode, where no picture delay is measured. A synced picture draws the skeleton
+     * itself, so the live overlay's draw rate and coalescing say nothing and give way to it.
+     */
+    fun line(model: String, drawnPerSecond: Float?, timedOut: Int? = null): String {
         val ageText = age.median()?.let { "age ${it}ms" }
             ?: if (clock.resolved) "age —" else "age n/a (clock)"
         val analysis = analysisRate.perSecond()
@@ -227,8 +252,11 @@ class LatencyProbe {
             append('\n')
             append(model)
             append(" · ").append(analysis?.let { "%.1f".format(it) } ?: "—").append(" in")
-            append(" · ").append(drawnPerSecond?.let { "%.0f".format(it) } ?: "—").append(" drawn")
-            coalescedShare()?.let { append(" · ").append(it).append("% coalesced") }
+            if (timedOut == null) {
+                append(" · ").append(drawnPerSecond?.let { "%.0f".format(it) } ?: "—").append(" drawn")
+                coalescedShare()?.let { append(" · ").append(it).append("% coalesced") }
+            }
+            append(" · ").append(pictureText(timedOut))
         }
     }
 }

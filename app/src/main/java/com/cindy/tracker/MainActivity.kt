@@ -874,7 +874,9 @@ class MainActivity : AppCompatActivity() {
         //   2. synced picture and plain film
         //   3. synced picture, no film
         //   4. live picture (synced film, plain film, then counting only)
-        val synced = wantedPictureMode?.let { PictureEffect(this, it) }
+        val synced = wantedPictureMode?.let { mode ->
+            PictureEffect(this, mode) { stamp -> latency.pictureShown(latency.clock.sinceCapture(stamp)) }
+        }
         val bound = (synced != null && (
             bindWithOverlay(provider, selector, preview, analysis, synced) ||
                 bindPlainRecording(provider, selector, preview, analysis, synced) ||
@@ -1177,7 +1179,11 @@ class MainActivity : AppCompatActivity() {
      * screen readout at all rather than a log.
      */
     private fun latencyLine(): String =
-        latency.line(detector?.modelLabel ?: "none", binding.overlay.drawRate.perSecond())
+        latency.line(
+            detector?.modelLabel ?: "none",
+            binding.overlay.drawRate.perSecond(),
+            timedOut = picture?.cappedCount
+        )
 
     private fun apply(snap: Snapshot) {
         exercise.text = snap.exercise.label
