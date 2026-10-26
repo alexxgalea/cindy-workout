@@ -28,12 +28,13 @@ import androidx.core.content.ContextCompat
  */
 class PictureEffect(
     context: Context,
-    mode: SkeletonSync.Mode
+    val mode: SkeletonSync.Mode
 ) {
     private val thread = HandlerThread("cindy-picture").also { it.start() }
     private val handler = Handler(thread.looper)
 
-    private val sync = SkeletonSync(mode) { System.nanoTime() }
+    // Every frame waits too in every-frame mode, so the sync holds as many as the effect does.
+    private val sync = SkeletonSync(mode, QUEUE_DEPTH) { System.nanoTime() }
 
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.label),
