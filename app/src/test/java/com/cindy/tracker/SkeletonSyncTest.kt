@@ -461,4 +461,32 @@ class SkeletonSyncTest {
         assertEquals(listOf(stamp(3)), shown.stamps())
         assertEquals(1, s.droppedCount)
     }
+
+    @Test
+    fun `a frame announced just after its own skeleton is shown at once with that skeleton`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.skeletonReady(stamp(2), at(120f))
+
+        val shown = s.frameKnown(stamp(2))
+
+        assertEquals(listOf(stamp(2)), shown.stamps())
+        assertEquals(120f, shown.single().skeleton!!.keypoints[0].x, 0f)
+    }
+
+    @Test
+    fun `after the cap fires the next skeleton does not glide in from a stale pose`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.frameKnown(stamp(1))
+        advance(SkeletonSync.CAP_MS)
+        s.due()
+        s.frameKnown(stamp(40))
+
+        val shown = s.skeletonReady(stamp(41), at(300f))
+
+        assertNull(shown[0].skeleton)
+    }
 }

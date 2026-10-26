@@ -72,6 +72,8 @@ class SkeletonSync(
         // The camera's stamps and the analysis reach here on different threads, so a frame can be
         // announced after a skeleton newer than it was used. It could only be shown out of order.
         if (mode == Mode.EVERY_FRAME && anchor != null && captureNanos <= anchorNanos) {
+            // The frame the newest skeleton was computed from: it has its real skeleton already.
+            if (captureNanos == anchorNanos) return listOf(Released(captureNanos, anchor))
             droppedCount++
             return emptyList()
         }
@@ -134,6 +136,8 @@ class SkeletonSync(
         val released = waiting.subList(0, expired).map { Released(it.captureNanos, null) }
         waiting.subList(0, expired).clear()
         cappedCount += released.size
+        // The skeletons stopped coming, so the last one is no end of an interpolation.
+        anchor = null
         return released
     }
 
