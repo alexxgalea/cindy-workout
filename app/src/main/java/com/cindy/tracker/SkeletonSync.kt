@@ -133,6 +133,8 @@ class SkeletonSync(
     fun releaseAll(): List<Released> {
         val released = waiting.map { Released(it.captureNanos, null) }
         waiting.clear()
+        // After a lens flip the old skeleton is of another picture, so nothing is drawn from it.
+        anchor = null
         return released
     }
 

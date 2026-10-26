@@ -315,4 +315,120 @@ class SkeletonSyncTest {
         assertEquals(120f, shown[1].skeleton!!.keypoints[0].x, 0.001f)
         assertEquals(130f, shown[2].skeleton!!.keypoints[0].x, 0.001f)
     }
+
+    private fun withJoint0(score: Float, x: Float) = SyncSkeleton(
+        Array(17) { Keypoint(x, x, if (it == 0) score else 0.9f) }, 480, 640, mirrored = false, guide = null
+    )
+
+    @Test
+    fun `a joint unseen in either neighbour is not drawn on the frames between them`() {
+        for ((first, second) in listOf(0.1f to 0.9f, 0.9f to 0.1f)) {
+            val s = everyFrame()
+            s.frameKnown(stamp(0))
+            s.skeletonReady(stamp(0), withJoint0(first, 100f))
+            s.frameKnown(stamp(1))
+            s.frameKnown(stamp(2))
+
+            val shown = s.skeletonReady(stamp(2), withJoint0(second, 120f))
+
+            assertTrue(shown[0].skeleton!!.keypoints[0].score < PoseGeometry.MIN_SCORE)
+            assertTrue(shown[0].skeleton!!.keypoints[1].score >= PoseGeometry.MIN_SCORE)
+            assertEquals(second, shown[1].skeleton!!.keypoints[0].score, 0f)
+        }
+    }
+
+    @Test
+    fun `the bar zone on a frame between is the earlier neighbours`() {
+        val s = everyFrame()
+        val earlier = WorkoutEngine.BarGuide(BarZone.Bounds(10f, 0f, 50f, 5f, 15f), 20f, true)
+        val later = WorkoutEngine.BarGuide(BarZone.Bounds(30f, 0f, 50f, 25f, 35f), 40f, false)
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), SyncSkeleton(at(100f).keypoints, 480, 640, false, earlier))
+        s.frameKnown(stamp(1))
+        s.frameKnown(stamp(2))
+
+        val shown = s.skeletonReady(stamp(2), SyncSkeleton(at(130f).keypoints, 480, 640, false, later))
+
+        assertSame(earlier, shown[0].skeleton!!.guide)
+        assertSame(later, shown[1].skeleton!!.guide)
+    }
+
+    @Test
+    fun `an interpolated joint never passes the newer position`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        for (f in 1..5) s.frameKnown(stamp(f))
+
+        val shown = s.skeletonReady(stamp(5), at(70f))
+
+        for (r in shown) assertTrue(r.skeleton!!.keypoints[0].x in 70f..100f)
+        assertEquals(70f, shown.last().skeleton!!.keypoints[0].x, 0f)
+    }
+
+    @Test
+    fun `frames before any skeleton exists are shown bare, and the same after a release`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.frameKnown(stamp(1))
+        val first = s.skeletonReady(stamp(1), at(100f))
+        assertNull(first[0].skeleton)
+        assertEquals(100f, first[1].skeleton!!.keypoints[0].x, 0f)
+
+        s.releaseAll()
+        s.frameKnown(stamp(2))
+        s.frameKnown(stamp(3))
+        val after = s.skeletonReady(stamp(3), at(130f))
+        assertNull(after[0].skeleton)
+    }
+
+    @Test
+    fun `a frame whose next skeleton never arrives is shown bare when the cap fires`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.frameKnown(stamp(1))
+        advance(SkeletonSync.CAP_MS - 1)
+        assertTrue(s.due().isEmpty())
+        advance(1)
+
+        val shown = s.due()
+
+        assertEquals(listOf(stamp(1)), shown.stamps())
+        assertNull(shown.single().skeleton)
+    }
+
+    @Test
+    fun `at 30 fps with a skeleton every sixth frame the picture delay stays constant for minutes`() {
+        val s = everyFrame()
+        val frameMs = 33L
+        val analysisEvery = 6
+        val analysisMs = 150L
+        // The wall time each frame was captured at, and when it was shown.
+        val delays = ArrayList<Long>()
+        val shownAt = HashMap<Long, Long>()
+        val capturedAt = HashMap<Long, Long>()
+        val start = now
+        val frames = 30 * 180
+        for (f in 0 until frames) {
+            now = start + f * frameMs * ms
+            capturedAt[stamp(f)] = now
+            s.frameKnown(stamp(f))
+            if (f % analysisEvery == 0) {
+                // The skeleton of this frame is ready after the analysis time.
+                val readyAt = now + analysisMs * ms
+                now = readyAt
+                for (r in s.skeletonReady(stamp(f), at(f.toFloat()))) shownAt[r.captureNanos] = now
+                now = start + f * frameMs * ms
+            }
+        }
+        for (f in 0 until frames) {
+            val shown = shownAt[stamp(f)] ?: continue
+            delays.add((shown - capturedAt.getValue(stamp(f))) / ms)
+        }
+        val firstMinute = delays.take(30 * 60 / analysisEvery * analysisEvery).max()
+        val lastMinute = delays.takeLast(30 * 60).max()
+        assertEquals(firstMinute, lastMinute)
+        assertTrue(lastMinute <= analysisMs + analysisEvery * frameMs)
+    }
 }
