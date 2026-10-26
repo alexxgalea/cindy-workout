@@ -29,6 +29,12 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.hardware.Sensor
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -290,15 +296,23 @@ class MainActivity : AppCompatActivity() {
      * is the second one with the predicted skeleton switched on, so the numbers and the thing
      * they are meant to explain can be read at the same time. The fourth shows the latency
      * numbers with the synced picture on: each analysed frame held until its own skeleton, and
-     * drawn with it into the picture.
+     * drawn with it into the picture. The fifth is the synced picture showing every camera frame,
+     * the ones the model never saw drawn with a skeleton interpolated between its neighbours.
      */
-    private enum class Readout { OFF, COUNTING, LATENCY, LATENCY_PREDICT, LATENCY_SYNCED }
+    private enum class Readout {
+        OFF, COUNTING, LATENCY, LATENCY_PREDICT, LATENCY_SYNCED, LATENCY_EVERY_FRAME
+    }
 
     private var readout = Readout.OFF
 
     /** Debug builds only: release builds keep the live picture until the owner's verdict. */
-    private val wantsSyncedPicture: Boolean
-        get() = BuildConfig.DEBUG && readout == Readout.LATENCY_SYNCED
+    private val wantedPictureMode: SkeletonSync.Mode?
+        get() = when {
+            !BuildConfig.DEBUG -> null
+            readout == Readout.LATENCY_SYNCED -> SkeletonSync.Mode.ANALYSED_ONLY
+            readout == Readout.LATENCY_EVERY_FRAME -> SkeletonSync.Mode.EVERY_FRAME
+            else -> null
+        }
 
     /** The effect drawing the picture, while it is bound. Null means the live picture. */
     @Volatile private var picture: PictureEffect? = null
@@ -596,11 +610,12 @@ class MainActivity : AppCompatActivity() {
                         Readout.LATENCY -> "Latency readout"
                         Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
                         Readout.LATENCY_SYNCED -> "Latency readout · synced picture, analysed frames only"
+                        Readout.LATENCY_EVERY_FRAME -> "Latency readout · synced picture, every frame"
                     }
                 )
                 // The effect is a use case on the camera, so changing the picture is a rebind,
                 // not an app restart.
-                if (wantsSyncedPicture != (picture != null)) {
+                if (wantedPictureMode != picture?.mode) {
                     // A rebind would cut the film in two.
                     if (video.isRecording) toast("Picture mode applies once the recording stops") else bindUseCases()
                 }
@@ -797,10 +812,33 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /**
+     * Tells the picture of every frame the camera captures, by the sensor timestamp of its
+     * per-capture result. On the P40 each of these was found in the effect's queue, which the
+     * analysed frames' own stamps were not always.
+     */
+    @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
+    private fun announceEveryFrame(builder: Preview.Builder) {
+        Camera2Interop.Extender(builder).setSessionCaptureCallback(
+            object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    result: TotalCaptureResult
+                ) {
+                    val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
+                    picture?.takeIf { it.mode == SkeletonSync.Mode.EVERY_FRAME }?.frameKnown(stamp)
+                }
+            }
+        )
+    }
+
     private fun bindUseCases() {
         val provider = cameraProvider ?: return
 
-        val preview = Preview.Builder().build().also {
+        val previewBuilder = Preview.Builder()
+        if (wantedPictureMode == SkeletonSync.Mode.EVERY_FRAME) announceEveryFrame(previewBuilder)
+        val preview = previewBuilder.build().also {
             it.setSurfaceProvider(binding.preview.surfaceProvider)
         }
 
@@ -834,7 +872,7 @@ class MainActivity : AppCompatActivity() {
         //   2. synced picture and plain film
         //   3. synced picture, no film
         //   4. live picture (film with skeleton, plain film, then counting only)
-        val synced = if (wantsSyncedPicture) PictureEffect(this, SkeletonSync.Mode.ANALYSED_ONLY) else null
+        val synced = wantedPictureMode?.let { PictureEffect(this, it) }
         val bound = (synced != null && (
             bindWithOverlay(provider, selector, preview, analysis, synced) ||
                 bindPlainRecording(provider, selector, preview, analysis, synced) ||
@@ -972,7 +1010,10 @@ class MainActivity : AppCompatActivity() {
             // Read once: if the lens flips mid-frame, this frame's skeleton goes to the effect
             // that holds its picture, which is by then closed, and so shows nothing.
             val syncedPicture = picture
-            syncedPicture?.frameKnown(captureNanos)
+            // In every-frame mode the camera's own per-capture results announce each frame.
+            if (syncedPicture?.mode == SkeletonSync.Mode.ANALYSED_ONLY) {
+                syncedPicture.frameKnown(captureNanos)
+            }
             val tEntry = System.nanoTime()
             readPlanes(proxy)
             val tConverted = System.nanoTime()

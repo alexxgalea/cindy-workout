@@ -28,12 +28,13 @@ import androidx.core.content.ContextCompat
  */
 class PictureEffect(
     context: Context,
-    mode: SkeletonSync.Mode
+    val mode: SkeletonSync.Mode
 ) {
     private val thread = HandlerThread("cindy-picture").also { it.start() }
     private val handler = Handler(thread.looper)
 
-    private val sync = SkeletonSync(mode) { System.nanoTime() }
+    // Every frame waits too in every-frame mode, so the sync holds as many as the effect does.
+    private val sync = SkeletonSync(mode, QUEUE_DEPTH) { System.nanoTime() }
 
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.label),
@@ -195,8 +196,9 @@ class PictureEffect(
 
         /**
          * Frames the effect holds. The cap is 250 ms, which is eight camera frames, and a
-         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Twelve is 400 ms.
+         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Every-frame mode
+         * then paces a release over about one analysis interval, so sixteen: 533 ms.
          */
-        const val QUEUE_DEPTH = 12
+        const val QUEUE_DEPTH = 16
     }
 }
