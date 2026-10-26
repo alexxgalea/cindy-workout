@@ -229,7 +229,7 @@ class LatencyProbe {
      * thread, which in the previous design would not have dropped anything — it would have drawn
      * every one of them, late and getting later.
      */
-    private fun coalescedShare(): Int? =
+    fun coalescedShare(): Int? =
         if (posted == 0) null else coalesced * 100 / posted
 
     /**
@@ -237,7 +237,10 @@ class LatencyProbe {
      *
      * [timedOut] is the synced picture's count of frames shown without their skeleton, and null
      * in live mode, where no picture delay is measured. A synced picture draws the skeleton
-     * itself, so the live overlay's draw rate and coalescing say nothing and give way to it.
+     * itself, so the live overlay's draw rate says nothing and gives way to it.
+     *
+     * The band holds about 50 characters a row at 14sp, so the line has no room for
+     * [coalescedShare] beside the picture note: it is kept, for a test or a log, but not printed.
      */
     fun line(model: String, drawnPerSecond: Float?, timedOut: Int? = null): String {
         val ageText = age.median()?.let { "age ${it}ms" }
@@ -254,7 +257,6 @@ class LatencyProbe {
             append(" · ").append(analysis?.let { "%.1f".format(it) } ?: "—").append(" in")
             if (timedOut == null) {
                 append(" · ").append(drawnPerSecond?.let { "%.0f".format(it) } ?: "—").append(" drawn")
-                coalescedShare()?.let { append(" · ").append(it).append("% coalesced") }
             }
             append(" · ").append(pictureText(timedOut))
         }
