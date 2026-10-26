@@ -71,6 +71,7 @@ class SkeletonSync(
     private var pacing = false
 
     /** Frames the cap released without their skeleton, for the latency readout. */
+    @Volatile
     var cappedCount = 0
         private set
 

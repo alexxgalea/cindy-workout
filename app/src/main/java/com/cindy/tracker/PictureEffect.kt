@@ -16,8 +16,9 @@ import androidx.core.content.ContextCompat
  */
 class PictureEffect(
     context: Context,
-    mode: SkeletonSync.Mode
-) : SyncedEffect(CameraEffect.PREVIEW, mode, "CindyPicture", "cindy-picture") {
+    mode: SkeletonSync.Mode,
+    onShown: ((captureNanos: Long) -> Unit)? = null
+) : SyncedEffect(CameraEffect.PREVIEW, mode, "CindyPicture", "cindy-picture", onShown) {
 
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.label),
