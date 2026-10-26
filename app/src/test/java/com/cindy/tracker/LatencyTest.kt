@@ -77,8 +77,7 @@ class LatencyTest {
         // Four frames analysed, three of them superseded before the main thread got to them.
         probe.posted(replacedUnrendered = false)
         repeat(3) { probe.posted(replacedUnrendered = true) }
-        val line = probe.line("thndr", 60f)
-        assertTrue("expected 75% coalesced, was: $line", line.contains("75% coalesced"))
+        assertEquals(75, probe.coalescedShare())
     }
 
     @Test
@@ -136,7 +135,7 @@ class LatencyTest {
         probe.pictureShown(180L)
         for (line in listOf(probe.line("thndr", 58f), probe.line("thndr", 58f, timedOut = 12))) {
             assertEquals(1, line.count { it == '\n' })
-            line.lines().forEach { assertTrue("too long for the band: '$it'", it.length <= 64) }
+            line.lines().forEach { assertTrue("too long for the band (about 50 characters fit): '$it'", it.length <= 50) }
         }
     }
 }
