@@ -422,7 +422,6 @@ class MainActivity : AppCompatActivity() {
             recordedHud.forWorkout(now, clock.text, exercise.text)
         }
         video.overlay.update(
-            keypoints = frame.keypoints,
             width = frame.width,
             height = frame.height,
             mirrored = frame.mirrored,
@@ -813,9 +812,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Tells the picture of every frame the camera captures, by the sensor timestamp of its
-     * per-capture result. On the P40 each of these was found in the effect's queue, which the
-     * analysed frames' own stamps were not always.
+     * Tells the picture, and the film while it films, of every frame the camera captures, by the
+     * sensor timestamp of its per-capture result. On the P40 each of these was found in the
+     * effect's queue, which the analysed frames' own stamps were not always.
      */
     @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
     private fun announceEveryFrame(builder: Preview.Builder) {
@@ -828,6 +827,7 @@ class MainActivity : AppCompatActivity() {
                 ) {
                     val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
                     picture?.takeIf { it.mode == SkeletonSync.Mode.EVERY_FRAME }?.frameKnown(stamp)
+                    video.frameKnown(stamp)
                 }
             }
         )
@@ -837,7 +837,9 @@ class MainActivity : AppCompatActivity() {
         val provider = cameraProvider ?: return
 
         val previewBuilder = Preview.Builder()
-        if (wantedPictureMode == SkeletonSync.Mode.EVERY_FRAME) announceEveryFrame(previewBuilder)
+        // The film is synced in every picture mode, so every frame is announced whatever the
+        // picture does.
+        announceEveryFrame(previewBuilder)
         val preview = previewBuilder.build().also {
             it.setSurfaceProvider(binding.preview.surfaceProvider)
         }
@@ -868,10 +870,10 @@ class MainActivity : AppCompatActivity() {
         // Preview + analysis + recording is more than some cameras will bind at once, and each
         // overlay effect is another surface on top of that. Rep counting is the point of the
         // app, so the extras are what get dropped, in order:
-        //   1. synced picture and film with skeleton
+        //   1. synced picture and film with the synced skeleton
         //   2. synced picture and plain film
         //   3. synced picture, no film
-        //   4. live picture (film with skeleton, plain film, then counting only)
+        //   4. live picture (synced film, plain film, then counting only)
         val synced = wantedPictureMode?.let { PictureEffect(this, it) }
         val bound = (synced != null && (
             bindWithOverlay(provider, selector, preview, analysis, synced) ||
@@ -913,7 +915,7 @@ class MainActivity : AppCompatActivity() {
             .addUseCase(analysis)
             .addUseCase(video.buildUseCase())
             .apply {
-                effect?.let { addEffect(it) }
+                effect?.let { addEffect(it.effect) }
                 pictureEffect?.let { addEffect(it.effect) }
             }
             .build()
@@ -1062,9 +1064,9 @@ class MainActivity : AppCompatActivity() {
                 keypoints, frameW, frameH, guide, pipelineAgeMs.toFloat()
             )
             // Never coalesced: this is the only skeleton the frame it came from will get.
-            syncedPicture?.skeletonReady(
-                captureNanos, SyncSkeleton(keypoints, frameW, frameH, mirrored, guide)
-            )
+            val synced = SyncSkeleton(keypoints, frameW, frameH, mirrored, guide)
+            syncedPicture?.skeletonReady(captureNanos, synced)
+            video.skeletonReady(captureNanos, synced)
 
             latency.analysed(
                 captureAgeMs = captureAgeMs,
@@ -1520,6 +1522,7 @@ class MainActivity : AppCompatActivity() {
             State.RUNNING -> {
                 state = State.PAUSED
                 picture?.releaseAll()
+                video.releaseAll()
                 coach.interrupted()
                 val now = SystemClock.elapsedRealtime()
                 pauseStartedAt = now
@@ -1705,6 +1708,7 @@ class MainActivity : AppCompatActivity() {
         binding.countdown.cancel()
         music.stop()
         picture?.releaseAll()
+        video.releaseAll()
         renderClock()
         renderControls()
 
@@ -2115,6 +2119,7 @@ class MainActivity : AppCompatActivity() {
         stability.reset()
         // Leaving the screen: whatever waits for a skeleton is let go, none of it replays.
         picture?.releaseAll()
+        video.releaseAll()
         // The three seconds were for walking to the bar, not for leaving the app.
         if (binding.countdown.isRunning) {
             binding.countdown.cancel()
