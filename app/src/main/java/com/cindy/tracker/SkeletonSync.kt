@@ -69,6 +69,12 @@ class SkeletonSync(
     /** A picture frame the model is about to analyse, or in live mode, any frame at all. */
     fun frameKnown(captureNanos: Long): List<Released> {
         if (mode == Mode.LIVE) return listOf(Released(captureNanos, newest))
+        // The camera's stamps and the analysis reach here on different threads, so a frame can be
+        // announced after a skeleton newer than it was used. It could only be shown out of order.
+        if (mode == Mode.EVERY_FRAME && anchor != null && captureNanos <= anchorNanos) {
+            droppedCount++
+            return emptyList()
+        }
         waiting.add(Waiting(captureNanos, nowNanos()))
         // Past capacity the oldest goes, and is simply never shown: showing it without its
         // skeleton would put a bare frame on screen that the cap had not yet allowed.
@@ -82,9 +88,9 @@ class SkeletonSync(
     /** The skeleton computed from the frame stamped [captureNanos]. */
     fun skeletonReady(captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
         newest = skeleton
+        if (mode == Mode.EVERY_FRAME) return releaseThrough(captureNanos, skeleton)
         val index = waiting.indexOfFirst { it.captureNanos == captureNanos }
         if (index < 0) return emptyList()
-        if (mode == Mode.EVERY_FRAME) return releaseThrough(index, captureNanos, skeleton)
         // Showing a frame discards every older one the picture still holds, so an older frame
         // still waiting is gone either way. Dropping it here keeps the order strict.
         droppedCount += index
@@ -92,16 +98,27 @@ class SkeletonSync(
         return listOf(Released(captureNanos, skeleton))
     }
 
-    /** Frames up to and including [index], in capture order, the ones before it interpolated. */
-    private fun releaseThrough(index: Int, captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
+    /**
+     * Every frame up to [captureNanos], in capture order: those before it interpolated, and it
+     * with the real skeleton if it was announced. A skeleton older than the last one is ignored.
+     */
+    private fun releaseThrough(captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
+        if (anchor != null && captureNanos <= anchorNanos) return emptyList()
         val earlier = anchor
-        val released = ArrayList<Released>(index + 1)
-        for (i in 0 until index) {
-            val at = waiting[i].captureNanos
-            released.add(Released(at, earlier?.let { between(it, anchorNanos, skeleton, captureNanos, at) }))
+        val released = ArrayList<Released>()
+        var upTo = 0
+        while (upTo < waiting.size && waiting[upTo].captureNanos <= captureNanos) {
+            val at = waiting[upTo].captureNanos
+            released.add(
+                Released(
+                    at,
+                    if (at == captureNanos) skeleton
+                    else earlier?.let { between(it, anchorNanos, skeleton, captureNanos, at) }
+                )
+            )
+            upTo++
         }
-        released.add(Released(captureNanos, skeleton))
-        waiting.subList(0, index + 1).clear()
+        waiting.subList(0, upTo).clear()
         anchor = skeleton
         anchorNanos = captureNanos
         return released

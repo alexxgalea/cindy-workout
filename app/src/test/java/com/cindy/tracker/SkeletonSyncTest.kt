@@ -431,4 +431,34 @@ class SkeletonSyncTest {
         assertEquals(firstMinute, lastMinute)
         assertTrue(lastMinute <= analysisMs + analysisEvery * frameMs)
     }
+
+    @Test
+    fun `a skeleton whose own frame was never announced still releases the frames before it`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.frameKnown(stamp(1))
+        s.frameKnown(stamp(2))
+
+        val shown = s.skeletonReady(stamp(3), at(130f))
+
+        assertEquals(listOf(stamp(1), stamp(2)), shown.stamps())
+        assertEquals(110f, shown[0].skeleton!!.keypoints[0].x, 0.001f)
+    }
+
+    @Test
+    fun `a frame announced after a newer skeleton was used is never shown, so order holds`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.frameKnown(stamp(2))
+        s.skeletonReady(stamp(2), at(120f))
+
+        assertTrue(s.frameKnown(stamp(1)).isEmpty())
+        s.frameKnown(stamp(3))
+        val shown = s.skeletonReady(stamp(4), at(140f))
+
+        assertEquals(listOf(stamp(3)), shown.stamps())
+        assertEquals(1, s.droppedCount)
+    }
 }
