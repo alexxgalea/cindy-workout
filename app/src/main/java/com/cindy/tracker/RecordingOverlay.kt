@@ -43,7 +43,6 @@ import androidx.camera.effects.Frame
 class RecordingOverlay {
 
     private data class State(
-        val keypoints: Array<Keypoint>,
         val width: Int,
         val height: Int,
         /** Whether the analysis frame was mirrored, as it is for the selfie camera. */
@@ -90,34 +89,47 @@ class RecordingOverlay {
     /** Scratch rect for every rounded panel and the banner, one at a time, never held across a call. */
     private val panelRect = RectF()
 
-    /** Called from the analysis thread with everything the next drawn frame should show. */
+    /**
+     * Called from the main thread with what the HUD of the next drawn frame should show. The
+     * analysis frame's size is the HUD's safe-area reference; the skeleton itself does not come
+     * through here, each frame brings its own from [SkeletonSync].
+     */
     fun update(
-        keypoints: Array<Keypoint>,
         width: Int,
         height: Int,
         mirrored: Boolean,
         hud: RecordedHudText,
         debug: Boolean = false
     ) {
-        state = State(keypoints, width, height, mirrored, hud, debug)
+        state = State(width, height, mirrored, hud, debug)
     }
 
     fun clear() {
         state = null
     }
 
-    /** Runs on the effect's handler thread. Returns false if the frame should be dropped. */
-    fun draw(frame: Frame): Boolean {
+    /**
+     * Runs on the effect's handler thread. [body] is the skeleton of this very frame, or null
+     * when none arrived in time: the frame is then filmed with the HUD alone.
+     */
+    fun draw(frame: Frame, body: SyncSkeleton?): Boolean {
         val canvas = frame.overlayCanvas
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-        val s = state ?: return true
-        if (s.width <= 0 || s.height <= 0) return true
-
         val size = frame.size
         if (size.width <= 0 || size.height <= 0) return true
 
-        // The keypoints are mirrored for the selfie camera; the buffer may not be.
-        val bodyMirrored = s.mirrored != frame.isMirroring
+        if (body != null && body.width > 0 && body.height > 0) {
+            // The keypoints are mirrored for the selfie camera; the buffer may not be.
+            canvas.save()
+            canvas.concat(
+                analysisToBuffer(frame, body.width, body.height, body.mirrored != frame.isMirroring)
+            )
+            skeleton.paint(canvas, body.keypoints, body.height)
+            canvas.restore()
+        }
+
+        val s = state ?: return true
+        if (s.width <= 0 || s.height <= 0) return true
         // The part of the frame that survives the crop, and so the only part text may use.
         val safe = OverlayTransform.visibleSource(
             srcWidth = s.width,
@@ -127,11 +139,12 @@ class RecordingOverlay {
             rotationDegrees = frame.rotationDegrees
         )
 
-        canvas.save()
-        canvas.concat(transform(frame, s, mirror = bodyMirrored))
-        if (s.debug) drawFrameBorder(canvas, s, safe)
-        skeleton.paint(canvas, s.keypoints, s.height)
-        canvas.restore()
+        if (s.debug) {
+            canvas.save()
+            canvas.concat(transform(frame, s, mirror = s.mirrored != frame.isMirroring))
+            drawFrameBorder(canvas, s, safe)
+            canvas.restore()
+        }
 
         // Text follows the buffer, never the keypoints, so it reads forwards in the file.
         canvas.save()
