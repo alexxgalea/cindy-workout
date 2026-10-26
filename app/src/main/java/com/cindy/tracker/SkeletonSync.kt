@@ -31,7 +31,14 @@ class SkeletonSync(
         LIVE,
 
         /** A frame the model analysed waits for its own skeleton; frames it never saw are not shown. */
-        ANALYSED_ONLY
+        ANALYSED_ONLY,
+
+        /**
+         * Every camera frame is shown. One the model never saw waits for the next skeleton and is
+         * then drawn with one interpolated, joint by joint and linearly in capture time, between
+         * the two real skeletons around it.
+         */
+        EVERY_FRAME
     }
 
     /** A frame to show now. [skeleton] is null when none was ready for it. */
@@ -46,6 +53,10 @@ class SkeletonSync(
     private val waiting = ArrayList<Waiting>()
 
     private var newest: SyncSkeleton? = null
+
+    /** The last real skeleton released, with its capture stamp: the earlier end of an interpolation. */
+    private var anchorNanos = 0L
+    private var anchor: SyncSkeleton? = null
 
     /** Frames the cap released without their skeleton, for the latency readout. */
     var cappedCount = 0
@@ -73,11 +84,27 @@ class SkeletonSync(
         newest = skeleton
         val index = waiting.indexOfFirst { it.captureNanos == captureNanos }
         if (index < 0) return emptyList()
+        if (mode == Mode.EVERY_FRAME) return releaseThrough(index, captureNanos, skeleton)
         // Showing a frame discards every older one the picture still holds, so an older frame
         // still waiting is gone either way. Dropping it here keeps the order strict.
         droppedCount += index
         waiting.subList(0, index + 1).clear()
         return listOf(Released(captureNanos, skeleton))
+    }
+
+    /** Frames up to and including [index], in capture order, the ones before it interpolated. */
+    private fun releaseThrough(index: Int, captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
+        val earlier = anchor
+        val released = ArrayList<Released>(index + 1)
+        for (i in 0 until index) {
+            val at = waiting[i].captureNanos
+            released.add(Released(at, earlier?.let { between(it, anchorNanos, skeleton, captureNanos, at) }))
+        }
+        released.add(Released(captureNanos, skeleton))
+        waiting.subList(0, index + 1).clear()
+        anchor = skeleton
+        anchorNanos = captureNanos
+        return released
     }
 
     /** Releases, without a skeleton, every frame that has waited as long as the cap allows. */
@@ -114,6 +141,19 @@ class SkeletonSync(
         if (next == mode) return emptyList()
         mode = next
         return releaseAll()
+    }
+
+    private fun between(
+        from: SyncSkeleton, fromNanos: Long, to: SyncSkeleton, toNanos: Long, at: Long
+    ): SyncSkeleton {
+        val t = if (toNanos == fromNanos) 1f else
+            ((at - fromNanos).toDouble() / (toNanos - fromNanos)).toFloat().coerceIn(0f, 1f)
+        val joints = Array(from.keypoints.size) { i ->
+            val a = from.keypoints[i]
+            val b = to.keypoints[i]
+            Keypoint(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, minOf(a.score, b.score))
+        }
+        return SyncSkeleton(joints, from.width, from.height, from.mirrored, from.guide)
     }
 
     /** When the oldest waiting frame hits the cap, on the clock this was built with. */

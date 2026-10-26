@@ -290,4 +290,29 @@ class SkeletonSyncTest {
 
         assertEquals(1, s.droppedCount)
     }
+
+    // ---- every frame: in-between frames wait, then show an interpolated skeleton ----
+
+    private fun everyFrame() = sync(SkeletonSync.Mode.EVERY_FRAME)
+
+    /** A skeleton whose every joint sits at ([x], [x]) and is fully seen. */
+    private fun at(x: Float, score: Float = 0.9f) =
+        SyncSkeleton(Array(17) { Keypoint(x, x, score) }, 480, 640, mirrored = false, guide = null)
+
+    @Test
+    fun `a frame between two analysed frames waits for the next skeleton and is shown halfway between`() {
+        val s = everyFrame()
+        s.frameKnown(stamp(0))
+        s.skeletonReady(stamp(0), at(100f))
+        s.frameKnown(stamp(1))
+        s.frameKnown(stamp(2))
+        assertTrue(s.frameKnown(stamp(3)).isEmpty())
+
+        val shown = s.skeletonReady(stamp(3), at(130f))
+
+        assertEquals(listOf(stamp(1), stamp(2), stamp(3)), shown.stamps())
+        assertEquals(110f, shown[0].skeleton!!.keypoints[0].x, 0.001f)
+        assertEquals(120f, shown[1].skeleton!!.keypoints[0].x, 0.001f)
+        assertEquals(130f, shown[2].skeleton!!.keypoints[0].x, 0.001f)
+    }
 }
