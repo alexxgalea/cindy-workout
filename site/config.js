@@ -4,7 +4,7 @@
 window.CINDY_SITE = {
   mode: "testers",
   // The Google Group the closed (Alpha) track allows. Must be https:// while mode is "testers".
-  groupUrl: "",
+  groupUrl: "https://groups.google.com/g/cindy-testers",
   optInUrl: "https://play.google.com/apps/testing/com.cindy.tracker",
   playUrl: "https://play.google.com/store/apps/details?id=com.cindy.tracker",
   privacyUrl: "https://alexxgalea.github.io/cindy-privacy/",
