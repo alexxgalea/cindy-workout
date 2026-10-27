@@ -1,0 +1,42 @@
+# Publishes site/ (the landing page behind the Instagram link) to the user-site repository
+# alexxgalea.github.io, which GitHub Pages serves. The source stays here, so the page survives this
+# repository going private; the pages repository holds only the published copy.
+#
+# Needs the secret SITE_DEPLOY_KEY: the private half of a deploy key with write access, added to
+# alexxgalea/alexxgalea.github.io. The privacy policy lives in its own repository (cindy-privacy)
+# and is not touched here.
+name: Publish the landing page
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'tools/site/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+concurrency: site-deploy
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the page, and refuse one with no group link while it recruits testers
+        run: python3 tools/site/check.py --deploy
+      - name: Copy site/ into the pages repository and push
+        env:
+          DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes"
+          git clone --depth 1 git@github.com:alexxgalea/alexxgalea.github.io.git pages
+          rsync -a --delete --exclude .git --exclude README.md site/ pages/
+          touch pages/.nojekyll
+          cd pages
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing changed."; exit 0; fi
+          git -c user.name="cindy-site" -c user.email="noreply@github.com" \
+            commit -m "Publish the landing page from ${GITHUB_SHA::7}"
+          git push origin HEAD:main
