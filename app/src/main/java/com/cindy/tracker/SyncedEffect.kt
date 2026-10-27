@@ -23,7 +23,6 @@ import androidx.camera.effects.OverlayEffect
  */
 abstract class SyncedEffect(
     target: Int,
-    val mode: SkeletonSync.Mode,
     private val tag: String,
     threadName: String,
     /** Told the capture stamp of each frame as it is drawn, on the handler thread. */
@@ -32,8 +31,8 @@ abstract class SyncedEffect(
     private val thread = HandlerThread(threadName).also { it.start() }
     private val handler = Handler(thread.looper)
 
-    // Every frame waits too in every-frame mode, so the sync holds as many as the effect does.
-    private val sync = SkeletonSync(mode, QUEUE_DEPTH) { System.nanoTime() }
+    // Every frame waits too, so the sync holds as many as the effect does.
+    private val sync = SkeletonSync(SkeletonSync.Mode.EVERY_FRAME, QUEUE_DEPTH) { System.nanoTime() }
 
     /** What each released frame is to be drawn with, until the effect calls back for it. */
     private val drawing = HashMap<Long, SyncSkeleton?>()

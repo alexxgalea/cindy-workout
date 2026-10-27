@@ -292,26 +292,24 @@ class MainActivity : AppCompatActivity() {
      *
      * There are two readouts rather than one because the line is a single 14sp row on the top
      * band and will not hold both, and because they answer different questions: [COUNTING] is
-     * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third shows
-     * the latency numbers with the synced picture on: each analysed frame held until its own
-     * skeleton, and drawn with it into the picture. The fourth is the synced picture showing
-     * every camera frame, the ones the model never saw drawn with a skeleton interpolated
-     * between its neighbours.
+     * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third mode
+     * is the second one on the live picture, which is the same picture without the wait for its
+     * skeleton, so the price of the synced one can be read against it.
      */
     private enum class Readout {
-        OFF, COUNTING, LATENCY, LATENCY_SYNCED, LATENCY_EVERY_FRAME
+        OFF, COUNTING, LATENCY, LATENCY_LIVE
     }
 
     private var readout = Readout.OFF
 
-    /** Debug builds only: release builds keep the live picture until the owner's verdict. */
-    private val wantedPictureMode: SkeletonSync.Mode?
-        get() = when {
-            !BuildConfig.DEBUG -> null
-            readout == Readout.LATENCY_SYNCED -> SkeletonSync.Mode.ANALYSED_ONLY
-            readout == Readout.LATENCY_EVERY_FRAME -> SkeletonSync.Mode.EVERY_FRAME
-            else -> null
-        }
+    /**
+     * The picture is the synced one in every build, with no setting; only the live-picture
+     * readout turns it off. See ADR 0005.
+     */
+    private val wantsLivePicture: Boolean get() = readout == Readout.LATENCY_LIVE
+
+    /** What the last bind asked for, so a phone that fell back to the live picture is not rebound for nothing. */
+    private var livePictureBound = false
 
     /** The effect drawing the picture, while it is bound. Null means the live picture. */
     @Volatile private var picture: PictureEffect? = null
@@ -605,13 +603,12 @@ class MainActivity : AppCompatActivity() {
                         Readout.OFF -> "Debug readout off"
                         Readout.COUNTING -> "Counting readout"
                         Readout.LATENCY -> "Latency readout"
-                        Readout.LATENCY_SYNCED -> "Latency readout · synced picture, analysed frames only"
-                        Readout.LATENCY_EVERY_FRAME -> "Latency readout · synced picture, every frame"
+                        Readout.LATENCY_LIVE -> "Latency readout · live picture"
                     }
                 )
                 // The effect is a use case on the camera, so changing the picture is a rebind,
                 // not an app restart.
-                if (wantedPictureMode != picture?.mode) {
+                if (wantsLivePicture != livePictureBound) {
                     // A rebind would cut the film in two.
                     if (video.isRecording) toast("Picture mode applies once the recording stops") else bindUseCases()
                 }
@@ -823,7 +820,7 @@ class MainActivity : AppCompatActivity() {
                     result: TotalCaptureResult
                 ) {
                     val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
-                    picture?.takeIf { it.mode == SkeletonSync.Mode.EVERY_FRAME }?.frameKnown(stamp)
+                    picture?.frameKnown(stamp)
                     video.frameKnown(stamp)
                 }
             }
@@ -834,8 +831,7 @@ class MainActivity : AppCompatActivity() {
         val provider = cameraProvider ?: return
 
         val previewBuilder = Preview.Builder()
-        // The film is synced in every picture mode, so every frame is announced whatever the
-        // picture does.
+        // Every frame is announced: the synced picture and the film both wait for their own.
         announceEveryFrame(previewBuilder)
         val preview = previewBuilder.build().also {
             it.setSurfaceProvider(binding.preview.surfaceProvider)
@@ -871,8 +867,11 @@ class MainActivity : AppCompatActivity() {
         //   2. synced picture and plain film
         //   3. synced picture, no film
         //   4. live picture (synced film, plain film, then counting only)
-        val synced = wantedPictureMode?.let { mode ->
-            PictureEffect(this, mode) { stamp -> latency.pictureShown(latency.clock.sinceCapture(stamp)) }
+        livePictureBound = wantsLivePicture
+        val synced = if (wantsLivePicture) {
+            null
+        } else {
+            PictureEffect(this) { stamp -> latency.pictureShown(latency.clock.sinceCapture(stamp)) }
         }
         val bound = (synced != null && (
             bindWithOverlay(provider, selector, preview, analysis, synced) ||
@@ -1011,10 +1010,6 @@ class MainActivity : AppCompatActivity() {
             // Read once: if the lens flips mid-frame, this frame's skeleton goes to the effect
             // that holds its picture, which is by then closed, and so shows nothing.
             val syncedPicture = picture
-            // In every-frame mode the camera's own per-capture results announce each frame.
-            if (syncedPicture?.mode == SkeletonSync.Mode.ANALYSED_ONLY) {
-                syncedPicture.frameKnown(captureNanos)
-            }
             val tEntry = System.nanoTime()
             readPlanes(proxy)
             val tConverted = System.nanoTime()
