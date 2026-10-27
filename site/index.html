@@ -16,7 +16,7 @@
   @font-face { font-family: "Manrope"; font-weight: 800; src: url("fonts/manrope_extrabold.ttf"); font-display: swap; }
   :root { --bg: #000; --fg: #fff; --dim: rgba(255,255,255,.62); --line: rgba(255,255,255,.18); --green: #30D158; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { background: var(--bg); }
+  html { background: var(--bg); scroll-behavior: smooth; }
   body { background: var(--bg); color: var(--fg); font: 500 18px/1.5 "Manrope", system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
   a { color: inherit; }
   main, header, footer { width: min(100%, 880px); margin: 0 auto; padding: 0 16px; }
@@ -48,6 +48,9 @@
   .note { margin-top: 20px; color: var(--dim); font-size: 16px; }
   footer { padding: 40px 16px 56px; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); margin-top: 24px; }
   footer a { margin-right: 16px; }
+  .sticky { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translate(-50%, 0); margin: 0; box-shadow: 0 8px 28px rgba(0,0,0,.6); transition: opacity .2s, transform .2s; z-index: 10; white-space: nowrap; }
+  .sticky.off { opacity: 0; transform: translate(-50%, 24px); pointer-events: none; }
+  body.has-sticky footer { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
   @media (max-width: 600px) { .shots { grid-template-columns: 1fr; max-width: 280px; margin: 0 auto; } }
 </style>
 </head>
@@ -117,13 +120,15 @@
   <span data-i18n="foot"></span>
 </footer>
 
+<a class="btn sticky off" id="sticky-join" href="#join" data-i18n="joinBtn" hidden></a>
+
 <script src="config.js"></script>
 <script>
 const T = {
   ro: {
-    title: "Cindy, numărată de cameră.",
+    title: "Camera îți numără repetările.",
     lead: "Cindy Tracker îți numără repetările cu camera telefonului: 20 de minute, 5 tracțiuni, 10 flotări, 15 genuflexiuni, cât mai multe runde. Fără ceas, fără nimeni care să numere pentru tine.",
-    badgeTest: "Caut {n} testeri cu Android, din România.",
+    badgeTest: "Caut {n} testeri cu Android.",
     badgePlay: "Disponibilă pe Google Play.",
     joinBtn: "Vreau să testez",
     playBtn: "Descarcă de pe Google Play",
@@ -142,7 +147,7 @@ const T = {
     s3: "Instalează Cindy Tracker din Google Play.",
     s4: "Rămâi în program <span style='color:var(--green)'>{d} zile la rând</span>. Asta e tot ce cer.",
     groupBtn: "1. Intră în grup", optInBtn: "2. Linkul de testare",
-    joinNote: "Doar Android, doar România. Testarea e închisă: fără grup, linkul de testare nu merge.",
+    joinNote: "Doar Android. Testarea e închisă: fără grup, linkul de testare nu merge.",
     getH: "Încearc-o",
     privacy: "Politica de confidențialitate",
     foot: "Cindy Tracker"
@@ -150,7 +155,7 @@ const T = {
   en: {
     title: "Cindy, counted by the camera.",
     lead: "Cindy Tracker counts your reps with the phone's camera: 20 minutes, 5 pull-ups, 10 push-ups, 15 air squats, as many rounds as you can. Nothing to wear, no one to count for you.",
-    badgeTest: "Looking for {n} Android testers in Romania.",
+    badgeTest: "Looking for {n} Android testers.",
     badgePlay: "Available on Google Play.",
     joinBtn: "I want to test",
     playBtn: "Get it on Google Play",
@@ -169,7 +174,7 @@ const T = {
     s3: "Install Cindy Tracker from Google Play.",
     s4: "Stay in the programme for <span style='color:var(--green)'>{d} days in a row</span>. That is all I ask.",
     groupBtn: "1. Join the group", optInBtn: "2. Testing link",
-    joinNote: "Android only, Romania only. The test is closed: without the group, the testing link will not work.",
+    joinNote: "Android only. The test is closed: without the group, the testing link will not work.",
     getH: "Try it",
     privacy: "Privacy policy",
     foot: "Cindy Tracker"
@@ -209,6 +214,22 @@ $("optin-btn").href = C.optInUrl;
 $("privacy").href = C.privacyUrl;
 document.querySelectorAll(".lang button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang)));
 setLang(initialLang());
+
+// The sticky "I want to test" button: shown once the hero's own button has scrolled away, hidden
+// again while the join steps are on screen.
+if (!play && "IntersectionObserver" in window) {
+  const sticky = $("sticky-join");
+  sticky.hidden = false;
+  document.body.classList.add("has-sticky");
+  const seen = { hero: true, join: false };
+  const update = () => sticky.classList.toggle("off", seen.hero || seen.join);
+  new IntersectionObserver(es => es.forEach(e => {
+    seen.hero = e.isIntersecting;
+    update();
+  })).observe($("cta-testers"));
+  new IntersectionObserver(es => es.forEach(e => { seen.join = e.isIntersecting; update(); }))
+    .observe($("join-testers"));
+}
 </script>
 </body>
 </html>
