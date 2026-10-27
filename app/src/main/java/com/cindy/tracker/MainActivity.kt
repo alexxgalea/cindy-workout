@@ -292,15 +292,14 @@ class MainActivity : AppCompatActivity() {
      *
      * There are two readouts rather than one because the line is a single 14sp row on the top
      * band and will not hold both, and because they answer different questions: [COUNTING] is
-     * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third mode
-     * is the second one with the predicted skeleton switched on, so the numbers and the thing
-     * they are meant to explain can be read at the same time. The fourth shows the latency
-     * numbers with the synced picture on: each analysed frame held until its own skeleton, and
-     * drawn with it into the picture. The fifth is the synced picture showing every camera frame,
-     * the ones the model never saw drawn with a skeleton interpolated between its neighbours.
+     * "why did that rep not score", [LATENCY] is "why is the skeleton behind me". The third shows
+     * the latency numbers with the synced picture on: each analysed frame held until its own
+     * skeleton, and drawn with it into the picture. The fourth is the synced picture showing
+     * every camera frame, the ones the model never saw drawn with a skeleton interpolated
+     * between its neighbours.
      */
     private enum class Readout {
-        OFF, COUNTING, LATENCY, LATENCY_PREDICT, LATENCY_SYNCED, LATENCY_EVERY_FRAME
+        OFF, COUNTING, LATENCY, LATENCY_SYNCED, LATENCY_EVERY_FRAME
     }
 
     private var readout = Readout.OFF
@@ -599,7 +598,6 @@ class MainActivity : AppCompatActivity() {
         if (BuildConfig.DEBUG) {
             binding.statusRow.setOnLongClickListener {
                 readout = Readout.entries[(readout.ordinal + 1) % Readout.entries.size]
-                binding.overlay.predict = readout == Readout.LATENCY_PREDICT
                 binding.status.maxLines = if (readout == Readout.COUNTING || !debug) 1 else 2
                 latency.reset()
                 toast(
@@ -607,7 +605,6 @@ class MainActivity : AppCompatActivity() {
                         Readout.OFF -> "Debug readout off"
                         Readout.COUNTING -> "Counting readout"
                         Readout.LATENCY -> "Latency readout"
-                        Readout.LATENCY_PREDICT -> "Latency readout · predicted skeleton"
                         Readout.LATENCY_SYNCED -> "Latency readout · synced picture, analysed frames only"
                         Readout.LATENCY_EVERY_FRAME -> "Latency readout · synced picture, every frame"
                     }
@@ -1052,19 +1049,11 @@ class MainActivity : AppCompatActivity() {
             val convertMs = (tConverted - tEntry) / 1_000_000L
             val captureAgeMs = latency.clock.sinceCapture(captureNanos)
 
-            // How far behind the body this pose already is, which is the horizon the predicted
-            // skeleton has to cover. Measured from the sensor stamp where the camera will say
-            // which clock it is on; where it will not, the stages this code timed itself are a
-            // floor — an undercorrection, which is the safe direction to be wrong in.
-            val pipelineAgeMs = captureAgeMs
-                ?: (convertMs + det.lastPrepMs + det.lastInferenceMs)
-
-            // Straight to the overlay from this thread. The skeleton is the one thing on screen
-            // whose whole job is to be current, and a posted runnable would put a queue between
-            // it and the camera — see OverlayView's note on why that queue is the bug.
-            binding.overlay.submit(
-                keypoints, frameW, frameH, guide, pipelineAgeMs.toFloat()
-            )
+            // Straight to the overlay from this thread. On the live picture the skeleton is the
+            // one thing on screen whose whole job is to be current, and a posted runnable would
+            // put a queue between it and the camera — see OverlayView's note on why that queue
+            // is the bug.
+            binding.overlay.submit(keypoints, frameW, frameH, guide)
             // Never coalesced: this is the only skeleton the frame it came from will get.
             val synced = SyncSkeleton(keypoints, frameW, frameH, mirrored, guide)
             syncedPicture?.skeletonReady(captureNanos, synced)

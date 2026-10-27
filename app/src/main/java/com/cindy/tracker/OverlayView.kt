@@ -8,11 +8,14 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
-import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * Draws the detected skeleton, and the pull-up gate, on top of the preview.
+ * Draws the detected skeleton, and the pull-up gate, on top of the live picture.
+ *
+ * The synced picture draws both into its own frames and this view stays out of the way (see
+ * [live]). This view is what draws them when the picture is the live one: the debug readout's
+ * live-picture mode, and a phone whose camera could not bind the synced picture.
  *
  * Keypoints arrive in analysis-frame pixels, which is a different resolution to the view, so
  * the same FILL_CENTER mapping PreviewView applies is recomputed here — otherwise the skeleton
@@ -36,11 +39,6 @@ class OverlayView @JvmOverloads constructor(
     private companion object {
         /** Alpha of the wash inside the bar zone: enough to read as a region, not as a mask. */
         const val ZONE_FILL_ALPHA = 26
-
-        /** Stop asking for frames once the pose stream has gone this quiet. */
-        const val IDLE_STOP_MS = 1_000L
-        /** Below this much movement, in frame pixels, another frame would redraw the same thing. */
-        const val STILL_PX = 0.5f
     }
 
     /** One analysed frame, immutable so the analysis thread can publish it without a lock. */
@@ -48,29 +46,11 @@ class OverlayView @JvmOverloads constructor(
         val keypoints: Array<Keypoint>,
         val srcW: Int,
         val srcH: Int,
-        val guide: WorkoutEngine.BarGuide?,
-        val nanos: Long,
-        /** How old this pose already was when it was published — the pipeline's own lag. */
-        val pipelineAgeMs: Float
+        val guide: WorkoutEngine.BarGuide?
     )
 
-    /** Newest last, at most three — the third is what makes a direction change detectable. */
     @Volatile
-    private var frames: List<PoseFrame> = emptyList()
-
-    /**
-     * Whether the skeleton may be drawn ahead of the last pose.
-     *
-     * Off by default and deliberately a switch rather than a decision: it is the one display
-     * change that can put a joint somewhere the body never was, and the only honest way to judge
-     * that is on a phone, at the top of a pull-up, with it flipped on and off.
-     */
-    @Volatile
-    var predict: Boolean = false
-        set(value) {
-            field = value
-            postInvalidateOnAnimation()
-        }
+    private var newest: PoseFrame? = null
 
     /**
      * Whether this view draws the skeleton and the gate. Off while the synced picture is on:
@@ -121,38 +101,17 @@ class OverlayView @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
     }
 
-    /** Scratch for the drawn pose, so a 60Hz redraw allocates nothing. */
-    private val drawn = FloatArray(KP.COUNT * 2)
-    /** What was on screen last frame, to notice when another frame would change nothing. */
-    private val lastDrawn = FloatArray(KP.COUNT * 2)
-
     /**
      * Publishes one analysed frame. [guide] is the pull-up gate, or null for the movements and
      * the moments that have no bar to show. Called from the analysis thread.
-     *
-     * [nanos] is [System.nanoTime] taken when the frame was analysed, not the sensor's capture
-     * stamp — the pose timeline only needs to be self-consistent to yield a velocity, and
-     * borrowing the camera's clock would drag its whole domain problem (see [FrameLatency]) into
-     * the render path.
-     *
-     * [pipelineAgeMs] is the part that stamp cannot supply: how far behind the body this pose
-     * already was the moment it arrived. Velocity comes from the stamps, the horizon comes from
-     * this, and conflating the two is what made the first version of prediction useless.
      */
     fun submit(
         keypoints: Array<Keypoint>?,
         sourceWidth: Int,
         sourceHeight: Int,
-        guide: WorkoutEngine.BarGuide? = null,
-        pipelineAgeMs: Float = 0f,
-        nanos: Long = System.nanoTime()
+        guide: WorkoutEngine.BarGuide? = null
     ) {
-        frames = if (keypoints == null) {
-            emptyList()
-        } else {
-            val frame = PoseFrame(keypoints, sourceWidth, sourceHeight, guide, nanos, pipelineAgeMs)
-            (frames + frame).takeLast(3)
-        }
+        newest = keypoints?.let { PoseFrame(it, sourceWidth, sourceHeight, guide) }
         postInvalidateOnAnimation()
     }
 
@@ -161,24 +120,21 @@ class OverlayView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (!live) return
-        val history = frames
-        val newest = history.lastOrNull() ?: return
-        if (newest.srcW == 0 || newest.srcH == 0) return
+        val pose = newest ?: return
+        if (pose.srcW == 0 || pose.srcH == 0) return
 
         drawRate.mark()
 
         // FILL_CENTER: scale up until both axes are covered, then centre the overflow.
-        val scale = max(width.toFloat() / newest.srcW, height.toFloat() / newest.srcH)
-        val dx = (width - newest.srcW * scale) / 2f
-        val dy = (height - newest.srcH * scale) / 2f
+        val scale = max(width.toFloat() / pose.srcW, height.toFloat() / pose.srcH)
+        val dx = (width - pose.srcW * scale) / 2f
+        val dy = (height - pose.srcH * scale) / 2f
 
         fun sx(x: Float) = x * scale + dx
         fun sy(y: Float) = y * scale + dy
 
-        // Under the skeleton, so the body is never obscured by its own gate. The gate is a
-        // learned position in frame pixels, not something the body is doing, so it is never
-        // predicted — only the skeleton moves.
-        newest.guide?.let { guide ->
+        // Under the skeleton, so the body is never obscured by its own gate.
+        pose.guide?.let { guide ->
             val colour = if (guide.gateOpen) ok else alert
             val left = sx(guide.zone.left)
             val right = sx(guide.zone.right)
@@ -193,66 +149,14 @@ class OverlayView @JvmOverloads constructor(
             canvas.drawLine(left, sy(guide.resetY), right, sy(guide.resetY), resetPaint)
         }
 
-        val now = System.nanoTime()
-        resolvePositions(history, now)
-
-        val k = newest.keypoints
+        val k = pose.keypoints
         for ((a, b) in KP.SKELETON) {
             if (!PoseGeometry.ok(k[a]) || !PoseGeometry.ok(k[b])) continue
-            canvas.drawLine(
-                sx(drawn[a * 2]), sy(drawn[a * 2 + 1]),
-                sx(drawn[b * 2]), sy(drawn[b * 2 + 1]),
-                bonePaint
-            )
+            canvas.drawLine(sx(k[a].x), sy(k[a].y), sx(k[b].x), sy(k[b].y), bonePaint)
         }
         for (i in 0 until KP.COUNT) {
             if (!PoseGeometry.ok(k[i])) continue
-            canvas.drawCircle(sx(drawn[i * 2]), sy(drawn[i * 2 + 1]), 9f, jointPaint)
+            canvas.drawCircle(sx(k[i].x), sy(k[i].y), 9f, jointPaint)
         }
-
-        // Predicting only pays if the picture is refreshed between poses, so this is the one mode
-        // that asks for frames of its own. Two things stop it asking, because those frames are not
-        // free — measured at about 18% of the analysis rate on the test handset, which is a tax
-        // paid in exactly the currency prediction is trying to buy:
-        //
-        //  - the pose stream has gone quiet, so the workout is over or paused;
-        //  - nothing moved, so the next frame would redraw this one. An athlete resting between
-        //    rounds is perfectly still for seconds at a time, and there is no reason to hold the
-        //    compositor open through it. A new pose always invalidates, so this cannot stick.
-        val moved = maxMovement()
-        System.arraycopy(drawn, 0, lastDrawn, 0, drawn.size)
-        if (predict && moved >= STILL_PX && (now - newest.nanos) / 1_000_000L < IDLE_STOP_MS) {
-            postInvalidateOnAnimation()
-        }
-    }
-
-    /** The furthest any joint travelled since the last draw, in frame pixels. */
-    private fun maxMovement(): Float {
-        var most = 0f
-        for (i in drawn.indices) most = max(most, abs(drawn[i] - lastDrawn[i]))
-        return most
-    }
-
-    /**
-     * Fills [drawn] with where each joint should appear right now.
-     *
-     * With prediction off, or before three poses have arrived, this is simply the newest pose.
-     * The bounded carry-forward and the reasoning behind every bound live in [PosePrediction],
-     * which is pure so it can be tested without a screen.
-     */
-    private fun resolvePositions(history: List<PoseFrame>, now: Long) {
-        val newest = history.last()
-        val usable = predict && history.size >= 3
-        PosePrediction.resolve(
-            newest = newest.keypoints,
-            newestNanos = newest.nanos,
-            previous = if (usable) history[1].keypoints else null,
-            previousNanos = if (usable) history[1].nanos else 0L,
-            oldest = if (usable) history[0].keypoints else null,
-            oldestNanos = if (usable) history[0].nanos else 0L,
-            nowNanos = now,
-            pipelineAgeMs = newest.pipelineAgeMs,
-            out = drawn
-        )
     }
 }
