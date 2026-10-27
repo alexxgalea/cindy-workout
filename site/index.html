@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cindy Tracker</title>
+<meta name="description" content="Cindy Tracker counts your reps with the phone's camera. / Cindy Tracker îți numără repetările cu camera telefonului.">
+<meta name="theme-color" content="#000000">
+<meta property="og:title" content="Cindy Tracker">
+<meta property="og:description" content="Cindy Tracker counts your reps with the phone's camera. / Cindy Tracker îți numără repetările cu camera telefonului.">
+<meta property="og:image" content="img/01-pushup-counting.jpg">
+<link rel="icon" href="img/icon.png">
+<style>
+  @font-face { font-family: "Manrope"; font-weight: 500; src: url("fonts/manrope_medium.ttf"); font-display: swap; }
+  @font-face { font-family: "Manrope"; font-weight: 700; src: url("fonts/manrope_bold.ttf"); font-display: swap; }
+  @font-face { font-family: "Manrope"; font-weight: 800; src: url("fonts/manrope_extrabold.ttf"); font-display: swap; }
+  :root { --bg: #000; --fg: #fff; --dim: rgba(255,255,255,.62); --line: rgba(255,255,255,.18); --green: #30D158; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body { background: var(--bg); color: var(--fg); font: 500 18px/1.5 "Manrope", system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+  a { color: inherit; }
+  main, header, footer { width: min(100%, 880px); margin: 0 auto; padding: 0 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-top: 20px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; text-decoration: none; }
+  .brand img { width: 40px; height: 40px; border-radius: 10px; }
+  .lang { display: flex; gap: 4px; }
+  .lang button { font: 700 14px/1 "Manrope", sans-serif; letter-spacing: 1px; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; min-height: 40px; cursor: pointer; }
+  .lang button[aria-pressed="true"] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+  .hero { padding: 56px 0 40px; }
+  h1 { font-weight: 800; font-size: clamp(38px, 8vw, 68px); line-height: 1.04; letter-spacing: -.03em; }
+  .lead { margin-top: 20px; color: var(--dim); font-size: clamp(18px, 2.6vw, 22px); max-width: 34em; }
+  .badge { display: inline-block; margin-top: 24px; color: var(--green); font-weight: 800; font-size: 20px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 14px 26px; margin-top: 24px; border-radius: 999px; background: var(--fg); color: var(--bg); font: 800 17px/1.2 "Manrope", sans-serif; text-decoration: none; border: 0; cursor: pointer; }
+  .btn.ghost { background: none; color: var(--fg); border: 1px solid var(--line); }
+  .btn[hidden], [hidden] { display: none !important; }
+  h2 { font-weight: 800; font-size: clamp(28px, 5vw, 40px); letter-spacing: -.02em; margin-bottom: 20px; }
+  section { padding: 40px 0; }
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .shots figure { border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: #0a0a0a; }
+  .shots img { display: block; width: 100%; height: auto; }
+  .shots figcaption { padding: 12px 14px 14px; color: var(--dim); font-size: 14px; line-height: 1.35; }
+  .points { list-style: none; display: grid; gap: 12px; }
+  .points li { padding: 16px 18px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); }
+  .points b { font-weight: 800; }
+  ol.steps { list-style: none; counter-reset: s; display: grid; gap: 16px; }
+  ol.steps li { counter-increment: s; display: flex; gap: 16px; align-items: flex-start; font-weight: 700; font-size: 20px; line-height: 1.35; }
+  ol.steps li::before { content: counter(s); flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); display: grid; place-items: center; font-size: 17px; }
+  .note { margin-top: 20px; color: var(--dim); font-size: 16px; }
+  footer { padding: 40px 16px 56px; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); margin-top: 24px; }
+  footer a { margin-right: 16px; }
+  @media (max-width: 600px) { .shots { grid-template-columns: 1fr; max-width: 280px; margin: 0 auto; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="./"><img src="img/icon.png" alt="" width="40" height="40"><span>Cindy Tracker</span></a>
+  <div class="lang" role="group" aria-label="Language / Limbă">
+    <button type="button" data-lang="ro" aria-pressed="false">RO</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1 data-i18n="title"></h1>
+    <p class="lead" data-i18n="lead"></p>
+    <p class="badge" data-i18n="badge" id="badge"></p>
+    <div id="cta-play" hidden>
+      <a class="btn" id="play-btn" href="#" data-i18n="playBtn"></a>
+    </div>
+    <div id="cta-testers" hidden>
+      <a class="btn" href="#join" data-i18n="joinBtn"></a>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-i18n="seeH"></h2>
+    <div class="shots">
+      <figure><img src="img/01-pushup-counting.jpg" width="540" height="1080" loading="lazy" data-i18n-alt="alt1"><figcaption data-i18n="cap1"></figcaption></figure>
+      <figure><img src="img/03-start-position-coach.jpg" width="540" height="1080" loading="lazy" data-i18n-alt="alt3"><figcaption data-i18n="cap3"></figcaption></figure>
+      <figure><img src="img/07-badge-and-energy.jpg" width="540" height="1080" loading="lazy" data-i18n-alt="alt7"><figcaption data-i18n="cap7"></figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-i18n="whyH"></h2>
+    <ul class="points">
+      <li data-i18n-html="p1"></li>
+      <li data-i18n-html="p2"></li>
+      <li data-i18n-html="p3"></li>
+      <li data-i18n-html="p4"></li>
+    </ul>
+  </section>
+
+  <section id="join">
+    <div id="join-testers" hidden>
+      <h2 data-i18n="joinH"></h2>
+      <ol class="steps">
+        <li data-i18n-html="s1"></li>
+        <li data-i18n-html="s2"></li>
+        <li data-i18n-html="s3"></li>
+        <li data-i18n-html="s4"></li>
+      </ol>
+      <a class="btn" id="group-btn" href="#" data-i18n="groupBtn"></a>
+      <a class="btn ghost" id="optin-btn" href="#" data-i18n="optInBtn"></a>
+      <p class="note" data-i18n="joinNote"></p>
+    </div>
+    <div id="join-play" hidden>
+      <h2 data-i18n="getH"></h2>
+      <a class="btn" id="play-btn2" href="#" data-i18n="playBtn"></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <a id="privacy" href="#" data-i18n="privacy"></a>
+  <span data-i18n="foot"></span>
+</footer>
+
+<script src="config.js"></script>
+<script>
+const T = {
+  ro: {
+    title: "Cindy, numărată de cameră.",
+    lead: "Cindy Tracker îți numără repetările cu camera telefonului: 20 de minute, 5 tracțiuni, 10 flotări, 15 genuflexiuni, cât mai multe runde. Fără ceas, fără nimeni care să numere pentru tine.",
+    badgeTest: "Caut {n} testeri cu Android, din România.",
+    badgePlay: "Disponibilă pe Google Play.",
+    joinBtn: "Vreau să testez",
+    playBtn: "Descarcă de pe Google Play",
+    seeH: "Cum arată",
+    alt1: "Camera numără flotările în timp real", cap1: "Camera numără fiecare repetare.",
+    alt3: "Ghidul pentru poziția de start", cap3: "Te ajută să te așezi în cadru.",
+    alt7: "Ecranul de final cu kilogramele ridicate", cap7: "La final vezi cât ai ridicat.",
+    whyH: "Ce trebuie să știi",
+    p1: "<b>Numără doar repetările complete</b> și îți spune când nu vede articulațiile de care are nevoie.",
+    p2: "<b>Vocea numără în română</b> (și în alte 10 limbi). Ecranele sunt, deocamdată, în engleză.",
+    p3: "<b>Poza din cameră nu pleacă niciodată de pe telefon.</b> Nu are cont și nu are reclame.",
+    p4: "<b>Puls și calorii</b>, dacă ai un ceas sau o centură care transmite pulsul prin Bluetooth.",
+    joinH: "Cum te înscrii",
+    s1: "Intră în grupul de testeri, cu adresa de Gmail de pe telefon.",
+    s2: "Deschide linkul de testare și apasă „Become a tester”.",
+    s3: "Instalează Cindy Tracker din Google Play.",
+    s4: "Rămâi în program <span style='color:var(--green)'>{d} zile la rând</span>. Asta e tot ce cer.",
+    groupBtn: "1. Intră în grup", optInBtn: "2. Linkul de testare",
+    joinNote: "Doar Android, doar România. Testarea e închisă: fără grup, linkul de testare nu merge.",
+    getH: "Încearc-o",
+    privacy: "Politica de confidențialitate",
+    foot: "Cindy Tracker"
+  },
+  en: {
+    title: "Cindy, counted by the camera.",
+    lead: "Cindy Tracker counts your reps with the phone's camera: 20 minutes, 5 pull-ups, 10 push-ups, 15 air squats, as many rounds as you can. Nothing to wear, no one to count for you.",
+    badgeTest: "Looking for {n} Android testers in Romania.",
+    badgePlay: "Available on Google Play.",
+    joinBtn: "I want to test",
+    playBtn: "Get it on Google Play",
+    seeH: "What it looks like",
+    alt1: "The camera counting push-ups live", cap1: "The camera counts every rep.",
+    alt3: "The start position guide", cap3: "It helps you step into the frame.",
+    alt7: "The finish screen with the weight lifted", cap7: "At the end you see how much you lifted.",
+    whyH: "Good to know",
+    p1: "<b>It counts only complete reps</b> and tells you when it cannot see the joints it needs.",
+    p2: "<b>The voice counts in 11 languages</b>, Romanian included. Screens are in English for now.",
+    p3: "<b>The camera picture never leaves your phone.</b> No account, no ads.",
+    p4: "<b>Heart rate and calories</b>, if you have a watch or chest strap that broadcasts heart rate over Bluetooth.",
+    joinH: "How to join",
+    s1: "Join the testers group with the Gmail address on your phone.",
+    s2: "Open the testing link and tap “Become a tester”.",
+    s3: "Install Cindy Tracker from Google Play.",
+    s4: "Stay in the programme for <span style='color:var(--green)'>{d} days in a row</span>. That is all I ask.",
+    groupBtn: "1. Join the group", optInBtn: "2. Testing link",
+    joinNote: "Android only, Romania only. The test is closed: without the group, the testing link will not work.",
+    getH: "Try it",
+    privacy: "Privacy policy",
+    foot: "Cindy Tracker"
+  }
+};
+
+const C = window.CINDY_SITE;
+const fill = s => s.replace("{n}", C.testersNeeded).replace("{d}", C.daysRequired);
+const $ = id => document.getElementById(id);
+
+function setLang(lang) {
+  const t = T[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; if (k !== "badge") el.textContent = fill(t[k]); });
+  document.querySelectorAll("[data-i18n-html]").forEach(el => { el.innerHTML = fill(t[el.dataset.i18nHtml]); });
+  document.querySelectorAll("[data-i18n-alt]").forEach(el => { el.alt = t[el.dataset.i18nAlt]; });
+  $("badge").textContent = fill(C.mode === "play" ? t.badgePlay : t.badgeTest);
+  document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+  try { localStorage.setItem("lang", lang); } catch (e) {}
+}
+
+function initialLang() {
+  const q = new URLSearchParams(location.search).get("lang");
+  if (q === "ro" || q === "en") return q;
+  try { const s = localStorage.getItem("lang"); if (s === "ro" || s === "en") return s; } catch (e) {}
+  return (navigator.language || "").toLowerCase().startsWith("ro") ? "ro" : "en";
+}
+
+const play = C.mode === "play";
+$("cta-play").hidden = !play;
+$("join-play").hidden = !play;
+$("cta-testers").hidden = play;
+$("join-testers").hidden = play;
+$("play-btn").href = $("play-btn2").href = C.playUrl;
+$("group-btn").href = C.groupUrl || "#join";
+$("optin-btn").href = C.optInUrl;
+$("privacy").href = C.privacyUrl;
+document.querySelectorAll(".lang button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang)));
+setLang(initialLang());
+</script>
+</body>
+</html>
