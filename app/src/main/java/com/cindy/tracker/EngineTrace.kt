@@ -2,6 +2,7 @@ package com.cindy.tracker
 
 import java.io.BufferedWriter
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -12,8 +13,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * A film cannot stand in for this. It shows the picture, not the frames the analyser dropped, the
  * clock the engine was handed, or the keypoints of a frame the film interpolated over.
  *
- * Debug builds only, and only ever touched from the analysis thread, so it takes no lock. One file
- * per session, opened at the first SETUP or RUNNING frame and closed at the first frame after.
+ * The athlete's controls and every recalibration change the engine between frames, so they are
+ * written too, as `control` rows in the place they happened, and the replay applies them there.
+ *
+ * Debug builds only. The file is only ever touched from the analysis thread, so it takes no lock;
+ * [control] may be called from any thread and is written before the next frame. One file per
+ * session, opened at the first SETUP or RUNNING frame and closed at the first frame after.
  */
 class EngineTrace(private val dir: File) {
 
@@ -27,8 +32,22 @@ class EngineTrace(private val dir: File) {
     /** Analysis calls refused since the last row because the previous frame was still running. */
     val refused = AtomicInteger()
 
+    private val controls = ConcurrentLinkedQueue<String>()
+
+    /**
+     * Something other than a frame changed the engine: [name] is one of [Control]'s, at [atMs] on
+     * the clock the engine is handed. Any thread.
+     */
+    fun control(name: Control, atMs: Long) {
+        controls.add("control,,$atMs" + ",".repeat(14) + name.name + ",".repeat(COLUMNS - 17))
+    }
+
     fun frame(row: Row) {
         val w = out ?: open()
+        while (true) {
+            w.write(controls.poll() ?: break)
+            w.newLine()
+        }
         val skipped = refused.getAndSet(0)
         w.write(row.csv(skipped))
         w.newLine()
@@ -38,6 +57,7 @@ class EngineTrace(private val dir: File) {
 
     /** Ends the session's file; harmless when none is open. */
     fun close() {
+        controls.clear()
         out?.run { flush(); close() }
         out = null
         rows = 0
@@ -98,6 +118,12 @@ class EngineTrace(private val dir: File) {
         }
     }
 
+    /** What a `control` row records. The replay knows each by name. */
+    enum class Control {
+        SKIP_SETUP, SKIP_EXERCISE, MANUAL_REP, UNDO_REP,
+        RECALIBRATE_CAMERA_MOVED, RECALIBRATE_RESUMED, RECALIBRATE_LENS_FLIPPED
+    }
+
     companion object {
         private const val FLUSH_EVERY = 30
 
@@ -111,5 +137,7 @@ class EngineTrace(private val dir: File) {
             append("exercise,reps,event,phase,signal,rejection,pull,push,squat,smart_squats")
             for (i in 0 until 17) append(",k${i}_x,k${i}_y,k${i}_s")
         }
+
+        val COLUMNS = HEADER.split(',').size
     }
 }

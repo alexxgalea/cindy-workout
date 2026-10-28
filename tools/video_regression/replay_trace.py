@@ -13,8 +13,8 @@ what it decided -- to Android/data/com.cindy.tracker.debug/files/engine_trace/en
     adb pull /sdcard/Android/data/com.cindy.tracker.debug/files/engine_trace/
     .venv/bin/python tools/video_regression/replay_trace.py engine_trace/engine-<ms>.csv
 
-The athlete's own controls (+1, undo, skip) are not in the trace, so a session that used them
-diverges from the replay at that point, and says so.
+The athlete's controls (skip, +1, undo) and every recalibration are `control` rows, applied to
+the replay where they happened and listed with their times.
 """
 from __future__ import annotations
 
@@ -54,8 +54,19 @@ def movement_scored(event: str, exercise: str) -> str:
     return Exercise[exercise].previous().name
 
 
+CONTROLS = {
+    "SKIP_SETUP": None,  # the setup -> workout boundary already calls finish_setup
+    "SKIP_EXERCISE": WorkoutEngine.skip_exercise,
+    "MANUAL_REP": WorkoutEngine.manual_rep,
+    "UNDO_REP": WorkoutEngine.undo_rep,
+    "RECALIBRATE_CAMERA_MOVED": WorkoutEngine.recalibrate,
+    "RECALIBRATE_RESUMED": WorkoutEngine.recalibrate,
+    "RECALIBRATE_LENS_FLIPPED": WorkoutEngine.recalibrate,
+}
+
+
 def replay(rows: list[dict]) -> int:
-    first = rows[0]
+    first = next(r for r in rows if r["kind"] != "control")
     engine = WorkoutEngine(
         profile=CindyProfile(
             pull=PullVariant[first["pull"]],
@@ -66,6 +77,7 @@ def replay(rows: list[dict]) -> int:
     )
     if first["kind"] == "setup":
         engine.begin_setup()
+    controls = []
     phone = {e.name: 0 for e in Exercise}
     port = {e.name: 0 for e in Exercise}
     divergence = None
@@ -73,6 +85,13 @@ def replay(rows: list[dict]) -> int:
     t0 = int(first["engine_ms"])
     for i, row in enumerate(rows):
         now = int(row["engine_ms"])
+        if row["kind"] == "control":
+            name = row["event"]
+            controls.append(((now - t0) / 1000, name, engine.exercise.name))
+            action = CONTROLS[name]
+            if action is not None:
+                action(engine)
+            continue
         tracking = row["tracking"] == "1"
         k = keypoints(row)
         if row["kind"] == "setup":
@@ -95,9 +114,13 @@ def replay(rows: list[dict]) -> int:
             divergence = (i, (now - t0) / 1000, row["kind"], theirs, mine,
                           engine.diagnostics.rejection_reason)
 
-    print("reps by movement     phone  replay")
+    print("reps by movement     phone  replay   (counted from frames; +1 not included)")
     for name in phone:
         print(f"  {name:<18} {phone[name]:>5}  {port[name]:>6}")
+    if controls:
+        print("controls and recalibrations (session time, what, movement):")
+        for t, name, ex in controls:
+            print(f"  {t:7.2f}s  {name:<26} {ex}")
     if divergence is None:
         print("\nThe replay agrees with the phone on every frame: the counting rules, given these "
               "frames, decide exactly what the phone decided.")
@@ -105,12 +128,11 @@ def replay(rows: list[dict]) -> int:
     i, t, kind, theirs, mine, why = divergence
     print(f"\nFirst disagreement at row {i} ({t:.2f}s, {kind}):\n  phone  {theirs}\n  replay {mine}"
           f"\n  replay's rejection: {why}")
-    print("  (a +1, undo or skip on the phone is not in the trace and diverges here too)")
     return 1
 
 
 def health(rows: list[dict], gap_ms: float) -> None:
-    run = [r for r in rows if r["kind"] == "run"] or rows
+    run = [r for r in rows if r["kind"] == "run"] or [r for r in rows if r["kind"] != "control"]
     cap = np.array([int(r["capture_ns"]) for r in run], dtype=np.int64) / 1e6
     span = (cap[-1] - cap[0]) / 1000 if len(cap) > 1 else 0
     gaps = np.diff(cap)
@@ -130,7 +152,7 @@ def health(rows: list[dict], gap_ms: float) -> None:
     print(f"  inference: median {np.median(infer):.0f} ms, p90 {np.percentile(infer, 90):.0f}")
     seen = sorted({int(r["thermal"]) for r in run})
     print(f"  thermal status seen: {', '.join(THERMAL.get(s, str(s)) for s in seen)}")
-    t0 = int(rows[0]["engine_ms"])
+    t0 = int(next(r for r in rows if r["kind"] != "control")["engine_ms"])
     long_gaps = [(int(run[i + 1]["engine_ms"]) - t0, g, run[i + 1]["exercise"])
                  for i, g in enumerate(gaps) if g > gap_ms]
     if long_gaps:

@@ -372,6 +372,7 @@ class MainActivity : AppCompatActivity() {
     private fun onCameraMoved() {
         if (state != State.RUNNING && state != State.SETUP) return
         synchronized(engineLock) { engine.recalibrate() }
+        traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         tracking.reframe()
         detector?.resetRoi()
         binding.overlay.clear()
@@ -1001,6 +1002,7 @@ class MainActivity : AppCompatActivity() {
         handoff.clear()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
+        traceControl(EngineTrace.Control.RECALIBRATE_LENS_FLIPPED)
         tracking.reframe()
         bindUseCases()
     }
@@ -1167,6 +1169,11 @@ class MainActivity : AppCompatActivity() {
             heelsFlatSpotted = engine.heelsFlatSpotted,
             poseLegible = engine.diagnostics.poseLegible
         )
+    }
+
+    /** Notes, for the replay, something other than a frame that just changed the engine. */
+    private fun traceControl(control: EngineTrace.Control) {
+        engineTrace?.control(control, SystemClock.elapsedRealtime())
     }
 
     /** One [EngineTrace] row for a frame that was just given to the engine. Analysis thread only. */
@@ -1588,6 +1595,7 @@ class MainActivity : AppCompatActivity() {
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
+                traceControl(EngineTrace.Control.RECALIBRATE_RESUMED)
                 tracking.reframe()
                 detector?.resetRoi()
                 status.text = "Recalibrating…"
@@ -1701,12 +1709,16 @@ class MainActivity : AppCompatActivity() {
                 primary = "SKIP",
                 onPrimary = {
                     recordedHud.skipped(SystemClock.elapsedRealtime())
+                    traceControl(EngineTrace.Control.SKIP_SETUP)
                     beginWorkout(calibrated = false)
                 },
                 secondary = "KEEP CHECKING",
                 onSecondary = {}
             ).show()
-            State.RUNNING, State.PAUSED -> apply(runEngine { engine.skipExercise() })
+            State.RUNNING, State.PAUSED -> {
+                apply(runEngine { engine.skipExercise() })
+                traceControl(EngineTrace.Control.SKIP_EXERCISE)
+            }
             State.IDLE, State.FINISHED -> Unit
         }
     }
@@ -1758,6 +1770,7 @@ class MainActivity : AppCompatActivity() {
     private fun onManualRep() {
         if (state != State.RUNNING) return
         apply(runEngine { engine.manualRep() })
+        traceControl(EngineTrace.Control.MANUAL_REP)
     }
 
     /** Takes back a rep the counter should not have scored. */
@@ -1766,6 +1779,7 @@ class MainActivity : AppCompatActivity() {
         val before = synchronized(engineLock) { engine.rounds }
         val movementBefore = synchronized(engineLock) { engine.exercise }
         val snap = runEngine { engine.undoRep() }
+        traceControl(EngineTrace.Control.UNDO_REP)
         // Stepping back over a round boundary un-books that round's split too.
         if (snap.rounds < before && roundSplits.isNotEmpty()) {
             roundStartedAtElapsed = elapsedMs - roundSplits.removeAt(roundSplits.size - 1)

@@ -98,6 +98,38 @@ class EngineTraceTest {
         trace.file!!.copyTo(File(root, "app/build/engine-trace-sample.csv"), overwrite = true)
     }
 
+    @Test
+    fun `skips, a recalibration and a manual rep are written where they happened`() {
+        trace = EngineTrace(Files.createTempDirectory("trace").toFile())
+        engine.beginSetup()
+        setupHold(PoseFixtures.pushup(170f), frames = 5)
+        trace.control(EngineTrace.Control.SKIP_SETUP, clock)
+        engine.finishSetup()
+        hold(PoseFixtures.pushup(170f), frames = 3)
+        engine.skipExercise()
+        trace.control(EngineTrace.Control.SKIP_EXERCISE, clock)
+        repeat(4) {
+            hold(PoseFixtures.pushup(170f))
+            hold(PoseFixtures.pushup(70f))
+        }
+        engine.recalibrate()
+        trace.control(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED, clock)
+        repeat(4) {
+            hold(PoseFixtures.pushup(170f))
+            hold(PoseFixtures.pushup(70f))
+        }
+        engine.manualRep()
+        trace.control(EngineTrace.Control.MANUAL_REP, clock)
+        hold(PoseFixtures.pushup(170f))
+        trace.close()
+
+        val lines = trace.file!!.readLines()
+        val columns = EngineTrace.COLUMNS
+        lines.drop(1).forEach { assertEquals(it, columns, it.split(',').size) }
+        assertEquals(4, lines.count { it.startsWith("control,") })
+        trace.file!!.copyTo(File(repositoryRoot(), "app/build/engine-trace-controls.csv"), overwrite = true)
+    }
+
     private fun repositoryRoot(): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null && !File(dir, "settings.gradle.kts").isFile) dir = dir.parentFile
