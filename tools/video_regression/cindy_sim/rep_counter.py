@@ -142,8 +142,16 @@ class RepCounter:
         bottom_of_band = (
             f32(self._seen_low + f32(self.bottom_margin * span)) if use_band else self.down_below
         )
+        middle = (
+            f32(self._seen_low + f32(0.5 * span)) if use_band
+            else f32(f32(self.down_below + self.up_above) / 2.0)
+        )
 
-        if s <= bottom_of_band:
+        # The bottom is judged on the frame as well as on the smoothed signal: per-frame smoothing
+        # on a slow analyser never reaches the zone a quick rep's one or two bottom frames did. The
+        # smoothed signal must still be at least halfway down, so one wild frame at the top is not
+        # a bottom. Mirrors RepCounter.kt.
+        if s <= bottom_of_band or (f32(raw) <= bottom_of_band and s <= middle):
             self.phase = Phase.DOWN
             self._armed = True
         elif s >= top_of_band:
