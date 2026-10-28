@@ -1,0 +1,3 @@
+The picture on the camera screen now waits for its skeleton, so the skeleton sits on you instead of trailing behind. The film you save carries a skeleton on every frame too.
+
+Motion prediction is gone: it could put a joint where your body never was.
