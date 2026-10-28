@@ -86,11 +86,11 @@ android {
         }
         release {
             signingConfig = signingConfigs.findByName("upload")
-            // Deliberately off. proguard-rules.pro is empty, and TFLite reaches for classes
-            // reflectively — R8 would strip them with nothing failing at compile time, and the
-            // first sign of it would be a crash on a stranger's phone. Turning this on means
-            // writing keep rules AND re-running the on-device benchmarks, not flipping a flag.
-            isMinifyEnabled = false
+            // R8 shrinks, optimises and obfuscates the code. The libraries that reach for classes
+            // reflectively (LiteRT's JNI) carry their own keep rules in their AARs; whatever else
+            // is needed is in proguard-rules.pro, each with the reason. R8 never fails the build
+            // over a stripped class, so a release build is checked on a phone (docs/RELEASING.md).
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
