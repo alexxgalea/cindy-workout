@@ -1124,6 +1124,10 @@ the change to Swift in the same PR or open an issue for it, and `ios/PARITY.md` 
 "In Swift today" means a Swift file of that name exists, at the September sync; it does not mean
 it is current.
 
+Android deleted `PosePrediction.kt` and `PosePredictionTest` on 2026-10-27 (ADR 0005), after both
+appendices were written; they stay listed here as the plan was made. `PARITY.md` says where the
+Swift copy stands.
+
 | Phase | Kotlin file | Lines | Lands in | In Swift today |
 |---|---|---|---|---|
 | P2 | `BarZone.kt` | 127 | CindyCore | partly |
