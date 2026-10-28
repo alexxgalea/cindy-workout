@@ -2077,6 +2077,18 @@ class MainActivity : AppCompatActivity() {
         vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
+    /**
+     * Back from a stop, because the phone was locked or another app had the screen. The camera
+     * reopens on its own, but the synced picture's effect keeps the surface it was given, which
+     * the screen has taken away since, and draws nothing: the camera runs behind a black preview.
+     * Binding again gives the effect a new surface. [onPause] has already ended any workout, so
+     * there is no film for this to cut in two.
+     */
+    override fun onRestart() {
+        super.onRestart()
+        if (cameraProvider != null) bindUseCases()
+    }
+
     override fun onResume() {
         super.onResume()
         rotationSensor?.let {
