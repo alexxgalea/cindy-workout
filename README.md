@@ -19,6 +19,12 @@ Manrope typeface) are credited under LICENCES in Help, with their full texts in
 [app/src/main/assets/licences/](app/src/main/assets/licences/). The address lives in
 [AppLinks.kt](app/src/main/java/com/cindy/tracker/AppLinks.kt).
 
+## Licence
+
+Copyright © 2026 Galea Alexandru Marian. All rights reserved. The source is public to be read, not
+to be reused: copying, modifying, redistributing or building an app from it needs written
+permission. See [LICENSE](LICENSE). The third-party components keep their own licences, as above.
+
 ## How it works
 
 ```
