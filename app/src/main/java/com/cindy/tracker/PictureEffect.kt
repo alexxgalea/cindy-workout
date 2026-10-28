@@ -9,16 +9,17 @@ import androidx.camera.effects.Frame
 import androidx.core.content.ContextCompat
 
 /**
- * The picture on screen, drawn by the app so each frame can wait for its own skeleton.
+ * The picture on screen, drawn by the app so each frame can wait for its own skeleton. It shows
+ * every frame the camera captured, a skeleton interpolated between its neighbours on the ones
+ * the model never saw. The picture runs behind the athlete on purpose, for that: see ADR 0005.
  *
  * The skeleton and the bar zone are drawn into the frame through [SkeletonPainter], on the
  * frame's own buffer.
  */
 class PictureEffect(
     context: Context,
-    mode: SkeletonSync.Mode,
     onShown: ((captureNanos: Long) -> Unit)? = null
-) : SyncedEffect(CameraEffect.PREVIEW, mode, "CindyPicture", "cindy-picture", onShown) {
+) : SyncedEffect(CameraEffect.PREVIEW, "CindyPicture", "cindy-picture", onShown) {
 
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.label),

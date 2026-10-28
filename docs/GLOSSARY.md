@@ -60,6 +60,28 @@ _Avoid_: mode, scaling option
 The short check before the clock starts that learns where the bar is and how far this athlete moves today. What it learns lasts for one session.
 _Avoid_: calibration (on its own), onboarding
 
+### The camera screen
+
+**Picture**:
+The camera's live image of the athlete on the camera screen.
+_Avoid_: preview, feed, camera view
+
+**Skeleton**:
+The joints and bones the app draws over the athlete, on the picture and in the film.
+_Avoid_: overlay, stick figure, pose
+
+**Skeleton lag**:
+The skeleton showing the body where it was a moment ago, so it trails or jumps off the athlete in the picture. It is about the skeleton against the picture, not against the real athlete.
+_Avoid_: delay, latency (on their own)
+
+**Picture delay**:
+How far the picture runs behind the real athlete. The app may raise it on purpose to remove skeleton lag.
+_Avoid_: delay, latency (on their own)
+
+**Film**:
+The video of a workout that the athlete chooses to record, with the skeleton and the count burned in.
+_Avoid_: recording (on its own), clip
+
 ### The app's pages
 
 **Session page**:

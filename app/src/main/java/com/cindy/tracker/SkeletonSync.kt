@@ -13,33 +13,21 @@ class SyncSkeleton(
 /**
  * Decides which picture frame is shown when, and with which skeleton.
  *
- * Frames are told to it by their camera capture timestamp, skeletons arrive stamped with the
- * timestamp of the frame they were computed from, and what comes back is the frames to show now.
+ * Every camera frame is shown. Frames are told to it by their camera capture timestamp, skeletons
+ * arrive stamped with the timestamp of the frame they were computed from, and what comes back is
+ * the frames to show now. A frame the model never saw waits for the next skeleton and is then
+ * drawn with one interpolated, joint by joint and linearly in capture time, between the two real
+ * skeletons around it.
+ *
  * Timestamps are only ever compared with each other. The clock it is given is the app's own
  * monotonic one, and nothing here subtracts a camera timestamp from it.
  *
  * Not thread safe: each instance belongs to one effect's handler thread.
  */
 class SkeletonSync(
-    mode: Mode,
     private val capacity: Int = DEFAULT_CAPACITY,
     private val nowNanos: () -> Long
 ) {
-
-    enum class Mode {
-        /** Nothing waits: every frame is shown at once, as the picture always was. */
-        LIVE,
-
-        /** A frame the model analysed waits for its own skeleton; frames it never saw are not shown. */
-        ANALYSED_ONLY,
-
-        /**
-         * Every camera frame is shown. One the model never saw waits for the next skeleton and is
-         * then drawn with one interpolated, joint by joint and linearly in capture time, between
-         * the two real skeletons around it.
-         */
-        EVERY_FRAME
-    }
 
     /** A frame to show now. [skeleton] is null when none was ready for it. */
     class Released(val captureNanos: Long, val skeleton: SyncSkeleton?)
@@ -48,22 +36,17 @@ class SkeletonSync(
 
     private class Paced(val frame: Released, val showAtNanos: Long)
 
-    var mode: Mode = mode
-        private set
-
     /** Waiting frames, oldest first. */
     private val waiting = ArrayList<Waiting>()
-
-    private var newest: SyncSkeleton? = null
 
     /** The last real skeleton released, with its capture stamp: the earlier end of an interpolation. */
     private var anchorNanos = 0L
     private var anchor: SyncSkeleton? = null
 
     /**
-     * Released frames not yet shown, oldest first. A release in every-frame mode carries several
-     * frames at once, and drawn together only the last would reach the screen. So each waits a
-     * capture gap after the one before it.
+     * Released frames not yet shown, oldest first. A release carries several frames at once, and
+     * drawn together only the last would reach the screen. So each waits a capture gap after the
+     * one before it.
      */
     private val paced = ArrayDeque<Paced>()
     private var lastPacedAtNanos = 0L
@@ -79,12 +62,11 @@ class SkeletonSync(
     var droppedCount = 0
         private set
 
-    /** A picture frame the model is about to analyse, or in live mode, any frame at all. */
+    /** A picture frame the camera captured. */
     fun frameKnown(captureNanos: Long): List<Released> {
-        if (mode == Mode.LIVE) return listOf(Released(captureNanos, newest))
         // The camera's stamps and the analysis reach here on different threads, so a frame can be
         // announced after a skeleton newer than it was used. It could only be shown out of order.
-        if (mode == Mode.EVERY_FRAME && anchor != null && captureNanos <= anchorNanos) {
+        if (anchor != null && captureNanos <= anchorNanos) {
             // The frame the newest skeleton was computed from: it has its real skeleton already.
             if (captureNanos == anchorNanos) return pace(listOf(Released(captureNanos, anchor)))
             droppedCount++
@@ -100,24 +82,12 @@ class SkeletonSync(
         return emptyList()
     }
 
-    /** The skeleton computed from the frame stamped [captureNanos]. */
-    fun skeletonReady(captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
-        newest = skeleton
-        if (mode == Mode.EVERY_FRAME) return releaseThrough(captureNanos, skeleton)
-        val index = waiting.indexOfFirst { it.captureNanos == captureNanos }
-        if (index < 0) return emptyList()
-        // Showing a frame discards every older one the picture still holds, so an older frame
-        // still waiting is gone either way. Dropping it here keeps the order strict.
-        droppedCount += index
-        waiting.subList(0, index + 1).clear()
-        return listOf(Released(captureNanos, skeleton))
-    }
-
     /**
-     * Every frame up to [captureNanos], in capture order: those before it interpolated, and it
-     * with the real skeleton if it was announced. A skeleton older than the last one is ignored.
+     * The skeleton computed from the frame stamped [captureNanos]. Releases every frame up to it,
+     * in capture order: those before it interpolated, and it with the real skeleton if it was
+     * announced. A skeleton older than the last one is ignored.
      */
-    private fun releaseThrough(captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
+    fun skeletonReady(captureNanos: Long, skeleton: SyncSkeleton): List<Released> {
         if (anchor != null && captureNanos <= anchorNanos) return emptyList()
         val earlier = anchor
         val released = ArrayList<Released>()
@@ -209,13 +179,6 @@ class SkeletonSync(
         // After a lens flip the old skeleton is of another picture, so nothing is drawn from it.
         anchor = null
         return released
-    }
-
-    /** Switches mode without a restart. Whatever was waiting is released, never carried over. */
-    fun setMode(next: Mode): List<Released> {
-        if (next == mode) return emptyList()
-        mode = next
-        return releaseAll()
     }
 
     private fun between(
