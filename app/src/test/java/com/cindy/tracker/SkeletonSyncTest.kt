@@ -25,10 +25,7 @@ class SkeletonSyncTest {
         now += millis * ms
     }
 
-    private fun sync(
-        mode: SkeletonSync.Mode = SkeletonSync.Mode.ANALYSED_ONLY,
-        capacity: Int = 8
-    ) = SkeletonSync(mode, capacity) { now }
+    private fun sync(capacity: Int = 8) = SkeletonSync(capacity) { now }
 
     /** A frame's capture stamp. Thirty-three milliseconds apart, as a 30 fps camera would. */
     private fun stamp(frame: Int) = 90_000_000_000L + frame * 33L * ms
@@ -51,27 +48,13 @@ class SkeletonSyncTest {
     }
 
     @Test
-    fun `a frame is never shown with the skeleton of another frame`() {
-        val s = sync()
-        val first = skeleton(PoseFixtures.pullup(150f))
-        val second = skeleton(PoseFixtures.pullup(60f))
-        s.frameKnown(stamp(1))
-        s.frameKnown(stamp(2))
-
-        val shownSecond = s.skeletonReady(stamp(2), second)
-
-        assertSame(second, shownSecond.single().skeleton)
-        assertTrue(s.skeletonReady(stamp(1), first).isEmpty())
-    }
-
-    @Test
-    fun `frames are released strictly in capture order`() {
+    fun `frames are released strictly in capture order, and a skeleton older than the newest is ignored`() {
         val s = sync()
         for (f in 1..4) s.frameKnown(stamp(f))
 
-        val shown = listOf(1, 2, 4, 3).flatMap { s.skeletonReady(stamp(it), skeleton()) }
+        val shown = s.drain(listOf(1, 2, 4, 3).flatMap { s.skeletonReady(stamp(it), skeleton()) })
 
-        assertEquals(listOf(stamp(1), stamp(2), stamp(4)), shown.stamps())
+        assertEquals(listOf(stamp(1), stamp(2), stamp(3), stamp(4)), shown.stamps())
     }
 
     @Test
@@ -79,27 +62,6 @@ class SkeletonSyncTest {
         val s = sync()
 
         assertTrue(s.skeletonReady(stamp(7), skeleton()).isEmpty())
-    }
-
-    @Test
-    fun `in live mode every frame is released at once`() {
-        val s = sync(SkeletonSync.Mode.LIVE)
-
-        val first = s.frameKnown(stamp(1))
-        val second = s.frameKnown(stamp(2))
-
-        assertEquals(listOf(stamp(1)), first.stamps())
-        assertEquals(listOf(stamp(2)), second.stamps())
-    }
-
-    @Test
-    fun `in live mode a frame carries the newest skeleton there is`() {
-        val s = sync(SkeletonSync.Mode.LIVE)
-        val newest = skeleton()
-        s.frameKnown(stamp(1))
-        s.skeletonReady(stamp(1), newest)
-
-        assertSame(newest, s.frameKnown(stamp(2)).single().skeleton)
     }
 
     @Test
@@ -129,7 +91,7 @@ class SkeletonSyncTest {
     }
 
     @Test
-    fun `in analysed only mode a frame is not released without its skeleton before the cap`() {
+    fun `a frame is not shown bare before the cap`() {
         val s = sync()
         s.frameKnown(stamp(1))
         s.frameKnown(stamp(2))
@@ -171,7 +133,7 @@ class SkeletonSyncTest {
         advance(250)
         s.due()
 
-        // Frame 1 was superseded, not capped; only frame 3 timed out.
+        // Frame 1 went out bare with frame 2's skeleton, not by the cap; only frame 3 timed out.
         assertEquals(1, s.cappedCount)
     }
 
@@ -241,27 +203,6 @@ class SkeletonSyncTest {
     }
 
     @Test
-    fun `switching to live mode releases what was waiting`() {
-        val s = sync()
-        s.frameKnown(stamp(1))
-
-        val shown = s.setMode(SkeletonSync.Mode.LIVE)
-
-        assertEquals(listOf(stamp(1)), shown.stamps())
-        assertEquals(listOf(stamp(2)), s.frameKnown(stamp(2)).stamps())
-    }
-
-    @Test
-    fun `switching back to analysed only starts a fresh wait`() {
-        val s = sync(SkeletonSync.Mode.LIVE)
-        s.frameKnown(stamp(1))
-        s.setMode(SkeletonSync.Mode.ANALYSED_ONLY)
-
-        assertTrue(s.frameKnown(stamp(2)).isEmpty())
-        assertEquals(listOf(stamp(2)), s.skeletonReady(stamp(2), skeleton()).stamps())
-    }
-
-    @Test
     fun `a long run keeps the delay between a frame becoming known and shown constant`() {
         val s = sync()
         val delays = ArrayList<Long>()
@@ -280,20 +221,7 @@ class SkeletonSyncTest {
         assertEquals(1_000, delays.size)
     }
 
-    @Test
-    fun `a frame passed over by a newer one is counted as dropped`() {
-        val s = sync()
-        s.frameKnown(stamp(1))
-        s.frameKnown(stamp(2))
-
-        s.skeletonReady(stamp(2), skeleton())
-
-        assertEquals(1, s.droppedCount)
-    }
-
-    // ---- every frame: in-between frames wait, then show an interpolated skeleton ----
-
-    private fun everyFrame() = sync(SkeletonSync.Mode.EVERY_FRAME)
+    // ---- frames the model never saw wait, then show an interpolated skeleton ----
 
     /** [first], then every paced frame as the clock moves on, until none is left to pace. */
     private fun SkeletonSync.drain(first: List<SkeletonSync.Released>): List<SkeletonSync.Released> {
@@ -311,7 +239,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `a frame between two analysed frames waits for the next skeleton and is shown halfway between`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(1))
@@ -333,7 +261,7 @@ class SkeletonSyncTest {
     @Test
     fun `a joint unseen in either neighbour is not drawn on the frames between them`() {
         for ((first, second) in listOf(0.1f to 0.9f, 0.9f to 0.1f)) {
-            val s = everyFrame()
+            val s = sync()
             s.frameKnown(stamp(0))
             s.skeletonReady(stamp(0), withJoint0(first, 100f))
             s.frameKnown(stamp(1))
@@ -349,7 +277,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `the bar zone on a frame between is the earlier neighbours`() {
-        val s = everyFrame()
+        val s = sync()
         val earlier = WorkoutEngine.BarGuide(BarZone.Bounds(10f, 0f, 50f, 5f, 15f), 20f, true)
         val later = WorkoutEngine.BarGuide(BarZone.Bounds(30f, 0f, 50f, 25f, 35f), 40f, false)
         s.frameKnown(stamp(0))
@@ -365,7 +293,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `an interpolated joint never passes the newer position`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         for (f in 1..5) s.frameKnown(stamp(f))
@@ -378,7 +306,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `frames before any skeleton exists are shown bare, and the same after a release`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.frameKnown(stamp(1))
         val first = s.drain(s.skeletonReady(stamp(1), at(100f)))
@@ -394,7 +322,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `a frame whose next skeleton never arrives is shown bare when the cap fires`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(1))
@@ -410,7 +338,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `at 30 fps with a skeleton every sixth frame the picture delay stays constant for minutes`() {
-        val s = everyFrame()
+        val s = sync()
         val frameMs = 33L
         val analysisEvery = 6
         val analysisMs = 150L
@@ -452,7 +380,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `a skeleton whose own frame was never announced still releases the frames before it`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(1))
@@ -466,7 +394,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `a frame announced after a newer skeleton was used is never shown, so order holds`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(2))
@@ -484,7 +412,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `a frame announced just after its own skeleton is shown at once with that skeleton`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         advance(100)
@@ -498,7 +426,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `after the cap fires the next skeleton does not glide in from a stale pose`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         s.frameKnown(stamp(1))
@@ -513,7 +441,7 @@ class SkeletonSyncTest {
 
     @Test
     fun `the frames of one release reach the screen a capture gap apart, not all at once`() {
-        val s = everyFrame()
+        val s = sync()
         s.frameKnown(stamp(0))
         s.skeletonReady(stamp(0), at(100f))
         for (f in 1..3) s.frameKnown(stamp(f))

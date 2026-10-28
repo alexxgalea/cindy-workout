@@ -32,7 +32,7 @@ abstract class SyncedEffect(
     private val handler = Handler(thread.looper)
 
     // Every frame waits too, so the sync holds as many as the effect does.
-    private val sync = SkeletonSync(SkeletonSync.Mode.EVERY_FRAME, QUEUE_DEPTH) { System.nanoTime() }
+    private val sync = SkeletonSync(QUEUE_DEPTH) { System.nanoTime() }
 
     /** What each released frame is to be drawn with, until the effect calls back for it. */
     private val drawing = HashMap<Long, SyncSkeleton?>()
@@ -183,8 +183,8 @@ abstract class SyncedEffect(
 
         /**
          * Frames the effect holds. The cap is 250 ms, which is eight camera frames, and a
-         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. Every-frame mode
-         * then paces a release over about one analysis interval, so sixteen: 533 ms.
+         * skeleton already ages 150 to 195 ms on the P40, so eight left no room. A release is then
+         * paced over about one analysis interval, so sixteen: 533 ms.
          */
         const val QUEUE_DEPTH = 16
     }
