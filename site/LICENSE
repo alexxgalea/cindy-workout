@@ -1,0 +1,29 @@
+Copyright (c) 2026 Galea Alexandru Marian. All rights reserved.
+
+This repository is public so that it can be read. It is not open source.
+
+No licence is granted to this software or to any part of it: its source code, its
+documentation, its design, its artwork, its app name and its screens. Without
+the written permission of the copyright holder you may not copy, modify, merge,
+publish, distribute, sublicense, sell, or use it, in whole or in part, in source
+or in any other form, for any purpose, commercial or not. You may not build and
+distribute an app from it, and you may not use it to train a machine-learning
+model.
+
+You may view the repository and, as GitHub's Terms of Service allow, fork it
+inside GitHub for the purpose of viewing it.
+
+To ask for permission, write to alexandru.galea2000@gmail.com.
+
+Third-party components. Cindy is built on software and assets owned by others,
+each under its own licence: MoveNet and LiteRT (Apache License 2.0), AndroidX
+(Apache License 2.0) and the Manrope typeface (SIL Open Font License 1.1). Their
+notices and full texts are in app/src/main/assets/licences/ and under LICENCES
+in the app's Help screen. This file does not change those licences, and they do
+not apply to the code and assets written for Cindy.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF
+OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
