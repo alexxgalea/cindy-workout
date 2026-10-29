@@ -771,7 +771,10 @@ class WorkoutEngine:
         bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next
         hang."""
         sample = self._read_pullup(k, now)
-        if self._bar_refusals.record(now, sample is None and self.hint == "Get on the bar"):
+        # A bar fixed for a recorded clip is the clip's own region, not an estimate: never doubted.
+        if not self._bar.is_manual and self._bar_refusals.record(
+            now, sample is None and self.hint == "Get on the bar"
+        ):
             self._forget_bar()
         return sample
 

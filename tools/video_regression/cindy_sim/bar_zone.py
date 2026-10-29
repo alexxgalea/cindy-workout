@@ -42,6 +42,11 @@ class BarZone:
         return not math.isnan(self._y)
 
     @property
+    def is_manual(self) -> bool:
+        """True when the bar was fixed for a recorded clip, not learned."""
+        return self._manual
+
+    @property
     def line_y(self) -> float | None:
         """The centre line of the bar, in the same pixel space as the keypoints."""
         return None if math.isnan(self._y) else self._y

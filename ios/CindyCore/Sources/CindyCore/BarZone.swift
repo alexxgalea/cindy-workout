@@ -37,6 +37,9 @@ public final class BarZone {
     /// True once a dead hang has been seen and the zone means something.
     public var established: Bool { !y.isNaN }
 
+    /// True when the bar was fixed for a recorded clip with `configureManual`, not learned.
+    public var isManual: Bool { manual }
+
     /// The centre line of the bar, in the same pixel coordinate system as the keypoints.
     public var lineY: Float? { established ? y : nil }
 

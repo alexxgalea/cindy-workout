@@ -167,6 +167,23 @@ class BarGateTest {
     }
 
     @Test
+    fun `a bar fixed for a recorded clip is never forgotten`() {
+        val e = WorkoutEngine()
+        // The clip's own bar, far below where the hands hang, so every frame is refused.
+        e.configureManualBar(
+            yNormalized = 0.95f, xMinNormalized = 0.3f, xMaxNormalized = 0.7f,
+            frameWidth = 720, frameHeight = 960
+        )
+        // Twenty seconds of pull-ups with the hands at about 0.62 of the frame's height.
+        repeat(10) {
+            e.hold(PoseFixtures.pullup(170f).moved(360f, 700f))
+            e.hold(PoseFixtures.pullup(60f).moved(360f, 700f))
+        }
+        assertEquals("a fixed bar is not replaced by one learned from the hands", 0, e.reps)
+        assertEquals("Get on the bar", e.hint)
+    }
+
+    @Test
     fun `a short run of off-bar movement at the same scale does not re-learn the bar`() {
         val e = WorkoutEngine()
         e.doPullup()

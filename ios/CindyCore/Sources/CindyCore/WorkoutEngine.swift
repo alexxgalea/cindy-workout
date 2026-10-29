@@ -908,7 +908,9 @@ public final class WorkoutEngine {
     /// bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next hang.
     private func pullupSample(_ k: [Keypoint], now: Int64) -> PullupSample? {
         let sample = readPullup(k, now: now)
-        if barRefusals.record(now: now, refusedByBar: sample == nil && hint == "Get on the bar") {
+        // A bar fixed for a recorded clip is the clip's own region, not an estimate: never doubted.
+        if !bar.isManual,
+           barRefusals.record(now: now, refusedByBar: sample == nil && hint == "Get on the bar") {
             forgetBar()
         }
         return sample

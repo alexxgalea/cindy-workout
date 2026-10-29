@@ -150,6 +150,21 @@ final class BarGateTests: XCTestCase {
         XCTAssertTrue(e.barKnown, "and it survives into the workout")
     }
 
+    /// a bar fixed for a recorded clip is never forgotten
+    func testABarFixedForARecordedClipIsNeverForgotten() {
+        let e = WorkoutEngine()
+        // The clip's own bar, far below where the hands hang, so every frame is refused.
+        e.configureManualBar(yNormalized: 0.95, xMinNormalized: 0.3, xMaxNormalized: 0.7,
+                             frameWidth: 720, frameHeight: 960)
+        // Twenty seconds of pull-ups with the hands at about 0.62 of the frame's height.
+        for _ in 0..<10 {
+            hold(e, PoseFixtures.pullup(170).moved(dx: 360, dy: 700))
+            hold(e, PoseFixtures.pullup(60).moved(dx: 360, dy: 700))
+        }
+        XCTAssertEqual(e.reps, 0, "a fixed bar is not replaced by one learned from the hands")
+        XCTAssertEqual(e.hint, "Get on the bar")
+    }
+
     /// a short run of off-bar movement at the same scale does not re-learn the bar
     func testAShortRunOfOffBarMovementAtTheSameScaleDoesNotReLearnTheBar() {
         let e = WorkoutEngine()

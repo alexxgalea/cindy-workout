@@ -943,10 +943,13 @@ class WorkoutEngine(
     /**
      * Validates a pull-up pose without mutating the counter, and tells [barRefusals] whether the
      * bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next hang.
+     * A bar fixed for a recorded clip is the clip's own region, not an estimate, and is never doubted.
      */
     private fun pullupSample(k: Array<Keypoint>, now: Long): PullupSample? {
         val sample = readPullup(k, now)
-        if (barRefusals.record(now, sample == null && hint == Hint.GET_ON_BAR.english)) forgetBar()
+        if (!bar.isManual &&
+            barRefusals.record(now, sample == null && hint == Hint.GET_ON_BAR.english)
+        ) forgetBar()
         return sample
     }
 

@@ -45,6 +45,9 @@ class BarZone {
     /** True once a dead hang has been seen and the zone means something. */
     val established: Boolean get() = !y.isNaN()
 
+    /** True when the bar was fixed for a recorded clip with [configureManual], not learned. */
+    val isManual: Boolean get() = manual
+
     /** The centre line of the bar, in the same pixel coordinate system as the keypoints. */
     val lineY: Float? get() = y.takeUnless { it.isNaN() }
 
