@@ -37,7 +37,7 @@ final class BarGuideTests: XCTestCase {
     /// the box that is drawn is the box that is tested
     func testTheBoxThatIsDrawnIsTheBoxThatIsTested() {
         let zone = BarZone()
-        zone.observeHang(handsX: 0, handsY: 0, halfGrip: 20)
+        zone.observeHang(handsX: 0, handsY: 0, halfGrip: 20, torso: 100)
         let torso: Float = 100
         let bounds = zone.bounds(torso: torso)!
 
@@ -59,7 +59,7 @@ final class BarGuideTests: XCTestCase {
     /// the box grows with the athlete's distance from the camera
     func testTheBoxGrowsWithTheAthletesDistanceFromTheCamera() {
         let zone = BarZone()
-        zone.observeHang(handsX: 0, handsY: 0, halfGrip: 20)
+        zone.observeHang(handsX: 0, handsY: 0, halfGrip: 20, torso: 100)
         let near = zone.bounds(torso: 200)!
         let far = zone.bounds(torso: 50)!
         XCTAssertGreaterThan(near.bottom - near.top, far.bottom - far.top)

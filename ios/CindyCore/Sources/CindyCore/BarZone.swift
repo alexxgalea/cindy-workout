@@ -19,6 +19,13 @@ public final class BarZone {
     private static let yTolerance: Float = 0.75
     /// Horizontal slack beyond the observed grip, in torso lengths.
     private static let xPadding: Float = 0.6
+    /// The narrowest half-grip a bar is first learned with, in torso lengths.
+    ///
+    /// Two wrists a few pixels apart are not a grip: they are hands seen stacked, one hand seen
+    /// twice, or an athlete cut off by the frame's edge. A bar learned from that is a sliver, and a
+    /// normal grip falls outside it. The two sessions that calibrated on the day this was found
+    /// learned half-grips of 0.26 and 0.46 torso, so this sits just under them.
+    private static let minGripHalf: Float = 0.25
 
     private var y: Float = .nan
     private var xMin: Float = .nan
@@ -63,17 +70,21 @@ public final class BarZone {
         manual = true
     }
 
-    /// Records where the hands were during a confirmed dead hang.
-    public func observeHang(handsX: Float, handsY: Float, halfGrip: Float) {
+    /// Records where the hands were during a confirmed dead hang, on a body of this `torso`.
+    ///
+    /// The first hang the bar is learned from is given at least `minGripHalf` of a torso either
+    /// side of the hands; later hangs only refine it, and are taken as they are.
+    public func observeHang(handsX: Float, handsY: Float, halfGrip: Float, torso: Float) {
         guard !manual else { return }
-        let low = handsX - halfGrip
-        let high = handsX + halfGrip
         guard established else {
+            let half = max(halfGrip, Self.minGripHalf * torso)
             y = handsY
-            xMin = low
-            xMax = high
+            xMin = handsX - half
+            xMax = handsX + half
             return
         }
+        let low = handsX - halfGrip
+        let high = handsX + halfGrip
         y += Self.follow * (handsY - y)
         xMin += Self.follow * (min(xMin, low) - xMin)
         xMax += Self.follow * (max(xMax, high) - xMax)

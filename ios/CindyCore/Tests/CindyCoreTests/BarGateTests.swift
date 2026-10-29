@@ -81,11 +81,10 @@ final class BarGateTests: XCTestCase {
         XCTAssertTrue(e.barKnown)
         XCTAssertEqual(e.reps, 2)
 
-        // Now do the identical elbow movement 400px lower — off the bar, arms overhead.
-        for _ in 0..<6 {
-            hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
-            hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
-        }
+        // Now do the identical elbow movement 400px lower — off the bar, arms overhead — for the
+        // seconds before BarRefusalWatch doubts the bar (four, and this is two).
+        hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
+        hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
         XCTAssertEqual(e.reps, 2, "arm-waving off the bar must not score")
         XCTAssertEqual(e.hint, "Get on the bar")
     }
@@ -94,10 +93,8 @@ final class BarGateTests: XCTestCase {
     func testTheSameMovementFarToTheSideScoresNothing() {
         let e = WorkoutEngine()
         for _ in 0..<2 { doPullup(e) }
-        for _ in 0..<6 {
-            hold(e, PoseFixtures.pullup(170).moved(dx: 500, dy: 0))
-            hold(e, PoseFixtures.pullup(60).moved(dx: 500, dy: 0))
-        }
+        hold(e, PoseFixtures.pullup(170).moved(dx: 500, dy: 0))
+        hold(e, PoseFixtures.pullup(60).moved(dx: 500, dy: 0))
         XCTAssertEqual(e.reps, 2)
     }
 
@@ -105,10 +102,8 @@ final class BarGateTests: XCTestCase {
     func testSteppingBackOntoTheBarResumesCounting() {
         let e = WorkoutEngine()
         for _ in 0..<2 { doPullup(e) }
-        for _ in 0..<2 {
-            hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
-            hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
-        }
+        hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
+        hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
         XCTAssertEqual(e.reps, 2)
         for _ in 0..<3 { doPullup(e) }
         XCTAssertEqual(e.exercise, .pushup, "back on the bar, counting continues")
@@ -155,19 +150,36 @@ final class BarGateTests: XCTestCase {
         XCTAssertTrue(e.barKnown, "and it survives into the workout")
     }
 
-    /// off-bar movement at the same scale never re-learns the bar
-    func testOffBarMovementAtTheSameScaleNeverReLearnsTheBar() {
+    /// a short run of off-bar movement at the same scale does not re-learn the bar
+    func testAShortRunOfOffBarMovementAtTheSameScaleDoesNotReLearnTheBar() {
         let e = WorkoutEngine()
         doPullup(e)
         XCTAssertEqual(e.reps, 1)
 
-        // A long run of the identical movement on the floor. The body is the same size, so this is
-        // someone who stepped down — not evidence that the bar was learned in the wrong place.
-        for _ in 0..<10 {
+        // Two seconds of the identical movement on the floor. The body is the same size, so this is
+        // someone who stepped down: the bar is not doubted until it has refused for four.
+        hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
+        hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
+        XCTAssertEqual(e.reps, 1, "floor repetitions must not teach the bar in two seconds")
+    }
+
+    /// a sustained run of off-bar movement is taken for the bar being somewhere else
+    ///
+    /// The price of recovering from a bar learned in the wrong place, which four recorded sessions
+    /// needed and which the owner chose to pay: a bar that has refused the athlete for four seconds
+    /// is forgotten, and the next hang is taken for the bar. Someone who steps down and keeps
+    /// repeating the movement for longer than that therefore scores on the floor.
+    func testASustainedRunOfOffBarMovementIsTakenForTheBarBeingSomewhereElse() {
+        let e = WorkoutEngine()
+        doPullup(e)
+        XCTAssertEqual(e.reps, 1)
+
+        for _ in 0..<4 {
             hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
             hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
         }
-        XCTAssertEqual(e.reps, 1, "floor repetitions must never re-teach the bar")
+        XCTAssertTrue(e.barKnown, "the bar was forgotten and learned again")
+        XCTAssertGreaterThan(e.reps, 1, "and the movement now counts where it is")
     }
 
     /// a brief contradiction at another scale does not abandon the bar
