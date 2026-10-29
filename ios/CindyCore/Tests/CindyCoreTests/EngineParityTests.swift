@@ -65,7 +65,7 @@ final class EngineParityTests: XCTestCase {
 
         XCTAssertEqual(failures, [], "every frame of every runnable trace must match the Kotlin")
         XCTAssertGreaterThan(compared, 0, "something was compared")
-        XCTAssertEqual(order.count, 20, "all twenty traces in the plan ran")
+        XCTAssertEqual(order.count, 21, "all twenty-one traces in the plan ran")
         print("Parity: \(compared) frames compared across \(order.count) traces")
     }
 

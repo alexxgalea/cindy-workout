@@ -165,8 +165,14 @@ public final class RepCounter: RepCounting {
                              : upAbove - downBelow
         let topOfBand = useBand ? seenHigh - Self.margin * range : upAbove
         let bottomOfBand = useBand ? seenLow + bottomMargin * range : downBelow
+        let middle = useBand ? seenLow + 0.5 * range : (downBelow + upAbove) / 2
 
-        if s <= bottomOfBand {
+        // The bottom is judged on the frame as well as on the smoothed signal. Smoothing is per
+        // frame, so on a phone analysing eight frames a second a quick rep's bottom is one or two
+        // samples, and the average never reaches the zone the frames did: the rep is lost. The
+        // smoothed signal must still have come at least halfway down, so one wild frame while
+        // the athlete holds the top is not a bottom. Mirrors RepCounter.kt.
+        if s <= bottomOfBand || (raw <= bottomOfBand && s <= middle) {
             phase = .down
             armed = true
         } else if s >= topOfBand {
