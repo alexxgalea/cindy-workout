@@ -97,11 +97,10 @@ class BarGateTest {
         assertTrue(e.barKnown)
         assertEquals(2, e.reps)
 
-        // Now do the identical elbow movement 400px lower — off the bar, arms overhead.
-        repeat(6) {
-            e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
-            e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
-        }
+        // Now do the identical elbow movement 400px lower — off the bar, arms overhead — for the
+        // seconds before BarRefusalWatch doubts the bar (four, and this is two).
+        e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
         assertEquals("arm-waving off the bar must not score", 2, e.reps)
         assertEquals("Get on the bar", e.hint)
     }
@@ -110,10 +109,8 @@ class BarGateTest {
     fun `the same movement far to the side scores nothing`() {
         val e = WorkoutEngine()
         repeat(2) { e.doPullup() }
-        repeat(6) {
-            e.hold(PoseFixtures.pullup(170f).moved(500f, 0f))
-            e.hold(PoseFixtures.pullup(60f).moved(500f, 0f))
-        }
+        e.hold(PoseFixtures.pullup(170f).moved(500f, 0f))
+        e.hold(PoseFixtures.pullup(60f).moved(500f, 0f))
         assertEquals(2, e.reps)
     }
 
@@ -121,10 +118,8 @@ class BarGateTest {
     fun `stepping back onto the bar resumes counting`() {
         val e = WorkoutEngine()
         repeat(2) { e.doPullup() }
-        repeat(2) {
-            e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
-            e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
-        }
+        e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
         assertEquals(2, e.reps)
         repeat(3) { e.doPullup() }
         assertEquals("back on the bar, counting continues", Exercise.PUSHUP, e.exercise)
@@ -172,18 +167,38 @@ class BarGateTest {
     }
 
     @Test
-    fun `off-bar movement at the same scale never re-learns the bar`() {
+    fun `a short run of off-bar movement at the same scale does not re-learn the bar`() {
         val e = WorkoutEngine()
         e.doPullup()
         assertEquals(1, e.reps)
 
-        // A long run of the identical movement on the floor. The body is the same size, so this
-        // is someone who stepped down — not evidence that the bar was learned in the wrong place.
-        repeat(10) {
+        // Two seconds of the identical movement on the floor. The body is the same size, so this
+        // is someone who stepped down: the bar is not doubted until it has refused for four.
+        e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
+        assertEquals("floor repetitions must not teach the bar in two seconds", 1, e.reps)
+    }
+
+    /**
+     * The price of recovering from a bar learned in the wrong place, which four recorded sessions
+     * needed and which the owner chose to pay: a bar that has refused the athlete for four seconds
+     * is forgotten, and the next hang is taken for the bar. Someone who steps down and keeps
+     * repeating the movement for longer than that therefore scores on the floor. Before this,
+     * nothing short of a change of body scale could re-teach the bar, and a bar learned from
+     * hands read on top of each other kept the athlete at "Get on the bar" until they gave up.
+     */
+    @Test
+    fun `a sustained run of off-bar movement is taken for the bar being somewhere else`() {
+        val e = WorkoutEngine()
+        e.doPullup()
+        assertEquals(1, e.reps)
+
+        repeat(4) {
             e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
             e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
         }
-        assertEquals("floor repetitions must never re-teach the bar", 1, e.reps)
+        assertTrue("the bar was forgotten and learned again", e.barKnown)
+        assertTrue("and the movement now counts where it is", e.reps > 1)
     }
 
     @Test

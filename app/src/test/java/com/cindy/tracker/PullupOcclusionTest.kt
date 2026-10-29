@@ -96,11 +96,10 @@ class PullupOcclusionTest {
         e.hold(PoseFixtures.pullup(60f))
         assertEquals(1, e.reps)
 
-        // Steps down and repeats the identical arm movement on the floor.
-        repeat(4) {
-            e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
-            e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
-        }
+        // Steps down and repeats the identical arm movement on the floor, for the two seconds
+        // before BarRefusalWatch would doubt the bar (it waits four).
+        e.hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        e.hold(PoseFixtures.pullup(60f).moved(0f, 400f))
         assertEquals("off-bar repetitions must not add to the score", 1, e.reps)
     }
 
