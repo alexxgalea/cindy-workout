@@ -260,7 +260,7 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 | P2 | `CameraStability.kt` | CindyCore, with `CameraLook` (S1: the heading and elevation of the axis the camera looks along, from Android's rotation matrix). S2 feeds it: CindyCore `CameraMotion` reads Core Motion's matrix (its layout picked by gravity, with the elevation from gravity returned beside it for the debug readout), CindyTracker `PhoneMotion` runs `CMMotionManager` at 16 Hz and `WorkoutSession.cameraMoved` decides what a knock does. Built by the macOS job; the angles want an iPhone | tests ported |
 | P2 | `PoseGeometry.kt` | CindyCore | ported |
 | P2 | `PosePrediction.kt` | CindyCore. Deleted on Android on 2026-10-27, with `PosePredictionTest` (ADR 0005); the Swift copy and its tests stay until the iOS port of the synced picture, and go with it | tests ported |
-| P2 | `RepCounter.kt` | CindyCore | tests ported |
+| P2 | `RepCounter.kt` | CindyCore. On 2026-10-28 Android began arming a rep on the frame that reached the bottom, not only the smoothed signal, so a slow analyser stops losing quick push-ups (`HotPhonePushUpsTest`, two `RepCounterTest` cases); the Swift copy has it too, with both `RepCounterTests` cases; `HotPhonePushUpsTest` is Android-only | tests ported |
 | P2 | `SmartSquatCounter.kt` | CindyCore | tests ported |
 | P2 | `StartPoses.kt` | CindyCore | ported |
 | P2 | `TrackingHealth.kt` | CindyCore | tests ported |

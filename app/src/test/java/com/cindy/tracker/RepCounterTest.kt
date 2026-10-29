@@ -83,6 +83,44 @@ class RepCounterTest {
         assertTrue(!c.smoothed.isNaN())
     }
 
+    /** A push-up counter whose band was learned from three slow, full reps. */
+    private fun calibratedPushUps(): Pair<RepCounter, Long> {
+        val c = RepCounter(downBelow = 100f, upAbove = 150f, minRepMs = 350L, minRange = 45f)
+        var t = 0L
+        repeat(3) {
+            c.hold(80f, t); t += 1000
+            c.hold(170f, t); t += 1000
+        }
+        assertTrue(c.calibrated)
+        return c to t
+    }
+
+    @Test
+    fun `a bottom a slow analyser caught on one frame still counts`() {
+        // A hot phone analyses eight frames a second, so a quick push-up's bottom lands on one of
+        // them. The smoothed signal never gets that low; the frame itself did.
+        val (c, start) = calibratedPushUps()
+        var t = start
+        val before = c.count
+        for (v in listOf(170f, 170f, 110f, 60f, 140f, 170f, 170f, 170f)) {
+            c.update(v, t); t += 125
+        }
+        assertEquals(before + 1, c.count)
+    }
+
+    @Test
+    fun `one wild frame at the top is not a rep`() {
+        // A detector glitch while the athlete holds the top: one frame reads a bent elbow, the
+        // smoothed signal barely moves, and nothing went down.
+        val (c, start) = calibratedPushUps()
+        var t = start
+        val before = c.count
+        for (v in listOf(170f, 170f, 170f, 60f, 170f, 170f, 170f, 170f)) {
+            c.update(v, t); t += 125
+        }
+        assertEquals(before, c.count)
+    }
+
     @Test
     fun `reset clears everything`() {
         val c = RepCounter(downBelow = 100f, upAbove = 150f)

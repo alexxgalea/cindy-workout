@@ -168,8 +168,14 @@ class RepCounter(
             else upAbove - downBelow
         val topOfBand = if (useBand) seenHigh - MARGIN * range else upAbove
         val bottomOfBand = if (useBand) seenLow + bottomMargin * range else downBelow
+        val middle = if (useBand) seenLow + 0.5f * range else (downBelow + upAbove) / 2f
 
-        if (s <= bottomOfBand) {
+        // The bottom is judged on the frame as well as on the smoothed signal. Smoothing is per
+        // frame, so on a phone analysing eight frames a second a quick rep's bottom is one or two
+        // samples, and the average never reaches the zone the frames did: the rep is lost. The
+        // smoothed signal must still have come at least halfway down, so one wild frame while
+        // the athlete holds the top is not a bottom.
+        if (s <= bottomOfBand || (raw <= bottomOfBand && s <= middle)) {
             phase = Phase.DOWN
             armed = true
         } else if (s >= topOfBand) {
