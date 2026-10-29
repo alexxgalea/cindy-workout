@@ -82,6 +82,36 @@ final class RepCounterTests: XCTestCase {
         XCTAssertEqual(c.count, 0)
     }
 
+    /// A push-up counter whose band was learned from three slow, full reps.
+    private func calibratedPushUps() -> (RepCounter, Int64) {
+        let c = RepCounter(downBelow: 100, upAbove: 150, minRepMs: 350, minRange: 45)
+        var t: Int64 = 0
+        for _ in 0..<3 {
+            _ = hold(c, 80, from: t); t += 1000
+            _ = hold(c, 170, from: t); t += 1000
+        }
+        XCTAssertTrue(c.calibrated)
+        return (c, t)
+    }
+
+    /// A bottom a slow analyser caught on one frame still counts. (`RepCounterTest.kt`)
+    func testABottomASlowAnalyserCaughtOnOneFrameStillCounts() {
+        let (c, start) = calibratedPushUps()
+        var t = start
+        let before = c.count
+        for v: Float in [170, 170, 110, 60, 140, 170, 170, 170] { c.update(v, now: t); t += 125 }
+        XCTAssertEqual(c.count, before + 1)
+    }
+
+    /// One wild frame at the top is not a rep. (`RepCounterTest.kt`)
+    func testOneWildFrameAtTheTopIsNotARep() {
+        let (c, start) = calibratedPushUps()
+        var t = start
+        let before = c.count
+        for v: Float in [170, 170, 170, 60, 170, 170, 170, 170] { c.update(v, now: t); t += 125 }
+        XCTAssertEqual(c.count, before)
+    }
+
     /// Reset clears everything. (`RepCounterTest.kt`)
     func testResetClearsEverything() {
         let c = RepCounter(downBelow: 100, upAbove: 150)
