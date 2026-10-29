@@ -229,6 +229,26 @@ fix when the same classification reproduces across at least two clips or a synth
 test — otherwise the likely outcome is trading an under-count for a false positive, which is the
 worse failure.
 
+## Replaying a session from the phone
+
+A film is not what the engine saw. It hides the frames the analyser dropped, the clock the engine
+was handed, and the keypoints of every frame it interpolated over, so a miscount the phone makes
+can count perfectly here. A debug build therefore writes every frame it gives the engine — the
+keypoints, the clock, the decision — to a trace, one file per session:
+
+```sh
+adb pull /sdcard/Android/data/com.cindy.tracker.debug/files/engine_trace/
+.venv/bin/python tools/video_regression/replay_trace.py engine_trace/engine-<ms>.csv
+```
+
+`replay_trace.py` feeds the same frames to the port and prints the reps per movement on the phone
+and in the replay, the first frame where they disagree, and how the phone was analysing: frames
+per second, gaps between analysed captures, frames refused while busy, frame age and thermal
+status. Agreement on every frame means the rules decided what the phone decided, given what the
+phone saw, and the loss is upstream of them. The athlete's +1, undo and skip are not traced, so a
+session that used them diverges there. `EngineTraceTest` writes a whole session through the real
+engine to `app/build/engine-trace-sample.csv`, which the replay must agree with frame for frame.
+
 ## Evaluation policy
 
 `run_batch.py` reports metrics grouped by category, because averaging valid clips together with

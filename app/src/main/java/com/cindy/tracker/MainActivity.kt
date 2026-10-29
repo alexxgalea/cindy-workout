@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -63,6 +64,7 @@ import kotlinx.coroutines.launch
 import androidx.camera.view.PreviewView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.cindy.tracker.databinding.ActivityMainBinding
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -87,6 +89,9 @@ class MainActivity : AppCompatActivity() {
 
         /** What an unavailable control fades to: plainly off, still plainly there. */
         const val DIMMED = 0.3f
+
+        /** About once a second at the analyser's rate; the status is a binder call. */
+        const val THERMAL_EVERY = 20
     }
 
     private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
@@ -367,6 +372,7 @@ class MainActivity : AppCompatActivity() {
     private fun onCameraMoved() {
         if (state != State.RUNNING && state != State.SETUP) return
         synchronized(engineLock) { engine.recalibrate() }
+        traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         tracking.reframe()
         detector?.resetRoi()
         binding.overlay.clear()
@@ -386,6 +392,18 @@ class MainActivity : AppCompatActivity() {
 
     /** Where the skeleton's lag actually comes from, measured rather than reasoned about. */
     private val latency = LatencyProbe()
+
+    /**
+     * Every frame the engine is given, written down so a miscounted session can be replayed on the
+     * desktop. Debug builds only; the files land in Android/data/<package>/files/engine_trace.
+     */
+    private val engineTrace: EngineTrace? by lazy {
+        if (BuildConfig.DEBUG) EngineTrace(File(getExternalFilesDir(null) ?: filesDir, "engine_trace")) else null
+    }
+
+    /** The phone's thermal status, read every [THERMAL_EVERY] traced frames. Analysis thread only. */
+    private var thermal = -1
+    private var thermalAge = 0
 
     /** The analysis frame's planes, reused every frame. Touched only by the analysis thread. */
     private val yuv = YuvFrame()
@@ -984,6 +1002,7 @@ class MainActivity : AppCompatActivity() {
         handoff.clear()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
+        traceControl(EngineTrace.Control.RECALIBRATE_LENS_FLIPPED)
         tracking.reframe()
         bindUseCases()
     }
@@ -1001,6 +1020,7 @@ class MainActivity : AppCompatActivity() {
         }
         val det = detector
         if (det == null || !analysing.compareAndSet(false, true)) {
+            if (det != null) engineTrace?.refused?.incrementAndGet()
             proxy.close()
             return
         }
@@ -1060,6 +1080,15 @@ class MainActivity : AppCompatActivity() {
                 prepMs = det.lastPrepMs,
                 inferMs = det.lastInferenceMs
             )
+            engineTrace?.let { trace ->
+                // A pause keeps the session's file open; only the end of the session closes it.
+                if (state == State.IDLE || state == State.FINISHED) {
+                    trace.close()
+                } else if (snap != null || setup != null) {
+                    trace.frame(traceRow(captureNanos, now, convertMs, det, captureAgeMs,
+                        keypoints, frameW, frameH, snap, setup))
+                }
+            }
 
             // Everything else the frame feeds — the counters, the coaching, the burned-in video
             // HUD — goes to the main thread as a latest value, not as one runnable per frame.
@@ -1141,6 +1170,70 @@ class MainActivity : AppCompatActivity() {
             poseLegible = engine.diagnostics.poseLegible
         )
     }
+
+    /** Notes, for the replay, something other than a frame that just changed the engine. */
+    private fun traceControl(control: EngineTrace.Control) {
+        engineTrace?.control(control, SystemClock.elapsedRealtime())
+    }
+
+    /** One [EngineTrace] row for a frame that was just given to the engine. Analysis thread only. */
+    private fun traceRow(
+        captureNanos: Long,
+        engineMs: Long,
+        convertMs: Long,
+        det: PoseDetector,
+        captureAgeMs: Long?,
+        keypoints: Array<Keypoint>,
+        frameW: Int,
+        frameH: Int,
+        snap: Snapshot?,
+        setup: Setup?
+    ): EngineTrace.Row {
+        if (thermalAge-- <= 0) {
+            thermalAge = THERMAL_EVERY
+            thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                getSystemService(PowerManager::class.java)?.currentThermalStatus ?: -1
+            } else {
+                -1
+            }
+        }
+        val engineState = synchronized(engineLock) {
+            EngineState(engine.exercise, engine.countingState, engine.signal,
+                engine.diagnostics.rejectionReason, engine.profile, engine.smartSquats)
+        }
+        return EngineTrace.Row(
+            captureNanos = captureNanos,
+            engineMs = engineMs,
+            convertMs = convertMs,
+            prepMs = det.lastPrepMs,
+            inferMs = det.lastInferenceMs,
+            captureAgeMs = captureAgeMs,
+            tracking = det.tracking,
+            softGain = det.softGain,
+            thermal = thermal,
+            frameW = frameW,
+            frameH = frameH,
+            keypoints = keypoints,
+            setupStage = setup?.stage?.name,
+            exercise = snap?.exercise ?: engineState.exercise,
+            reps = snap?.reps ?: setup?.reps ?: 0,
+            event = snap?.event,
+            phase = engineState.phase,
+            signal = engineState.signal,
+            rejection = engineState.rejection,
+            profile = engineState.profile,
+            smartSquats = engineState.smartSquats
+        )
+    }
+
+    private data class EngineState(
+        val exercise: Exercise,
+        val phase: String,
+        val signal: Float,
+        val rejection: String?,
+        val profile: CindyProfile,
+        val smartSquats: Boolean
+    )
 
     /** Everything needed to judge a miscount from across the room. */
     private fun debugLine(snap: Snapshot): String {
@@ -1502,6 +1595,7 @@ class MainActivity : AppCompatActivity() {
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
                 synchronized(engineLock) { engine.recalibrate() }
+                traceControl(EngineTrace.Control.RECALIBRATE_RESUMED)
                 tracking.reframe()
                 detector?.resetRoi()
                 status.text = "Recalibrating…"
@@ -1615,12 +1709,16 @@ class MainActivity : AppCompatActivity() {
                 primary = "SKIP",
                 onPrimary = {
                     recordedHud.skipped(SystemClock.elapsedRealtime())
+                    traceControl(EngineTrace.Control.SKIP_SETUP)
                     beginWorkout(calibrated = false)
                 },
                 secondary = "KEEP CHECKING",
                 onSecondary = {}
             ).show()
-            State.RUNNING, State.PAUSED -> apply(runEngine { engine.skipExercise() })
+            State.RUNNING, State.PAUSED -> {
+                apply(runEngine { engine.skipExercise() })
+                traceControl(EngineTrace.Control.SKIP_EXERCISE)
+            }
             State.IDLE, State.FINISHED -> Unit
         }
     }
@@ -1672,6 +1770,7 @@ class MainActivity : AppCompatActivity() {
     private fun onManualRep() {
         if (state != State.RUNNING) return
         apply(runEngine { engine.manualRep() })
+        traceControl(EngineTrace.Control.MANUAL_REP)
     }
 
     /** Takes back a rep the counter should not have scored. */
@@ -1680,6 +1779,7 @@ class MainActivity : AppCompatActivity() {
         val before = synchronized(engineLock) { engine.rounds }
         val movementBefore = synchronized(engineLock) { engine.exercise }
         val snap = runEngine { engine.undoRep() }
+        traceControl(EngineTrace.Control.UNDO_REP)
         // Stepping back over a round boundary un-books that round's split too.
         if (snap.rounds < before && roundSplits.isNotEmpty()) {
             roundStartedAtElapsed = elapsedMs - roundSplits.removeAt(roundSplits.size - 1)
