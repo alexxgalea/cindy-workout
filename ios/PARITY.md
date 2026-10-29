@@ -256,7 +256,8 @@ The tests Android added or changed on 12 October (S1 in `PLAN.md`): 39 of them, 
 
 | Phase | Kotlin file | Lands in | Status |
 |---|---|---|---|
-| P2 | `BarZone.kt` | CindyCore | tests ported |
+| P2 | `BarRefusalWatch.kt` | CindyCore. New on 2026-10-29: the engine forgets a bar that has refused the athlete for four seconds, so a bar learned in the wrong place stops locking the calibration at 0 of 2. Swift has it level, and `StuckCalibrationTests` hold the Swift engine to the Kotlin engine's own moment of READY, to the millisecond, on five real setup traces (`StuckCalibrationTest` on Android) | tests ported |
+| P2 | `BarZone.kt` | CindyCore. On 2026-10-29 the first hang a bar is learned from gets at least a quarter torso either side of the hands, so wrists read on top of each other no longer make a sliver; `BarZoneTests` (3) mirror `BarZoneTest`. The four `BarGateTest` and `PullupOcclusionTest` cases that ran a long off-bar movement now run a short one, with a new case for what a long one does, and Swift has the same | tests ported |
 | P2 | `CameraStability.kt` | CindyCore, with `CameraLook` (S1: the heading and elevation of the axis the camera looks along, from Android's rotation matrix). S2 feeds it: CindyCore `CameraMotion` reads Core Motion's matrix (its layout picked by gravity, with the elevation from gravity returned beside it for the debug readout), CindyTracker `PhoneMotion` runs `CMMotionManager` at 16 Hz and `WorkoutSession.cameraMoved` decides what a knock does. Built by the macOS job; the angles want an iPhone | tests ported |
 | P2 | `PoseGeometry.kt` | CindyCore | ported |
 | P2 | `PosePrediction.kt` | CindyCore. Deleted on Android on 2026-10-27, with `PosePredictionTest` (ADR 0005); the Swift copy and its tests stay until the iOS port of the synced picture, and go with it | tests ported |

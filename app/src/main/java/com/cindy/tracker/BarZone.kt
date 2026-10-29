@@ -26,6 +26,15 @@ class BarZone {
         const val Y_TOLERANCE = 0.75f
         /** Horizontal slack beyond the observed grip, in torso lengths. */
         const val X_PADDING = 0.6f
+        /**
+         * The narrowest half-grip a bar is first learned with, in torso lengths.
+         *
+         * Two wrists a few pixels apart are not a grip: they are hands seen stacked, one hand seen
+         * twice, or an athlete cut off by the frame's edge. A bar learned from that is a sliver, and
+         * a normal grip falls outside it. The two sessions that calibrated on the day this was found
+         * learned half-grips of 0.26 and 0.46 torso, so this sits just under them.
+         */
+        const val MIN_GRIP_HALF = 0.25f
     }
 
     private var y = Float.NaN
@@ -35,6 +44,9 @@ class BarZone {
 
     /** True once a dead hang has been seen and the zone means something. */
     val established: Boolean get() = !y.isNaN()
+
+    /** True when the bar was fixed for a recorded clip with [configureManual], not learned. */
+    val isManual: Boolean get() = manual
 
     /** The centre line of the bar, in the same pixel coordinate system as the keypoints. */
     val lineY: Float? get() = y.takeUnless { it.isNaN() }
@@ -74,17 +86,23 @@ class BarZone {
         manual = true
     }
 
-    /** Records where the hands were during a confirmed dead hang. */
-    fun observeHang(handsX: Float, handsY: Float, halfGrip: Float) {
+    /**
+     * Records where the hands were during a confirmed dead hang, on a body of this [torso].
+     *
+     * The first hang the bar is learned from is given at least [MIN_GRIP_HALF] of a torso either
+     * side of the hands; later hangs only refine it, and are taken as they are.
+     */
+    fun observeHang(handsX: Float, handsY: Float, halfGrip: Float, torso: Float) {
         if (manual) return
-        val low = handsX - halfGrip
-        val high = handsX + halfGrip
         if (!established) {
+            val half = max(halfGrip, MIN_GRIP_HALF * torso)
             y = handsY
-            xMin = low
-            xMax = high
+            xMin = handsX - half
+            xMax = handsX + half
             return
         }
+        val low = handsX - halfGrip
+        val high = handsX + halfGrip
         y += FOLLOW * (handsY - y)
         xMin += FOLLOW * (min(xMin, low) - xMin)
         xMax += FOLLOW * (max(xMax, high) - xMax)

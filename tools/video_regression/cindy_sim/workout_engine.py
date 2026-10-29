@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Sequence
 
 from . import pose_geometry
+from .bar_refusal_watch import BarRefusalWatch
 from .bar_zone import BarZone
 from .keypoints import KP, Keypoint
 from .pose_geometry import (
@@ -268,6 +269,8 @@ class WorkoutEngine:
 
         self._moving_since = 0
         self._bar = BarZone()
+        #: Counts what the bar has refused, so a bar learned in the wrong place gets forgotten.
+        self._bar_refusals = BarRefusalWatch()
         self._setup_in_progress = False
         #: A fresh, on-bar dead hang is required before every pull-up count.
         self._pullup_down_seen = False
@@ -426,6 +429,7 @@ class WorkoutEngine:
         self._banked_rounds.clear()
         self.diagnostics = FrameDiagnostics()
         self._bar.reset()
+        self._bar_refusals.clear()
 
     def skip_exercise(self) -> RepEvent:
         return self._advance()
@@ -470,6 +474,7 @@ class WorkoutEngine:
         for counter in self._counters.values():
             counter.reset_band()
         self._bar.reset()
+        self._bar_refusals.clear()
         self._pullup_down_seen = False
         self._pullup_extended_elbow = NAN
         self._bar_torso = NAN
@@ -621,6 +626,7 @@ class WorkoutEngine:
         self._counters[self.exercise].reset()
         self._moving_since = 0
         self._bar.reset()
+        self._bar_refusals.clear()
         self._setup_in_progress = True
         self._pullup_down_seen = False
         self._pullup_extended_elbow = NAN
@@ -761,7 +767,27 @@ class WorkoutEngine:
         return self._settle() if settle_workout else RepEvent.NONE
 
     def _pullup_sample(self, k: Sequence[Keypoint], now: int) -> PullupSample | None:
-        """Validates a pull-up pose without mutating the counter."""
+        """Validates a pull-up pose without mutating the counter, and tells the watch whether the
+        bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next
+        hang."""
+        sample = self._read_pullup(k, now)
+        # A bar fixed for a recorded clip is the clip's own region, not an estimate: never doubted.
+        if not self._bar.is_manual and self._bar_refusals.record(
+            now, sample is None and self.hint == "Get on the bar"
+        ):
+            self._forget_bar()
+        return sample
+
+    def _forget_bar(self) -> None:
+        """Lets go of the bar that was learned, and of what was counted against it."""
+        self._bar.reset()
+        self._bar_refusals.clear()
+        self._bar_torso = NAN
+        self._bar_contradictions = 0
+        self._bar_settle_since = 0
+        self._bar_settle_hands = None
+
+    def _read_pullup(self, k: Sequence[Keypoint], now: int) -> PullupSample | None:
         left_wrist = k[KP.LEFT_WRIST]
         right_wrist = k[KP.RIGHT_WRIST]
         if not ok(left_wrist) or not ok(right_wrist):
@@ -819,11 +845,7 @@ class WorkoutEngine:
             if ratio > self.BAR_SCALE_CHANGE:
                 self._bar_contradictions += 1
                 if self._bar_contradictions > self.MAX_BAR_CONTRADICTIONS:
-                    self._bar.reset()
-                    self._bar_torso = NAN
-                    self._bar_contradictions = 0
-                    self._bar_settle_since = 0
-                    self._bar_settle_hands = None
+                    self._forget_bar()
         else:
             self._bar_contradictions = 0
 
@@ -851,7 +873,7 @@ class WorkoutEngine:
         if elbow >= dead_hang and gate_ok:
             was_established = self._bar.established
             half = self._grip_half_width(k)
-            self._bar.observe_hang(hands.x, hands.y, 0.0 if half is None else half)
+            self._bar.observe_hang(hands.x, hands.y, 0.0 if half is None else half, torso)
             if not was_established:
                 self._bar_torso = torso
         if self._bar.established:
@@ -957,7 +979,7 @@ class WorkoutEngine:
             return
         if now - self._bar_settle_since < self.BAR_SETTLE_MS:
             return
-        self._bar.observe_hang(hands.x, hands.y, half_grip)
+        self._bar.observe_hang(hands.x, hands.y, half_grip, torso)
         self._bar_torso = torso
         self._bar_settle_since = 0
         self._bar_settle_hands = None

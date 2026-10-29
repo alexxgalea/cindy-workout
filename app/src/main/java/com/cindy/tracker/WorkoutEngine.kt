@@ -393,6 +393,8 @@ class WorkoutEngine(
 
     private var movingSince = 0L
     private val bar = BarZone()
+    /** Counts what the bar has refused, so a bar learned in the wrong place gets forgotten. */
+    private val barRefusals = BarRefusalWatch()
     private var setupInProgress = false
     /** A fresh, on-bar dead hang is required before every pull-up count. */
     private var pullupDownSeen = false
@@ -515,6 +517,7 @@ class WorkoutEngine(
         bankedRounds.clear()
         diagnostics = FrameDiagnostics()
         bar.reset()
+        barRefusals.clear()
         barGuide = null
     }
 
@@ -590,6 +593,7 @@ class WorkoutEngine(
         counters.values.forEach { it.resetBand() }
         // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
         bar.reset()
+        barRefusals.clear()
         barGuide = null
         pullupDownSeen = false
         pullupExtendedElbow = Float.NaN
@@ -750,6 +754,7 @@ class WorkoutEngine(
         counters.getValue(exercise).reset()
         movingSince = 0L
         bar.reset()
+        barRefusals.clear()
         barGuide = null
         setupInProgress = true
         pullupDownSeen = false
@@ -935,8 +940,31 @@ class WorkoutEngine(
         return if (settleWorkout) settle() else RepEvent.NONE
     }
 
-    /** Validates a pull-up pose without mutating the counter. */
+    /**
+     * Validates a pull-up pose without mutating the counter, and tells [barRefusals] whether the
+     * bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next hang.
+     * A bar fixed for a recorded clip is the clip's own region, not an estimate, and is never doubted.
+     */
     private fun pullupSample(k: Array<Keypoint>, now: Long): PullupSample? {
+        val sample = readPullup(k, now)
+        if (!bar.isManual &&
+            barRefusals.record(now, sample == null && hint == Hint.GET_ON_BAR.english)
+        ) forgetBar()
+        return sample
+    }
+
+    /** Lets go of the bar that was learned, and of what was counted against it. */
+    private fun forgetBar() {
+        bar.reset()
+        barRefusals.clear()
+        barGuide = null
+        barTorso = Float.NaN
+        barContradictions = 0
+        barSettleSince = 0L
+        barSettleHands = null
+    }
+
+    private fun readPullup(k: Array<Keypoint>, now: Long): PullupSample? {
         val leftWrist = k[KP.LEFT_WRIST]
         val rightWrist = k[KP.RIGHT_WRIST]
         if (!PoseGeometry.ok(leftWrist) || !PoseGeometry.ok(rightWrist)) {
@@ -1005,14 +1033,7 @@ class WorkoutEngine(
             val ratio =
                 if (barTorso.isNaN() || barTorso <= 0f || torso <= 0f) 1f
                 else maxOf(torso / barTorso, barTorso / torso)
-            if (ratio > BAR_SCALE_CHANGE && ++barContradictions > MAX_BAR_CONTRADICTIONS) {
-                bar.reset()
-                barGuide = null
-                barTorso = Float.NaN
-                barContradictions = 0
-                barSettleSince = 0L
-                barSettleHands = null
-            }
+            if (ratio > BAR_SCALE_CHANGE && ++barContradictions > MAX_BAR_CONTRADICTIONS) forgetBar()
         } else {
             barContradictions = 0
         }
@@ -1039,7 +1060,7 @@ class WorkoutEngine(
         ) {
             val wasEstablished = bar.established
             val half = gripHalfWidth(k) ?: 0f
-            bar.observeHang(hands.x, hands.y, half)
+            bar.observeHang(hands.x, hands.y, half, torso)
             if (!wasEstablished) barTorso = torso
         }
         if (bar.established) {
@@ -1165,7 +1186,7 @@ class WorkoutEngine(
             return
         }
         if (now - barSettleSince < BAR_SETTLE_MS) return
-        bar.observeHang(hands.x, hands.y, halfGrip)
+        bar.observeHang(hands.x, hands.y, halfGrip, torso)
         barTorso = torso
         barSettleSince = 0L
         barSettleHands = null

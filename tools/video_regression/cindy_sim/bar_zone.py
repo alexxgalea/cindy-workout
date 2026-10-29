@@ -25,6 +25,10 @@ class BarZone:
     Y_TOLERANCE = 0.75
     #: Horizontal slack beyond the observed grip, in torso lengths.
     X_PADDING = 0.6
+    #: The narrowest half-grip a bar is first learned with, in torso lengths. Two wrists a few
+    #: pixels apart are not a grip: hands seen stacked, one hand seen twice, or an athlete cut off by
+    #: the frame's edge. The two sessions that calibrated learned 0.26 and 0.46 of a torso.
+    MIN_GRIP_HALF = 0.25
 
     def __init__(self) -> None:
         self._y = NAN
@@ -36,6 +40,11 @@ class BarZone:
     def established(self) -> bool:
         """True once a dead hang has been seen and the zone means something."""
         return not math.isnan(self._y)
+
+    @property
+    def is_manual(self) -> bool:
+        """True when the bar was fixed for a recorded clip, not learned."""
+        return self._manual
 
     @property
     def line_y(self) -> float | None:
@@ -51,17 +60,22 @@ class BarZone:
         self._x_max = f32(x_max)
         self._manual = True
 
-    def observe_hang(self, hands_x: float, hands_y: float, half_grip: float) -> None:
-        """Records where the hands were during a confirmed dead hang."""
+    def observe_hang(self, hands_x: float, hands_y: float, half_grip: float, torso: float) -> None:
+        """Records where the hands were during a confirmed dead hang, on a body of this torso.
+
+        The first hang the bar is learned from is given at least ``MIN_GRIP_HALF`` of a torso either
+        side of the hands; later hangs only refine it, and are taken as they are.
+        """
         if self._manual:
+            return
+        if not self.established:
+            half = max(half_grip, f32(self.MIN_GRIP_HALF * torso))
+            self._y = f32(hands_y)
+            self._x_min = f32(hands_x - half)
+            self._x_max = f32(hands_x + half)
             return
         low = f32(hands_x - half_grip)
         high = f32(hands_x + half_grip)
-        if not self.established:
-            self._y = f32(hands_y)
-            self._x_min = low
-            self._x_max = high
-            return
         self._y = f32(self._y + self.FOLLOW * (hands_y - self._y))
         self._x_min = f32(self._x_min + self.FOLLOW * (min(self._x_min, low) - self._x_min))
         self._x_max = f32(self._x_max + self.FOLLOW * (max(self._x_max, high) - self._x_max))

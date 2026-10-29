@@ -340,6 +340,8 @@ public final class WorkoutEngine {
 
     private var movingSince: Int64 = 0
     private let bar = BarZone()
+    /// Counts what the bar has refused, so a bar learned in the wrong place gets forgotten.
+    private let barRefusals = BarRefusalWatch()
     private var setupInProgress = false
     /// A fresh, on-bar dead hang is required before every pull-up count.
     private var pullupDownSeen = false
@@ -484,6 +486,7 @@ public final class WorkoutEngine {
         bankedRounds.removeAll()
         diagnostics = FrameDiagnostics()
         bar.reset()
+        barRefusals.clear()
         barGuide = nil
     }
 
@@ -556,6 +559,7 @@ public final class WorkoutEngine {
         counters.values.forEach { $0.resetBand() }
         // The bar's position was recorded in frame pixels, so a moved camera invalidates it.
         bar.reset()
+        barRefusals.clear()
         barGuide = nil
         pullupDownSeen = false
         pullupExtendedElbow = .nan
@@ -708,6 +712,7 @@ public final class WorkoutEngine {
         counter.reset()
         movingSince = 0
         bar.reset()
+        barRefusals.clear()
         barGuide = nil
         setupInProgress = true
         pullupDownSeen = false
@@ -899,8 +904,30 @@ public final class WorkoutEngine {
         return settleWorkout ? settle() : .none
     }
 
-    /// Validates a pull-up pose without mutating the counter.
+    /// Validates a pull-up pose without mutating the counter, and tells `barRefusals` whether the
+    /// bar refused it. A bar that keeps refusing is forgotten, to be learned again from the next hang.
     private func pullupSample(_ k: [Keypoint], now: Int64) -> PullupSample? {
+        let sample = readPullup(k, now: now)
+        // A bar fixed for a recorded clip is the clip's own region, not an estimate: never doubted.
+        if !bar.isManual,
+           barRefusals.record(now: now, refusedByBar: sample == nil && hint == "Get on the bar") {
+            forgetBar()
+        }
+        return sample
+    }
+
+    /// Lets go of the bar that was learned, and of what was counted against it.
+    private func forgetBar() {
+        bar.reset()
+        barRefusals.clear()
+        barGuide = nil
+        barTorso = .nan
+        barContradictions = 0
+        barSettleSince = 0
+        barSettleHands = nil
+    }
+
+    private func readPullup(_ k: [Keypoint], now: Int64) -> PullupSample? {
         let leftWrist = k[KP.leftWrist]
         let rightWrist = k[KP.rightWrist]
         guard PoseGeometry.ok(leftWrist), PoseGeometry.ok(rightWrist) else {
@@ -949,14 +976,7 @@ public final class WorkoutEngine {
                 ? 1 : max(torso / barTorso, barTorso / torso)
             if ratio > Self.barScaleChange {
                 barContradictions += 1
-                if barContradictions > Self.maxBarContradictions {
-                    bar.reset()
-                    barGuide = nil
-                    barTorso = .nan
-                    barContradictions = 0
-        barSettleSince = 0
-                    barSettleHands = nil
-                }
+                if barContradictions > Self.maxBarContradictions { forgetBar() }
             }
         } else {
             barContradictions = 0
@@ -984,7 +1004,7 @@ public final class WorkoutEngine {
         if elbow >= deadHang, mayLearn {
             let wasEstablished = bar.established
             let half = gripHalfWidth(k) ?? 0
-            bar.observeHang(handsX: hands.x, handsY: hands.y, halfGrip: half)
+            bar.observeHang(handsX: hands.x, handsY: hands.y, halfGrip: half, torso: torso)
             if !wasEstablished { barTorso = torso }
         }
         if bar.established {
@@ -1100,7 +1120,7 @@ public final class WorkoutEngine {
             return
         }
         guard now - barSettleSince >= Self.barSettleMs else { return }
-        bar.observeHang(handsX: hands.x, handsY: hands.y, halfGrip: halfGrip)
+        bar.observeHang(handsX: hands.x, handsY: hands.y, halfGrip: halfGrip, torso: torso)
         barTorso = torso
         barSettleSince = 0
         barSettleHands = nil

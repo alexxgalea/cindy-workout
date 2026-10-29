@@ -47,7 +47,7 @@ class BarGuideTest {
     @Test
     fun `the box that is drawn is the box that is tested`() {
         val zone = BarZone()
-        zone.observeHang(handsX = 0f, handsY = 0f, halfGrip = 20f)
+        zone.observeHang(handsX = 0f, handsY = 0f, halfGrip = 20f, torso = 100f)
         val torso = 100f
         val bounds = zone.bounds(torso)!!
 
@@ -69,7 +69,7 @@ class BarGuideTest {
     @Test
     fun `the box grows with the athlete's distance from the camera`() {
         val zone = BarZone()
-        zone.observeHang(handsX = 0f, handsY = 0f, halfGrip = 20f)
+        zone.observeHang(handsX = 0f, handsY = 0f, halfGrip = 20f, torso = 100f)
         val near = zone.bounds(200f)!!
         val far = zone.bounds(50f)!!
         assertTrue(near.bottom - near.top > far.bottom - far.top)

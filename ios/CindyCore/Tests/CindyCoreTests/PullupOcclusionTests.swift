@@ -82,11 +82,10 @@ final class PullupOcclusionTests: XCTestCase {
         hold(e, PoseFixtures.pullup(60))
         XCTAssertEqual(e.reps, 1)
 
-        // Steps down and repeats the identical arm movement on the floor.
-        for _ in 0..<4 {
-            hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
-            hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
-        }
+        // Steps down and repeats the identical arm movement on the floor, for the two seconds
+        // before BarRefusalWatch would doubt the bar (it waits four).
+        hold(e, PoseFixtures.pullup(170).moved(dx: 0, dy: 400))
+        hold(e, PoseFixtures.pullup(60).moved(dx: 0, dy: 400))
         XCTAssertEqual(e.reps, 1, "off-bar repetitions must not add to the score")
     }
 
