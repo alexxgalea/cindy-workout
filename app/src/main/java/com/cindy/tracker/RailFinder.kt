@@ -41,8 +41,11 @@ data class RailLine(val slope: Float, val xRef: Float, val yRef: Float) {
  *
  * A wall of bars has several rails a few pixels apart, and the line of best score is not
  * necessarily the one being held. The tilt is taken from the best line and then the choice is made
- * by the hand: the nearest rail at or above the wrist, since a hand hangs from the rail and never
- * below it.
+ * by the hand, in two steps. A hand hangs from the rail and never below it, so only rails at or
+ * above the wrist are candidates. But the pose puts the wrist where the hand ends, not where it
+ * grips: on the recorded wall bars it read a hand's length *under* the tube (14 px, with the next
+ * rail 5 px above it), so the *nearest* rail above the wrist was the wrong one. Candidates are
+ * therefore every rail within [reach] above the wrist, and the one that looks most like a bar wins.
  */
 object RailFinder {
     /** Tallest thing, in pixels, that still counts as thin: a bar is a few pixels, a wall is not. */
@@ -58,6 +61,9 @@ object RailFinder {
     /** A rail scoring under this share of the best line's score is a smudge, not a rail. */
     private const val CANDIDATE_SHARE = 0.5f
 
+    /** Rails within this share of the strongest are a tie, and the highest of them is the bar. */
+    private const val TIE_SHARE = 0.85f
+
     /** A wrist can read a few pixels below the rail it holds: the hand wraps the bar. */
     const val WRIST_SLACK = 4f
 
@@ -66,10 +72,11 @@ object RailFinder {
     /**
      * The bar held by the hand at ([wristX], [wristY]), or null when the picture shows none.
      *
-     * [halfWidth] is how far either side of the hand to look, and [above] how far above it: both in
-     * pixels of [luma], so the caller scales them from the body (a torso is a good unit).
+     * [halfWidth] is how far either side of the hand to look, [above] how far above it to look for
+     * the tilt, and [reach] how far above the wrist the held bar can be: all in pixels of [luma], so
+     * the caller scales them from the body (a torso is a good unit). A hand's length is [reach].
      */
-    fun find(luma: Luma, wristX: Float, wristY: Float, halfWidth: Int, above: Int): RailLine? {
+    fun find(luma: Luma, wristX: Float, wristY: Float, halfWidth: Int, above: Int, reach: Int): RailLine? {
         val tiltDrift = (halfWidth * tan(Math.toRadians(MAX_TILT.toDouble()))).toInt() + 1
         val x0 = (wristX - halfWidth).toInt().coerceAtLeast(0)
         val x1 = (wristX + halfWidth).toInt().coerceAtMost(luma.width - 1)
@@ -110,16 +117,19 @@ object RailFinder {
         if (bestScore < MIN_SCORE) return null
 
         val scores = FloatArray(offsets.size) { score(bestSlope, wristY + offsets[it]) }
-        // Nearest rail at or above the wrist: scan up from the wrist for the first real peak.
-        for (i in scores.indices.reversed()) {
-            val s = scores[i]
-            if (s < bestScore * CANDIDATE_SHARE) continue
+        // Candidates: real peaks, within a hand's length above the wrist (and a little below it).
+        val peaks = scores.indices.filter { i ->
             val lo = (i - 2).coerceAtLeast(0)
             val hi = (i + 2).coerceAtMost(scores.size - 1)
-            if ((lo..hi).any { scores[it] > s }) continue
-            return RailLine(bestSlope, wristX, wristY + offsets[i])
+            offsets[i] >= -reach && scores[i] >= bestScore * CANDIDATE_SHARE &&
+                (lo..hi).none { scores[it] > scores[i] }
         }
-        return null
+        if (peaks.isEmpty()) return null
+        val top = peaks.maxOf { scores[it] }
+        // The strongest wins; rails that look about as strong are decided by being the highest,
+        // since a hand reaches up to the bar.
+        val chosen = peaks.filter { scores[it] >= top * TIE_SHARE }.minByOrNull { offsets[it] }!!
+        return RailLine(bestSlope, wristX, wristY + offsets[chosen])
     }
 
     /** The thin bright parts of [luma] in a window: the picture minus its vertical opening. */

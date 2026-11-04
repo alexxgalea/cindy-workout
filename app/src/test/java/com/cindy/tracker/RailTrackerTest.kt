@@ -54,7 +54,7 @@ class RailTrackerTest {
     private fun says(
         tilt: () -> Float,
         looks: () -> Unit = {}
-    ): (Luma, Float, Float, Int, Int) -> RailLine? = { _, wx, _, _, _ ->
+    ): (Luma, Float, Float, Int, Int, Int) -> RailLine? = { _, wx, _, _, _, _ ->
         looks()
         val slope = RailFinder.slopeOf(tilt())
         val absY = 170f + slope * (wx + originX - 340f)

@@ -62,25 +62,27 @@ class RailFinderTest {
 
     @Test
     fun `the held rail of the real wall bars is found, tilted, not level`() {
-        val line = RailFinder.find(wallBars(), wristX = 155f, wristY = 44f, halfWidth = 70, above = 30)
+        val line = RailFinder.find(wallBars(), wristX = 155f, wristY = 44f, halfWidth = 70, above = 30, reach = 8)
         assertNotNull(line)
         assertEquals(7.4f, line!!.degrees, 1.5f)
         assertEquals(40f, line.yAt(155f), 2.5f)
     }
 
     @Test
-    fun `a hand lower on the same wall holds the nearest rail above it, not the best one`() {
-        // The wrist is under the second rail: the first is above it too, and is the one that
-        // scored best in the learned stack, but it is not the one this hand can be holding.
-        val line = RailFinder.find(wallBars(), wristX = 155f, wristY = 62f, halfWidth = 70, above = 30)
-        assertNotNull(line)
-        assertEquals(59f, line!!.yAt(155f), 2.5f)
+    fun `a hand's length is as far up as the held bar can be`() {
+        // The wrist is under the second rail, 3 px below it and 22 below the top tube. With a hand
+        // that short the second rail is the one held; with a longer hand the top tube is, since
+        // it is the stronger of the two rails the hand can reach.
+        val near = RailFinder.find(wallBars(), wristX = 155f, wristY = 62f, halfWidth = 70, above = 30, reach = 8)
+        assertEquals(59f, near!!.yAt(155f), 2.5f)
+        val far = RailFinder.find(wallBars(), wristX = 155f, wristY = 62f, halfWidth = 70, above = 30, reach = 26)
+        assertEquals(40f, far!!.yAt(155f), 2.5f)
     }
 
     @Test
     fun `an invented rail is found at its tilt and its height`() {
         val luma = synthetic(ys = listOf(60f, 80f), degrees = -5f)
-        val line = RailFinder.find(luma, wristX = 150f, wristY = 63f, halfWidth = 70, above = 30)
+        val line = RailFinder.find(luma, wristX = 150f, wristY = 63f, halfWidth = 70, above = 30, reach = 8)
         assertNotNull(line)
         assertEquals(-5f, line!!.degrees, 1.5f)
         assertEquals(60f, line.yAt(150f), 2f)
@@ -91,7 +93,7 @@ class RailFinderTest {
         val luma = synthetic(ys = listOf(60f), degrees = 8f)
         // An arm: a bright-as-the-rail vertical band 16 px wide, straight through the line.
         for (y in 0 until luma.height) for (x in 140..156) luma.pixels[y * luma.width + x] = 200.toByte()
-        val line = RailFinder.find(luma, wristX = 148f, wristY = 62f, halfWidth = 70, above = 30)
+        val line = RailFinder.find(luma, wristX = 148f, wristY = 62f, halfWidth = 70, above = 30, reach = 8)
         assertNotNull(line)
         assertEquals(8f, line!!.degrees, 1.5f)
         assertEquals(60f, line.yAt(150f), 2.5f)
@@ -100,13 +102,13 @@ class RailFinderTest {
     @Test
     fun `a bare wall has no rail to find`() {
         val luma = synthetic(ys = emptyList(), degrees = 0f)
-        assertNull(RailFinder.find(luma, wristX = 150f, wristY = 70f, halfWidth = 70, above = 30))
+        assertNull(RailFinder.find(luma, wristX = 150f, wristY = 70f, halfWidth = 70, above = 30, reach = 8))
     }
 
     @Test
     fun `a hand at the edge of the picture neither crashes nor invents a rail`() {
         val luma = synthetic(ys = emptyList(), degrees = 0f)
-        assertNull(RailFinder.find(luma, wristX = 4f, wristY = 3f, halfWidth = 70, above = 30))
-        assertNull(RailFinder.find(luma, wristX = 295f, wristY = 138f, halfWidth = 70, above = 30))
+        assertNull(RailFinder.find(luma, wristX = 4f, wristY = 3f, halfWidth = 70, above = 30, reach = 8))
+        assertNull(RailFinder.find(luma, wristX = 295f, wristY = 138f, halfWidth = 70, above = 30, reach = 8))
     }
 }

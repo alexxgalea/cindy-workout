@@ -22,7 +22,7 @@ data class DrawnRail(val line: RailLine, val xFrom: Float, val xTo: Float)
  * Called from the analysis thread; [reset] may come from any thread.
  */
 class RailTracker(
-    private val find: (Luma, Float, Float, Int, Int) -> RailLine? = RailFinder::find
+    private val find: (Luma, Float, Float, Int, Int, Int) -> RailLine? = RailFinder::find
 ) {
     private companion object {
         /** Look once every this many calls: a look costs several milliseconds and the bar is still. */
@@ -41,6 +41,9 @@ class RailTracker(
         const val NEAR_BAR = 0.6f
         const val HALF_WIDTH_TORSOS = 0.7f
         const val ABOVE_TORSOS = 0.6f
+
+        /** How far above a wrist the held bar can be: about a hand's length. */
+        const val HAND_TORSOS = 0.2f
 
         /** How far the drawn bar reaches beyond the hands, in torsos. */
         const val REACH_TORSOS = 0.5f
@@ -110,7 +113,7 @@ class RailTracker(
             val y1 = (wrist.y + margin).toInt().coerceAtMost(frameHeight - 1)
             val luma = window(x0, y0, x1 - x0 + 1, y1 - y0 + 1) ?: continue
             // The window's own pixels start at (x0, y0), so the hand is told in those.
-            val line = find(luma, wrist.x - x0, wrist.y - y0, half, above) ?: continue
+            val line = find(luma, wrist.x - x0, wrist.y - y0, half, above, (HAND_TORSOS * torso).toInt()) ?: continue
             val atCentre = line.yAt(centre - x0) + y0
             votes += Vote(line.degrees, atCentre, wrist.x)
             if (votes.size > MAX_VOTES) votes.removeAt(0)
