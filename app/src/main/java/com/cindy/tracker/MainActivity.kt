@@ -340,6 +340,9 @@ class MainActivity : AppCompatActivity() {
      * and the recorder — the counting must not depend on a sensor being present.
      */
     private val stability = CameraStabilityMonitor()
+
+    /** Where the bar is in the picture, for drawing it. Never read by the engine. */
+    private val railTracker = RailTracker()
     private var sensors: SensorManager? = null
     private var rotationSensor: Sensor? = null
 
@@ -372,6 +375,7 @@ class MainActivity : AppCompatActivity() {
     private fun onCameraMoved() {
         if (state != State.RUNNING && state != State.SETUP) return
         synchronized(engineLock) { engine.recalibrate() }
+        railTracker.reset()
         traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         tracking.reframe()
         detector?.resetRoi()
@@ -1002,6 +1006,7 @@ class MainActivity : AppCompatActivity() {
         handoff.clear()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
+        railTracker.reset()
         traceControl(EngineTrace.Control.RECALIBRATE_LENS_FLIPPED)
         tracking.reframe()
         bindUseCases()
@@ -1058,9 +1063,15 @@ class MainActivity : AppCompatActivity() {
                 null
             }
             // The gate is pull-up geometry; the other two movements have no bar to draw.
-            val guide = synchronized(engineLock) {
+            val gateGuide = synchronized(engineLock) {
                 engine.barGuide.takeIf { engine.exercise == Exercise.PULLUP }
             }
+            // The bar as the picture shows it, learned while the athlete hangs and then held. Only
+            // the drawing uses it; the gate above is what counts.
+            railTracker.observe(keypoints, gateGuide, frameW, frameH) { x, y, w, h ->
+                YuvCrop.lumaWindow(yuv, upright, x, y, w, h)
+            }
+            val guide = gateGuide?.copy(rail = railTracker.rail)
             val convertMs = (tConverted - tEntry) / 1_000_000L
             val captureAgeMs = latency.clock.sinceCapture(captureNanos)
 
@@ -2219,6 +2230,8 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         sensors?.unregisterListener(rotationListener)
         stability.reset()
+        // The phone may be put down somewhere else.
+        railTracker.reset()
         // Leaving the screen: whatever waits for a skeleton is let go, none of it replays.
         picture?.releaseAll()
         video.releaseAll()

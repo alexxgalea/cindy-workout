@@ -63,6 +63,33 @@ class YuvFrame {
 object YuvCrop {
 
     /**
+     * A window of the picture as grey, in the upright frame's own pixels, or null if the frame
+     * cannot be mapped.
+     *
+     * [upright] is the map from the camera's raw buffer to the upright frame, the same one the
+     * keypoints are in; each output pixel is walked back through it to the raw pixel it came from,
+     * so the window is turned and mirrored exactly as the skeleton is. Pixels the window shares
+     * with nothing, past the edge of the frame, read black.
+     */
+    fun lumaWindow(frame: YuvFrame, upright: Affine, x0: Int, y0: Int, w: Int, h: Int): Luma? {
+        if (w <= 0 || h <= 0 || frame.width <= 0 || frame.height <= 0) return null
+        val inverse = upright.invert() ?: return null
+        val out = ByteArray(w * h)
+        for (oy in 0 until h) {
+            for (ox in 0 until w) {
+                // Pixel centres, so a quarter turn lands on a pixel and not between two.
+                val ux = x0 + ox + 0.5f
+                val uy = y0 + oy + 0.5f
+                val sx = kotlin.math.floor(inverse.mapX(ux, uy)).toInt()
+                val sy = kotlin.math.floor(inverse.mapY(ux, uy)).toInt()
+                if (sx < 0 || sy < 0 || sx >= frame.width || sy >= frame.height) continue
+                out[oy * w + ox] = frame.y[sy * frame.yRowStride + sx * frame.yPixelStride]
+            }
+        }
+        return Luma(w, h, out)
+    }
+
+    /**
      * Writes `size * size` packed 0xRRGGBB ints into [out].
      *
      * [modelToSource] maps a model-square coordinate to a coordinate in the camera's raw buffer —

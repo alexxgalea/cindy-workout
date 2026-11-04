@@ -23,8 +23,6 @@ class PictureEffect(
 
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.skeleton),
-        zoneOkColor = ContextCompat.getColor(context, R.color.state_ok),
-        zoneAlertColor = ContextCompat.getColor(context, R.color.state_alert),
         resetLinePathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
     )
 

@@ -9,7 +9,7 @@ import androidx.core.content.ContextCompat
 import kotlin.math.max
 
 /**
- * Draws the detected skeleton, and the pull-up gate, on top of the live picture.
+ * Draws the detected skeleton, and the pull-up bar, on top of the live picture.
  *
  * The synced picture draws both into its own frames and this view stays out of the way (see
  * [live]). This view is what draws them when the picture is the live one: the debug readout's
@@ -59,13 +59,10 @@ class OverlayView @JvmOverloads constructor(
     /** Draw rate, for the latency readout. Counted here because this is what the athlete sees. */
     val drawRate = RateMeter()
 
-    // The same painter the synced picture and the film use, so the skeleton looks one way
-    // wherever it is drawn. The gate's two states are the only other colour on this canvas: the
-    // skeleton is the athlete, green means this would count, red means it would not.
+    // The same painter the synced picture and the film use, so the skeleton and the bar look one
+    // way wherever they are drawn.
     private val painter = SkeletonPainter(
         boneColor = ContextCompat.getColor(context, R.color.skeleton),
-        zoneOkColor = ContextCompat.getColor(context, R.color.state_ok),
-        zoneAlertColor = ContextCompat.getColor(context, R.color.state_alert),
         // Drawn on a canvas scaled up to the view, so these lengths grow with it: about the
         // 18 and 14 px the line has always had on screen.
         resetLinePathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
