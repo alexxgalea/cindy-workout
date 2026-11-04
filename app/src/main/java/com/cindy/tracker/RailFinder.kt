@@ -171,4 +171,7 @@ object RailFinder {
         }
         return Thin(x0, y0, w, h, out)
     }
+
+    /** The slope, in pixels of y per pixel of x, of a tilt in degrees. */
+    fun slopeOf(degrees: Float): Float = tan(Math.toRadians(degrees.toDouble())).toFloat()
 }
