@@ -187,4 +187,41 @@ class YuvCropTest {
             assertEquals(y, back.mapY(forward.mapX(x, y), forward.mapY(x, y)), 0.01f)
         }
     }
+
+    /** Every pixel different, so a window's pixel can be traced back to the camera pixel it came from. */
+    private fun unique(): YuvFrame {
+        val f = YuvFrame()
+        val y = ByteArray(w * h)
+        for (row in 0 until h) for (col in 0 until w) y[row * w + col] = ((col * 5 + row * 7) % 256).toByte()
+        val u = ByteArray((w / 2) * (h / 2)) { 128.toByte() }
+        f.set(w, h, y, w, 1, u, u, w / 2, 1)
+        return f
+    }
+
+    @Test
+    fun `a grey window is turned and mirrored the way the keypoints are`() {
+        val f = unique()
+        for (rotation in listOf(0, 90, 180, 270)) for (mirror in listOf(false, true)) {
+            val upright = OverlayTransform.upright(w, h, rotation, mirror)
+            val uw = OverlayTransform.uprightWidth(w, h, rotation).toInt()
+            val uh = OverlayTransform.uprightHeight(w, h, rotation).toInt()
+            val win = YuvCrop.lumaWindow(f, upright, 0, 0, uw, uh)!!
+            for (row in 0 until h step 5) for (col in 0 until w step 5) {
+                val ux = Math.floor(upright.mapX(col + 0.5f, row + 0.5f).toDouble()).toInt()
+                val uy = Math.floor(upright.mapY(col + 0.5f, row + 0.5f).toDouble()).toInt()
+                assertEquals(
+                    "rotation $rotation mirror $mirror, camera pixel ($col, $row)",
+                    (col * 5 + row * 7) % 256, win[ux, uy]
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a window running past the frame reads black there and grey inside`() {
+        val f = flat(200)
+        val win = YuvCrop.lumaWindow(f, Affine.IDENTITY, w - 4, h - 4, 8, 8)!!
+        assertEquals(200, win[0, 0])
+        assertEquals(0, win[7, 7])
+    }
 }
