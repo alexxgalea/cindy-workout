@@ -8,7 +8,7 @@ import kotlin.math.hypot
 import kotlin.math.min
 
 /**
- * Draws the skeleton, and the pull-up bar zone when it is given one, onto a canvas that is
+ * Draws the skeleton, and the pull-up bar when it is given one, onto a canvas that is
  * already mapped to the analysed frame.
  *
  * Everything is in the frame's own coordinates, the space the keypoints arrive in, so the caller
@@ -25,12 +25,10 @@ import kotlin.math.min
  * elbows and knees stay visible through it. The face gets nothing, because [FIRST_BODY_JOINT]
  * starts below it; the nose, eyes and ears still feed the engine, they are only not drawn.
  *
- * The film passes no bar zone, so what it burns in is the skeleton alone.
+ * The film passes no bar, so what it burns in is the skeleton alone.
  */
 class SkeletonPainter(
     private val boneColor: Int = FILM_BONE,
-    private val zoneOkColor: Int = Color.GREEN,
-    private val zoneAlertColor: Int = Color.RED,
     resetLinePathEffect: PathEffect? = null
 ) {
     private val bone = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -42,9 +40,8 @@ class SkeletonPainter(
         color = boneColor
         style = Paint.Style.STROKE
     }
-    private val zoneFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val zoneEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val barLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = boneColor
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
@@ -54,7 +51,7 @@ class SkeletonPainter(
         pathEffect = resetLinePathEffect
     }
 
-    /** The bar zone goes under the skeleton, so the body is never obscured by its own gate. */
+    /** The bar goes under the skeleton, so the body is never obscured by its own gate. */
     fun paint(
         canvas: Canvas,
         keypoints: Array<Keypoint>,
@@ -93,40 +90,20 @@ class SkeletonPainter(
         }
     }
 
-    private fun paintZone(canvas: Canvas, guide: WorkoutEngine.BarGuide, frameHeight: Int) {
-        val rail = guide.rail
-        if (rail != null) return paintRail(canvas, guide, rail, frameHeight)
-        val z = guide.zone
-        val colour = if (guide.gateOpen) zoneOkColor else zoneAlertColor
-        zoneFill.color = colour
-        zoneFill.alpha = ZONE_FILL_ALPHA
-        canvas.drawRect(z.left, z.top, z.right, z.bottom, zoneFill)
-        zoneEdge.color = colour
-        zoneEdge.strokeWidth = frameHeight * ZONE_EDGE_FRACTION
-        canvas.drawRect(z.left, z.top, z.right, z.bottom, zoneEdge)
-        barLine.color = colour
-        barLine.strokeWidth = frameHeight * BAR_WIDTH_FRACTION
-        canvas.drawLine(z.left, z.lineY, z.right, z.lineY, barLine)
+    /**
+     * The bar where the picture has it: tilted, thin, and the skeleton's own colour. Nothing is
+     * drawn until the bar has been seen; the old gate's box and level line are gone.
+     */
+    private fun paintZone(canvas: Canvas, guide: WorkoutEngine.BarGuide, h: Int) {
+        val rail = guide.rail ?: return
+        barLine.strokeWidth = h * RAIL_WIDTH_FRACTION
+        canvas.drawLine(
+            rail.xFrom, rail.line.yAt(rail.xFrom),
+            rail.xTo, rail.line.yAt(rail.xTo),
+            barLine
+        )
         // Where the head has to come back to before the next rep can arm.
-        resetLine.strokeWidth = frameHeight * ZONE_EDGE_FRACTION
-        canvas.drawLine(z.left, guide.resetY, z.right, guide.resetY, resetLine)
-    }
-
-    /** The bar where the picture has it: tilted, thin, in the gate's colour, with no box around it. */
-    private fun paintRail(canvas: Canvas, guide: WorkoutEngine.BarGuide, rail: DrawnRail, h: Int) {
-        val colour = if (guide.gateOpen) zoneOkColor else zoneAlertColor
-        val t = h * RAIL_WIDTH_FRACTION
-        val y0 = rail.line.yAt(rail.xFrom)
-        val y1 = rail.line.yAt(rail.xTo)
-        // A dark line just under it, so it reads against a white wall as well as a dark one.
-        barLine.strokeWidth = t * 1.8f
-        barLine.color = Color.argb(70, 0, 0, 0)
-        canvas.drawLine(rail.xFrom, y0 + t * 0.5f, rail.xTo, y1 + t * 0.5f, barLine)
-        barLine.strokeWidth = t
-        barLine.color = colour
-        canvas.drawLine(rail.xFrom, y0, rail.xTo, y1, barLine)
-        // Where the head has to come back to before the next rep can arm.
-        resetLine.strokeWidth = h * ZONE_EDGE_FRACTION
+        resetLine.strokeWidth = h * RESET_WIDTH_FRACTION
         canvas.drawLine(rail.xFrom, guide.resetY, rail.xTo, guide.resetY, resetLine)
     }
 
@@ -163,14 +140,10 @@ class SkeletonPainter(
         /** A bone is never trimmed by more than this share of its length at each end. */
         const val MAX_GAP_SHARE = 0.3f
 
-        /** The bar line, and the zone's outline, as a fraction of frame height. */
-        const val BAR_WIDTH_FRACTION = 0.005f
-        const val ZONE_EDGE_FRACTION = 0.002f
+        /** The bar drawn on the real bar, as a fraction of frame height: thinner than a bone. */
+        const val RAIL_WIDTH_FRACTION = 0.0025f
 
-        /** The bar drawn on the real bar, as a fraction of frame height. */
-        const val RAIL_WIDTH_FRACTION = 0.007f
-
-        /** Alpha of the wash inside the bar zone: enough to read as a region, not as a mask. */
-        const val ZONE_FILL_ALPHA = 26
+        /** The head's return line, as a fraction of frame height. */
+        const val RESET_WIDTH_FRACTION = 0.002f
     }
 }

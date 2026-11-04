@@ -158,7 +158,7 @@ class SkeletonPainterTest {
     }
 
     @Test
-    fun `a bar zone is drawn when given one, with its bar line and reset line`() {
+    fun `the old gate's box and level line are never drawn, whatever the gate says`() {
         val guide = WorkoutEngine.BarGuide(
             zone = BarZone.Bounds(lineY = 100f, left = 50f, right = 300f, top = 40f, bottom = 180f),
             resetY = 160f,
@@ -166,15 +166,12 @@ class SkeletonPainterTest {
         )
         val drawn = paint(seen(), guide)
 
-        assertTrue(drawn.rects.contains(listOf(50f, 40f, 300f, 180f)))
-        // Two lines more than the bones: the bar itself, and where the head must come back to.
-        assertEquals(KP.SKELETON.size + 2, drawn.lines.size)
-        assertTrue(drawn.lines.any { it.y1 == 100f && it.y2 == 100f && it.x1 == 50f && it.x2 == 300f })
-        assertTrue(drawn.lines.any { it.y1 == 160f && it.y2 == 160f && it.x1 == 50f && it.x2 == 300f })
+        assertTrue(drawn.rects.isEmpty())
+        assertEquals(KP.SKELETON.size, drawn.lines.size)
     }
 
     @Test
-    fun `a bar the picture has shown is drawn tilted along itself, with no box`() {
+    fun `a bar the picture has shown is drawn tilted along itself, thin, with no box`() {
         val rail = DrawnRail(
             line = RailLine(slope = 0.13f, xRef = 150f, yRef = 100f),
             xFrom = 80f,
@@ -188,14 +185,13 @@ class SkeletonPainterTest {
         )
         val drawn = paint(seen(), guide)
 
-        // The old gate was a box; the real bar has none.
         assertTrue(drawn.rects.isEmpty())
-        // The bar, a shadow under it, and the head's return line, besides the bones.
-        assertEquals(KP.SKELETON.size + 3, drawn.lines.size)
-        // The tilted lines along it are the bar and its wider shadow; the head's line is level.
-        val bar = drawn.lines.filter { it.x1 == 80f && it.x2 == 260f && it.y1 != it.y2 }
-            .minByOrNull { it.width }!!
+        // The bar and the head's return line, besides the bones.
+        assertEquals(KP.SKELETON.size + 2, drawn.lines.size)
+        val bar = drawn.lines.first { it.x1 == 80f && it.x2 == 260f && it.y1 != it.y2 }
         assertEquals(100f + 0.13f * (80f - 150f), bar.y1, 1e-3f)
         assertEquals(0.13f, (bar.y2 - bar.y1) / (bar.x2 - bar.x1), 1e-3f)
+        // Thinner than a bone, so the real tube is still seen under it.
+        assertTrue(bar.width < drawn.lines.last().width)
     }
 }

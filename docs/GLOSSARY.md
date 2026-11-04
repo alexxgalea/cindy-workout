@@ -71,7 +71,7 @@ The joints and bones the app draws over the athlete, on the picture and in the f
 _Avoid_: overlay, stick figure, pose
 
 **Drawn bar**:
-The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. The gate that decides whether a rep counts is separate and never reads it, and until the drawn bar is sure the camera screen shows the gate's plain line instead.
+The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. It is drawn thin, in the skeleton's colour, and nothing is drawn in its place until the app is sure of it. The gate that decides whether a rep counts is separate and never reads it.
 _Avoid_: bar line, rail
 
 **Skeleton lag**:
