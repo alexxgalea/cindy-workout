@@ -70,6 +70,10 @@ _Avoid_: preview, feed, camera view
 The joints and bones the app draws over the athlete, on the picture and in the film: a thin cyan line for each bone and a ring at each joint below the face.
 _Avoid_: overlay, stick figure, pose
 
+**Drawn bar**:
+The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. The gate that decides whether a rep counts is separate and never reads it, and until the drawn bar is sure the camera screen shows the gate's plain line instead.
+_Avoid_: bar line, rail
+
 **Skeleton lag**:
 The skeleton showing the body where it was a moment ago, so it trails or jumps off the athlete in the picture. It is about the skeleton against the picture, not against the real athlete.
 _Avoid_: delay, latency (on their own)
