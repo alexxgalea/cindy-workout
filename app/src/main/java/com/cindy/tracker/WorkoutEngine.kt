@@ -830,7 +830,9 @@ class WorkoutEngine(
     data class BarGuide(
         val zone: BarZone.Bounds,
         val resetY: Float,
-        val gateOpen: Boolean
+        val gateOpen: Boolean,
+        /** The bar as the picture shows it, when it has been seen. Drawing only: the gate ignores it. */
+        val rail: DrawnRail? = null
     )
 
     // ── signals ───────────────────────────────────────────────────────────────

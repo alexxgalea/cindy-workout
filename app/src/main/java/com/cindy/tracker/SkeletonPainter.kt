@@ -94,6 +94,8 @@ class SkeletonPainter(
     }
 
     private fun paintZone(canvas: Canvas, guide: WorkoutEngine.BarGuide, frameHeight: Int) {
+        val rail = guide.rail
+        if (rail != null) return paintRail(canvas, guide, rail, frameHeight)
         val z = guide.zone
         val colour = if (guide.gateOpen) zoneOkColor else zoneAlertColor
         zoneFill.color = colour
@@ -108,6 +110,24 @@ class SkeletonPainter(
         // Where the head has to come back to before the next rep can arm.
         resetLine.strokeWidth = frameHeight * ZONE_EDGE_FRACTION
         canvas.drawLine(z.left, guide.resetY, z.right, guide.resetY, resetLine)
+    }
+
+    /** The bar where the picture has it: tilted, thin, in the gate's colour, with no box around it. */
+    private fun paintRail(canvas: Canvas, guide: WorkoutEngine.BarGuide, rail: DrawnRail, h: Int) {
+        val colour = if (guide.gateOpen) zoneOkColor else zoneAlertColor
+        val t = h * RAIL_WIDTH_FRACTION
+        val y0 = rail.line.yAt(rail.xFrom)
+        val y1 = rail.line.yAt(rail.xTo)
+        // A dark line just under it, so it reads against a white wall as well as a dark one.
+        barLine.strokeWidth = t * 1.8f
+        barLine.color = Color.argb(70, 0, 0, 0)
+        canvas.drawLine(rail.xFrom, y0 + t * 0.5f, rail.xTo, y1 + t * 0.5f, barLine)
+        barLine.strokeWidth = t
+        barLine.color = colour
+        canvas.drawLine(rail.xFrom, y0, rail.xTo, y1, barLine)
+        // Where the head has to come back to before the next rep can arm.
+        resetLine.strokeWidth = h * ZONE_EDGE_FRACTION
+        canvas.drawLine(rail.xFrom, guide.resetY, rail.xTo, guide.resetY, resetLine)
     }
 
     companion object {
@@ -146,6 +166,9 @@ class SkeletonPainter(
         /** The bar line, and the zone's outline, as a fraction of frame height. */
         const val BAR_WIDTH_FRACTION = 0.005f
         const val ZONE_EDGE_FRACTION = 0.002f
+
+        /** The bar drawn on the real bar, as a fraction of frame height. */
+        const val RAIL_WIDTH_FRACTION = 0.007f
 
         /** Alpha of the wash inside the bar zone: enough to read as a region, not as a mask. */
         const val ZONE_FILL_ALPHA = 26
