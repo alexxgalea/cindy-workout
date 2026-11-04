@@ -5,6 +5,7 @@ import android.graphics.Paint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import kotlin.math.hypot
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,6 +25,8 @@ class SkeletonPainterTest {
         val lines = mutableListOf<Line>()
         val circles = mutableListOf<Pair<Float, Float>>()
         val radii = mutableListOf<Float>()
+        val circleStyles = mutableListOf<Paint.Style>()
+        val circleStrokes = mutableListOf<Float>()
         val rects = mutableListOf<List<Float>>()
 
         override fun drawLine(startX: Float, startY: Float, stopX: Float, stopY: Float, paint: Paint) {
@@ -33,6 +36,8 @@ class SkeletonPainterTest {
         override fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
             circles += cx to cy
             radii += radius
+            circleStyles += paint.style
+            circleStrokes += paint.strokeWidth
         }
 
         override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
@@ -45,16 +50,70 @@ class SkeletonPainterTest {
     /** Every joint seen, laid out so each one has its own distinct x. */
     private fun seen() = Array(KP.COUNT) { Keypoint(10f + it, 20f + it, 0.9f) }
 
+    /** Every joint seen, far enough apart that no bone is short enough to be trimmed by half. */
+    private fun spread() = Array(KP.COUNT) { Keypoint(100f + it * 30f, 50f + it * 20f, 0.9f) }
+
+    /** The joints that are drawn: everything below the face. */
+    private val bodyJoints = KP.COUNT - KP.LEFT_SHOULDER
+
     private fun paint(
         keypoints: Array<Keypoint>,
         guide: WorkoutEngine.BarGuide? = null
     ): Recorder = Recorder().also { SkeletonPainter().paint(it, keypoints, frameHeight, guide) }
 
     @Test
-    fun `a fully seen body gets every bone and every joint`() {
+    fun `a fully seen body gets every bone and a ring on every joint below the face`() {
         val drawn = paint(seen())
         assertEquals(KP.SKELETON.size, drawn.lines.size)
-        assertEquals(KP.COUNT, drawn.circles.size)
+        assertEquals(bodyJoints, drawn.circles.size)
+    }
+
+    @Test
+    fun `the face gets no joints, however well it is seen`() {
+        val k = seen()
+        for (i in KP.NOSE until KP.LEFT_SHOULDER) k[i] = k[i].copy(score = 0.99f)
+        val drawn = paint(k)
+        for (i in KP.NOSE until KP.LEFT_SHOULDER) {
+            assertFalse("face point $i was drawn", drawn.circles.contains(k[i].x to k[i].y))
+        }
+    }
+
+    @Test
+    fun `joints are rings, not discs`() {
+        val drawn = paint(seen())
+        assertTrue(drawn.circleStyles.all { it == Paint.Style.STROKE })
+        assertTrue(drawn.circleStrokes.all { it > 0f })
+    }
+
+    @Test
+    fun `a bone stops short of its joints by more than the ring needs`() {
+        val k = spread()
+        val drawn = paint(k)
+        val ring = drawn.radii[0] + drawn.circleStrokes[0] / 2f
+        KP.SKELETON.forEachIndexed { i, (a, b) ->
+            val line = drawn.lines[i]
+            val fromA = hypot(line.x1 - k[a].x, line.y1 - k[a].y)
+            val fromB = hypot(line.x2 - k[b].x, line.y2 - k[b].y)
+            assertTrue("bone $a-$b touches joint $a", fromA > ring)
+            assertTrue("bone $a-$b touches joint $b", fromB > ring)
+        }
+    }
+
+    @Test
+    fun `a very short bone is trimmed in proportion and never turned inside out`() {
+        val k = spread()
+        // Pull the left elbow to 5 px from the shoulder: a body seen from far away.
+        val s = k[KP.LEFT_SHOULDER]
+        k[KP.LEFT_ELBOW] = Keypoint(s.x + 3f, s.y + 4f, 0.9f)
+        val drawn = paint(k)
+        val i = KP.SKELETON.indexOfFirst { it == (KP.LEFT_SHOULDER to KP.LEFT_ELBOW) }
+        val line = drawn.lines[i]
+        val before = hypot(k[KP.LEFT_ELBOW].x - s.x, k[KP.LEFT_ELBOW].y - s.y)
+        val after = hypot(line.x2 - line.x1, line.y2 - line.y1)
+        assertTrue("the bone still shows", after > 0f)
+        assertTrue("the bone did not grow", after < before)
+        // Same direction as the bone: start nearer the shoulder than the end is.
+        assertTrue(hypot(line.x1 - s.x, line.y1 - s.y) < hypot(line.x2 - s.x, line.y2 - s.y))
     }
 
     @Test
@@ -66,15 +125,15 @@ class SkeletonPainterTest {
         val touching = KP.SKELETON.count { (a, b) -> a == KP.LEFT_ELBOW || b == KP.LEFT_ELBOW }
         assertTrue("the elbow touches at least two bones", touching >= 2)
         assertEquals(KP.SKELETON.size - touching, drawn.lines.size)
-        assertEquals(KP.COUNT - 1, drawn.circles.size)
+        assertEquals(bodyJoints - 1, drawn.circles.size)
         assertFalse(drawn.circles.contains(k[KP.LEFT_ELBOW].x to k[KP.LEFT_ELBOW].y))
     }
 
     @Test
     fun `a joint exactly at the threshold is drawn`() {
         val k = seen()
-        k[KP.NOSE] = k[KP.NOSE].copy(score = PoseGeometry.MIN_SCORE)
-        assertEquals(KP.COUNT, paint(k).circles.size)
+        k[KP.LEFT_WRIST] = k[KP.LEFT_WRIST].copy(score = PoseGeometry.MIN_SCORE)
+        assertEquals(bodyJoints, paint(k).circles.size)
     }
 
     @Test
