@@ -67,7 +67,7 @@ The camera's live image of the athlete on the camera screen.
 _Avoid_: preview, feed, camera view
 
 **Skeleton**:
-The joints and bones the app draws over the athlete, on the picture and in the film.
+The joints and bones the app draws over the athlete, on the picture and in the film: a thin cyan line for each bone and a ring at each joint below the face.
 _Avoid_: overlay, stick figure, pose
 
 **Skeleton lag**:

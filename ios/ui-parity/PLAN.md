@@ -32,7 +32,7 @@
 
 - **iOS 17.0 is the floor.** Use no iOS 18-only API (`ForEach(subviews:)`, `Group(subviews:)` and the like) without an `#available` fallback that looks the same.
 - **Glass is the three-layer recipe in `glassCard`.** No runtime blur, `.ultraThinMaterial`, `.glassEffect` or system Liquid Glass backgrounds.
-- **Colours come only from `Palette`.** Green (`stateOk`) is the affirmative, red (`stateAlert`) blocked or stopping, orange (`stateCaution`) caution, `achievement` earned. The skeleton is white.
+- **Colours come only from `Palette`.** Green (`stateOk`) is the affirmative, red (`stateAlert`) blocked or stopping, orange (`stateCaution`) caution, `achievement` earned. The skeleton is cyan on Android (`R.color.skeleton`, `#64D2FF`, used for nothing else); the iPhone port of that is owed.
 - **Type comes only from `CindyType`** through `.cindy(_:)`. A number that ticks uses tabular figures.
 - **Icons come from `CindyIcon`**, which holds Android's `ic_*` drawables. The one exception is a system control that draws its own.
 - **Words are copied verbatim** from the Kotlin on `origin/main` when the phase starts. Where a CindyCore model holds the words, its tests pin them.
@@ -106,7 +106,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
 ### U1: camera HUD
 
 **Known differences** (`ContentView.swift` against `activity_main.xml`):
-- **The retired mint `#00E5A0`** still colours the bones, the movement label, the progress bar and the primary button. Android's skeleton and primary are white.
+- **The retired mint `#00E5A0`** still colours the bones, the movement label, the progress bar and the primary button. Android's primary is white and its skeleton is cyan (`#64D2FF`).
 - **Layout.** Black capsules float over a full-bleed preview. Android has two translucent bands:
   - the top band, about 104 pt (`Palette.bandTop`), holds the clock, the REC and MENU icons, and the status line;
   - the bottom band, about 200 pt (`Palette.bandBottom`), holds the round · movement eyebrow, the rep count with −/+ beside it, and the action row.

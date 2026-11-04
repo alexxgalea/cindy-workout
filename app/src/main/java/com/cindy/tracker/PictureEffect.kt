@@ -22,7 +22,7 @@ class PictureEffect(
 ) : SyncedEffect(CameraEffect.PREVIEW, "CindyPicture", "cindy-picture", onShown) {
 
     private val painter = SkeletonPainter(
-        boneColor = ContextCompat.getColor(context, R.color.label),
+        boneColor = ContextCompat.getColor(context, R.color.skeleton),
         zoneOkColor = ContextCompat.getColor(context, R.color.state_ok),
         zoneAlertColor = ContextCompat.getColor(context, R.color.state_alert),
         resetLinePathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)

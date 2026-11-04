@@ -402,9 +402,10 @@ the check instead shows `CALIBRATION SKIPPED` for the same three seconds.
 what any of this says — [RecordingOverlay](app/src/main/java/com/cindy/tracker/RecordingOverlay.kt)
 only draws it.
 
-The filmed skeleton is drawn at the same weight the live overlay uses on screen — bones at 0.45%
-of the frame's height, joints at 0.55% — rather than the heavier line an earlier version burned in
-at roughly twice that.
+The skeleton is drawn by one painter, [SkeletonPainter](app/src/main/java/com/cindy/tracker/SkeletonPainter.kt),
+for the picture, the live overlay and the film alike, so it looks the same everywhere: a thin cyan
+line for each bone (0.33% of the frame's height) that stops short of each joint, and a hollow ring
+(0.67% radius) at every joint below the face. The face is not drawn at all.
 
 The preview's overlay is a view on top of the screen and never reaches the encoder, so the video
 gets its own renderer through CameraX's `OverlayEffect`, which hands back a canvas over the

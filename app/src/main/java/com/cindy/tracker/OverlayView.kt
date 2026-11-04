@@ -2,9 +2,7 @@ package com.cindy.tracker
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -36,11 +34,6 @@ class OverlayView @JvmOverloads constructor(
     defStyle: Int = 0
 ) : View(context, attrs, defStyle) {
 
-    private companion object {
-        /** Alpha of the wash inside the bar zone: enough to read as a region, not as a mask. */
-        const val ZONE_FILL_ALPHA = 26
-    }
-
     /** One analysed frame, immutable so the analysis thread can publish it without a lock. */
     private class PoseFrame(
         val keypoints: Array<Keypoint>,
@@ -66,40 +59,17 @@ class OverlayView @JvmOverloads constructor(
     /** Draw rate, for the latency readout. Counted here because this is what the athlete sees. */
     val drawRate = RateMeter()
 
-    // The gate's two states, and nothing else on this canvas is coloured. The skeleton used to
-    // be drawn in the accent — the same colour as titles, chips, streaks and scores — so seeing
-    // green on screen told the athlete nothing at all. Now it means one thing: this would count.
-    private val ok = ContextCompat.getColor(context, R.color.state_ok)
-    private val alert = ContextCompat.getColor(context, R.color.state_alert)
-
-    private val bonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.label)
-        strokeWidth = 7f
-        strokeCap = Paint.Cap.ROUND
-        style = Paint.Style.STROKE
-    }
-    private val jointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        style = Paint.Style.FILL
-    }
-    private val zonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeWidth = 3f
-        style = Paint.Style.STROKE
-    }
-    private val zoneFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
-    private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeWidth = 8f
-        strokeCap = Paint.Cap.ROUND
-        style = Paint.Style.STROKE
-    }
-    private val resetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.label_secondary)
-        strokeWidth = 3f
-        style = Paint.Style.STROKE
-        pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
-    }
+    // The same painter the synced picture and the film use, so the skeleton looks one way
+    // wherever it is drawn. The gate's two states are the only other colour on this canvas: the
+    // skeleton is the athlete, green means this would count, red means it would not.
+    private val painter = SkeletonPainter(
+        boneColor = ContextCompat.getColor(context, R.color.skeleton),
+        zoneOkColor = ContextCompat.getColor(context, R.color.state_ok),
+        zoneAlertColor = ContextCompat.getColor(context, R.color.state_alert),
+        // Drawn on a canvas scaled up to the view, so these lengths grow with it: about the
+        // 18 and 14 px the line has always had on screen.
+        resetLinePathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+    )
 
     /**
      * Publishes one analysed frame. [guide] is the pull-up gate, or null for the movements and
@@ -130,33 +100,12 @@ class OverlayView @JvmOverloads constructor(
         val dx = (width - pose.srcW * scale) / 2f
         val dy = (height - pose.srcH * scale) / 2f
 
-        fun sx(x: Float) = x * scale + dx
-        fun sy(y: Float) = y * scale + dy
-
-        // Under the skeleton, so the body is never obscured by its own gate.
-        pose.guide?.let { guide ->
-            val colour = if (guide.gateOpen) ok else alert
-            val left = sx(guide.zone.left)
-            val right = sx(guide.zone.right)
-            zoneFillPaint.color = colour
-            zoneFillPaint.alpha = ZONE_FILL_ALPHA
-            canvas.drawRect(left, sy(guide.zone.top), right, sy(guide.zone.bottom), zoneFillPaint)
-            zonePaint.color = colour
-            canvas.drawRect(left, sy(guide.zone.top), right, sy(guide.zone.bottom), zonePaint)
-            barPaint.color = colour
-            canvas.drawLine(left, sy(guide.zone.lineY), right, sy(guide.zone.lineY), barPaint)
-            // Where the head has to come back to before the next rep can arm.
-            canvas.drawLine(left, sy(guide.resetY), right, sy(guide.resetY), resetPaint)
-        }
-
-        val k = pose.keypoints
-        for ((a, b) in KP.SKELETON) {
-            if (!PoseGeometry.ok(k[a]) || !PoseGeometry.ok(k[b])) continue
-            canvas.drawLine(sx(k[a].x), sy(k[a].y), sx(k[b].x), sy(k[b].y), bonePaint)
-        }
-        for (i in 0 until KP.COUNT) {
-            if (!PoseGeometry.ok(k[i])) continue
-            canvas.drawCircle(sx(k[i].x), sy(k[i].y), 9f, jointPaint)
-        }
+        // Draw in the analysis frame's own pixels and let the canvas do the mapping, which is
+        // what the synced picture and the film do too.
+        canvas.save()
+        canvas.translate(dx, dy)
+        canvas.scale(scale, scale)
+        painter.paint(canvas, pose.keypoints, pose.srcH, pose.guide)
+        canvas.restore()
     }
 }
