@@ -1,12 +1,14 @@
 package com.cindy.tracker
 
 import android.content.Context
+import android.media.AudioFormat
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.util.Log
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A [TtsEngine] over the phone's own [TextToSpeech].
@@ -28,6 +30,9 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
      */
     @Volatile private var byName: Map<String, Voice> = emptyMap()
 
+    /** The sample rate of each utterance whose audio is being handed on, by id. */
+    private val rates = ConcurrentHashMap<String, Int>()
+
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             val connected = status == TextToSpeech.SUCCESS
@@ -39,15 +44,34 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
             listener?.onReady(connected)
         }.apply {
             setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onBeginSynthesis(
+                    utteranceId: String?,
+                    sampleRateInHz: Int,
+                    audioFormat: Int,
+                    channelCount: Int
+                ) {
+                    // Only the shape a clip can be played back in is handed on.
+                    if (audioFormat == AudioFormat.ENCODING_PCM_16BIT && channelCount == 1) {
+                        rates[utteranceId.orEmpty()] = sampleRateInHz
+                    }
+                }
+
+                override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                    val rate = rates[utteranceId.orEmpty()] ?: return
+                    listener?.onAudio(utteranceId.orEmpty(), rate, audio ?: return)
+                }
+
                 override fun onStart(utteranceId: String?) {
                     listener?.onStart(utteranceId.orEmpty())
                 }
 
                 override fun onDone(utteranceId: String?) {
+                    rates.remove(utteranceId.orEmpty())
                     listener?.onDone(utteranceId.orEmpty())
                 }
 
                 override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    rates.remove(utteranceId.orEmpty())
                     listener?.onStop(utteranceId.orEmpty())
                 }
 
@@ -57,6 +81,7 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
+                    rates.remove(utteranceId.orEmpty())
                     listener?.onError(utteranceId.orEmpty(), failureOf(errorCode))
                 }
             })
@@ -103,6 +128,11 @@ class AndroidTtsEngine(context: Context) : TtsEngine {
             SpeakQueue.APPEND -> TextToSpeech.QUEUE_ADD
         }
         tts?.speak(text, mode, params, utteranceId)
+    }
+
+    override fun capture(text: String, utteranceId: String): Boolean = guarded(false, "capturing") {
+        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f) }
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, params, utteranceId) == TextToSpeech.SUCCESS
     }
 
     override fun stop() {

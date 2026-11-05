@@ -59,14 +59,59 @@ class FakeTtsEngine : TtsEngine {
 
     override fun speak(text: String, queue: SpeakQueue, volume: Float, utteranceId: String) {
         said += Said(text, queue, volume, utteranceId)
+        if (speechHasAudio) deliver(text, utteranceId)
+    }
+
+    /**
+     * Whether [capture] takes anything. Captured speech is [SILENCE] silent samples at [RATE] and
+     * then one loud sample per character of the text, handed over and finished at once.
+     */
+    var captures = false
+
+    /** Whether ordinary speech hands over its audio and finishes at once too. */
+    var speechHasAudio = false
+
+    /** Texts captured, in order. */
+    val captured = mutableListOf<String>()
+
+    /** Captures taken but held, never finishing until [stop] flushes them, as a busy engine's queue does. */
+    var holdCaptures = false
+    private val heldCaptures = mutableListOf<String>()
+
+    override fun capture(text: String, utteranceId: String): Boolean {
+        if (!captures) return false
+        if (holdCaptures) {
+            heldCaptures += utteranceId
+            return true
+        }
+        captured += text
+        deliver(text, utteranceId)
+        return true
+    }
+
+    private fun deliver(text: String, utteranceId: String) {
+        listener?.onStart(utteranceId)
+        val samples = ShortArray(SILENCE) { 0 } + ShortArray(text.length) { 4000 }
+        val b = java.nio.ByteBuffer.allocate(samples.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        samples.forEach { b.putShort(it) }
+        listener?.onAudio(utteranceId, RATE, b.array())
+        listener?.onDone(utteranceId)
     }
 
     override fun stop() {
         calls += "stop"
+        val flushed = heldCaptures.toList()
+        heldCaptures.clear()
+        flushed.forEach { listener?.onStop(it) }
     }
 
     override fun shutdown() {
         calls += "shutdown"
+    }
+
+    companion object {
+        const val RATE = 1_000
+        const val SILENCE = 300
     }
 
     /** The engine connects, or fails to. */
