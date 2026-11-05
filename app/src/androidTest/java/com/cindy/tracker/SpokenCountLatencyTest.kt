@@ -130,6 +130,108 @@ class SpokenCountLatencyTest {
     }
 
     /**
+     * The guard: a count said the way a workout says it, through the app's own [Speaker], is
+     * heard within the limit. This is the path the athlete hears.
+     */
+    @Test
+    fun aCountSaidByTheSpeakerIsHeardSoon() {
+        val args = InstrumentationRegistry.getArguments()
+        assumeTrue("set voiceLatency=true to run", args.getString("voiceLatency") == "true")
+        val maxMs = args.getString("voiceLatencyMaxMs")?.toDouble() ?: MAX_MEDIAN_MS
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+        // A process with nothing on screen is frozen by EMUI's power manager within seconds,
+        // which a workout, with its screen in front, never is.
+        val screen = androidx.test.core.app.ActivityScenario.launch(MenuActivity::class.java)
+        lateinit var speaker: Speaker
+        instrumentation.runOnMainSync { speaker = Speaker(context).apply { language = "en" } }
+        // Ready, and done preparing whatever it prepares: the state a workout starts in.
+        val deadline = System.nanoTime() + PREPARE_MS * 1_000_000L
+        var prepared = 0
+        while (System.nanoTime() < deadline) {
+            val now = onMain { speaker.countsPrepared }
+            if (now >= COUNTS && now == prepared) break
+            prepared = now
+            Thread.sleep(500)
+        }
+        Log.i(TAG, "speaker: $prepared counts prepared")
+
+        val mic = Microphone()
+        mic.start()
+        Thread.sleep(1_000)
+        val asked = (1..COUNTS).map { n ->
+            val at = System.nanoTime()
+            onMain { speaker.say(VoiceLine.Count(n)) }
+            Thread.sleep(GAP_MS)
+            at
+        }
+        Thread.sleep(500)
+        mic.stop()
+        instrumentation.runOnMainSync { speaker.shutdown() }
+        screen.close()
+
+        val heard = asked.mapNotNull { at -> mic.onsetAfter(at, at + GAP_MS * 1_000_000L)?.let { (it - at) / 1e6 } }
+        Log.i(TAG, "speaker: ask>heard " + heard.joinToString(" ") { "%.0f".format(Locale.US, it) })
+        assertTrue("heard ${heard.size} of $COUNTS counts", heard.size >= COUNTS / 2)
+        val median = heard.sorted()[heard.size / 2]
+        Log.i(TAG, "speaker: median ask>heard %.0f ms over %d counts (limit %.0f)".format(Locale.US, median, heard.size, maxMs))
+        assertTrue("a count is heard a median %.0f ms after the speaker is asked".format(Locale.US, median),
+            median <= maxMs)
+    }
+
+    /** Probe: does the engine hand over the audio of counts spoken at volume 0, every one of them? */
+    @Test
+    fun silentSpeechHandsOverItsAudio() {
+        val args = InstrumentationRegistry.getArguments()
+        assumeTrue("set voiceLatency=true to run", args.getString("voiceLatency") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val screen = androidx.test.core.app.ActivityScenario.launch(MenuActivity::class.java)
+        val ready = CountDownLatch(1)
+        val tts = TextToSpeech(context) { ready.countDown() }
+        assertTrue(ready.await(10, TimeUnit.SECONDS))
+        tts.language = Locale.US
+        val bytes = ConcurrentHashMap<String, Int>()
+        val done = CountDownLatch(30)
+        val outcome = ConcurrentHashMap<String, String>()
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String) = Unit
+            override fun onAudioAvailable(id: String, audio: ByteArray) {
+                bytes.merge(id, audio.size, Int::plus)
+            }
+            override fun onDone(id: String) {
+                outcome[id] = "done"
+                done.countDown()
+            }
+            override fun onStop(id: String, interrupted: Boolean) {
+                outcome[id] = "stopped"
+                done.countDown()
+            }
+            @Deprecated("required by the base class")
+            override fun onError(id: String) {
+                outcome[id] = "error"
+                done.countDown()
+            }
+        })
+        val started = System.nanoTime()
+        for (n in 1..30) {
+            val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0f) }
+            tts.speak(VoicePacks.english.phrasebook.say(VoiceLine.Count(n)), TextToSpeech.QUEUE_ADD, params, "n$n")
+        }
+        val all = done.await(90, TimeUnit.SECONDS)
+        Log.i(TAG, "silent: all=$all in %.1f s; ".format(Locale.US, (System.nanoTime() - started) / 1e9) +
+            (1..30).joinToString(" ") { "$it:${outcome["n$it"] ?: "-"}/${bytes["n$it"] ?: 0}" })
+        tts.shutdown()
+        screen.close()
+    }
+
+    private fun <T> onMain(block: () -> T): T {
+        var result: Result<T>? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { result = runCatching(block) }
+        return result!!.getOrThrow()
+    }
+
+    /**
      * Probe, not a guard: where the half second after `onStart` goes. Renders one count to a file,
      * then plays it untrimmed and trimmed of its leading silence, on an ordinary track and on a
      * low-latency one, plus a click that measures the speaker-to-microphone path alone.
@@ -313,6 +415,7 @@ class SpokenCountLatencyTest {
         const val TAG = "CindyVoiceLatency"
         const val COUNTS = 12
         const val PROBE_PLAYS = 8
+        const val PREPARE_MS = 20_000L
         const val GAP_MS = 1_200L
         const val LOUD_SAMPLE = 500
         const val MAX_MEDIAN_MS = 250.0
