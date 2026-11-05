@@ -53,8 +53,15 @@ class Speaker(
     /** Raised while speech is audible, so background music can duck out of the way. */
     var onSpeakingChanged: ((Boolean) -> Unit)? = null
 
+    /**
+     * Told, by the id [say] returned, when an utterance starts to sound (true) or is cut off before
+     * it finished (false). From the engine's thread. The debug trace times the spoken count with it.
+     */
+    var onUtterance: ((String, Boolean) -> Unit)? = null
+
     init {
         director.whenSpeaking = { speaking -> onSpeakingChanged?.invoke(speaking) }
+        director.whenUtterance = { id, started -> onUtterance?.invoke(id, started) }
     }
 
     // ── the language ──────────────────────────────────────────────────────────
@@ -86,8 +93,11 @@ class Speaker(
 
     // ── saying things ─────────────────────────────────────────────────────────
 
-    /** Interrupts anything in progress — used for rep numbers. */
-    fun say(line: VoiceLine) = speak(line, SpeakQueue.REPLACE)
+    /**
+     * Interrupts anything in progress — used for rep numbers. Returns the utterance's id, or null
+     * when nothing was said.
+     */
+    fun say(line: VoiceLine): String? = speak(line, SpeakQueue.REPLACE)
 
     /** Queues behind whatever is speaking — used for cues that must be heard. */
     fun queue(line: VoiceLine) = speak(line, SpeakQueue.APPEND)
@@ -105,9 +115,9 @@ class Speaker(
      * path at camera rate, and with the voice switched off there is no reason to build a
      * sentence for each one.
      */
-    private fun speak(line: VoiceLine, queue: SpeakQueue, ignoreEnabled: Boolean = false) {
-        if ((!enabled && !ignoreEnabled) || !director.ready) return
-        director.speak(line, queue, volume)
+    private fun speak(line: VoiceLine, queue: SpeakQueue, ignoreEnabled: Boolean = false): String? {
+        if ((!enabled && !ignoreEnabled) || !director.ready) return null
+        return director.speak(line, queue, volume)
     }
 
     // ── what is on the phone ──────────────────────────────────────────────────

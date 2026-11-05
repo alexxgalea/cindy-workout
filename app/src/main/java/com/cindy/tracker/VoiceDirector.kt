@@ -60,6 +60,9 @@ class VoiceDirector(
     /** Told when speech starts and stops, so music can duck out of its way. */
     var whenSpeaking: ((Boolean) -> Unit)? = null
 
+    /** Told, by utterance id, when the engine starts saying something and when it cuts it off. */
+    var whenUtterance: ((String, Boolean) -> Unit)? = null
+
     /**
      * The pack whose voice the engine is set to now, or null when something else — a preview, a
      * download request — has moved it, so that the next thing said puts it back first.
@@ -252,6 +255,7 @@ class VoiceDirector(
     }
 
     override fun onStart(utteranceId: String) {
+        whenUtterance?.invoke(utteranceId, true)
         whenSpeaking?.invoke(true)
     }
 
@@ -261,6 +265,7 @@ class VoiceDirector(
     }
 
     override fun onStop(utteranceId: String) {
+        whenUtterance?.invoke(utteranceId, false)
         // Cut off by the next thing said, or by stop(). Not "done" as far as the music is
         // concerned — a rep count flushing the last one would otherwise let it swell between
         // every pair of numbers — but a preview that was cut off is over, and its callback,

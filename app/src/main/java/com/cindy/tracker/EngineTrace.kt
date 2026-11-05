@@ -42,6 +42,16 @@ class EngineTrace(private val dir: File) {
         controls.add("control,,$atMs" + ",".repeat(14) + name.name + ",".repeat(COLUMNS - 17))
     }
 
+    /**
+     * The voice did [stage] to utterance [id], at [atMs] on the engine's clock. [reps] is the count
+     * being spoken, on [Voice.ASKED] only. Written as a `voice` row: the count in `reps`, the stage
+     * in `event`, the id in `phase`. The replay skips them; they time the spoken count. Any thread.
+     */
+    fun voice(stage: Voice, id: String, atMs: Long, reps: Int? = null) {
+        controls.add("voice,,$atMs" + ",".repeat(13) + (reps ?: "") + "," + stage.name + "," + id +
+            ",".repeat(COLUMNS - 18))
+    }
+
     fun frame(row: Row) {
         val w = out ?: open()
         while (true) {
@@ -123,6 +133,9 @@ class EngineTrace(private val dir: File) {
         SKIP_SETUP, SKIP_EXERCISE, MANUAL_REP, UNDO_REP,
         RECALIBRATE_CAMERA_MOVED, RECALIBRATE_RESUMED, RECALIBRATE_LENS_FLIPPED
     }
+
+    /** What a `voice` row records: a count handed to the speaker, starting to sound, or cut off. */
+    enum class Voice { ASKED, STARTED, STOPPED }
 
     companion object {
         private const val FLUSH_EVERY = 30
