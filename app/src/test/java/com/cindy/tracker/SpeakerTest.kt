@@ -40,6 +40,9 @@ class SpeakerTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
+    /** Lets a second pass on the main thread, so whatever was waiting on the clock runs. */
+    private fun later() = shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+
     // ── saying things ────────────────────────────────────────────────────────
 
     @Test
@@ -338,6 +341,215 @@ class SpeakerTest {
         assertNull("reported off the main thread", failure)
         idle()
         assertEquals(SpeechFailure.NETWORK, failure)
+    }
+
+    // ── kept numbers ─────────────────────────────────────────────────────────
+
+    private val player = FakeClipPlayer()
+
+    /** A speaker whose engine hands over audio, with every number captured. */
+    private fun capturingSpeaker(): Speaker {
+        engine.captures = true
+        val speaker = Speaker(
+            RuntimeEnvironment.getApplication(),
+            engine,
+            background = Executor { it.run() },
+            player = player
+        )
+        engine.becomeReady()
+        idle()
+        return speaker
+    }
+
+    @Test
+    fun `numbers are captured once the engine is ready, and played rather than spoken`() {
+        val speaker = capturingSpeaker()
+        assertEquals((1..30).map { "$it" }, engine.captured)
+        assertEquals(30, speaker.countsPrepared)
+
+        val id = speaker.say(VoiceLine.Count(12))
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+        val clip = player.played.single().clip
+        // "12" is two loud samples; the 300 silent ones before it are gone but for the margin.
+        assertEquals(15 + 2, clip.samples.size)
+        assertTrue(id!!.startsWith("clip-"))
+    }
+
+    @Test
+    fun `a number past those captured is spoken, and kept for next time`() {
+        val speaker = capturingSpeaker()
+        engine.speechHasAudio = true
+        speaker.say(VoiceLine.Count(31))
+        assertEquals("31", engine.said.single().text)
+        assertEquals(emptyList<FakeClipPlayer.Played>(), player.played)
+
+        speaker.say(VoiceLine.Count(31))
+        assertEquals(1, engine.said.size)
+        assertEquals(1, player.played.size)
+    }
+
+    @Test
+    fun `an engine that hands over no audio speaks every number`() {
+        val speaker = speaker()
+        engine.becomeReady()
+        idle()
+        assertEquals(0, speaker.countsPrepared)
+        speaker.say(VoiceLine.Count(3))
+        speaker.say(VoiceLine.Count(3))
+        assertEquals(listOf("3", "3"), engine.said.map { it.text })
+    }
+
+    @Test
+    fun `a number cut off as it is spoken is not kept`() {
+        val speaker = capturingSpeaker()
+        speaker.say(VoiceLine.Count(40))
+        engine.listener!!.onAudio(engine.said.last().id, 1_000, ByteArray(20) { 50 })
+        engine.listener!!.onStop(engine.said.last().id)
+        speaker.say(VoiceLine.Count(40))
+        assertEquals(2, engine.said.size)
+    }
+
+    @Test
+    fun `a played number cuts off the engine and carries the volume`() {
+        val speaker = capturingSpeaker()
+        speaker.volume = 0.4f
+        engine.calls.clear()
+        speaker.say(VoiceLine.Count(3))
+        assertTrue("stop" in engine.calls)
+        assertEquals(0.4f, player.played.single().volume)
+    }
+
+    @Test
+    fun `a cue queued behind a played number waits for it to end`() {
+        val speaker = capturingSpeaker()
+        speaker.say(VoiceLine.Count(5))
+        assertNull(speaker.queue(VoiceLine.Movement(Exercise.PUSHUP)))
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+
+        later()
+        assertEquals(listOf(SpeakQueue.APPEND), engine.said.map { it.queue })
+    }
+
+    @Test
+    fun `the next number drops a cue still held, as the engine's flush would`() {
+        val speaker = capturingSpeaker()
+        speaker.say(VoiceLine.Count(5))
+        speaker.queue(VoiceLine.Movement(Exercise.PUSHUP))
+        speaker.say(VoiceLine.Count(6))
+        later()
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+        assertEquals(2, player.played.size)
+    }
+
+    @Test
+    fun `something else said stops the number playing`() {
+        val speaker = capturingSpeaker()
+        speaker.say(VoiceLine.Count(5))
+        speaker.say(VoiceLine.SetUp)
+        assertTrue(player.stops > 0)
+        assertEquals(SpeakQueue.REPLACE, engine.said.single().queue)
+    }
+
+    @Test
+    fun `a played number ducks the music until it ends`() {
+        val speaker = capturingSpeaker()
+        val seen = mutableListOf<Boolean>()
+        speaker.onSpeakingChanged = { seen += it }
+        speaker.say(VoiceLine.Count(5))
+        assertEquals(listOf(true), seen)
+        later()
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
+    fun `capturing does not duck the music`() {
+        val seen = mutableListOf<Boolean>()
+        engine.captures = true
+        val speaker = Speaker(RuntimeEnvironment.getApplication(), engine,
+            background = Executor { it.run() }, player = player)
+        speaker.onSpeakingChanged = { seen += it }
+        engine.becomeReady()
+        idle()
+        assertEquals(30, speaker.countsPrepared)
+        assertEquals(emptyList<Boolean>(), seen)
+    }
+
+    @Test
+    fun `a cue never waits behind captures still out, which are tried again later`() {
+        engine.captures = true
+        engine.holdCaptures = true
+        val speaker = Speaker(RuntimeEnvironment.getApplication(), engine,
+            background = Executor { it.run() }, player = player)
+        engine.becomeReady()
+        idle()
+        engine.calls.clear()
+
+        speaker.queue(VoiceLine.Movement(Exercise.PUSHUP))
+        assertEquals(listOf("stop"), engine.calls)
+        assertEquals(SpeakQueue.APPEND, engine.said.single().queue)
+        assertEquals(0, speaker.countsPrepared)
+
+        engine.holdCaptures = false
+        speaker.refresh()
+        assertEquals(30, speaker.countsPrepared)
+    }
+
+    @Test
+    fun `captures cut short are tried again once it is quiet`() {
+        engine.captures = true
+        engine.holdCaptures = true
+        val speaker = Speaker(RuntimeEnvironment.getApplication(), engine,
+            background = Executor { it.run() }, player = player)
+        engine.becomeReady()
+        idle()
+        engine.holdCaptures = false
+        engine.stop()
+        assertEquals(0, speaker.countsPrepared)
+
+        later()
+        later()
+        assertEquals(30, speaker.countsPrepared)
+    }
+
+    @Test
+    fun `capturing waits while something is being said`() {
+        engine.captures = true
+        val speaker = Speaker(RuntimeEnvironment.getApplication(), engine,
+            background = Executor { it.run() }, player = player)
+        engine.listener!!.onReady(true)
+        engine.listener!!.onStart("cue")
+        idle()
+        assertEquals(0, speaker.countsPrepared)
+
+        engine.listener!!.onDone("cue")
+        later()
+        later()
+        assertEquals(30, speaker.countsPrepared)
+    }
+
+    @Test
+    fun `a new language captures its own numbers`() {
+        engine.likeGoogle()
+        val speaker = capturingSpeaker()
+        speaker.language = "es"
+        assertEquals(60, engine.captured.size)
+        speaker.say(VoiceLine.Count(2))
+        assertEquals(1, player.played.size)
+    }
+
+    @Test
+    fun `a number that will not play is spoken instead`() {
+        val speaker = capturingSpeaker()
+        player.works = false
+        speaker.say(VoiceLine.Count(4))
+        assertEquals("4", engine.said.single().text)
+    }
+
+    @Test
+    fun `shutting down lets go of the player`() {
+        val speaker = capturingSpeaker()
+        speaker.shutdown()
+        assertTrue(player.released)
     }
 
     // ── on the real engine ───────────────────────────────────────────────────

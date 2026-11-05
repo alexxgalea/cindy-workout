@@ -3,16 +3,28 @@ package com.cindy.tracker
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Speaks rep counts and cues.
  *
  * Rep numbers are spoken with QUEUE_FLUSH so the voice tracks the athlete rather than falling
  * a queue behind during a fast set; cues that must not be dropped are queued after.
+ *
+ * Rep numbers are also kept as sound and played straight from memory when one is scored
+ * ([CountClip]): the phone's engine is otherwise heard about half a second after it is asked, most
+ * of it silence at the start of each word. They are captured from the engine's own synthesis, by
+ * saying each at no volume while nothing else is being said, and from every number still spoken
+ * live. A number not captured yet, or a phone whose engine hands over no audio, is spoken as
+ * before. A cue queued while a kept number plays waits for it to finish, as it would behind the
+ * engine's own speech, and nothing audible ever waits behind a capture.
  *
  * What is said arrives as a [VoiceLine] and is worded here, by the phrasebook of the voice that is
  * actually speaking. Which voice that is, what to do when the language the athlete chose is not
@@ -23,7 +35,8 @@ class Speaker(
     context: Context,
     private val engine: TtsEngine = AndroidTtsEngine(context),
     private val background: Executor = Executors.newSingleThreadExecutor(),
-    now: () -> Long = System::currentTimeMillis
+    now: () -> Long = System::currentTimeMillis,
+    private val player: ClipPlayer = AudioTrackClipPlayer()
 ) {
 
     private val director = VoiceDirector(engine, now = now)
@@ -34,6 +47,36 @@ class Speaker(
 
     /** True from the moment a question is handed to the background thread until it has been answered. */
     private val asking = AtomicBoolean(false)
+
+    /** Kept rep numbers, by count, for the voice of [clipsEpoch]. */
+    private val clips = ConcurrentHashMap<Int, CountClip>()
+    @Volatile private var clipsEpoch = -1
+    private val clipIds = AtomicInteger(0)
+
+    /** A number whose audio is arriving: which, for which voice, and the audio so far. */
+    private class Capture(val reps: Int, val epoch: Int, val silent: Boolean) {
+        val audio = ByteArrayOutputStream()
+        var sampleRate = 0
+    }
+
+    /** Numbers being captured, silently or as they are spoken, by utterance id. */
+    private val captures = ConcurrentHashMap<String, Capture>()
+
+    /** Silent captures cut short in a row; past [MAX_CUT_SHORT] only live speech fills the gaps. */
+    @Volatile private var cutShort = 0
+
+    /** Whether the engine is saying something now, as far as its own callbacks tell. */
+    @Volatile private var engineSpeaking = false
+
+    /** When the kept number playing now ends, on [SystemClock.uptimeMillis]; 0 when none is. */
+    @Volatile private var clipEndsAt = 0L
+    private val clipEnded = Runnable {
+        clipEndsAt = 0L
+        onSpeakingChanged?.invoke(false)
+    }
+
+    /** The token of cues held until a kept number has finished, and of a capture put off. */
+    private val held = Any()
 
     var enabled = true
 
@@ -60,8 +103,21 @@ class Speaker(
     var onUtterance: ((String, Boolean) -> Unit)? = null
 
     init {
-        director.whenSpeaking = { speaking -> onSpeakingChanged?.invoke(speaking) }
+        director.whenSpeaking = { speaking ->
+            engineSpeaking = speaking
+            onSpeakingChanged?.invoke(speaking)
+        }
         director.whenUtterance = { id, started -> onUtterance?.invoke(id, started) }
+        director.whenAudio = { id, rate, pcm ->
+            captures[id]?.let { c ->
+                synchronized(c) {
+                    if (c.sampleRate == 0) c.sampleRate = rate
+                    if (rate == c.sampleRate) c.audio.write(pcm) else captures.remove(id)
+                }
+            }
+        }
+        director.whenFinished = { id, finished -> captures.remove(id)?.let { keep(it, finished) } }
+        director.whenReady = { ready -> if (ready) main.post { prepareCounts() } }
     }
 
     // ── the language ──────────────────────────────────────────────────────────
@@ -74,7 +130,10 @@ class Speaker(
      */
     var language: String
         get() = director.wanted.tag
-        set(value) = director.choose(VoicePacks.of(value))
+        set(value) {
+            director.choose(VoicePacks.of(value))
+            prepareCounts()
+        }
 
     /** The language asked for, whether or not the phone can speak it yet. */
     val wanted: VoicePack get() = director.wanted
@@ -89,7 +148,10 @@ class Speaker(
      * Tries the language again if it is not the one being spoken, in case its voice has arrived.
      * Cheap when nothing is wrong, so safe at every moment that might be the moment.
      */
-    fun refresh() = director.refresh()
+    fun refresh() {
+        director.refresh()
+        prepareCounts()
+    }
 
     // ── saying things ─────────────────────────────────────────────────────────
 
@@ -97,10 +159,34 @@ class Speaker(
      * Interrupts anything in progress — used for rep numbers. Returns the utterance's id, or null
      * when nothing was said.
      */
-    fun say(line: VoiceLine): String? = speak(line, SpeakQueue.REPLACE)
+    fun say(line: VoiceLine): String? {
+        if (!enabled || !director.ready) return null
+        val clip = (line as? VoiceLine.Count)?.let { clipFor(it.reps) }
+        if (clip != null) {
+            cancelHeld()
+            engine.stop()
+            if (player.play(clip, volume)) return clipStarted(clip)
+        }
+        // Kept as it is spoken, so the next time this number comes round it is ready.
+        val epoch = director.epoch
+        return speak(line, SpeakQueue.REPLACE) { id ->
+            if (line is VoiceLine.Count) captures[id] = Capture(line.reps, epoch, silent = false)
+        }
+    }
 
-    /** Queues behind whatever is speaking — used for cues that must be heard. */
-    fun queue(line: VoiceLine) = speak(line, SpeakQueue.APPEND)
+    /**
+     * Queues behind whatever is speaking — used for cues that must be heard. Behind a kept
+     * number the cue is held until the number ends, and returns null.
+     */
+    fun queue(line: VoiceLine): String? {
+        // Silent captures are queued only when nothing else is, so dropping them cuts nothing off.
+        if (enabled && director.ready && director.capturingNow) engine.stop()
+        if (enabled && director.ready && clipEndsAt > SystemClock.uptimeMillis()) {
+            main.postAtTime({ speak(line, SpeakQueue.APPEND) }, held, clipEndsAt)
+            return null
+        }
+        return speak(line, SpeakQueue.APPEND)
+    }
 
     /**
      * Says [line] regardless of [enabled], for previewing the voice from the menu.
@@ -115,10 +201,105 @@ class Speaker(
      * path at camera rate, and with the voice switched off there is no reason to build a
      * sentence for each one.
      */
-    private fun speak(line: VoiceLine, queue: SpeakQueue, ignoreEnabled: Boolean = false): String? {
+    private fun speak(
+        line: VoiceLine,
+        queue: SpeakQueue,
+        ignoreEnabled: Boolean = false,
+        register: ((String) -> Unit)? = null
+    ): String? {
         if ((!enabled && !ignoreEnabled) || !director.ready) return null
-        return director.speak(line, queue, volume)
+        if (queue == SpeakQueue.REPLACE) {
+            cancelHeld()
+            stopClip()
+        }
+        return director.speak(line, queue, volume, register)
     }
+
+    // ── kept numbers ──────────────────────────────────────────────────────────
+
+    /** How many rep numbers are ready to play in the voice in use. */
+    val countsPrepared: Int get() = if (clipsEpoch == director.epoch) clips.size else 0
+
+    /** The kept [reps], if it was captured in the voice in use. */
+    private fun clipFor(reps: Int): CountClip? =
+        if (clipsEpoch == director.epoch) clips[reps] else null
+
+    private fun clipStarted(clip: CountClip): String {
+        val id = "clip-${clipIds.incrementAndGet()}"
+        main.removeCallbacks(clipEnded)
+        clipEndsAt = SystemClock.uptimeMillis() + clip.durationMs
+        main.postAtTime(clipEnded, clipEndsAt)
+        onSpeakingChanged?.invoke(true)
+        onUtterance?.invoke(id, true)
+        return id
+    }
+
+    private fun stopClip() {
+        if (clipEndsAt == 0L) return
+        player.stop()
+        main.removeCallbacks(clipEnded)
+        clipEnded.run()
+    }
+
+    private fun cancelHeld() = main.removeCallbacksAndMessages(held)
+
+    /** A capture that ended: kept if it finished, in the voice still in use, with audio in it. */
+    private fun keep(capture: Capture, finished: Boolean) {
+        if (capture.silent) {
+            if (finished) {
+                cutShort = 0
+            } else if (++cutShort <= MAX_CUT_SHORT) {
+                // Flushed by something said, or by the engine itself; try again once it is quiet.
+                main.removeCallbacksAndMessages(preparing)
+                main.postAtTime({ prepareCounts() }, preparing, SystemClock.uptimeMillis() + PREPARE_RETRY_MS)
+            }
+        }
+        if (!finished || capture.epoch != director.epoch) return
+        val clip = synchronized(capture) {
+            if (capture.sampleRate == 0) return
+            CountClip.fromPcm16(capture.sampleRate, capture.audio.toByteArray())
+        }.trimmed()
+        if (clip.samples.isEmpty()) return
+        if (clipsEpoch == capture.epoch) clips[capture.reps] = clip
+    }
+
+    /**
+     * Captures, silently, the rep numbers the voice in use does not have yet. Cheap when they are
+     * all there, so it is called whenever the voice might have changed. Main thread.
+     *
+     * Each is said at no volume, queued in the engine, and only while nothing is being said, so
+     * anything said after flushes them rather than waiting behind them (see [queue]). Whatever a
+     * flush cut short is captured the next time this is called, or as it is spoken live.
+     */
+    fun prepareCounts() {
+        if (closed || !director.ready) return
+        val epoch = director.epoch
+        if (clipsEpoch != epoch) {
+            clips.clear()
+            clipsEpoch = epoch
+        }
+        if (director.capturingNow) return
+        if (engineSpeaking || clipEndsAt != 0L) {
+            main.removeCallbacksAndMessages(preparing)
+            main.postAtTime({ prepareCounts() }, preparing, SystemClock.uptimeMillis() + PREPARE_RETRY_MS)
+            return
+        }
+        for (n in 1..PREPARED_COUNTS) {
+            if (clips.containsKey(n)) continue
+            var registered: String? = null
+            val id = director.capture(VoiceLine.Count(n)) {
+                registered = it
+                captures[it] = Capture(n, epoch, silent = true)
+            }
+            if (id == null) {
+                registered?.let { captures.remove(it) }
+                break
+            }
+        }
+    }
+
+    /** The token of a capture put off because something was being said. */
+    private val preparing = Any()
 
     // ── what is on the phone ──────────────────────────────────────────────────
 
@@ -177,11 +358,29 @@ class Speaker(
         return started
     }
 
-    fun stop() = engine.stop()
+    fun stop() {
+        engine.stop()
+        cancelHeld()
+        stopClip()
+    }
 
     fun shutdown() {
         closed = true
+        cancelHeld()
+        main.removeCallbacksAndMessages(preparing)
+        stopClip()
         (background as? ExecutorService)?.shutdownNow()
+        player.release()
         engine.shutdown()
+    }
+
+    private companion object {
+        /**
+         * A Cindy movement asks for at most 15; a single-movement set past this keeps each number
+         * the first time it is spoken.
+         */
+        const val PREPARED_COUNTS = 30
+        const val PREPARE_RETRY_MS = 2_000L
+        const val MAX_CUT_SHORT = 5
     }
 }
