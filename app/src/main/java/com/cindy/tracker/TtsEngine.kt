@@ -44,6 +44,12 @@ interface EngineListener {
     /** Cut off before it finished, by the next utterance or by a stop. */
     fun onStop(utteranceId: String)
     fun onError(utteranceId: String, failure: SpeechFailure)
+
+    /**
+     * A chunk of [utteranceId]'s synthesized speech, as mono 16-bit samples at [sampleRate],
+     * before any volume is applied. From the engine's thread, between its start and its end.
+     */
+    fun onAudio(utteranceId: String, sampleRate: Int, pcm: ByteArray) {}
 }
 
 /**
@@ -84,6 +90,13 @@ interface TtsEngine {
     fun currentVoice(): EngineVoice?
 
     fun speak(text: String, queue: SpeakQueue, volume: Float, utteranceId: String)
+
+    /**
+     * Says [text] at no volume, queued behind whatever is being said, so that its audio arrives
+     * through [EngineListener.onAudio] under [utteranceId]. False if the engine would not take it,
+     * or hands over no audio; an engine that cannot keeps this answer.
+     */
+    fun capture(text: String, utteranceId: String): Boolean = false
 
     fun stop()
 

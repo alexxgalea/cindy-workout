@@ -63,6 +63,25 @@ class VoiceDirector(
     /** Told, by utterance id, when the engine starts saying something and when it cuts it off. */
     var whenUtterance: ((String, Boolean) -> Unit)? = null
 
+    /** Told, by utterance id, when anything said or captured ends: finished (true), or cut off or failed. */
+    var whenFinished: ((String, Boolean) -> Unit)? = null
+
+    /** Handed each chunk of synthesized audio, by utterance id. From the engine's thread. */
+    var whenAudio: ((String, Int, ByteArray) -> Unit)? = null
+
+    /**
+     * Changes whenever the language spoken does, so whatever was captured for the last one can
+     * be told apart from what is captured for this one.
+     */
+    @Volatile var epoch = 0
+        private set
+
+    /** Captures still out. They are not heard, so the music does not duck for them. */
+    private val capturing = ConcurrentHashMap.newKeySet<String>()
+
+    /** True while something [capture] asked for has not yet ended. */
+    val capturingNow: Boolean get() = capturing.isNotEmpty()
+
     /**
      * The pack whose voice the engine is set to now, or null when something else — a preview, a
      * download request — has moved it, so that the next thing said puts it back first.
@@ -107,6 +126,7 @@ class VoiceDirector(
     }
 
     private fun apply() {
+        val before = using
         if (applyTo(wanted)) {
             using = wanted
         } else {
@@ -114,6 +134,7 @@ class VoiceDirector(
             using = VoicePacks.english
         }
         applied = using
+        if (using !== before) epoch++
     }
 
     /** Puts the engine on [pack]'s voice. False if the phone has none that can count a workout. */
@@ -144,16 +165,35 @@ class VoiceDirector(
     // ── speaking ──────────────────────────────────────────────────────────────
 
     /**
-     * Says [line] in the voice in use and returns the utterance's id.
+     * Says [line] in the voice in use and returns the utterance's id, which [register] is
+     * handed first, before the engine can say anything about it.
      *
      * Puts the engine back on the athlete's voice first if a preview has moved it, and only then
      * words the line, because putting it back can turn out to fall back to English.
      */
-    fun speak(line: VoiceLine, queue: SpeakQueue, volume: Float): String {
+    fun speak(line: VoiceLine, queue: SpeakQueue, volume: Float, register: ((String) -> Unit)? = null): String {
         if (applied !== using) apply()
         val id = "cindy-${ids.incrementAndGet()}"
+        register?.invoke(id)
         engine.speak(phrasebook.say(line), queue, volume, id)
         return id
+    }
+
+    /**
+     * Has the engine say [line] at no volume, in the voice in use, so that its audio arrives
+     * through [whenAudio]; returns the capture's id, or null if the engine would not take it.
+     * [register] is handed the id first. Its end comes back through [whenFinished]. Main thread,
+     * like [speak].
+     */
+    fun capture(line: VoiceLine, register: (String) -> Unit): String? {
+        if (!ready) return null
+        if (applied !== using) apply()
+        val id = "capture-${ids.incrementAndGet()}"
+        capturing += id
+        register(id)
+        if (engine.capture(phrasebook.say(line), id)) return id
+        capturing -= id
+        return null
     }
 
     /**
@@ -255,16 +295,21 @@ class VoiceDirector(
     }
 
     override fun onStart(utteranceId: String) {
+        if (utteranceId in capturing) return
         whenUtterance?.invoke(utteranceId, true)
         whenSpeaking?.invoke(true)
     }
 
     override fun onDone(utteranceId: String) {
+        whenFinished?.invoke(utteranceId, true)
+        if (capturing.remove(utteranceId)) return
         whenSpeaking?.invoke(false)
         if (utteranceId == previewId) forgetPreview()
     }
 
     override fun onStop(utteranceId: String) {
+        whenFinished?.invoke(utteranceId, false)
+        if (capturing.remove(utteranceId)) return
         whenUtterance?.invoke(utteranceId, false)
         // Cut off by the next thing said, or by stop(). Not "done" as far as the music is
         // concerned — a rep count flushing the last one would otherwise let it swell between
@@ -274,12 +319,18 @@ class VoiceDirector(
     }
 
     override fun onError(utteranceId: String, failure: SpeechFailure) {
+        whenFinished?.invoke(utteranceId, false)
+        if (capturing.remove(utteranceId)) return
         whenSpeaking?.invoke(false)
         if (utteranceId == previewId) {
             val report = onPreviewFailure
             forgetPreview()
             report?.invoke(failure)
         }
+    }
+
+    override fun onAudio(utteranceId: String, sampleRate: Int, pcm: ByteArray) {
+        whenAudio?.invoke(utteranceId, sampleRate, pcm)
     }
 
     private fun forgetPreview() {
