@@ -130,6 +130,45 @@ class EngineTraceTest {
         trace.file!!.copyTo(File(repositoryRoot(), "app/build/engine-trace-controls.csv"), overwrite = true)
     }
 
+    @Test
+    fun `the spoken count is written after the frame that scored it`() {
+        trace = EngineTrace(Files.createTempDirectory("trace").toFile())
+        engine.beginSetup()
+        setupHold(PoseFixtures.pushup(170f), frames = 5)
+        trace.control(EngineTrace.Control.SKIP_SETUP, clock)
+        engine.finishSetup()
+        engine.skipExercise()
+        trace.control(EngineTrace.Control.SKIP_EXERCISE, clock)
+        var said = 0
+        fun holdSaying(pose: Array<Keypoint>) = repeat(10) {
+            val event = engine.onFrame(pose, clock)
+            trace.frame(row(pose, null, event))
+            if (event == RepEvent.REP) {
+                val id = "cindy-${++said}"
+                trace.voice(EngineTrace.Voice.ASKED, id, clock + 20, engine.reps)
+                trace.voice(EngineTrace.Voice.STARTED, id, clock + 150)
+            }
+            clock += 100L
+        }
+        repeat(4) {
+            holdSaying(PoseFixtures.pushup(170f))
+            holdSaying(PoseFixtures.pushup(70f))
+        }
+        holdSaying(PoseFixtures.pushup(170f))
+        trace.close()
+
+        val lines = trace.file!!.readLines()
+        lines.drop(1).forEach { assertEquals(it, EngineTrace.COLUMNS, it.split(',').size) }
+        val header = EngineTrace.HEADER.split(',')
+        val asked = lines.filter { it.startsWith("voice,") }.map { header.zip(it.split(',')).toMap() }
+        assertTrue(said > 0)
+        assertEquals(2 * said, asked.size)
+        assertEquals("ASKED", asked.first()["event"])
+        assertEquals("1", asked.first()["reps"])
+        assertEquals("cindy-1", asked.first()["phase"])
+        trace.file!!.copyTo(File(repositoryRoot(), "app/build/engine-trace-voice.csv"), overwrite = true)
+    }
+
     private fun repositoryRoot(): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null && !File(dir, "settings.gradle.kts").isFile) dir = dir.parentFile

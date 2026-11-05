@@ -15,6 +15,10 @@ what it decided -- to Android/data/com.cindy.tracker.debug/files/engine_trace/en
 
 The athlete's controls (skip, +1, undo) and every recalibration are `control` rows, applied to
 the replay where they happened and listed with their times.
+
+`voice` rows say when each spoken count was asked for and when the engine started to sound it.
+The replay skips them and reports, per scored frame, how long the count took to be heard, from
+the moment the frame was captured. --max-voice-ms fails the run when the median is over it.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ from cindy_sim.workout_engine import (  # noqa: E402
 )
 
 SCORED = {"REP", "EXERCISE_DONE", "ROUND_DONE"}
+NOT_FRAMES = {"control", "voice"}
 THERMAL = {-1: "unknown", 0: "none", 1: "light", 2: "moderate", 3: "severe", 4: "critical",
            5: "emergency", 6: "shutdown"}
 
@@ -66,7 +71,7 @@ CONTROLS = {
 
 
 def replay(rows: list[dict]) -> int:
-    first = next(r for r in rows if r["kind"] != "control")
+    first = next(r for r in rows if r["kind"] not in NOT_FRAMES)
     engine = WorkoutEngine(
         profile=CindyProfile(
             pull=PullVariant[first["pull"]],
@@ -85,6 +90,8 @@ def replay(rows: list[dict]) -> int:
     t0 = int(first["engine_ms"])
     for i, row in enumerate(rows):
         now = int(row["engine_ms"])
+        if row["kind"] == "voice":
+            continue
         if row["kind"] == "control":
             name = row["event"]
             controls.append(((now - t0) / 1000, name, engine.exercise.name))
@@ -132,7 +139,7 @@ def replay(rows: list[dict]) -> int:
 
 
 def health(rows: list[dict], gap_ms: float) -> None:
-    run = [r for r in rows if r["kind"] == "run"] or [r for r in rows if r["kind"] != "control"]
+    run = [r for r in rows if r["kind"] == "run"] or [r for r in rows if r["kind"] not in NOT_FRAMES]
     cap = np.array([int(r["capture_ns"]) for r in run], dtype=np.int64) / 1e6
     span = (cap[-1] - cap[0]) / 1000 if len(cap) > 1 else 0
     gaps = np.diff(cap)
@@ -152,7 +159,7 @@ def health(rows: list[dict], gap_ms: float) -> None:
     print(f"  inference: median {np.median(infer):.0f} ms, p90 {np.percentile(infer, 90):.0f}")
     seen = sorted({int(r["thermal"]) for r in run})
     print(f"  thermal status seen: {', '.join(THERMAL.get(s, str(s)) for s in seen)}")
-    t0 = int(next(r for r in rows if r["kind"] != "control")["engine_ms"])
+    t0 = int(next(r for r in rows if r["kind"] not in NOT_FRAMES)["engine_ms"])
     long_gaps = [(int(run[i + 1]["engine_ms"]) - t0, g, run[i + 1]["exercise"])
                  for i, g in enumerate(gaps) if g > gap_ms]
     if long_gaps:
@@ -161,10 +168,86 @@ def health(rows: list[dict], gap_ms: float) -> None:
             print(f"    {t / 1000:7.2f}s  {g:5.0f} ms  {ex}")
 
 
+def voice_latency(rows: list[dict]) -> list[tuple]:
+    """For each scored frame, the count's journey: captured, analysed, asked for, started to sound.
+
+    A scored frame is matched to the first ASKED row after it with the same count, and that to its
+    utterance's STARTED row. Times are milliseconds on the engine's clock. Returns one tuple per
+    scored frame: (session s, movement, count, capture->engine, engine->asked, asked->started,
+    capture->started, cut off), with None where the voice row is missing.
+    """
+    t0 = int(next(r for r in rows if r["kind"] not in NOT_FRAMES)["engine_ms"])
+    started, stopped = {}, set()
+    for r in rows:
+        if r["kind"] == "voice" and r["event"] == "STARTED":
+            started.setdefault(r["phase"], int(r["engine_ms"]))
+        if r["kind"] == "voice" and r["event"] == "STOPPED":
+            stopped.add(r["phase"])
+    out = []
+    for i, r in enumerate(rows):
+        if r["kind"] != "run" or r["event"] not in SCORED:
+            continue
+        cap = int(r["capture_ns"]) / 1e6
+        eng = int(r["engine_ms"])
+        count = r["reps"] if r["event"] == "REP" else None
+        asked = None
+        for q in rows[i + 1:]:
+            if q["kind"] == "run" and q["event"] in SCORED:
+                break
+            if q["kind"] == "voice" and q["event"] == "ASKED":
+                asked = q
+                break
+        a = int(asked["engine_ms"]) if asked else None
+        s = started.get(asked["phase"]) if asked else None
+        out.append(((eng - t0) / 1000, movement_scored(r["event"], r["exercise"]),
+                    asked["reps"] if asked else count, eng - cap,
+                    a - eng if a is not None else None,
+                    s - a if s is not None and a is not None else None,
+                    s - cap if s is not None else None,
+                    bool(asked) and asked["phase"] in stopped and s is None))
+    return out
+
+
+def report_voice(rows: list[dict], max_ms: float | None, verbose: bool) -> int:
+    lat = voice_latency(rows)
+    if not any(r[6] is not None for r in lat):
+        if not any(r["kind"] == "voice" for r in rows):
+            print("\nno voice rows: this trace is from a build that does not time the spoken count")
+        else:
+            print("\nvoice rows present but no scored count was heard")
+        return 0
+    heard = [r for r in lat if r[6] is not None]
+    print(f"\nspoken count, from capture to the voice starting ({len(heard)} of {len(lat)} "
+          "scored frames heard):")
+    for name, k in (("capture -> engine", 3), ("engine -> asked", 4), ("asked -> sounding", 5),
+                    ("capture -> sounding", 6)):
+        v = np.array([r[k] for r in heard], dtype=float)
+        print(f"  {name:<20} median {np.median(v):4.0f} ms, p90 {np.percentile(v, 90):4.0f}, "
+              f"max {v.max():4.0f}")
+    lost = [r for r in lat if r[6] is None]
+    if lost:
+        print(f"  never heard: {len(lost)}" + (f" ({sum(r[7] for r in lost)} cut off by the next)"
+                                               if any(r[7] for r in lost) else ""))
+    if verbose:
+        print("  session s  movement  count  cap>eng  eng>ask  ask>snd  cap>snd")
+        for t, mv, n, a, b, c, d, _ in lat:
+            f = lambda x: "    -" if x is None else f"{x:5.0f}"  # noqa: E731
+            print(f"  {t:9.2f}  {mv:<8} {n or '':>5}  {f(a)}    {f(b)}    {f(c)}    {f(d)}")
+    if max_ms is not None:
+        med = float(np.median([r[6] for r in heard]))
+        if med > max_ms:
+            print(f"  FAIL: median {med:.0f} ms is over {max_ms:.0f} ms")
+            return 1
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("trace")
     ap.add_argument("--gap-ms", type=float, default=150.0, help="list analysis gaps longer than this")
+    ap.add_argument("--max-voice-ms", type=float, help="fail when the spoken count's median delay "
+                    "from capture is over this")
+    ap.add_argument("--voice-rows", action="store_true", help="list every scored frame's delays")
     args = ap.parse_args()
     with open(args.trace, newline="") as f:
         rows = list(csv.DictReader(f))
@@ -173,7 +256,7 @@ def main() -> int:
         return 2
     code = replay(rows)
     health(rows, args.gap_ms)
-    return code
+    return code or report_voice(rows, args.max_voice_ms, args.voice_rows)
 
 
 if __name__ == "__main__":

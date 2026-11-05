@@ -572,6 +572,10 @@ class MainActivity : AppCompatActivity() {
         video = VideoRecorder(this)
         speaker = Speaker(this).apply {
             onSpeakingChanged = { speaking -> ui.post { music.duck(speaking) } }
+            onUtterance = { id, started ->
+                val stage = if (started) EngineTrace.Voice.STARTED else EngineTrace.Voice.STOPPED
+                engineTrace?.voice(stage, id, SystemClock.elapsedRealtime())
+            }
         }
 
         try {
@@ -1182,6 +1186,12 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** Says a rep count, and notes in the debug trace when it was asked for. Main thread. */
+    private fun sayCount(reps: Int) {
+        val id = speaker.say(VoiceLine.Count(reps)) ?: return
+        engineTrace?.voice(EngineTrace.Voice.ASKED, id, SystemClock.elapsedRealtime(), reps)
+    }
+
     /** Notes, for the replay, something other than a frame that just changed the engine. */
     private fun traceControl(control: EngineTrace.Control) {
         engineTrace?.control(control, SystemClock.elapsedRealtime())
@@ -1316,11 +1326,11 @@ class MainActivity : AppCompatActivity() {
             RepEvent.NONE -> Unit
             RepEvent.REP -> {
                 buzz(35)
-                speaker.say(VoiceLine.Count(snap.eventReps))
+                sayCount(snap.eventReps)
             }
             RepEvent.UNDO -> {
                 buzz(20)
-                speaker.say(VoiceLine.Count(snap.eventReps))
+                sayCount(snap.eventReps)
             }
             RepEvent.EXERCISE_DONE -> {
                 if (inWorkout()) {
@@ -1330,7 +1340,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 buzz(90)
                 // The count the movement reached, which a skip makes different from its target.
-                speaker.say(VoiceLine.Count(snap.eventReps))
+                sayCount(snap.eventReps)
                 speaker.queue(VoiceLine.Movement(snap.exercise))
             }
             RepEvent.ROUND_DONE -> {
@@ -1343,7 +1353,7 @@ class MainActivity : AppCompatActivity() {
                 val split = elapsedMs - roundStartedAtElapsed
                 roundSplits += split
                 roundStartedAtElapsed = elapsedMs
-                speaker.say(VoiceLine.Count(snap.eventReps))
+                sayCount(snap.eventReps)
                 speaker.queue(VoiceLine.RoundDone(snap.rounds, split))
                 toast("Round ${snap.rounds} · ${formatDuration(split)}")
             }
