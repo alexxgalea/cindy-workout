@@ -29,17 +29,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Prototype #140: the real zone, drawn, for the no-bands variant. Debug builds only. -->
-    <com.cindy.tracker.ZoneCornersView
-        android:id="@+id/zoneCorners"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
     <com.cindy.tracker.OverlayView
         android:id="@+id/overlay"
         android:layout_width="0dp"
@@ -69,7 +58,6 @@
         app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
-            android:id="@+id/clockRow"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:gravity="center_vertical"
@@ -96,17 +84,6 @@
               neither is an adjustment anyone makes between two pull-ups. REC stays: it carries
               live state the athlete changes mid-session, which is the whole test for this row.
             -->
-            <!-- Prototype #140: the camera switch in the top band. Debug builds only. -->
-            <ImageView
-                android:id="@+id/btnSwitchTop"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_flip"
-                android:visibility="gone"
-                tools:ignore="ContentDescription" />
-
             <ImageView
                 android:id="@+id/btnRec"
                 android:layout_width="44dp"
@@ -244,7 +221,6 @@
 
         <!-- The round moved down off the clock bar: 72 + 55 + 176dp of row against 320 available. -->
         <LinearLayout
-            android:id="@+id/eyebrowRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
@@ -286,7 +262,6 @@
 
         <!-- Rep edits sit either side of the number they change, not lost among the actions. -->
         <LinearLayout
-            android:id="@+id/countRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
@@ -370,7 +345,6 @@
           mid-Cindy, while a way out of the workout is.
         -->
         <FrameLayout
-            android:id="@+id/actionRow"
             android:layout_width="match_parent"
             android:layout_height="@dimen/shutter"
             android:layout_marginTop="12dp"
