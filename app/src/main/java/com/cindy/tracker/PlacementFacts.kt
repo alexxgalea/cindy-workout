@@ -33,7 +33,7 @@ fun Context.placementFacts(): LinearLayout = LinearLayout(this).apply {
                 setImageResource(icon)
                 imageTintList = ColorStateList.valueOf(
                     getColor(
-                        if (icon == R.drawable.ic_dont_move) R.color.state_caution
+                        if (icon == R.drawable.ic_dont_move) R.color.label
                         else R.color.label_tertiary
                     )
                 )

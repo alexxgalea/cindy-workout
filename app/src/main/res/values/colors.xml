@@ -3,13 +3,23 @@
   one colour for what the athlete has earned, and one for the athlete's own body: the skeleton.
   Nothing is coloured for decoration.
 
-  Green is the affirmative: this rep would count, a tier reached, a score up on your best. Red is
-  blocked, unreadable, or stopping. Orange cautions. Achievement orange is redder than that amber
-  and means one thing only — you earned this: a personal record, a streak, the best-so-far line.
+  The colour rule:
+    Orange is achievement. It marks what the athlete earned or keeps up: a streak flame, a
+    trained day, a badge, a rank disc, a personal record, the best-so-far line. It is one token,
+    `achievement`, and no other orange exists here: a second orange is a second meaning.
+    Green is the affirmative: this rep would count, a tier reached, a score up on your best.
+    Red is blocked, unreadable, or stopping.
+    A caution is not coloured. It is said in words, and where an icon carries it the icon steps
+    up the label ramp, so that a warning never reads as an achievement.
+    Heart is pink-red and means heart-rate data. The skeleton is cyan and means "this is you".
+
   The mint accent this replaced was used for titles AND chips AND streaks AND scores AND the
   skeleton, so it told the athlete nothing. The skeleton's cyan is not that accent come back:
   it is used for the skeleton and nothing else, so it means one thing, "this is you". It is
   neither green, red nor orange, so it never reads as the gate or as an alert.
+
+  Strava's own orange (#FC5200) lives only in the "Connect with Strava" button, drawn as Strava
+  supplies it; it is Strava's mark, not a token of this palette.
 -->
 <resources>
 
@@ -28,10 +38,10 @@
     <!-- ── state ── -->
     <color name="state_ok">#FF30D158</color>
     <color name="state_alert">#FFFF453A</color>
-    <color name="state_caution">#FFFF9F0A</color>
 
     <!-- ── earned ── -->
-    <!-- Personal records, streaks, the best-so-far line, the best week. Nothing else. -->
+    <!-- Orange is achievement. Personal records, streaks and their flames, trained days, badges,
+         rank discs, the best-so-far line, the best week. Nothing else, and never a caution. -->
     <color name="achievement">#FFFC4C02</color>
 
     <!-- ── the body ── -->
