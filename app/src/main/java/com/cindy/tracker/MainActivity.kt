@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
 
         /** Whether the first-launch pages have been sent for, which a recreated screen must not repeat. */
         const val STATE_TUTORIAL_LAUNCHED = "tutorial_launched"
+        const val PROTOTYPE_HUD_KEY = "prototype_hud_variant"
 
         /**
          * The count between tapping REC and filming. Long enough to put the phone down and turn
@@ -644,6 +645,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         keepHudClearOfSystemBars()
+        setUpHudPrototype()
         describeControls()
         renderClock()
         synchronized(engineLock) {
@@ -764,8 +766,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun keepHudClearOfSystemBars() {
         val bands = listOf(binding.bandTop, binding.bandBottom)
-        val base = bands.associateWith { view ->
-            intArrayOf(view.paddingLeft, view.paddingTop, view.paddingRight, view.paddingBottom)
+        bands.forEach { view ->
+            bandBase[view] = intArrayOf(view.paddingLeft, view.paddingTop, view.paddingRight, view.paddingBottom)
         }
         val coachBase =
             (binding.coachCard.layoutParams as ViewGroup.MarginLayoutParams).marginStart
@@ -774,23 +776,77 @@ class MainActivity : AppCompatActivity() {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
+            lastBars = bars
+            applyBandInsets()
             val rtl = root.layoutDirection == View.LAYOUT_DIRECTION_RTL
-
-            base.getValue(binding.bandTop).let { b ->
-                binding.bandTop.setPadding(
-                    b[0] + bars.left, b[1] + bars.top, b[2] + bars.right, b[3]
-                )
-            }
-            base.getValue(binding.bandBottom).let { b ->
-                binding.bandBottom.setPadding(
-                    b[0] + bars.left, b[1], b[2] + bars.right, b[3] + bars.bottom
-                )
-            }
             binding.coachCard.updateLayoutParams<ViewGroup.MarginLayoutParams> {
                 marginStart = coachBase + if (rtl) bars.right else bars.left
             }
             insets
         }
+    }
+
+    /** The bands' own padding plus whatever the glass is covered by. */
+    private fun applyBandInsets() {
+        val bars = lastBars
+        bandBase.getValue(binding.bandTop).let { b ->
+            binding.bandTop.setPadding(b[0] + bars.left, b[1] + bars.top, b[2] + bars.right, b[3])
+        }
+        bandBase.getValue(binding.bandBottom).let { b ->
+            binding.bandBottom.setPadding(b[0] + bars.left, b[1], b[2] + bars.right, b[3] + bars.bottom)
+        }
+    }
+
+    // PROTOTYPE #140: the padding each band starts from, so a variant can change it.
+    private val bandBase = HashMap<View, IntArray>()
+    private var lastBars = androidx.core.graphics.Insets.NONE
+    private var hudVariants: HudVariants? = null
+
+    /**
+     * PROTOTYPE #140 (debug only): the hidden switch between the three band variants, a long
+     * press on the clock, and the camera switch in the top band.
+     */
+    private fun setUpHudPrototype() {
+        if (!BuildConfig.DEBUG) return
+        val variants = HudVariants(binding) { view, l, t, r, b ->
+            bandBase[view] = intArrayOf(l, t, r, b)
+            applyBandInsets()
+        }
+        hudVariants = variants
+        binding.btnFlip.visibility = View.GONE
+        binding.btnSwitchTop.visibility = View.VISIBLE
+        binding.btnSwitchTop.setOnClickListener { onTopSwitch() }
+        binding.timer.setOnLongClickListener {
+            val next = variants.cycle()
+            prefs().edit().putString(PROTOTYPE_HUD_KEY, next.name).apply()
+            toast(next.label)
+            true
+        }
+        // Today's bands are measured once, as they come out of the layout, before a variant moves them.
+        binding.root.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (binding.bandTop.height == 0 || binding.bandBottom.height == 0) return
+                binding.root.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                variants.captureToday()
+                val saved = prefs().getString(PROTOTYPE_HUD_KEY, null)
+                    ?.let { name -> HudVariant.entries.firstOrNull { it.name == name } }
+                    ?: HudVariant.TODAY
+                variants.apply(saved)
+                renderControls()
+            }
+        })
+    }
+
+    /** The prototype's switch: live in idle and paused, dimmed while the check or the clock runs. */
+    private fun prototypeSwitchEnabled() = state == WorkoutState.IDLE || state == WorkoutState.PAUSED
+
+    private fun onTopSwitch() {
+        if (!prototypeSwitchEnabled()) return
+        if (video.isRecording) {
+            toast("Prototype: stop the film before switching cameras (the real build will ask)")
+            return
+        }
+        flipCamera()
     }
 
     /**
@@ -814,6 +870,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnStart.describeAsButton()
         binding.btnEnd.describeAsButton()
         binding.btnFlip.describeAsButton(longPress = "Switch pose model")
+        binding.btnSwitchTop.describeAsButton()
         binding.btnRec.describeAsButton()
     }
 
@@ -1676,6 +1733,16 @@ class MainActivity : AppCompatActivity() {
         render(binding.btnAddRep, panel[CameraControl.PLUS])
         render(binding.btnStart, panel[CameraControl.SHUTTER])
         render(binding.btnSkipExercise, panel[CameraControl.SKIP])
+
+        if (BuildConfig.DEBUG && hudVariants != null) {
+            // PROTOTYPE #140: the switch lives in the top band, and the left slot is END's alone.
+            binding.btnFlip.visibility = View.GONE
+            val on = prototypeSwitchEnabled()
+            binding.btnSwitchTop.isEnabled = on
+            binding.btnSwitchTop.alpha = if (on) 1f else DIMMED
+            binding.btnSwitchTop.contentDescription = panel[CameraControl.SWITCH_CAMERA].name
+            binding.btnSwitchTop.imageTintList = ColorStateList.valueOf(label)
+        }
     }
 
     /** What the camera screen's controls are, for the state it is in and whether it is filming. */
