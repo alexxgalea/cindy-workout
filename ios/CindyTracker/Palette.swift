@@ -17,8 +17,8 @@ extension Color {
 ///
 /// White at four opacities on black, three system colours that mean something, and one colour for
 /// what the athlete has earned. Nothing is coloured for decoration. Green is the affirmative: this
-/// rep would count, a tier reached. Red is blocked, unreadable, or stopping. Orange cautions.
-/// Achievement orange means one thing only: you earned this.
+/// rep would count, a tier reached. Red is blocked, unreadable, or stopping. Orange is
+/// achievement, and means one thing only: you earned this. A caution is not coloured.
 enum Palette {
     static let background = Color(argb: 0xFF000000)
 
@@ -34,9 +34,9 @@ enum Palette {
     // state
     static let stateOk = Color(argb: 0xFF30D158)
     static let stateAlert = Color(argb: 0xFFFF453A)
-    static let stateCaution = Color(argb: 0xFFFF9F0A)
 
-    /// Personal records, streaks, the best-so-far line, the best week. Nothing else.
+    /// Orange is achievement: personal records, streaks and their flames, trained days, badges, rank
+    /// discs, the best-so-far line, the best week. Nothing else, and never a caution.
     static let achievement = Color(argb: 0xFFFC4C02)
     /// Heart-rate data and nothing else.
     static let heart = Color(argb: 0xFFFF375F)

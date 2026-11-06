@@ -128,7 +128,7 @@ struct PlacementFactRows: View {
                         Image(icon)
                             .resizable()
                             .frame(width: 17, height: 17)
-                            .foregroundStyle(fact.warning ? Palette.stateCaution : Palette.labelTertiary)
+                            .foregroundStyle(fact.warning ? Palette.label : Palette.labelTertiary)
                             .padding(.top, 2)
                             .accessibilityHidden(true)
                     }
