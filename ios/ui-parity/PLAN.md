@@ -111,7 +111,7 @@ Task-level plan: `ios/ui-parity/U0.md`.
   - the top band, about 104 pt (`Palette.bandTop`), holds the clock, the REC and MENU icons, and the status line;
   - the bottom band, about 200 pt (`Palette.bandBottom`), holds the round · movement eyebrow, the rep count with −/+ beside it, and the action row.
 - **The actions are words** (START, PAUSE, STOP, FLIP). On Android:
-  - the shutter is a mark only (`ic_play`, `ic_pause`, `ic_again`, `ic_skip`), with a spoken name;
+  - the shutter is a mark only (`ic_play`, `ic_pause`, `ic_skip`), with a spoken name;
   - FLIP and END are icons, and the left slot changes hands between them.
 - **Skipping.** iOS skips on a long press on +1, while Android has `btnSkipExercise`. The tour regains its SKIP step, and Help goes back to Android's wording: `HelpPageTests` expects "Hold +1" today, and that flips.
 - **Idle controls dim in place and never hide**, by the rule in `renderControls`.
