@@ -39,6 +39,17 @@ class FirstRun(context: Context) {
         get() = prefs.getBoolean(Onboarding.KEY_PLACEMENT_SEEN, false)
 
     /**
+     * Whether the offer to pair a heart-rate watch at START has been shown. Set when it is shown,
+     * not when it is answered: it is made once in the app's life, and leaving the sheet any other
+     * way is still having seen it.
+     */
+    var watchOfferSeen: Boolean
+        get() = prefs.getBoolean(Onboarding.KEY_WATCH_OFFER_SEEN, false)
+        set(value) {
+            prefs.edit().putBoolean(Onboarding.KEY_WATCH_OFFER_SEEN, value).apply()
+        }
+
+    /**
      * Whether to show the pages now. [hasHistory] is whether any session is on record, and
      * [cameraGranted] whether the camera's permission is already held.
      */
