@@ -4,7 +4,6 @@ import SwiftUI
 /// writes). Every icon is a template image, tinted at the call site with `.foregroundStyle`,
 /// except `checkFilled`, which keeps its own green.
 enum CindyIcon: String, CaseIterable {
-    case again = "ic_again"
     case check = "ic_check"
     case checkFilled = "ic_check_filled"
     case chevronLeft = "ic_chevron_left"
