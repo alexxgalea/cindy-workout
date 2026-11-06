@@ -94,8 +94,6 @@ class MainActivity : AppCompatActivity() {
         const val THERMAL_EVERY = 20
     }
 
-    private enum class State { IDLE, SETUP, RUNNING, PAUSED, FINISHED }
-
     /**
      * A HUD field that is only written when it actually changes.
      *
@@ -278,7 +276,10 @@ class MainActivity : AppCompatActivity() {
      */
     private var heelsFlatAnnounced = false
 
-    @Volatile private var state = State.IDLE
+    @Volatile private var state = WorkoutState.IDLE
+
+    /** The session page is up over this screen, so what closing it leads to is owed on return. */
+    private var sessionPageOpen = false
     private var remainingMs = WORKOUT_MS
     private var lastTickAt = 0L
     /** Wall time of each completed round, and when the current one started. */
@@ -373,14 +374,14 @@ class MainActivity : AppCompatActivity() {
      * fixed.
      */
     private fun onCameraMoved() {
-        if (state != State.RUNNING && state != State.SETUP) return
+        if (state != WorkoutState.RUNNING && state != WorkoutState.SETUP) return
         synchronized(engineLock) { engine.recalibrate() }
         railTracker.reset()
         traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         tracking.reframe()
         detector?.resetRoi()
         binding.overlay.clear()
-        if (state == State.RUNNING) {
+        if (state == WorkoutState.RUNNING) {
             status.text = "Phone moved — checking framing"
             speaker.queue(VoiceLine.PhoneMoved)
         }
@@ -430,12 +431,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(frame: UiFrame) {
         latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
-        if (frame.snap != null && state == State.RUNNING) apply(frame.snap)
-        if (frame.setup != null && state == State.SETUP) applySetup(frame.setup)
+        if (frame.snap != null && state == WorkoutState.RUNNING) apply(frame.snap)
+        if (frame.setup != null && state == WorkoutState.SETUP) applySetup(frame.setup)
         // Feed the burned-in overlay what the film shows right now -- apart from the score while
         // the setup check runs, not the screen's own numbers.
         val now = SystemClock.elapsedRealtime()
-        val hud = if (state == State.SETUP) {
+        val hud = if (state == WorkoutState.SETUP) {
             recordedHud.forSetup(now, frame.setup, setupExerciseLabel())
         } else {
             recordedHud.forWorkout(now, clock.text, exercise.text)
@@ -452,7 +453,7 @@ class MainActivity : AppCompatActivity() {
     private val ui = Handler(Looper.getMainLooper())
     private val ticker = object : Runnable {
         override fun run() {
-            if (state != State.RUNNING) return
+            if (state != WorkoutState.RUNNING) return
             val now = SystemClock.elapsedRealtime()
             val step = now - lastTickAt
             remainingMs -= step
@@ -711,7 +712,7 @@ class MainActivity : AppCompatActivity() {
      * because the hole is cut from where the controls actually are.
      */
     private fun maybeStartTour() {
-        if (tourShowing || !cameraAnswered || state != State.IDLE) return
+        if (tourShowing || !cameraAnswered || state != WorkoutState.IDLE) return
         if (!firstRun.hudTourPending) return
         tourShowing = true
         tourBack.isEnabled = true
@@ -803,15 +804,16 @@ class MainActivity : AppCompatActivity() {
      * The labels that depend on state are refreshed by [renderChips] and [renderControls].
      */
     private fun describeControls() {
-        binding.btnUndo.describeAsButton("Take back a rep")
-        binding.btnAddRep.describeAsButton("Add a rep")
+        binding.btnUndo.describeAsButton()
+        binding.btnAddRep.describeAsButton()
         binding.btnMenu.describeAsButton("Menu: records, movements, music, body weight and help")
         binding.statusRow.describeAsButton(longPress = "Show the debug readout")
-        // The rest change job with the workout: renderControls and renderChips name those, and
-        // only the long presses, which never change, are declared here.
+        // The controls of the action row are named by [CameraControls], through renderControls,
+        // and renderChips names the chips: only the long presses, which never change, are
+        // declared here.
         binding.btnStart.describeAsButton()
-        binding.btnEnd.describeAsButton("End the workout")
-        binding.btnFlip.describeAsButton("Switch camera", longPress = "Switch pose model")
+        binding.btnEnd.describeAsButton()
+        binding.btnFlip.describeAsButton(longPress = "Switch pose model")
         binding.btnRec.describeAsButton()
     }
 
@@ -1052,7 +1054,7 @@ class MainActivity : AppCompatActivity() {
             val frameH = OverlayTransform.uprightHeight(rawW, rawH, rotation).toInt()
             val keypoints = det.detect(yuv, upright, frameW, frameH)
             val now = SystemClock.elapsedRealtime()
-            val snap = if (state == State.RUNNING) {
+            val snap = if (state == WorkoutState.RUNNING) {
                 val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }
                 // Touched only from this thread, so it needs no lock of its own; the legibility
                 // it reads was captured under the engine's.
@@ -1061,7 +1063,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 null
             }
-            val setup = if (state == State.SETUP) {
+            val setup = if (state == WorkoutState.SETUP) {
                 synchronized(engineLock) { engine.onSetupFrame(keypoints, now, det.tracking) }
             } else {
                 null
@@ -1097,7 +1099,7 @@ class MainActivity : AppCompatActivity() {
             )
             engineTrace?.let { trace ->
                 // A pause keeps the session's file open; only the end of the session closes it.
-                if (state == State.IDLE || state == State.FINISHED) {
+                if (state == WorkoutState.IDLE || state == WorkoutState.FINISHED) {
                     trace.close()
                 } else if (snap != null || setup != null) {
                     trace.frame(traceRow(captureNanos, now, convertMs, det, captureAgeMs,
@@ -1294,7 +1296,7 @@ class MainActivity : AppCompatActivity() {
         // Readable from the bar, when the digits are not.
         binding.repProgress.progress =
             snap.reps * 100 / snap.exercise.target.coerceAtLeast(1)
-        if (state == State.RUNNING) {
+        if (state == WorkoutState.RUNNING) {
             status.text = when {
                 readout == Readout.COUNTING -> debugLine(snap)
                 debug -> latencyLine()
@@ -1402,7 +1404,7 @@ class MainActivity : AppCompatActivity() {
     // ── setup ─────────────────────────────────────────────────────────────────
 
     private fun enterSetup() {
-        state = State.SETUP
+        state = WorkoutState.SETUP
         renderControls()
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
@@ -1475,7 +1477,7 @@ class MainActivity : AppCompatActivity() {
     /** Starts the clock. [calibrated] only changes what is announced. */
     private fun beginWorkout(calibrated: Boolean) {
         synchronized(engineLock) { engine.finishSetup() }
-        state = State.RUNNING
+        state = WorkoutState.RUNNING
         LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
         val now = SystemClock.elapsedRealtime()
         lastTickAt = now
@@ -1597,14 +1599,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleRun() {
+        // Whether the shutter answers is [CameraControls]' to say, not this block's.
+        if (!controlPanel()[CameraControl.SHUTTER].enabled) return
         when (state) {
-            State.IDLE -> askAboutWatch { showPlacementGuide { enterSetup() } }
-            // Unreachable: the shutter is disabled for the duration of the check, and SKIP is
-            // the way out of it. Named rather than left to `else` so the state machine stays
-            // readable from this one when-block.
-            State.SETUP -> Unit
-            State.PAUSED -> {
-                state = State.RUNNING
+            WorkoutState.IDLE -> askAboutWatch { showPlacementGuide { enterSetup() } }
+            // Unreachable, since the guard above has already refused: named rather than left to
+            // `else` so the state machine stays readable from this one when-block.
+            WorkoutState.SETUP -> Unit
+            WorkoutState.PAUSED -> {
+                state = WorkoutState.RUNNING
                 val now = SystemClock.elapsedRealtime()
                 if (pauseStartedAt != 0L) {
                     pausedMs += now - pauseStartedAt
@@ -1624,8 +1627,8 @@ class MainActivity : AppCompatActivity() {
                 speaker.say(VoiceLine.Resume)
                 ui.post(ticker)
             }
-            State.RUNNING -> {
-                state = State.PAUSED
+            WorkoutState.RUNNING -> {
+                state = WorkoutState.PAUSED
                 picture?.releaseAll()
                 video.releaseAll()
                 coach.interrupted()
@@ -1638,7 +1641,7 @@ class MainActivity : AppCompatActivity() {
                 speaker.stop()
                 ui.removeCallbacks(ticker)
             }
-            State.FINISHED -> resetWorkout()
+            WorkoutState.FINISHED -> resetWorkout()
         }
         renderControls()
     }
@@ -1654,63 +1657,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The controls of the action row, and what each is for at this moment.
-     *
-     * The left slot is FLIP before the clock starts and END once it is running. Only one of the
-     * two is ever present: they share a position in the frame, and showing both crowded the band
-     * for no gain, since flipping the camera is not something anyone does mid-Cindy while
-     * getting out of a workout is.
-     *
-     * The shutter is the run control and nothing else. It goes inert during the setup check,
-     * because there is no workout yet to run or to pause — SKIP is the way out of the check.
-     *
-     * The rest follow one rule: a control keeps its place and dims when it has nothing to act
-     * on. Hiding them instead was tried and was worse — a band that empties out does not read as
-     * tidy, it reads as a band that has lost its buttons, and you cannot learn where a control
-     * lives if it is only there half the time. The left slot is not an exception to that: it
-     * never empties, it changes hands.
+     * Draws the action row from what [CameraControls] answers for this moment, and decides
+     * nothing: which controls are there, which are dimmed and what each is called all live in
+     * that one table. What stays here is how a control looks once the table has spoken: its
+     * mark, its tint, and how dimmed is drawn.
      */
     private fun renderControls() {
-        val live = inWorkout()
+        val panel = controlPanel()
 
-        binding.btnFlip.visibility = if (live) View.GONE else View.VISIBLE
+        render(binding.btnFlip, panel[CameraControl.SWITCH_CAMERA])
         binding.btnFlip.setImageResource(R.drawable.ic_flip)
         binding.btnFlip.imageTintList = ColorStateList.valueOf(label)
-        binding.btnFlip.contentDescription = "Switch camera"
 
-        binding.btnEnd.visibility = if (live) View.VISIBLE else View.GONE
+        render(binding.btnEnd, panel[CameraControl.END])
         binding.btnEnd.imageTintList = ColorStateList.valueOf(alert)
 
-        // The editors act on a count, and the count only moves while the clock is running —
-        // onManualRep and onUndoRep both refuse outside RUNNING — so a paused workout dims them
-        // too, rather than offering a lit button that quietly does nothing.
-        val canEdit = state == State.RUNNING
-        for (editor in listOf(binding.btnUndo, binding.btnAddRep)) {
-            editor.isEnabled = canEdit
-            editor.alpha = if (canEdit) 1f else DIMMED
-        }
+        render(binding.btnUndo, panel[CameraControl.MINUS])
+        render(binding.btnAddRep, panel[CameraControl.PLUS])
+        render(binding.btnStart, panel[CameraControl.SHUTTER])
+        render(binding.btnSkipExercise, panel[CameraControl.SKIP])
+    }
 
-        // Inert during the check, and dimmed so that it reads as unavailable rather than broken.
-        val canRun = state != State.SETUP
-        binding.btnStart.isEnabled = canRun
-        binding.btnStart.alpha = if (canRun) 1f else DIMMED
-        binding.btnStart.contentDescription = when (state) {
-            State.IDLE -> "Start the workout"
-            State.SETUP -> "Start — available once the setup check finishes"
-            State.RUNNING -> "Pause"
-            State.PAUSED -> "Resume"
-            State.FINISHED -> "Start again"
-        }
+    /** What the camera screen's controls are, for the state it is in and whether it is filming. */
+    private fun controlPanel() = CameraControls.of(state, video.isRecording)
 
-        // There is a movement to leave during the check and during the workout, and none before
-        // the clock starts or after it stops.
-        val canSkip = state == State.SETUP || live
-        binding.btnSkipExercise.isEnabled = canSkip
-        binding.btnSkipExercise.alpha = if (canSkip) 1f else DIMMED
-        binding.btnSkipExercise.contentDescription = when (state) {
-            State.SETUP -> "Skip the setup check"
-            else -> "Skip to the next movement"
-        }
+    private fun render(view: View, control: ControlState) {
+        view.visibility = if (control.present) View.VISIBLE else View.GONE
+        view.isEnabled = control.enabled
+        view.alpha = if (control.enabled) 1f else DIMMED
+        view.contentDescription = control.name
     }
 
     /**
@@ -1720,8 +1695,9 @@ class MainActivity : AppCompatActivity() {
      * asking twenty times a session would be the wrong trade.
      */
     private fun onSkip() {
+        if (!controlPanel()[CameraControl.SKIP].enabled) return
         when (state) {
-            State.SETUP -> CindySheet(
+            WorkoutState.SETUP -> CindySheet(
                 this,
                 title = "Skip the setup check?",
                 subtitle = "Cindy will start counting straight away, without calibrating to " +
@@ -1736,19 +1712,19 @@ class MainActivity : AppCompatActivity() {
                 secondary = "KEEP CHECKING",
                 onSecondary = {}
             ).show()
-            State.RUNNING, State.PAUSED -> {
+            WorkoutState.RUNNING, WorkoutState.PAUSED -> {
                 apply(runEngine { engine.skipExercise() })
                 traceControl(EngineTrace.Control.SKIP_EXERCISE)
             }
-            State.IDLE, State.FINISHED -> Unit
+            WorkoutState.IDLE, WorkoutState.FINISHED -> Unit
         }
     }
 
     /** A workout is live once the clock has started, whether or not it is ticking right now. */
-    private fun inWorkout(): Boolean = state == State.RUNNING || state == State.PAUSED
+    private fun inWorkout(): Boolean = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
 
     private fun confirmStop() {
-        val wasRunning = state == State.RUNNING
+        val wasRunning = state == WorkoutState.RUNNING
         if (wasRunning) toggleRun() // park the clock while the dialog is up
         CindySheet(
             this,
@@ -1762,8 +1738,21 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
+    /**
+     * Back from the session page: goes where [CameraControls] says closing it leads. Today that
+     * is where the screen already was, so a finished workout waits for the shutter.
+     */
+    private fun closeSessionPage() {
+        if (!sessionPageOpen) return
+        sessionPageOpen = false
+        if (controlPanel().afterSessionPage == WorkoutState.IDLE && state != WorkoutState.IDLE) {
+            resetWorkout()
+            renderControls()
+        }
+    }
+
     private fun resetWorkout() {
-        state = State.IDLE
+        state = WorkoutState.IDLE
         LiveWorkout.active = false // The clock is off again, so reminders may post.
         remainingMs = WORKOUT_MS
         roundSplits.clear()
@@ -1789,14 +1778,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onManualRep() {
-        if (state != State.RUNNING) return
+        if (!controlPanel()[CameraControl.PLUS].enabled) return
         apply(runEngine { engine.manualRep() })
         traceControl(EngineTrace.Control.MANUAL_REP)
     }
 
     /** Takes back a rep the counter should not have scored. */
     private fun onUndoRep() {
-        if (state != State.RUNNING) return
+        if (!controlPanel()[CameraControl.MINUS].enabled) return
         val before = synchronized(engineLock) { engine.rounds }
         val movementBefore = synchronized(engineLock) { engine.exercise }
         val snap = runEngine { engine.undoRep() }
@@ -1811,7 +1800,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun finishWorkout(stoppedEarly: Boolean = false) {
-        state = State.FINISHED
+        state = WorkoutState.FINISHED
         LiveWorkout.active = false // The workout is over, so reminders may post.
         ui.removeCallbacks(ticker)
         buzz(600)
@@ -1883,6 +1872,7 @@ class MainActivity : AppCompatActivity() {
         attempt.avgRoundMs?.let { speaker.queue(VoiceLine.Averaging(it)) }
         if (beat) speaker.queue(VoiceLine.BeatBenchmark(Records.BENCHMARK_NAME))
 
+        sessionPageOpen = true
         startActivity(ResultsActivity.intent(this, attempt, stoppedEarly, snap.heelsFlatSpotted))
     }
 
@@ -1947,7 +1937,7 @@ class MainActivity : AppCompatActivity() {
                 }
         }
         music.volume = profile.musicVolume
-        if (profile.musicOn && state == State.RUNNING) music.play() else music.pause()
+        if (profile.musicOn && state == WorkoutState.RUNNING) music.play() else music.pause()
     }
 
     /**
@@ -2024,7 +2014,7 @@ class MainActivity : AppCompatActivity() {
      * then the athlete is already moving and the figure is in the way.
      */
     private fun updateCoach(snap: Snapshot) {
-        val eligible = state == State.RUNNING && snap.blocked && snap.bodyVisible && !debug
+        val eligible = state == WorkoutState.RUNNING && snap.blocked && snap.bodyVisible && !debug
         val now = SystemClock.elapsedRealtime()
         if (!eligible) blockedSince = 0L else if (blockedSince == 0L) blockedSince = now
 
@@ -2217,6 +2207,7 @@ class MainActivity : AppCompatActivity() {
             // and this runs for the whole of a twenty minute workout.
             sensors?.registerListener(rotationListener, it, SensorManager.SENSOR_DELAY_UI)
         }
+        closeSessionPage()
         syncMovements()
         syncVoice()
         syncMusic()
@@ -2251,7 +2242,7 @@ class MainActivity : AppCompatActivity() {
             renderChips()
         }
         // Do not keep playing over whatever the athlete opens next.
-        if (state == State.RUNNING && !isChangingConfigurations) toggleRun() else music.pause()
+        if (state == WorkoutState.RUNNING && !isChangingConfigurations) toggleRun() else music.pause()
         // The camera gives up the screen here, and a heart rate is only wanted while it has it.
         heartSource?.stop()
     }
