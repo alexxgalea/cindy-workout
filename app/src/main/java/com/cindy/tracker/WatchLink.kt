@@ -55,17 +55,19 @@ object WatchLinks {
      * What to ask when START is tapped.
      *
      * [bleAvailable] is whether the phone can talk to a watch at all: there is no point offering
-     * one to a phone that cannot. [offerSilenced] is the athlete having said not to ask again.
-     * A silent watch is always asked about, since that one cannot be turned off: it is a watch
-     * the athlete chose, which is not doing what they chose it for.
+     * one to a phone that cannot. [offerSeen] is whether the offer to pair has ever been shown
+     * (see [Onboarding.watchOfferSeen]): it is made once in the app's life, whatever the answer,
+     * and pairing stays in the menu. A silent watch is always asked about, since that is a
+     * different question and cannot be turned off: it is a watch the athlete chose, which is not
+     * doing what they chose it for.
      */
     fun promptAtStart(
         link: WatchLink,
         bleAvailable: Boolean,
-        offerSilenced: Boolean
+        offerSeen: Boolean
     ): WatchPrompt = when (link) {
         WatchLink.NOT_PAIRED ->
-            if (bleAvailable && !offerSilenced) WatchPrompt.OFFER_TO_PAIR else WatchPrompt.NONE
+            if (bleAvailable && !offerSeen) WatchPrompt.OFFER_TO_PAIR else WatchPrompt.NONE
         WatchLink.SILENT -> WatchPrompt.ASK_ABOUT_SILENT_WATCH
         WatchLink.LIVE -> WatchPrompt.NONE
     }

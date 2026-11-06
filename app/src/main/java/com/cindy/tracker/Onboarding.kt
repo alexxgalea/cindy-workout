@@ -30,8 +30,26 @@ object Onboarding {
      */
     const val KEY_PLACEMENT_SEEN = "placement_guide_dismissed"
 
-    /** Where "Don't ask again" on the offer to pair a heart-rate watch is kept. */
-    const val KEY_WATCH_OFFER_SILENCED = "watch_offer_silenced"
+    /**
+     * Set once the offer to pair a heart-rate watch has been shown, whatever the athlete did with it.
+     *
+     * The string is the key "Don't ask again" used, on purpose: an athlete who ticked it has
+     * already answered, and a new name would ask them again.
+     */
+    const val KEY_WATCH_OFFER_SEEN = "watch_offer_silenced"
+
+    /**
+     * Whether the offer to pair a watch has already been made to this athlete.
+     *
+     * The earlier version asked at every START until "Don't ask again", so an athlete who never
+     * ticked it left no mark. A session on record, or the placement guide put away, which comes
+     * after the question at START, are proof that they were past it at least once.
+     */
+    fun watchOfferSeen(
+        remembered: Boolean,
+        hasHistory: Boolean,
+        placementDismissed: Boolean
+    ): Boolean = remembered || hasHistory || placementDismissed
 
     /**
      * Whether to show the pages before the camera opens.
