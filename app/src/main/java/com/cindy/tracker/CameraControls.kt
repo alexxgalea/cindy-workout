@@ -58,6 +58,13 @@ class CameraControlPanel internal constructor(
  */
 object CameraControls {
 
+    /**
+     * What the status line says while the workout is idle. It names the shutter, which is what
+     * starts the setup check, and is worded as a statement, not an invitation: the line itself
+     * does nothing when it is touched.
+     */
+    const val IDLE_LINE = "Press the shutter to start the setup check"
+
     @Suppress("UNUSED_PARAMETER")
     fun of(state: WorkoutState, filming: Boolean): CameraControlPanel {
         val live = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
