@@ -820,7 +820,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        status.text = "Tap to set up"
+        status.text = CameraControls.IDLE_LINE
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -1764,7 +1764,7 @@ class MainActivity : AppCompatActivity() {
         detector?.resetRoi()
         primary(R.drawable.ic_play)
         statusDot(neutral)
-        status.text = "Tap to set up"
+        status.text = CameraControls.IDLE_LINE
         reps.colour(label)
         music.stop()
         renderClock()
