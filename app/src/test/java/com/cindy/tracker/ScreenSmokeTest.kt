@@ -85,6 +85,33 @@ class ScreenSmokeTest {
         assertTrue("the bands ate the whole screen", binding.bandTop.height + binding.bandBottom.height < 2400)
     }
 
+    /**
+     * The camera switch stays on the screen the whole workout, dimmed, so it cannot share END's
+     * slot in the action row. It sits in the top band, and TalkBack is given its name by the
+     * module that decides the controls.
+     */
+    @Test
+    fun `the camera switch is in the top band, with a spoken name`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.setTheme(R.style.Theme_Cindy)
+        val binding = com.cindy.tracker.databinding.ActivityMainBinding
+            .inflate(android.view.LayoutInflater.from(context))
+        binding.root.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(2400, android.view.View.MeasureSpec.EXACTLY)
+        )
+        binding.root.layout(0, 0, 1080, 2400)
+
+        var ancestor: android.view.ViewParent? = binding.btnFlip.parent
+        while (ancestor != null && ancestor !== binding.bandTop) ancestor = ancestor.parent
+        assertTrue("the camera switch is not in the top band", ancestor === binding.bandTop)
+        assertTrue("the camera switch has no size", binding.btnFlip.width > 0 && binding.btnFlip.height > 0)
+        for (state in WorkoutState.entries) {
+            val name = CameraControls.of(state, false)[CameraControl.SWITCH_CAMERA].name
+            assertTrue("$state: the camera switch has no spoken name", name.isNotBlank())
+        }
+    }
+
     @Test
     fun `the help screen builds`() = smoke<HelpActivity>()
 

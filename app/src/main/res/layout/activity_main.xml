@@ -77,6 +77,22 @@
                 app:autoSizeTextType="uniform" />
 
             <!--
+              The camera switch. It lives with the other things that are about the camera rather
+              than the count, beside REC and MENU, and not in the left slot of the action row:
+              that slot is END's alone while a workout is live, and the switch has to stay on the
+              screen, dimmed, while the clock runs. Where exactly it sits in this row is the bands
+              verdict's to settle; this is only the first place it fits.
+            -->
+            <ImageView
+                android:id="@+id/btnFlip"
+                android:layout_width="44dp"
+                android:layout_height="40dp"
+                android:padding="11dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_flip"
+                tools:ignore="ContentDescription" />
+
+            <!--
               Icons, not words: four labelled chips wanted 330dp of row and this one has 320.
               Two of them now. Music went to the menu, where the track can be chosen with a tap
               rather than found behind a long press, and the voice followed it there — it is a
@@ -338,11 +354,9 @@
           thing — leave this movement — and a control that means one thing should not be a long
           press on a control that means another.
 
-          The left slot holds one control at a time: FLIP until the clock starts, END in red once
-          it has. They are two views sharing a position rather than one view swapping its icon,
-          so each keeps its own mark, tint and spoken name. Carrying both at once was tried and
-          the band was too crowded — and a camera flip is not something anyone reaches for
-          mid-Cindy, while a way out of the workout is.
+          The left slot holds END, in red, and only while a workout is live: getting out of a
+          workout is always in the same place. The camera switch used to share it; it is in the
+          top band now, because it stays on the screen, dimmed, while the clock runs.
         -->
         <FrameLayout
             android:layout_width="match_parent"
@@ -350,18 +364,7 @@
             android:layout_marginTop="12dp"
             android:paddingHorizontal="20dp">
 
-            <ImageView
-                android:id="@+id/btnFlip"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_gravity="start|center_vertical"
-                android:background="@drawable/btn_glass"
-                android:padding="14dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_flip"
-                tools:ignore="ContentDescription" />
-
-            <!-- Stacked on FLIP, which is gone by the time this is here. -->
+            <!-- Alone in the left slot, once a workout is live. Empty before it. -->
             <ImageView
                 android:id="@+id/btnEnd"
                 android:layout_width="52dp"

@@ -591,7 +591,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnEnd.setOnClickListener { confirmStop() }
-        binding.btnFlip.setOnClickListener { flipCamera() }
+        binding.btnFlip.setOnClickListener { onSwitchCamera() }
         // Debug builds only. A stranger who discovers the model swap can silently halve their
         // own tracking accuracy with a long press and never know why the count got worse.
         if (BuildConfig.DEBUG) {
@@ -999,6 +999,37 @@ class MainActivity : AppCompatActivity() {
 
     private fun adoptPicture(pictureEffect: PictureEffect?) {
         picture = pictureEffect
+    }
+
+    /**
+     * The camera switch's tap. Whether it answers, and whether it must ask first, are
+     * [CameraControls]' to say. A switch rebinds the camera, which ends a film, so with one
+     * recording the athlete is asked before it goes; with none it goes at once.
+     */
+    private fun onSwitchCamera() {
+        val panel = controlPanel()
+        if (!panel[CameraControl.SWITCH_CAMERA].enabled) return
+        if (!panel.switchAsksFirst) {
+            flipCamera()
+            return
+        }
+        CindySheet(
+            this,
+            title = "Switching cameras ends the film here",
+            subtitle = "What you have filmed so far is kept."
+        ).actions(
+            primary = "SWITCH",
+            onPrimary = {
+                // The film may have ended on its own while the question was up.
+                if (video.isRecording) {
+                    video.stop()
+                    renderChips()
+                }
+                flipCamera()
+            },
+            secondary = "KEEP FILMING",
+            onSecondary = {}
+        ).show()
     }
 
     private fun flipCamera() {
