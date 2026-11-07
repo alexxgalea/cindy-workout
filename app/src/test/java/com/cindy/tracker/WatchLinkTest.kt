@@ -40,14 +40,49 @@ class WatchLinkTest {
     }
 
     @Test
-    fun `an unpaired athlete is offered a watch unless they said not to ask again`() {
+    fun `a fresh install is offered a watch at the first start`() {
         assertEquals(
             WatchPrompt.OFFER_TO_PAIR,
-            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = true, offerSilenced = false)
+            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = true, offerSeen = false)
         )
+    }
+
+    @Test
+    fun `the offer is made once in the app's life, so the second start is not asked`() {
         assertEquals(
             WatchPrompt.NONE,
-            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = true, offerSilenced = true)
+            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = true, offerSeen = true)
+        )
+    }
+
+    @Test
+    fun `an upgrade from a version that already asked is not asked again`() {
+        // The old version asked at every start until "Don't ask again", and kept that answer
+        // under the key the new one reads as "seen". An athlete who had a session, or had put the
+        // placement guide away, was past the question at least once without ticking the box.
+        val key = Onboarding.KEY_WATCH_OFFER_SEEN
+        assertEquals("watch_offer_silenced", key)
+        for ((remembered, history, dismissed) in listOf(
+            Triple(true, false, false),
+            Triple(false, true, false),
+            Triple(false, false, true)
+        )) {
+            assertEquals(
+                WatchPrompt.NONE,
+                WatchLinks.promptAtStart(
+                    WatchLink.NOT_PAIRED,
+                    bleAvailable = true,
+                    offerSeen = Onboarding.watchOfferSeen(remembered, history, dismissed)
+                )
+            )
+        }
+        assertEquals(
+            WatchPrompt.OFFER_TO_PAIR,
+            WatchLinks.promptAtStart(
+                WatchLink.NOT_PAIRED,
+                bleAvailable = true,
+                offerSeen = Onboarding.watchOfferSeen(false, false, false)
+            )
         )
     }
 
@@ -55,16 +90,16 @@ class WatchLinkTest {
     fun `a phone that cannot talk to a watch is never offered one`() {
         assertEquals(
             WatchPrompt.NONE,
-            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = false, offerSilenced = false)
+            WatchLinks.promptAtStart(WatchLink.NOT_PAIRED, bleAvailable = false, offerSeen = false)
         )
     }
 
     @Test
     fun `a silent watch is always asked about, whatever was said about the offer`() {
-        for (silenced in listOf(false, true)) {
+        for (seen in listOf(false, true)) {
             assertEquals(
                 WatchPrompt.ASK_ABOUT_SILENT_WATCH,
-                WatchLinks.promptAtStart(WatchLink.SILENT, bleAvailable = true, offerSilenced = silenced)
+                WatchLinks.promptAtStart(WatchLink.SILENT, bleAvailable = true, offerSeen = seen)
             )
         }
     }
@@ -73,7 +108,7 @@ class WatchLinkTest {
     fun `a live watch is never interrupted`() {
         assertEquals(
             WatchPrompt.NONE,
-            WatchLinks.promptAtStart(WatchLink.LIVE, bleAvailable = true, offerSilenced = false)
+            WatchLinks.promptAtStart(WatchLink.LIVE, bleAvailable = true, offerSeen = false)
         )
     }
 

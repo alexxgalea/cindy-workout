@@ -1,0 +1,1 @@
+A smaller, tighter build: the app's code is now shrunk and optimised before it reaches your phone. Nothing changes in how Cindy counts, looks or sounds.

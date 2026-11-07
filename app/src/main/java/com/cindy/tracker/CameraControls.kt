@@ -28,44 +28,64 @@ data class ControlState(val availability: Availability, val name: String) {
 class CameraControlPanel internal constructor(
     private val controls: Map<CameraControl, ControlState>,
     /** The state the camera screen is in once the session page has been closed, however it closed. */
-    val afterSessionPage: WorkoutState
+    val afterSessionPage: WorkoutState,
+    /**
+     * Whether a camera switch must ask first: true while a film is recording, because a switch
+     * ends it. With no film running a switch happens at once.
+     */
+    val switchAsksFirst: Boolean
 ) {
     operator fun get(control: CameraControl): ControlState = controls.getValue(control)
 
     override fun equals(other: Any?): Boolean =
-        other is CameraControlPanel && controls == other.controls && afterSessionPage == other.afterSessionPage
+        other is CameraControlPanel && controls == other.controls && afterSessionPage == other.afterSessionPage &&
+            switchAsksFirst == other.switchAsksFirst
 
-    override fun hashCode(): Int = 31 * controls.hashCode() + afterSessionPage.hashCode()
+    override fun hashCode(): Int =
+        31 * (31 * controls.hashCode() + afterSessionPage.hashCode()) + switchAsksFirst.hashCode()
 }
 
 /**
  * The rules for the camera screen's controls, kept free of Android types so they can be tested
  * on their own, in one table: the activity draws what this answers and keeps no rule of its own.
  *
- * Today's rules, which the table pins:
- *  - the left slot of the action row is the camera switch until a workout is live, and END once
- *    it is. They share a position, so exactly one of the two is ever present;
+ * The rules, which the table pins:
+ *  - the camera switch answers before the start and on a pause, where nothing is being counted
+ *    and the phone may be turned or moved. While the check or the clock runs it is dimmed, not
+ *    hidden, so it still teaches where it lives and cannot be knocked mid-set. It does not
+ *    answer on a finished workout either: the session page has the last word there;
+ *  - END has the left slot of the action row to itself, and is there while a workout is live;
  *  - the shutter is the run control and nothing else, and is inert only during the setup check;
  *  - the count editors act on a count, which only moves while the clock runs;
  *  - SKIP has a movement to leave during the check and during the workout;
  *  - a control with nothing to act on is dimmed and keeps its place, not hidden: you cannot
- *    learn where a control lives if it is only there half the time. The left slot is the
- *    exception that proves it: it never empties, it changes hands;
+ *    learn where a control lives if it is only there half the time. END is the one
+ *    exception: it exists only while there is a workout to leave;
  *  - a finished workout is not left on the camera screen for the athlete to clear: closing the
  *    session page, by DONE, DISCARD or back, returns the screen to idle, so START is ready.
  *
- * The workout being filmed changes nothing today. It is an input so that the rules that do
- * depend on it (asking before a camera switch ends a film) have one place to go.
+ * Whether a film is recording changes no control. It only decides [CameraControlPanel.switchAsksFirst]:
+ * a switch ends the film, so while one is recording the switch asks before it acts.
  */
 object CameraControls {
 
-    @Suppress("UNUSED_PARAMETER")
+    /**
+     * What the status line says while the workout is idle. It names the shutter, which is what
+     * starts the setup check, and is worded as a statement, not an invitation: the line itself
+     * does nothing when it is touched.
+     */
+    const val IDLE_LINE = "Press the shutter to start the setup check"
+
     fun of(state: WorkoutState, filming: Boolean): CameraControlPanel {
         val live = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
         return CameraControlPanel(
             controls = mapOf(
                 CameraControl.SWITCH_CAMERA to ControlState(
-                    if (live) Availability.ABSENT else Availability.ENABLED,
+                    if (state == WorkoutState.IDLE || state == WorkoutState.PAUSED) {
+                        Availability.ENABLED
+                    } else {
+                        Availability.DIMMED
+                    },
                     "Switch camera"
                 ),
                 CameraControl.END to ControlState(
@@ -94,7 +114,8 @@ object CameraControls {
             ),
             // However the session page closes, the next workout is one tap on START away: the
             // clock full, round 1, the count at zero. The saved session is not touched by it.
-            afterSessionPage = WorkoutState.IDLE
+            afterSessionPage = WorkoutState.IDLE,
+            switchAsksFirst = filming
         )
     }
 

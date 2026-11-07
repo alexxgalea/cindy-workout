@@ -328,8 +328,9 @@ class HudTourTest {
 
         start(hud)
 
-        // Everything in the bottom band goes with it: start, reps, skip, flip.
-        assertEquals(3, hud.spotlight.stepCount)
+        // Everything in the bottom band goes with it: start, reps, skip. The camera switch
+        // is in the top band now, so it stays: what is left is the status line, REC, MENU and it.
+        assertEquals(4, hud.spotlight.stepCount)
     }
 
     @Test

@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins what the camera screen's controls do today, state by state. These are the rules the
+ * Pins what the camera screen's controls do, state by state. These are the rules the
  * activity used to hold in `renderControls`; the tickets that change them change the table
  * below, and nothing else.
  */
@@ -30,10 +30,10 @@ class CameraControlsTest {
     private val today: Map<WorkoutState, Map<CameraControl, Availability>> = mapOf(
         //          switch    END     shutter  minus    plus     skip
         IDLE to row(ENABLED, ABSENT, ENABLED, DIMMED, DIMMED, DIMMED),
-        SETUP to row(ENABLED, ABSENT, DIMMED, DIMMED, DIMMED, ENABLED),
-        RUNNING to row(ABSENT, ENABLED, ENABLED, ENABLED, ENABLED, ENABLED),
-        PAUSED to row(ABSENT, ENABLED, ENABLED, DIMMED, DIMMED, ENABLED),
-        FINISHED to row(ENABLED, ABSENT, ENABLED, DIMMED, DIMMED, DIMMED)
+        SETUP to row(DIMMED, ABSENT, DIMMED, DIMMED, DIMMED, ENABLED),
+        RUNNING to row(DIMMED, ENABLED, ENABLED, ENABLED, ENABLED, ENABLED),
+        PAUSED to row(ENABLED, ENABLED, ENABLED, DIMMED, DIMMED, ENABLED),
+        FINISHED to row(DIMMED, ABSENT, ENABLED, DIMMED, DIMMED, DIMMED)
     )
 
     private fun row(
@@ -49,7 +49,7 @@ class CameraControlsTest {
     )
 
     @Test
-    fun `every state, with and without a film, answers as the camera screen does today`() {
+    fun `every state, with and without a film, answers as the table says`() {
         for ((state, expected) in today) {
             for (filming in listOf(false, true)) {
                 val controls = CameraControls.of(state, filming)
@@ -70,30 +70,52 @@ class CameraControlsTest {
     }
 
     @Test
-    fun `a film changes nothing about the controls today`() {
+    fun `a film changes no control, only whether a camera switch asks first`() {
         for (state in WorkoutState.entries) {
-            assertEquals(CameraControls.of(state, false), CameraControls.of(state, true))
+            val quiet = CameraControls.of(state, false)
+            val filming = CameraControls.of(state, true)
+            for (control in CameraControl.entries) {
+                assertEquals("$control in $state", quiet[control], filming[control])
+            }
         }
     }
 
     @Test
-    fun `the camera switch is there exactly while no workout is live`() {
+    fun `the camera switch is enabled exactly in idle and paused`() {
         for (state in WorkoutState.entries) {
-            val live = state == RUNNING || state == PAUSED
-            assertEquals("$state", !live, CameraControls.of(state, false)[SWITCH_CAMERA].present)
+            for (filming in listOf(false, true)) {
+                assertEquals(
+                    "$state, filming=$filming",
+                    state == IDLE || state == PAUSED,
+                    CameraControls.of(state, filming)[SWITCH_CAMERA].enabled
+                )
+            }
         }
     }
 
     @Test
-    fun `END takes the left slot once a workout is live, and never shares it with the switch`() {
+    fun `the camera switch is dimmed, never hidden, where it does not answer`() {
         for (state in WorkoutState.entries) {
-            val controls = CameraControls.of(state, false)
-            assertTrue(
-                "$state: one of the two holds the slot",
-                controls[END].present != controls[SWITCH_CAMERA].present
-            )
+            val switch = CameraControls.of(state, false)[SWITCH_CAMERA]
+            assertTrue("$state: it keeps its place", switch.present)
+        }
+        assertEquals(DIMMED, CameraControls.of(SETUP, false)[SWITCH_CAMERA].availability)
+        assertEquals(DIMMED, CameraControls.of(RUNNING, false)[SWITCH_CAMERA].availability)
+    }
+
+    @Test
+    fun `a camera switch asks first exactly when a film is recording`() {
+        for (state in WorkoutState.entries) {
+            assertTrue("$state, filming", CameraControls.of(state, true).switchAsksFirst)
+            assertFalse("$state, not filming", CameraControls.of(state, false).switchAsksFirst)
+        }
+    }
+
+    @Test
+    fun `END holds the left slot to itself whenever a workout is live`() {
+        for (state in WorkoutState.entries) {
             val live = state == RUNNING || state == PAUSED
-            assertEquals("$state", live, controls[END].present)
+            assertEquals("$state", live, CameraControls.of(state, false)[END].present)
         }
     }
 

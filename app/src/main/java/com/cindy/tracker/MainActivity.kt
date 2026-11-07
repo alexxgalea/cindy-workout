@@ -591,7 +591,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnStart.setOnClickListener { toggleRun() }
         binding.btnEnd.setOnClickListener { confirmStop() }
-        binding.btnFlip.setOnClickListener { flipCamera() }
+        binding.btnFlip.setOnClickListener { onSwitchCamera() }
         // Debug builds only. A stranger who discovers the model swap can silently halve their
         // own tracking accuracy with a long press and never know why the count got worse.
         if (BuildConfig.DEBUG) {
@@ -820,7 +820,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        status.text = "Tap to set up"
+        status.text = CameraControls.IDLE_LINE
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -999,6 +999,37 @@ class MainActivity : AppCompatActivity() {
 
     private fun adoptPicture(pictureEffect: PictureEffect?) {
         picture = pictureEffect
+    }
+
+    /**
+     * The camera switch's tap. Whether it answers, and whether it must ask first, are
+     * [CameraControls]' to say. A switch rebinds the camera, which ends a film, so with one
+     * recording the athlete is asked before it goes; with none it goes at once.
+     */
+    private fun onSwitchCamera() {
+        val panel = controlPanel()
+        if (!panel[CameraControl.SWITCH_CAMERA].enabled) return
+        if (!panel.switchAsksFirst) {
+            flipCamera()
+            return
+        }
+        CindySheet(
+            this,
+            title = "Switching cameras ends the film here",
+            subtitle = "What you have filmed so far is kept."
+        ).actions(
+            primary = "SWITCH",
+            onPrimary = {
+                // The film may have ended on its own while the question was up.
+                if (video.isRecording) {
+                    video.stop()
+                    renderChips()
+                }
+                flipCamera()
+            },
+            secondary = "KEEP FILMING",
+            onSecondary = {}
+        ).show()
     }
 
     private fun flipCamera() {
@@ -1542,11 +1573,16 @@ class MainActivity : AppCompatActivity() {
     private fun askAboutWatch(then: () -> Unit) {
         val bleAvailable = packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)
         val link = watchLink(SystemClock.elapsedRealtime())
-        val silenced = prefs().getBoolean(Onboarding.KEY_WATCH_OFFER_SILENCED, false)
-        when (WatchLinks.promptAtStart(link, bleAvailable, silenced)) {
+        val seen = Onboarding.watchOfferSeen(
+            remembered = firstRun.watchOfferSeen,
+            hasHistory = records.all().isNotEmpty(),
+            placementDismissed = firstRun.placementDismissed
+        )
+        when (WatchLinks.promptAtStart(link, bleAvailable, seen)) {
             WatchPrompt.NONE -> then()
             WatchPrompt.OFFER_TO_PAIR -> {
-                var dontAskAgain = false
+                // Seen the moment it is on the screen: backing out of it counts as an answer.
+                firstRun.watchOfferSeen = true
                 CindySheet(
                     this,
                     title = "Add a heart-rate watch?",
@@ -1557,19 +1593,14 @@ class MainActivity : AppCompatActivity() {
                         "A Garmin, a Polar or a chest strap can broadcast it. You can add one " +
                             "later from the menu."
                     )
-                ).toggle("Don't ask again", checked = false) { dontAskAgain = it }
-                    .actions(
-                        primary = "CONNECT WATCH",
-                        onPrimary = {
-                            rememberWatchOfferAnswer(dontAskAgain)
-                            startActivity(MenuActivity.intent(this, workoutLive = false, openHeartRate = true))
-                        },
-                        secondary = "NOT NOW",
-                        onSecondary = {
-                            rememberWatchOfferAnswer(dontAskAgain)
-                            then()
-                        }
-                    ).show()
+                ).actions(
+                    primary = "CONNECT WATCH",
+                    onPrimary = {
+                        startActivity(MenuActivity.intent(this, workoutLive = false, openHeartRate = true))
+                    },
+                    secondary = "NOT NOW",
+                    onSecondary = { then() }
+                ).show()
             }
             WatchPrompt.ASK_ABOUT_SILENT_WATCH -> {
                 val name = heartDevice?.name ?: "your watch"
@@ -1592,10 +1623,6 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
         }
-    }
-
-    private fun rememberWatchOfferAnswer(dontAskAgain: Boolean) {
-        if (dontAskAgain) prefs().edit().putBoolean(Onboarding.KEY_WATCH_OFFER_SILENCED, true).apply()
     }
 
     private fun toggleRun() {
@@ -1770,7 +1797,7 @@ class MainActivity : AppCompatActivity() {
         detector?.resetRoi()
         primary(R.drawable.ic_play)
         statusDot(neutral)
-        status.text = "Tap to set up"
+        status.text = CameraControls.IDLE_LINE
         reps.colour(label)
         music.stop()
         renderClock()
