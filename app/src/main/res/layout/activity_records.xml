@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The shape every secondary screen shares: a top bar (back and the title), a line saying what the screen
-  is, the content, and any real action in the thumb's reach at the bottom. Rows are built in code from
+  The shape every secondary screen shares: a top bar (back and the title), the content, and any real
+  action in the thumb's reach at the bottom. Rows are built in code from
   CindyViews so that Menu, Records, Results and Help cannot drift apart again.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -21,17 +21,10 @@
         android:layout_height="wrap_content"
         app:title="Progress" />
 
-    <TextView
-        style="@style/Cindy.Body"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Cindy — AMRAP 20:00" />
-
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="@dimen/space_6"
+        android:layout_marginTop="8dp"
         android:layout_weight="1"
         android:clipToPadding="false"
         android:overScrollMode="never"
