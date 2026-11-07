@@ -79,10 +79,14 @@ final class LicencesTests: XCTestCase {
         let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
         XCTAssertEqual(names, ["manrope_bold.ttf", "manrope_extrabold.ttf", "manrope_medium.ttf",
                                "manrope_regular.ttf", "manrope_semibold.ttf"])
+        // Android moved to Inter (spec #139, ticket #149) and the iPhone app has not followed yet, so
+        // the files are no longer Android's. When the iOS port of the type lands, this goes back to
+        // comparing the two folders byte for byte, against Android's inter_*.ttf.
         let android = Self.root.appendingPathComponent("app/src/main/res/font")
-        for name in names {
-            XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(name)),
-                           try Data(contentsOf: android.appendingPathComponent(name)), "\(name) is Android's file")
-        }
+        let androidNames = try FileManager.default.contentsOfDirectory(atPath: android.path)
+            .filter { $0.hasSuffix(".ttf") }.sorted()
+        XCTAssertEqual(androidNames, ["inter_bold.ttf", "inter_extrabold.ttf", "inter_medium.ttf",
+                                      "inter_regular.ttf", "inter_semibold.ttf"],
+                       "Android's five weights; iOS still ships Manrope until the type is ported")
     }
 }

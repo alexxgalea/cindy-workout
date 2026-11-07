@@ -60,12 +60,10 @@
                 <!-- Rounds are the score; the loose reps are a footnote on it. -->
                 <TextView
                     android:id="@+id/scoreReps"
-                    style="@style/Cindy.MetricXL"
+                    style="@style/Cindy.MetricXL.Quiet"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:fontFamily="@font/manrope_bold"
-                    android:textColor="@color/label_tertiary"
                     android:textSize="38sp"
                     android:visibility="gone" />
             </LinearLayout>
