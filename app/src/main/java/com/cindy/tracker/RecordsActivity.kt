@@ -82,12 +82,13 @@ class RecordsActivity : AppCompatActivity() {
             category = Progress.defaultCategory(attempts)
         }
 
+        // How am I doing, first: the habit and the week in one card, then whether the score is
+        // moving. What is only reference (the bests, the ranking, the calendar) follows.
         hero(attempts, today, zone, firstDay)
-        if (attempts.isNotEmpty()) thisWeek(attempts, today, zone, firstDay)
         progressCard(attempts, today, zone, firstDay)
         if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
-        if (attempts.isNotEmpty()) calendar(Streak.daysTrained(attempts, zone), today)
         leaderboard(attempts)
+        if (attempts.isNotEmpty()) calendar(attempts, today, zone, firstDay)
     }
 
     private fun leaderboard(attempts: List<Attempt>) {
@@ -211,31 +212,13 @@ class RecordsActivity : AppCompatActivity() {
             show(Streak.weekStart(today, firstDay), days, today)
         })
 
-        Cheer.nextStep(attempts, today, zone, firstDay)?.let { step ->
-            card.addView(styledText(R.style.Cindy_Footnote, step).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(0, dp(12), 0, 0)
-            })
-        }
-
         card.addView(View(this).apply {
             setBackgroundColor(getColor(R.color.hairline))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, hairlinePx()
-            ).apply { topMargin = dp(14) }
+            ).apply { topMargin = dp(16) }
         })
-        card.addView(styledText(
-            R.style.Cindy_Footnote,
-            "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
-                "${attempts.size} session${if (attempts.size == 1) "" else "s"}"
-        ).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(0, dp(13), 0, 0)
-        })
+        thisWeek(card, attempts, today, zone, firstDay)
     }
 
     /**
@@ -293,21 +276,24 @@ class RecordsActivity : AppCompatActivity() {
             }
         }
 
-    /** Sessions, reps and time this week against last, then the month so far. */
+    /** Sessions, reps and time this week against last, as the last block of the hero card. */
     private fun thisWeek(
-        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+        card: LinearLayout, attempts: List<Attempt>, today: LocalDate, zone: ZoneId,
+        firstDay: DayOfWeek
     ) {
         val s = Progress.summary(attempts, today, zone, firstDay)
         val now = s.thisWeek
         val before = s.lastWeek
-        binding.rows.addView(section("THIS WEEK"))
-        binding.rows.addView(LinearLayout(this).apply {
+        card.addView(eyebrow("THIS WEEK").apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+        })
+        card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundResource(R.drawable.glass_card)
-            setPadding(dp(8), dp(16), dp(8), dp(16))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(6) }
+            ).apply { topMargin = dp(8) }
             addView(tile(
                 "Sessions", "${now.sessions}", now.sessions - before.sessions, ""
             ))
@@ -319,24 +305,13 @@ class RecordsActivity : AppCompatActivity() {
                 ((now.clockMs - before.clockMs) / 60_000L).toInt(), " min"
             ))
         })
-        val month = s.thisMonth
-        binding.rows.addView(styledText(
-            R.style.Cindy_Footnote,
-            "This month: ${month.sessions} session${if (month.sessions == 1) "" else "s"} · " +
-                "${Progress.formatReps(month.reps)} reps · ${Progress.formatClock(month.clockMs)}."
-        ).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(dp(4), dp(6), 0, dp(6))
-        })
     }
 
     /** One figure of the week: label, value and, when it moved, the change since last week. */
     private fun tile(label: String, value: String, delta: Int, suffix: String): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, dp(12), 0)
+            setPadding(0, 0, dp(12), 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             addView(styledText(R.style.Cindy_Footnote, label).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -394,8 +369,14 @@ class RecordsActivity : AppCompatActivity() {
         })
     }
 
-    /** The month grid, with arrows back through the athlete's history. */
-    private fun calendar(days: Set<LocalDate>, today: LocalDate) {
+    /**
+     * The month grid, with arrows back through the athlete's history, and under it the totals
+     * that are about the whole history rather than about this week.
+     */
+    private fun calendar(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        val days = Streak.daysTrained(attempts, zone)
         calendarHolder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -404,6 +385,23 @@ class RecordsActivity : AppCompatActivity() {
         }
         binding.rows.addView(calendarHolder)
         renderCalendar(days, today, Streak.currentRun(days, today))
+
+        val month = Progress.summary(attempts, today, zone, firstDay).thisMonth
+        // What the next streak milestone costs lives here, with the days it counts, rather than
+        // in the first card, where the headline above already says where the streak stands.
+        val lines = listOfNotNull(
+            Cheer.nextStep(attempts, today, zone, firstDay),
+            "This month: ${month.sessions} session${if (month.sessions == 1) "" else "s"} · " +
+                "${Progress.formatReps(month.reps)} reps · ${Progress.formatClock(month.clockMs)}",
+            "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
+                "${attempts.size} session${if (attempts.size == 1) "" else "s"} in all"
+        )
+        binding.rows.addView(styledText(R.style.Cindy_Footnote, lines.joinToString("\n")).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(4), dp(4), 0, dp(6))
+        })
     }
 
     /**
@@ -521,7 +519,6 @@ class RecordsActivity : AppCompatActivity() {
         attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
     ) {
         if (attempts.size < 2) return
-        binding.rows.addView(section("PROGRESS"))
         progressHolder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -607,7 +604,7 @@ class RecordsActivity : AppCompatActivity() {
         } else {
             val chart = ProgressChartView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(176)
                 ).apply { topMargin = dp(8) }
             }
             val describe = { i: Int ->

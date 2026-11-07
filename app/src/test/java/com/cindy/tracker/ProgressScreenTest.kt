@@ -19,6 +19,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * What Progress shows and where: the figures that answer "how am I doing" first, and a
@@ -31,6 +32,7 @@ import org.robolectric.annotation.Config
  * the captures of the phone are what the pull request still owes.
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
 class ProgressScreenTest {
 
@@ -93,5 +95,61 @@ class ProgressScreenTest {
         val shown = texts(open())
         assertTrue("the title is on the page", "Progress" in shown)
         assertFalse("a sentence under the title", shown.any { it.startsWith("Cindy —") })
+    }
+
+    private fun top(view: View, root: View): Int {
+        var y = 0
+        var v: View = view
+        while (v !== root) {
+            y += v.top
+            v = v.parent as View
+        }
+        return y
+    }
+
+    private fun first(activity: Activity, match: (View) -> Boolean): View? =
+        views(activity.findViewById(android.R.id.content)).firstOrNull(match)
+
+    private fun text(activity: Activity, label: String): View? =
+        first(activity) { it is TextView && it.text.toString() == label }
+
+    private fun chart(activity: Activity): View? =
+        first(activity) { it.contentDescription?.startsWith("Score chart") == true }
+
+    private fun scroll(activity: Activity): ScrollView =
+        first(activity) { it is ScrollView } as ScrollView
+
+    @Test
+    fun `the week's figures come before the chart`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val sessions = text(activity, "Sessions")
+        assertNotNull("no Sessions figure", sessions)
+        assertNotNull("no chart", chart(activity))
+        assertTrue(
+            "the week's figures sit above the chart",
+            top(sessions!!, content) < top(chart(activity)!!, content)
+        )
+    }
+
+    @Test
+    fun `the first screen holds the streaks, the week and the first half of the score chart`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val fold = scroll(activity).height
+        // The streak numbers, the week strip and the week's three figures, all in view.
+        listOf("DAILY STREAK", "WEEKLY STREAK", "Sessions", "Reps", "Time").forEach { label ->
+            val v = text(activity, label)
+            assertNotNull("no $label", v)
+            assertTrue("$label is below the fold", top(v!!, content) + v.height <= fold)
+        }
+        // The chart's own line has begun by the fold: its top half at the least.
+        val chart = chart(activity)!!
+        assertTrue(
+            "the chart starts below the fold",
+            top(chart, content) + chart.height / 2 <= fold
+        )
     }
 }
