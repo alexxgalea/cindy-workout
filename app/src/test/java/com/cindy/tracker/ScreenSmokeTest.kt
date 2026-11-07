@@ -1130,7 +1130,7 @@ class ScreenSmokeTest {
     // ── reopening a session from Progress ───────────────────────────────────
 
     @Test
-    fun `reopening a saved session shows its date and time, with DISCARD beside DONE`() {
+    fun `reopening a saved session shows its date and time, with DISCARD and no DONE`() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = RecordStore(context)
         store.clear()
@@ -1151,7 +1151,7 @@ class ScreenSmokeTest {
         assertTrue("headline was not a date: $headline", headline != "TIME" && headline != "STOPPED")
         assertEquals(
             "review mode has no PROGRESS, which is the page it came from",
-            listOf("DISCARD", "DONE"), actionLabels(activity)
+            listOf("DISCARD"), actionLabels(activity)
         )
         assertTrue(
             "the streak row describes today, not the reviewed day",
@@ -1227,7 +1227,7 @@ class ScreenSmokeTest {
 
         val activity = openResults(context, attempt)
 
-        assertEquals(listOf("PROGRESS", "DISCARD", "DONE"), actionLabels(activity))
+        assertEquals(listOf("PROGRESS", "DISCARD"), actionLabels(activity))
 
         activity.finish()
         RecordStore(context).clear()
@@ -1241,7 +1241,7 @@ class ScreenSmokeTest {
 
         val activity = openResults(context, neverSaved)
 
-        assertEquals(listOf("PROGRESS", "DONE"), actionLabels(activity))
+        assertEquals(listOf("PROGRESS"), actionLabels(activity))
 
         activity.finish()
     }
