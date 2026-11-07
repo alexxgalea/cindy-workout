@@ -51,8 +51,9 @@ class LicencesTest {
 
     @Test
     fun `the font's notice in the credit is the notice its licence text opens with`() {
-        val manrope = Licences.credits.single { it.licence == Licences.OFL }
+        val font = Licences.credits.single { it.licence == Licences.OFL }
         val firstLine = Licences.text(context, Licences.OFL).lines().first()
-        assertEquals(manrope.by, firstLine)
+        assertEquals(font.by, firstLine)
+        assertTrue("the credit is not for Inter", font.what.startsWith("Inter"))
     }
 }

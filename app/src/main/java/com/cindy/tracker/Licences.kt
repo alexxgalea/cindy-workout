@@ -36,8 +36,8 @@ object Licences {
         Credit("Kotlin and kotlinx.coroutines", "JetBrains", APACHE),
         // The font's own notice, as it is written in the font file's name table.
         Credit(
-            "Manrope, the typeface",
-            "Copyright 2019 The Manrope Project Authors (https://github.com/sharanda/manrope)",
+            "Inter, the typeface",
+            "Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)",
             OFL
         )
     )
