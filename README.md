@@ -463,8 +463,7 @@ with one line that is always true and never scolds. Below it, top to bottom:
   (810 reps), the score that prompted this app.
 
 Any session can be reopened on the page it ended on: tap a leaderboard row, a day's session in
-the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it shows DONE and
-DISCARD but no PROGRESS and no streak (that describes today, not the day being looked at), and a
+the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it closes from the top bar's back control and shows DISCARD but no PROGRESS and no streak (that describes today, not the day being looked at), and a
 **COMPARED WITH** card stands in for the usual against-your-best row: your best or last session at
 the same movements, whichever is chosen, and only ever an earlier one — a session cannot honestly
 be measured against something that had not happened yet. Tapping the card opens that one too.

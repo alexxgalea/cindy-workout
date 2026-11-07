@@ -95,3 +95,7 @@ _Avoid_: results, results screen, summary
 **Progress**:
 The page of every session over time: the trend, the calendar of trained days and the leaderboard.
 _Avoid_: records, history (a record is a personal best, not a page)
+
+**Top bar**:
+The strip at the top of a navigation page: a Back control at the leading edge and the page's title in the middle. It, and the system back gesture, are how a page is closed.
+_Avoid_: header, toolbar, DONE (the pill the top bar replaced)
