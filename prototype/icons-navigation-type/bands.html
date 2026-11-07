@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="bands.css">
 </head>
 <body>
+<script>window.__errors = []; addEventListener("error", (e) => { window.__errors.push(e.message + " at " + String(e.filename || "").split("/").pop() + ":" + e.lineno); });</script>
 <header class="bench">
   <h1>Bands mock for #140 <small>Thin bands, No bands and Today's bands. No bands without −/+ is rejected (− and + stay) and kept under its own view. Throwaway, never merged. No blur.</small></h1>
   <div class="mockbanner"><b>MOCK.</b> An HTML stand-in for the owner's missing phone test. It is not the ticket's in-app prototype (that is the branch <code>prototype/hud-bands</code>, e6593b1, on the live camera). What goes where is read from that branch; the picture is the real adb capture of 2026-11-06, whose lens was covered, so the person is a <b>placeholder silhouette</b>. Opens from disk: no server, no network.</div>
@@ -15,9 +16,12 @@
     <div class="group"><span class="lbl">View</span><div class="seg" id="seg-view"></div></div>
     <div class="group" id="grp-variant"><span class="lbl">Variant</span><div class="seg" id="seg-variant"></div></div>
     <div class="group" id="grp-readout"><span class="lbl">Readout (rejected variant)</span><div class="seg" id="seg-readout"></div></div>
+    <div class="group pz-only" id="grp-digits"><span class="lbl">Figures</span><div class="seg" id="seg-digits"></div></div>
+    <div class="group pz-only" id="grp-pzsize"><span class="lbl">Size</span><div class="seg" id="seg-pzsize"></div></div>
     <div class="group" id="grp-state"><span class="lbl">State</span><div class="seg" id="seg-state"></div></div>
   </div>
   <div class="row">
+    <label class="chk pz-only"><input type="checkbox" id="t-foot"> Controls footprint</label>
     <label class="chk"><input type="checkbox" id="t-frame"> Analysis frame outline</label>
     <label class="chk"><input type="checkbox" id="t-person"> Placeholder person</label>
     <label class="chk"><input type="checkbox" id="t-lift"> Lift the picture (the real capture is almost black)</label>
@@ -36,6 +40,9 @@
 </main>
 <script src="icons.js"></script>
 <script src="bands-geometry.js"></script>
+<script src="bands-polish.js"></script>
 <script src="bands.js"></script>
+<p id="pagecheck" class="pz-check"></p>
+<script>setTimeout(() => { document.getElementById("pagecheck").textContent = "Script errors: " + (window.__errors.length ? window.__errors.join("; ") : "none"); }, 1500);</script>
 </body>
 </html>
