@@ -155,7 +155,7 @@
   const persist = () => { try { history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(st))); } catch (e) { /* file:// */ } };
 
   const phone = (variant, state, scale, label) => {
-    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="transform:scale(${scale});transform-origin:0 0">${render(variant, state, st)}</div>`;
+    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="zoom:${scale}">${render(variant, state, st)}</div>`;
     return `<div class="shell" style="width:${f1(W * scale)}px;height:${f1(H * scale)}px" role="img" aria-label="${label}">${inner}</div>`;
   };
   const pct = (n) => n.toFixed(1) + " %";
@@ -202,7 +202,7 @@
       ["SKIP", "dimmed", "enabled", "enabled", "enabled", "dimmed"],
     ];
     return `<table class="tbl"><caption>Controls per state, as the branch has them</caption><thead><tr><th></th>${STATES.map((x) => `<th>${x[1]}</th>`).join("")}</tr></thead><tbody>` +
-      rows.map((r) => `<tr><th>${r[0]}</th>${r.slice(1).map((c) => `<td class="${c.startsWith("dimmed") ? "dim" : ""}">${c}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
+      rows.map((r) => `<tr><th>${r[0]}</th>${r.slice(1).map((c) => `<td class="${c.startsWith("dimmed") ? "dimmed" : ""}">${c}</td>`).join("")}</tr>`).join("") + `</tbody></table>`;
   }
 
   function sharesTable() {

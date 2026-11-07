@@ -14,7 +14,7 @@
 .tbl th, .tbl td { padding: 6px 8px; border-bottom: 1px solid var(--chrome-line); text-align: left; font-weight: 400; vertical-align: top; }
 .tbl thead th { color: var(--chrome-dim); font-size: 11px; }
 .tbl tbody th { color: var(--chrome-fg); font-weight: 600; }
-.tbl td.dim { color: var(--chrome-dim); }
+.tbl td.dimmed { color: var(--chrome-dim); }
 .numbers { max-width: 980px; margin: 30px auto 0; font-size: 13px; }
 .numbers p { margin: 8px 0; }
 .numbers code { background: #1b1c20; padding: 1px 5px; border-radius: 4px; }
@@ -28,7 +28,7 @@
 .bz-pic { inset: 0; background: #101810 url(assets/lens-covered-picture.jpg) center / cover no-repeat; }
 .bz-lift { inset: 0; background: rgba(150, 175, 140, .34); }
 .person { left: 0; top: 0; pointer-events: none; }
-.ph-label { left: 10px; right: 10px; top: 146px; font: 600 9px/1.3 ui-monospace, Menlo, monospace; letter-spacing: .04em; color: rgba(255, 255, 255, .6); text-align: left; pointer-events: none; text-transform: uppercase; }
+.ph-label { left: 52px; right: 52px; top: 150px; font: 600 9px/1.3 ui-monospace, Menlo, monospace; letter-spacing: .04em; color: rgba(255, 255, 255, .6); text-align: center; pointer-events: none; text-transform: uppercase; }
 .corners, .frame { left: 0; top: 0; pointer-events: none; }
 .bz-band.top { background: var(--band-top); }
 .bz-band.bot { background: var(--band-bottom); }
@@ -60,7 +60,7 @@
 .bz-cluster { position: absolute; display: flex; align-items: center; gap: 6px; }
 .bz-reps { display: flex; align-items: center; gap: 1px; }
 .bz-eyebrow .t-eyebrow { line-height: 1; }
-.bz-mark { border: 1.5px dashed #ff9f0a; border-radius: 12px; pointer-events: none; }
-.bz-mark i { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font: 600 8.5px/1 ui-monospace, Menlo, monospace; color: #ff9f0a; white-space: nowrap; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
+.bz-mark { border: 1.5px dashed #bf5af2; border-radius: 12px; pointer-events: none; }
+.bz-mark i { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; font: 600 8.5px/1 ui-monospace, Menlo, monospace; color: #bf5af2; white-space: nowrap; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
 .show-targets .bz-circ, .show-targets .bz-icon, .show-targets .bz-shutter { outline: 1px dashed #64d2ff; outline-offset: 0; }
 .phone.type-inter .t-metric-m, .phone.type-inter .t-metric-xl { font-weight: 800; }
