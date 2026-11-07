@@ -249,10 +249,7 @@ class TutorialActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(54)
             ).apply { topMargin = dp(6) }
             setOnClickListener {
-                chooseMovements(profile.movements) { chosen ->
-                    profile.movements = chosen
-                    Toast.makeText(this@TutorialActivity, chosen.label(), Toast.LENGTH_SHORT).show()
-                }
+                startActivity(Intent(this@TutorialActivity, MovementsActivity::class.java))
             }
         })
     }
