@@ -1495,7 +1495,7 @@ class ScreenSmokeTest {
         val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
         val root = activity.findViewById<android.view.View>(android.R.id.content)
 
-        val row = findByDescriptionContains(root, "You, 9")
+        val row = findByDescriptionContains(root, "Rank 2, ")
         assertTrue("no leaderboard row for the session", row != null)
         row!!.performClick()
 
