@@ -319,12 +319,10 @@
                 <!-- Drops back a weight and a shade so the eye lands on the number that moves. -->
                 <TextView
                     android:id="@+id/repsTarget"
-                    style="@style/Cindy.MetricXL"
+                    style="@style/Cindy.MetricXL.Quiet"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="@font/manrope_bold"
                     android:text="/5"
-                    android:textColor="@color/label_tertiary"
                     android:textSize="30sp" />
             </LinearLayout>
 

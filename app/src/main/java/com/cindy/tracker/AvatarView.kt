@@ -11,7 +11,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.res.ResourcesCompat
 
 /**
  * The athlete, as a circle: their photo when they have given one, the letters of their name when
@@ -44,7 +43,7 @@ class AvatarView @JvmOverloads constructor(
     private val lettering = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.label)
         textAlign = Paint.Align.CENTER
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_extrabold)
+        typeface = CindyType.extraBold(context)
     }
     private val figure = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.label_tertiary)

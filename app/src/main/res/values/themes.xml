@@ -6,7 +6,7 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="colorPrimary">@color/label</item>
         <item name="android:windowBackground">@color/bg</item>
-        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:fontFamily">@font/inter</item>
         <item name="android:textColor">@color/label</item>
     </style>
 
@@ -34,7 +34,7 @@
         <item name="android:windowAnimationStyle">@style/Animation.Cindy.Sheet</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:fontFamily">@font/manrope</item>
+        <item name="android:fontFamily">@font/inter</item>
         <item name="android:textColor">@color/label</item>
     </style>
 

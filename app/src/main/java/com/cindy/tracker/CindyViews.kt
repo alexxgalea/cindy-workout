@@ -283,7 +283,7 @@ fun Context.rankRow(
 
 /** Lifts one word to the heaviest weight without disturbing the rest of its style. */
 private fun TextView.useExtraBold() {
-    typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.manrope_extrabold)
+    typeface = CindyType.extraBold(context)
 }
 
 /** A small filled marker. Reserved for facts, never decoration. */
