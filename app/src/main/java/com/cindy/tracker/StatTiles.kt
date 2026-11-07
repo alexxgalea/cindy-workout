@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -18,94 +17,35 @@ import kotlin.math.roundToInt
  */
 data class StatTile(val label: String, val value: String, val footnote: String, val speech: String)
 
-/** The six figures under the score, built from the attempt's own totals. */
+/**
+ * The round figures under the lead: the average round, the fastest and the slowest.
+ *
+ * The score, the reps and the clock are [SessionLead]'s, so they are not said again here. A tile
+ * with nothing to say is left out rather than shown as a dash, so a session without a full round
+ * has no tiles at all.
+ */
 object SessionTiles {
 
-    /** No data is a dash, not a zero: nothing was timed, which is not the same as taking no time. */
-    const val NONE = "—"
-
     /**
-     * ROUNDS, REPS, TIME, then AVG ROUND, FASTEST, SLOWEST.
-     *
-     * [stats] is optional: without set times (an older record) the tiles still say everything the
-     * attempt's own totals can, and nothing more. The rounds tile's footnote then falls back to
-     * [Attempt.reps], the same loose count the headline already shows.
+     * AVG, FASTEST, SLOWEST, each only when the attempt can give it. An older record without
+     * round splits still has an average (the clock over the rounds, and it says so) but no
+     * extremes. [stats] is unused now that the loose reps moved to [SessionLead]; callers that
+     * hold it keep passing it.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun of(a: Attempt, stats: SessionStats?): List<StatTile> {
         val splits = a.roundSplitsMs
         val fastest = splits.minOrNull()
         val slowest = splits.maxOrNull()
-        return listOf(
-            rounds(a, stats),
-            reps(a),
-            time(a),
+        return listOfNotNull(
             average(a),
-            extreme("FASTEST", "Fastest round", fastest, splits.indexOf(fastest)),
-            extreme("SLOWEST", "Slowest round", slowest, splits.indexOf(slowest))
+            fastest?.let { extreme("FASTEST", "Fastest round", it, splits.indexOf(it)) },
+            slowest?.let { extreme("SLOWEST", "Slowest round", it, splits.indexOf(it)) }
         )
     }
 
-    private fun rounds(a: Attempt, stats: SessionStats?): StatTile {
-        val leftover = stats?.let { it.unfinished?.reps ?: 0 } ?: a.reps
-        // The reps into the next round come from the score, so a floor says "at least" here
-        // too, on the tile and in the sentence read out for it.
-        val atLeast = if (a.scoreIsLowerBound) "at least " else ""
-        val into = "$leftover ${reps(leftover)} into round ${a.rounds + 1}"
-        val footnote = when {
-            leftover > 0 -> "${atLeast}+$into"
-            a.rounds == 0 -> "none finished"
-            else -> "all finished"
-        }
-        val speech = if (leftover > 0) {
-            "Rounds: ${a.rounds}, plus ${atLeast}$into"
-        } else {
-            "Rounds: ${a.rounds}, $footnote"
-        }
-        return StatTile("ROUNDS", "${a.rounds}", footnote, speech)
-    }
-
-    private fun reps(a: Attempt): StatTile {
-        val pace = SessionStats.repsPerMinute(a)
-        val atLeast = a.scoreIsLowerBound
-        // A floor says so on the tile and in the sentence read out for it: the camera lost the
-        // athlete, so the true figure, and the pace made from it, can only be higher.
-        val rate = pace?.let { "${"%.1f".format(Locale.US, it)} reps/min" }
-        val parts = listOfNotNull(
-            when {
-                rate == null -> if (atLeast) "at least" else null
-                atLeast -> "at least $rate"
-                else -> rate
-            },
-            if (a.manualReps > 0) "${a.manualReps} tapped" else null
-        )
-        val footnote = parts.joinToString(" · ")
-        val speech = buildString {
-            append(if (atLeast) "Reps: at least ${a.totalReps}" else "Reps: ${a.totalReps}")
-            if (pace != null) {
-                append(", ${if (atLeast) "at least " else ""}${"%.1f".format(Locale.US, pace)} reps a minute")
-            }
-            if (a.manualReps > 0) append(", ${a.manualReps} of them tapped in")
-        }
-        return StatTile("REPS", "${a.totalReps}", footnote.ifEmpty { "banked" }, speech)
-    }
-
-    private fun time(a: Attempt): StatTile {
-        val footnote = if (a.pausedMs > 0L) {
-            "plus ${formatDuration(a.pausedMs)} paused"
-        } else {
-            "on the clock"
-        }
-        return StatTile(
-            "TIME", formatDuration(a.durationMs), footnote,
-            "Time: ${formatDuration(a.durationMs)} on the clock" +
-                if (a.pausedMs > 0L) ", plus ${formatDuration(a.pausedMs)} paused" else ""
-        )
-    }
-
-    private fun average(a: Attempt): StatTile {
-        val avg = a.avgRoundMs ?: return StatTile(
-            "AVG", NONE, "no full round", "Average round: no full round yet"
-        )
+    private fun average(a: Attempt): StatTile? {
+        val avg = a.avgRoundMs ?: return null
         // Without round splits the figure is the clock over the rounds, which charges the
         // unfinished round to the average, and says so rather than passing as a mean of rounds.
         val footnote = if (a.roundSplitsMs.isNotEmpty()) {
@@ -119,18 +59,16 @@ object SessionTiles {
         )
     }
 
-    private fun extreme(label: String, spoken: String, ms: Long?, index: Int): StatTile {
-        if (ms == null) return StatTile(label, NONE, "no full round", "$spoken: no full round yet")
+    private fun extreme(label: String, spoken: String, ms: Long, index: Int): StatTile {
         val footnote = "round ${index + 1}"
         return StatTile(label, formatDuration(ms), footnote, "$spoken: ${formatDuration(ms)}, $footnote")
     }
 
-    private fun reps(n: Int) = if (n == 1) "rep" else "reps"
     private fun rounds(n: Int) = if (n == 1) "round" else "rounds"
 }
 
 /**
- * The six [StatTile]s as a three-by-two grid of glass cards.
+ * The [StatTile]s as a row of glass cards.
  *
  * Built in code like the rest of this page; every tile is one TalkBack node, with its children
  * hidden, the way [RecordsActivity]'s week tiles are.
