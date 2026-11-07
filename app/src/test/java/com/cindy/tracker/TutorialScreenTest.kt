@@ -314,21 +314,14 @@ class TutorialScreenTest {
     }
 
     @Test
-    fun `CHOOSE MY MOVEMENTS opens the movement sheet, and saving reports the choice`() {
+    fun `CHOOSE MY MOVEMENTS opens the Movements page`() {
         val activity = open()
         press(activity, "NEXT")
 
         press(activity, "CHOOSE MY MOVEMENTS")
-        val dialog = ShadowDialog.getLatestDialog()
-        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
-        val sheet = dialog.window!!.decorView
-        assertNotNull(findByText(sheet, "Make Cindy yours"))
 
-        findByText(sheet, "SAVE")!!.performClick()
-
-        // Nothing was changed in the sheet, so what is saved and said is the standard Cindy.
-        assertEquals("Cindy", ShadowToast.getTextOfLatestToast())
-        assertEquals(CindyProfile.STANDARD, Profile(context).movements)
+        val started = shadowOf(activity).nextStartedActivity
+        assertEquals(MovementsActivity::class.java.name, started?.component?.className)
         activity.finish()
     }
 

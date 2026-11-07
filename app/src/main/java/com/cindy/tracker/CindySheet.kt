@@ -29,7 +29,7 @@ import androidx.core.view.WindowInsetsControllerCompat
  * It also sits *over the live preview* rather than over a grey scrim, which the placement guide
  * in particular wants: you can see your own room while you read where to stand in it.
  *
- * Callers: the placement guide, the movement picker, the body-weight prompt and the two audio
+ * Callers: the placement guide, the body-weight prompt and the two audio
  * sheets behind the menu's voice and music rows.
  */
 class CindySheet(
@@ -237,59 +237,8 @@ class CindySheet(
 
     /** A switch row, in place of a Material checkbox. */
     fun toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit): CindySheet {
-        val ctx: Context = activity
-        var on = checked
-
-        val thumb = View(ctx).apply { setBackgroundResource(R.drawable.toggle_thumb) }
-        val track = FrameLayout(ctx).apply {
-            setBackgroundResource(
-                if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
-            )
-            addView(thumb, FrameLayout.LayoutParams(ctx.dp(23), ctx.dp(23)).apply {
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                marginStart = ctx.dp(2)
-            })
-        }
-        thumb.translationX = if (on) ctx.dpf(20f) else 0f
-
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundResource(R.drawable.glass_card_small)
-            minimumHeight = ctx.dp(52)
-            setPadding(ctx.dp(16), ctx.dp(8), ctx.dp(12), ctx.dp(8))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = ctx.dp(20) }
-
-            addView(ctx.styledText(R.style.Cindy_Callout, label).apply {
-                setTextColor(ctx.getColor(R.color.label))
-                layoutParams = LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-                )
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-            })
-            addView(track, LinearLayout.LayoutParams(ctx.dp(47), ctx.dp(28)))
-
-            setOnClickListener {
-                on = !on
-                track.setBackgroundResource(
-                    if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
-                )
-                thumb.animate().translationX(if (on) ctx.dpf(20f) else 0f)
-                    .setDuration(160).start()
-                stateDescription(this, label, on)
-                onChange(on)
-            }
-        }
-        stateDescription(row, label, on)
-        row.describeAsButton()
-        body.addView(row)
+        body.addView(activity.switchRow(label, checked, onChange))
         return this
-    }
-
-    private fun stateDescription(row: View, label: String, on: Boolean) {
-        row.contentDescription = "$label, ${if (on) "on" else "off"}"
     }
 
     /**

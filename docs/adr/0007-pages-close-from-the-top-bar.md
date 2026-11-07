@@ -15,5 +15,6 @@ On 2026-11-07 the owner decided, after the prototype of icons, navigation and ty
 - A bottom action bar remains only where there is a real action: a sheet's SAVE and CANCEL, the session page's DISCARD, the stop question's END and KEEP GOING. Help keeps CROSSFIT.COM, which leaves the app, and the session page straight after a workout keeps PROGRESS.
 - Sheets are not pages. A sheet with one choice still closes on its own button, as it did.
 - The Back control is 48 dp and is named "Back" for TalkBack; the title is a heading.
+- Movements was a sheet closed by SAVE and CANCEL and is now a pushed page with a top bar. A tap on a variation is saved at once, so it has no bottom bar of its own: SAVE and CANCEL were the only reason it was a sheet.
 - The first-run tutorial keeps its own last step (`LET'S GO`, or `DONE` on a replay), which ends a tour, not a page.
 - The iPhone app keeps DONE until its port of this change (tracked with the iPhone port of the polished interface), and ADR 0003 says so.

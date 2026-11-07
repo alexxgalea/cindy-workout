@@ -112,6 +112,16 @@ class MenuActivity : AppCompatActivity() {
     }
 
     /**
+     * Coming back from a page that changes what a row says: Movements saves on every tap, so its
+     * row has to read what was chosen rather than what the menu was opened with. [render] only,
+     * and not [settleRowsIn], for the reason given there.
+     */
+    override fun onRestart() {
+        super.onRestart()
+        render()
+    }
+
+    /**
      * Brings the rows in one after another, once, on the way in.
      *
      * The screen used to appear finished — the system's default cross-fade, and a list already
@@ -173,7 +183,19 @@ class MenuActivity : AppCompatActivity() {
         val stravaTokens = StravaTokenStore(this)
         val stravaGrant = stravaTokens.grant
 
-        // The athlete comes first: who the scores belong to, and what they have earned so far.
+        // The way back to the session just finished, two taps from the camera. Absent with no
+        // sessions, because a row that opens nothing is a dead end.
+        LastSessionRow.of(all)?.let { last ->
+            binding.rows.addView(insetGroup {
+                row(navRow(last.title, last.value) {
+                    startActivity(ResultsActivity.review(this@MenuActivity, last.atMillis))
+                }.apply { describeAsButton(last.spokenName) })
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(12) })
+        }
+
+        // The athlete comes next: who the scores belong to, and what they have earned so far.
         val name = profile.displayName
         val photo = AvatarStore.load(this)
         val earned = Badges.earned(
@@ -199,13 +221,9 @@ class MenuActivity : AppCompatActivity() {
                 if (workoutLive) {
                     toast("Reset the workout first to change movements")
                 } else {
-                    chooseMovements(movements, profile) { chosen ->
-                        profile.movements = chosen
-                        // The subtitle rather than the label, so that turning the squat setting
-                        // on or off is confirmed too: the label alone would repeat what it was.
-                        toast(movementsSubtitle(chosen))
-                        render()
-                    }
+                    // The page saves each tap itself; the row says what was chosen when this
+                    // screen comes back (see onRestart).
+                    startActivity(Intent(this@MenuActivity, MovementsActivity::class.java))
                 }
             })
             row(navRow(
