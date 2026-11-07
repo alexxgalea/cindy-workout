@@ -451,3 +451,64 @@ fun Context.avatarRow(
     setOnClickListener { onTap() }
     describeAsButton("$title, $value")
 }
+
+/**
+ * A switch row, in place of a Material checkbox: the label, a track and a thumb, on a glass card.
+ *
+ * Tapping it flips the switch, re-names it for TalkBack ("Remind me, on") and calls [onChange]
+ * with the new state. Used on the sheets ([CindySheet.toggle]) and on pages ([MovementsActivity]).
+ */
+fun Context.switchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit): View {
+    val ctx = this
+    var on = checked
+
+    val thumb = View(ctx).apply { setBackgroundResource(R.drawable.toggle_thumb) }
+    val track = android.widget.FrameLayout(ctx).apply {
+        setBackgroundResource(
+            if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
+        )
+        addView(thumb, android.widget.FrameLayout.LayoutParams(ctx.dp(23), ctx.dp(23)).apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            marginStart = ctx.dp(2)
+        })
+    }
+    thumb.translationX = if (on) ctx.dpf(20f) else 0f
+
+    fun describe(row: View) {
+        row.contentDescription = "$label, ${if (on) "on" else "off"}"
+    }
+
+    val row = LinearLayout(ctx).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setBackgroundResource(R.drawable.glass_card_small)
+        minimumHeight = ctx.dp(52)
+        setPadding(ctx.dp(16), ctx.dp(8), ctx.dp(12), ctx.dp(8))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = ctx.dp(20) }
+
+        addView(ctx.styledText(R.style.Cindy_Callout, label).apply {
+            setTextColor(ctx.getColor(R.color.label))
+            layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            )
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        })
+        addView(track, LinearLayout.LayoutParams(ctx.dp(47), ctx.dp(28)))
+
+        setOnClickListener {
+            on = !on
+            track.setBackgroundResource(
+                if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
+            )
+            thumb.animate().translationX(if (on) ctx.dpf(20f) else 0f)
+                .setDuration(160).start()
+            describe(this)
+            onChange(on)
+        }
+    }
+    describe(row)
+    row.describeAsButton()
+    return row
+}
