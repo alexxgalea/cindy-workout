@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cindy prototype: icons, closing a page, type</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bench">
+  <h1>Cindy prototype #141 <small>icons, closing a page, type. Throwaway, never merged. No SF Symbols, no SF Pro, no blur.</small></h1>
+  <div class="row">
+    <div class="group"><span class="lbl">Page</span><div class="seg"><button data-tab="screens" aria-pressed="true">Screens</button><button data-tab="inventory" aria-pressed="false">Icon inventory</button></div></div>
+    <div class="group"><span class="lbl">Screen</span><div class="seg" data-set="screen"></div></div>
+    <div class="group"><span class="lbl">View</span><div class="seg" data-set="view"></div></div>
+  </div>
+  <div class="row">
+    <div class="group"><span class="lbl">Icons</span><div class="seg" data-set="icons"></div></div>
+    <div class="group"><span class="lbl">Closing</span><div class="seg" data-set="nav"></div></div>
+    <div class="group"><span class="lbl">Bar control</span><div class="seg" data-set="ctl"></div></div>
+    <div class="group"><span class="lbl">Bar title</span><div class="seg" data-set="ttl"></div></div>
+    <div class="group"><span class="lbl">Type</span><div class="seg" data-set="type"></div></div>
+    <div class="group"><span class="lbl">Sentence under title</span><div class="seg" data-set="sub"></div></div>
+  </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="real"> Real capture alongside</label>
+    <label class="chk"><input type="checkbox" id="targets"> Show touch targets and the back-gesture edge</label>
+    <button id="reset" style="background:none;border:1px solid #34363b;color:inherit;border-radius:8px;padding:5px 10px;cursor:pointer">Reset</button>
+    <span class="hint">In a phone: tap MENU, rows, DONE, the bar's control; drag from the left edge for the back gesture; Esc or the left arrow also goes back.</span>
+  </div>
+</header>
+<main>
+  <section id="tab-screens"><div class="stage" id="stage"></div></section>
+  <section id="tab-inventory" hidden></section>
+</main>
+<script src="icons.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
