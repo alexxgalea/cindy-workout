@@ -17,7 +17,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowDialog
-import org.robolectric.shadows.ShadowToast
 
 /**
  * The screens behind heels-flat squats: the setting that lets a session switch itself, and the
@@ -25,7 +24,7 @@ import org.robolectric.shadows.ShadowToast
  *
  * The counting is tested without a view in [HeelsFlatSquatTest] and [SmartSquatTest]. What is
  * tested here is the part an athlete meets: a setting that is off until they turn it on, that is
- * kept only when they say SAVE, that the menu reports honestly, and a results screen that says
+ * kept the moment they do, that the menu reports honestly, and a results screen that says
  * why a standard Cindy came back as an Adaptive one and offers to make it permanent.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -65,15 +64,15 @@ class HeelsFlatScreensTest {
     private fun content(activity: android.app.Activity): View =
         activity.findViewById(android.R.id.content)
 
-    /** The menu, with the Movements sheet open in front of it. */
-    private fun openMovementsSheet(): Pair<android.app.Activity, android.app.Dialog> {
-        val activity = openMenu()
-        val row = findByDescriptionPrefix(content(activity), "Movements")
+    /** The Movements page, opened from the menu's row. */
+    private fun openMovementsPage(): android.app.Activity {
+        val menu = openMenu()
+        val row = findByDescriptionPrefix(content(menu), "Movements")
         assertNotNull("no Movements row", row)
         row!!.performClick()
-        val dialog = ShadowDialog.getLatestDialog()
-        assertTrue("no sheet opened", dialog != null && dialog.isShowing)
-        return activity to dialog
+        val started = org.robolectric.Shadows.shadowOf(menu).nextStartedActivity
+        assertEquals(MovementsActivity::class.java.name, started?.component?.className)
+        return Robolectric.buildActivity(MovementsActivity::class.java).setup().get()
     }
 
     private fun movementsRow(activity: android.app.Activity): String =
@@ -95,70 +94,30 @@ class HeelsFlatScreensTest {
     }
 
     @Test
-    fun `the Movements sheet offers the setting, off`() {
+    fun `the Movements page offers the setting, off`() {
         reset()
-        val (_, dialog) = openMovementsSheet()
-        val toggle = findByDescriptionPrefix(dialog.window!!.decorView, "Spot heels-flat squats")
-        assertNotNull("the sheet has no setting", toggle)
+        val page = openMovementsPage()
+        val toggle = findByDescriptionPrefix(content(page), "Spot heels-flat squats")
+        assertNotNull("the page has no setting", toggle)
         assertEquals("Spot heels-flat squats, off", toggle!!.contentDescription.toString())
     }
 
     @Test
-    fun `switching it on and saving keeps it, and the Movements row says so`() {
+    fun `switching it on keeps it at once, and the Movements row says so`() {
         reset()
-        val (activity, dialog) = openMovementsSheet()
-        val root = dialog.window!!.decorView
+        val page = openMovementsPage()
 
-        findByDescriptionPrefix(root, "Spot heels-flat squats")!!.performClick()
+        findByDescriptionPrefix(content(page), "Spot heels-flat squats")!!.performClick()
         assertEquals(
-            "the switch moves at once",
+            "the switch moves",
             "Spot heels-flat squats, on",
-            findByDescriptionPrefix(root, "Spot heels-flat squats")!!.contentDescription.toString()
+            findByDescriptionPrefix(content(page), "Spot heels-flat squats")!!.contentDescription.toString()
         )
-        assertFalse("but nothing is kept until SAVE", Profile(context).smartSquats)
+        assertTrue("and nothing waits for a SAVE", Profile(context).smartSquats)
+        assertNull("there is none to press", findByText(content(page), "SAVE"))
 
-        findByText(root, "SAVE")!!.performClick()
-
-        assertTrue(Profile(context).smartSquats)
-        assertEquals("Movements, Cindy · spots heels flat", movementsRow(activity))
+        assertEquals("Movements, Cindy · spots heels flat", movementsRow(openMenu()))
         reset()
-    }
-
-    @Test
-    fun `saving says what was saved, even when only the setting changed`() {
-        reset()
-        val (_, dialog) = openMovementsSheet()
-        val root = dialog.window!!.decorView
-
-        findByDescriptionPrefix(root, "Spot heels-flat squats")!!.performClick()
-        findByText(root, "SAVE")!!.performClick()
-
-        // The movements did not change, so their name alone would be a toast about nothing.
-        assertEquals("Cindy · spots heels flat", ShadowToast.getTextOfLatestToast())
-        reset()
-    }
-
-    @Test
-    fun `cancelling leaves the setting alone`() {
-        reset()
-        val (_, dialog) = openMovementsSheet()
-        val root = dialog.window!!.decorView
-
-        findByDescriptionPrefix(root, "Spot heels-flat squats")!!.performClick()
-        findByText(root, "CANCEL")!!.performClick()
-
-        assertFalse(Profile(context).smartSquats)
-    }
-
-    @Test
-    fun `dismissing the sheet without saving leaves the setting alone`() {
-        reset()
-        val (_, dialog) = openMovementsSheet()
-
-        findByDescriptionPrefix(dialog.window!!.decorView, "Spot heels-flat squats")!!.performClick()
-        dialog.dismiss()
-
-        assertFalse(Profile(context).smartSquats)
     }
 
     @Test

@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
  * How a navigation page is closed: from a back control at the top, and from the system back
  * gesture, with no DONE pill at the bottom (ADR 0007).
  *
- * The pages are the menu, Progress, You, Help and the session page, which is where Progress
+ * The pages are the menu, Progress, You, Movements, Help and the session page, which is where Progress
  * pushes to. Each one is opened as an athlete would reach it and then closed both ways, because a
  * top control that only looks like a back button, or a gesture a page swallows, are the two ways
  * this goes wrong. What is asserted is what the athlete or TalkBack would perceive: a control
@@ -65,6 +65,9 @@ class TopBarScreenTest {
         },
         Page("You", "You") {
             Robolectric.buildActivity(AccountActivity::class.java).setup().get()
+        },
+        Page("Movements", "Movements") {
+            Robolectric.buildActivity(MovementsActivity::class.java).setup().get()
         },
         Page("Help", "Cindy") {
             Robolectric.buildActivity(HelpActivity::class.java).setup().get()
@@ -188,7 +191,7 @@ class TopBarScreenTest {
 
     @Test
     fun `a page with nothing to act on has no bottom bar`() {
-        for (page in pages.take(3)) {
+        for (page in pages.take(4)) {
             val activity = page.open(context)
             val actions = activity.findViewById<ViewGroup>(R.id.actions)
             assertEquals("${page.name} keeps an empty action bar", 0, actions?.childCount ?: 0)
