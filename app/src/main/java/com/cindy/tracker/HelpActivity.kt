@@ -51,9 +51,6 @@ class HelpActivity : AppCompatActivity() {
             setOnClickListener { openSource() }
             describeAsButton("Open the CrossFit page for Cindy")
         })
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
 
         render()
     }

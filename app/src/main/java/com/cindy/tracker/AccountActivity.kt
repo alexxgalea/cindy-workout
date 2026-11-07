@@ -59,9 +59,6 @@ class AccountActivity : AppCompatActivity() {
         profile = Profile(this)
         store = RecordStore(this)
 
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render()
     }
 

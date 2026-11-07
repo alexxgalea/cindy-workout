@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The shape every secondary screen shares: a large title, a line saying what the screen is, the
-  content, and the actions in the thumb's reach at the bottom. Rows are built in code from
+  The shape every secondary screen shares: a top bar (back and the title), a line saying what the screen
+  is, the content, and any real action in the thumb's reach at the bottom. Rows are built in code from
   CindyViews so that Menu, Records, Results and Help cannot drift apart again.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -12,20 +13,19 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical"
     android:paddingHorizontal="@dimen/screen_margin"
-    android:paddingTop="@dimen/space_6"
     android:paddingBottom="@dimen/space_6">
 
-    <TextView
-        style="@style/Cindy.Title"
-        android:layout_width="wrap_content"
+    <com.cindy.tracker.TopBar
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Cindy" />
+        app:title="Cindy" />
 
     <TextView
         style="@style/Cindy.Body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="8dp"
         android:text="The benchmark workout, and how this app scores it" />
 
     <ScrollView

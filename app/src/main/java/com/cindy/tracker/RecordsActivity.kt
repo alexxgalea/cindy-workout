@@ -50,9 +50,6 @@ class RecordsActivity : AppCompatActivity() {
 
         // Sessions are deleted one at a time, from their own page: there is deliberately no
         // button here that takes the whole board at once.
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render()
     }
 

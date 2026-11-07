@@ -103,9 +103,6 @@ class MenuActivity : AppCompatActivity() {
         records = RecordStore(this)
         workoutLive = intent.getBooleanExtra(EXTRA_WORKOUT_LIVE, false)
 
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render()
         settleRowsIn()
         // Only on a fresh start: a recreated screen must not put the sheet back after it was closed.
@@ -150,9 +147,9 @@ class MenuActivity : AppCompatActivity() {
     /**
      * Down the way it came, rather than whatever the system would have chosen.
      *
-     * Overridden here rather than at the two call sites that leave this screen — DONE and the
-     * back gesture — because they are both this screen ending, and one of them is not a call
-     * site at all.
+     * Overridden here rather than at the two call sites that leave this screen — the top bar's
+     * back control and the back gesture — because they are both this screen ending, and one of
+     * them is not a call site at all.
      */
     override fun finish() {
         super.finish()
