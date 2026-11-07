@@ -19,7 +19,6 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.customview.widget.ExploreByTouchHelper
@@ -130,7 +129,7 @@ class RoundSplitsView @JvmOverloads constructor(
             TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics
         )
         textAlign = Paint.Align.CENTER
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_semibold)
+        typeface = CindyType.semiBold(context)
         // Round numbers and a rep count change as the athlete scrubs: proportional figures would
         // shuffle them sideways.
         fontFeatureSettings = "tnum"
@@ -142,7 +141,7 @@ class RoundSplitsView @JvmOverloads constructor(
         )
         textAlign = Paint.Align.RIGHT
         letterSpacing = 0.05f
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_bold)
+        typeface = CindyType.bold(context)
         fontFeatureSettings = "tnum"
     }
 

@@ -237,6 +237,123 @@ class ScreenSmokeTest {
         }
     }
 
+    /** Three sessions where the most recent is neither the best nor the first filed. */
+    private fun fileThreeSessions(store: RecordStore): Attempt {
+        store.clear()
+        val day = 24L * 60 * 60 * 1000
+        val now = System.currentTimeMillis()
+        store.add(Attempt(rounds = 20, reps = 0, atMillis = now - 5 * day, durationMs = 1_200_000L))
+        store.add(Attempt(rounds = 4, reps = 2, atMillis = now, durationMs = 1_200_000L))
+        store.add(Attempt(rounds = 9, reps = 0, atMillis = now - 9 * day, durationMs = 1_200_000L))
+        return store.all().first { it.rounds == 4 }
+    }
+
+    /** With sessions, the menu's first row is the last session, spoken with its date and score. */
+    @Test
+    fun `the menu opens with a last-session row when there are sessions`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        val latest = fileThreeSessions(store)
+        try {
+            val activity = Robolectric.buildActivity(
+                MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+            ).setup().get()
+            val rows = activity.findViewById<android.view.ViewGroup>(R.id.rows)
+            val first = firstRowOf(rows)
+            val spoken = LastSessionRow.of(listOf(latest))!!.spokenName
+            assertEquals("the first row is not the last session", spoken, first.contentDescription.toString())
+            assertTrue("the spoken name has no score: $spoken", spoken.contains("4 rounds and 2 reps"))
+        } finally {
+            store.clear()
+        }
+    }
+
+    /** The row opens the session page of the most recent session, not the best one. */
+    @Test
+    fun `the last-session row opens the most recent session`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        val latest = fileThreeSessions(store)
+        try {
+            val activity = Robolectric.buildActivity(
+                MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+            ).setup().get()
+            firstRowOf(activity.findViewById(R.id.rows)).performClick()
+            val started = Shadows.shadowOf(activity).nextStartedActivity
+            assertEquals(ResultsActivity::class.java.name, started.component!!.className)
+            assertEquals(latest.atMillis, started.getLongExtra("review_at", -1L))
+        } finally {
+            store.clear()
+        }
+    }
+
+    /** With no sessions the row is absent: the athlete's profile is the first thing on the menu. */
+    @Test
+    fun `the menu has no last-session row without sessions`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        RecordStore(context).clear()
+        val activity = Robolectric.buildActivity(
+            MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+        ).setup().get()
+        val root = activity.findViewById<android.view.View>(android.R.id.content)
+        assertNull("a last-session row with no sessions", findByDescriptionPrefix(root, "Last session"))
+    }
+
+    /**
+     * A session discarded from its own page leaves the menu stopped underneath with a row that
+     * names it: on return the row must name the one before. The menu already redraws on return
+     * from a stop, and this keeps the row inside that.
+     */
+    @Test
+    fun `the last-session row follows a session discarded from its page`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        val latest = fileThreeSessions(store)
+        try {
+            val controller = Robolectric.buildActivity(
+                MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+            ).setup()
+            val root = controller.get().findViewById<android.view.View>(android.R.id.content)
+            assertTrue("no row for the latest", findByDescriptionContains(root, "4 rounds and 2 reps") != null)
+
+            store.remove(latest.atMillis)
+            controller.pause().stop().start().resume()
+            assertNull("the row still names the discarded session", findByDescriptionContains(root, "4 rounds and 2 reps"))
+            assertTrue("no row for the one before", findByDescriptionContains(root, "Last session, ") != null)
+
+        } finally {
+            store.clear()
+        }
+    }
+
+    /** Discarding the only session leaves the menu without the row once it is back on screen. */
+    @Test
+    fun `the last-session row goes when the only session is discarded`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = RecordStore(context)
+        store.clear()
+        store.add(Attempt(rounds = 3, reps = 0, atMillis = System.currentTimeMillis(), durationMs = 1_200_000L))
+        try {
+            val controller = Robolectric.buildActivity(
+                MenuActivity::class.java, MenuActivity.intent(context, workoutLive = false)
+            ).setup()
+            val root = controller.get().findViewById<android.view.View>(android.R.id.content)
+            assertTrue("no row for the session", findByDescriptionPrefix(root, "Last session") != null)
+
+            store.clear()
+            controller.pause().stop().start().resume()
+            assertNull("a row with no sessions", findByDescriptionPrefix(root, "Last session"))
+        } finally {
+            store.clear()
+        }
+    }
+
+    /** The first row of the menu's list. */
+    private fun firstRowOf(rows: android.view.ViewGroup): android.view.View {
+        val group = rows.getChildAt(0) as android.view.ViewGroup
+        return group.getChildAt(0)
+    }
+
     /** The first view under [root] whose contentDescription starts with [prefix]. */
     private fun findByDescriptionPrefix(
         root: android.view.View, prefix: String
