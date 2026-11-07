@@ -1,0 +1,263 @@
+package com.cindy.tracker
+
+import android.app.Activity
+import android.content.Context
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.test.core.app.ApplicationProvider
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * What Progress shows and where: the figures that answer "how am I doing" first, and a
+ * leaderboard that reads as a ranking (ticket #153 of spec #139).
+ *
+ * Built at the P40's 1080x2340 (360 x 780 dp at 480 dpi) for an empty, a short and a long
+ * history. What is asserted is what the athlete or TalkBack would perceive: which texts are on
+ * the page, in what order, and what the first screenful holds. Robolectric lays text out with
+ * its own metrics, so "above the fold" here is a measurement of the layout, not of the phone;
+ * the captures of the phone are what the pull request still owes.
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
+class ProgressScreenTest {
+
+    @get:Rule
+    val noStrava = NoStravaCredentials()
+
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+
+    @Before
+    @After
+    fun reset() {
+        RecordStore(context).clear()
+    }
+
+    private val day = 24L * 60 * 60 * 1000
+
+    /** [count] sessions, one a day, the newest today, each a little better than the one before. */
+    private fun history(count: Int) {
+        val store = RecordStore(context)
+        val now = System.currentTimeMillis()
+        repeat(count) { i ->
+            val rounds = 12 + i % 9
+            store.add(
+                Attempt(
+                    rounds = rounds,
+                    reps = i % 5,
+                    atMillis = now - (count - 1 - i) * day,
+                    durationMs = 20 * 60 * 1000L,
+                    roundSplitsMs = List(rounds) { 60_000L + it * 500L },
+                    profile = CindyProfile.STANDARD
+                )
+            )
+        }
+    }
+
+    /** The page, laid out on the P40: 1080 x 2340 less about 100 px of status bar. */
+    private fun open(): Activity {
+        val activity = Robolectric.buildActivity(RecordsActivity::class.java).setup().get()
+        val root = activity.findViewById<View>(android.R.id.content)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2340 - 100, View.MeasureSpec.EXACTLY)
+        )
+        root.layout(0, 0, 1080, 2340 - 100)
+        return activity
+    }
+
+    private fun views(root: View): Sequence<View> = sequence {
+        yield(root)
+        if (root is ViewGroup) for (i in 0 until root.childCount) yieldAll(views(root.getChildAt(i)))
+    }
+
+    private fun texts(activity: Activity): List<String> =
+        views(activity.findViewById(android.R.id.content))
+            .filterIsInstance<TextView>().map { it.text.toString() }.toList()
+
+    /** The three histories the page is built for, each laid out whole at the P40's size. */
+    @Test
+    fun `it builds for an empty, a short and a long history`() {
+        listOf(0, 1, 60).forEach { count ->
+            RecordStore(context).clear()
+            history(count)
+            val activity = open()
+            val content = scroll(activity).getChildAt(0)
+            assertTrue("$count sessions: nothing was laid out", content.height > 0)
+            // Every icon on the page resolved to something with a size.
+            views(content).filterIsInstance<android.widget.ImageView>().forEach {
+                it.drawable?.let { d ->
+                    assertTrue("$count sessions: an icon has no size", d.intrinsicWidth > 0)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the title stands on its own, with no sentence under it`() {
+        history(3)
+        val shown = texts(open())
+        assertTrue("the title is on the page", "Progress" in shown)
+        assertFalse("a sentence under the title", shown.any { it.startsWith("Cindy —") })
+    }
+
+    private fun top(view: View, root: View): Int {
+        var y = 0
+        var v: View = view
+        while (v !== root) {
+            y += v.top
+            v = v.parent as View
+        }
+        return y
+    }
+
+    private fun first(activity: Activity, match: (View) -> Boolean): View? =
+        views(activity.findViewById(android.R.id.content)).firstOrNull(match)
+
+    private fun text(activity: Activity, label: String): View? =
+        first(activity) { it is TextView && it.text.toString() == label }
+
+    private fun chart(activity: Activity): View? =
+        first(activity) { it.contentDescription?.startsWith("Score chart") == true }
+
+    private fun scroll(activity: Activity): ScrollView =
+        first(activity) { it is ScrollView } as ScrollView
+
+    /** The leaderboard's rows, in order: each one speaks as "Rank n, ...". */
+    private fun rankRows(activity: Activity): List<View> =
+        views(activity.findViewById(android.R.id.content))
+            .filter { it.contentDescription?.startsWith("Rank ") == true }.toList()
+
+    private fun byDescription(activity: Activity, description: String): View? =
+        first(activity) { it.contentDescription?.toString() == description }
+
+    @Test
+    fun `no row of the leaderboard is named You`() {
+        history(12)
+        assertFalse("a row called You", "You" in texts(open()))
+    }
+
+    @Test
+    fun `a long history shows the top five sessions under the benchmark and offers the rest`() {
+        history(12)
+        val activity = open()
+        // The benchmark and five sessions.
+        assertEquals(6, rankRows(activity).size)
+        val more = byDescription(activity, "Show all 12 sessions")
+        assertNotNull("no way to see the rest", more)
+        more!!.performClick()
+        assertEquals(13, rankRows(activity).size)
+        val fewer = byDescription(activity, "Show the top 5")
+        assertNotNull("no way back to the top five", fewer)
+        fewer!!.performClick()
+        assertEquals(6, rankRows(activity).size)
+    }
+
+    @Test
+    fun `a short history shows every session and offers nothing more`() {
+        history(3)
+        val activity = open()
+        assertEquals(4, rankRows(activity).size)
+        assertTrue(views(activity.findViewById(android.R.id.content)).none {
+            it.contentDescription?.startsWith("Show all") == true
+        })
+    }
+
+    @Test
+    fun `each session's row says its rank, its day and its score`() {
+        history(3)
+        val rows = rankRows(open()).map { it.contentDescription.toString() }
+        // The benchmark leads: none of the three sessions beats twenty-seven rounds.
+        assertTrue(rows[0], rows[0].startsWith("Rank 1, Tom Holland, 27"))
+        val best = rows[1]
+        assertTrue(best, best.startsWith("Rank 2, "))
+        assertTrue(best, Regex("\\d{1,2} \\w{3} \\d{4}").containsMatchIn(best))
+        assertTrue(best, best.contains("14 + 2"))
+    }
+
+    @Test
+    fun `a session that beats the benchmark is listed above it`() {
+        val store = RecordStore(context)
+        store.add(
+            Attempt(
+                rounds = 28, reps = 0, atMillis = System.currentTimeMillis() - day,
+                durationMs = 20 * 60 * 1000L, roundSplitsMs = List(28) { 42_000L },
+                profile = CindyProfile.STANDARD
+            )
+        )
+        history(2)
+        val rows = rankRows(open()).map { it.contentDescription.toString() }
+        assertTrue(rows[0], rows[0].startsWith("Rank 1, ") && !rows[0].contains("Tom Holland"))
+        assertTrue(rows[1], rows[1].startsWith("Rank 2, Tom Holland"))
+    }
+
+    @Test
+    fun `with no history the page is the first card and the benchmark to chase`() {
+        val activity = open()
+        val shown = texts(activity)
+        assertTrue(shown.any { it == "Your first Cindy starts everything." })
+        assertTrue("no benchmark row", rankRows(activity).size == 1)
+        assertTrue(shown.any { it.startsWith("No attempts yet") })
+        assertNull("a chart with nothing to plot", chart(activity))
+        assertFalse("week figures with nothing in them", "THIS WEEK" in shown)
+    }
+
+    @Test
+    fun `the next streak milestone is kept, under the calendar`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val step = first(activity) { it is TextView && it.text.contains("more days to a") }
+        assertNotNull("the next-step line is gone", step)
+        assertTrue(top(step!!, content) > top(chart(activity)!!, content))
+    }
+
+    @Test
+    fun `the week's figures come before the chart`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val sessions = text(activity, "Sessions")
+        assertNotNull("no Sessions figure", sessions)
+        assertNotNull("no chart", chart(activity))
+        assertTrue(
+            "the week's figures sit above the chart",
+            top(sessions!!, content) < top(chart(activity)!!, content)
+        )
+    }
+
+    @Test
+    fun `the first screen holds the streaks, the week and the first half of the score chart`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val fold = scroll(activity).height
+        // The streak numbers, the week strip and the week's three figures, all in view.
+        listOf("DAILY STREAK", "WEEKLY STREAK", "Sessions", "Reps", "Time").forEach { label ->
+            val v = text(activity, label)
+            assertNotNull("no $label", v)
+            assertTrue("$label is below the fold", top(v!!, content) + v.height <= fold)
+        }
+        // The chart's own line has begun by the fold: its top half at the least.
+        val chart = chart(activity)!!
+        assertTrue(
+            "the chart starts below the fold",
+            top(chart, content) + chart.height / 2 <= fold
+        )
+    }
+}

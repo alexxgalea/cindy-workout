@@ -97,7 +97,7 @@ The most recent session by when it was filed, not the best one. The menu's first
 _Avoid_: latest result, best session
 
 **Progress**:
-The page of every session over time: the trend, the calendar of trained days and the leaderboard.
+The page of every session over time. It leads with how the athlete is doing (the streaks and the week), then the trend, the bests, the leaderboard (the athlete's sessions ranked, with the benchmark among them) and the calendar of trained days.
 _Avoid_: records, history (a record is a personal best, not a page)
 
 **Movements**:

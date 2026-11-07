@@ -284,6 +284,23 @@ object Records {
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 
+    /** One place on the leaderboard: the athlete's [attempt], or null for the benchmark. */
+    data class Standing(val rank: Int, val attempt: Attempt?)
+
+    /**
+     * The leaderboard in order, with the benchmark standing among the athlete's sessions.
+     *
+     * Every session that [beatsBenchmark] ranks above it, best first; it then ranks above every
+     * other session, best first. A session of other movements never passes it however many reps
+     * it holds, for the reason [beatsBenchmark] gives, so the order is a partition and not a
+     * plain sort by score. Ranks count from 1 and have no gaps.
+     */
+    fun standings(attempts: List<Attempt>): List<Standing> {
+        val (above, below) = ranked(attempts).partition { beatsBenchmark(it) }
+        val order: List<Attempt?> = above + listOf(null) + below
+        return order.mapIndexed { i, a -> Standing(i + 1, a) }
+    }
+
     /**
      * Whether this score passes [BENCHMARK].
      *
