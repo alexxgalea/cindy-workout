@@ -42,7 +42,7 @@ final class IconParityTests: XCTestCase {
     }
 
     func testEveryAndroidIconHasAnImageset() {
-        XCTAssertEqual(androidNames.count, 23)
+        XCTAssertEqual(androidNames.count, 22)
         XCTAssertEqual(imagesetNames, androidNames)
     }
 
@@ -97,7 +97,7 @@ final class IconParityTests: XCTestCase {
             if intent == "original" { original.insert(name) }
         }
         XCTAssertEqual(original, ["ic_check_filled"])
-        XCTAssertEqual(imagesetNames.count - original.count, 22)
+        XCTAssertEqual(imagesetNames.count - original.count, 21)
     }
 
     func testCindyIconNamesEveryImageset() throws {

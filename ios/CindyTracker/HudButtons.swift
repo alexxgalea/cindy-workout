@@ -56,7 +56,7 @@ struct ShutterButton: View {
         switch mark {
         case .play: return .play
         case .pause: return .pause
-        case .again: return .again
+        case .again: return .play  // Android has no again mark: finished draws the play mark
         }
     }
 

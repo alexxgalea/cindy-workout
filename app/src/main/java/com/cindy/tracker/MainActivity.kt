@@ -1668,6 +1668,7 @@ class MainActivity : AppCompatActivity() {
                 speaker.stop()
                 ui.removeCallbacks(ticker)
             }
+            // Closing the session page already did this; only a screen that missed that gets here.
             WorkoutState.FINISHED -> resetWorkout()
         }
         renderControls()
@@ -1766,8 +1767,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Back from the session page: goes where [CameraControls] says closing it leads. Today that
-     * is where the screen already was, so a finished workout waits for the shutter.
+     * Back from the session page, by DONE, DISCARD or the back gesture: goes where
+     * [CameraControls] says closing it leads, which is idle. The session was saved, with its
+     * heart-rate trace and rep times, before the page opened; resetting touches none of that.
      */
     private fun closeSessionPage() {
         if (!sessionPageOpen) return
@@ -1881,7 +1883,7 @@ class MainActivity : AppCompatActivity() {
         if (saved) RepTimesStore(this).save(attempt.atMillis, repLog.marks)
         if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
 
-        primary(R.drawable.ic_again)
+        primary(R.drawable.ic_play)
         renderControls()
         // Kept as it was: the finished count is painted in the alert colour so a glance at a
         // phone across the room says the clock has stopped rather than that it is still running.

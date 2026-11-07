@@ -175,7 +175,7 @@ class CameraControlsTest {
         )
         assertEquals("Pause", CameraControls.of(RUNNING, false)[SHUTTER].name)
         assertEquals("Resume", CameraControls.of(PAUSED, false)[SHUTTER].name)
-        assertEquals("Start again", CameraControls.of(FINISHED, false)[SHUTTER].name)
+        assertEquals("Start the workout", CameraControls.of(FINISHED, false)[SHUTTER].name)
     }
 
     @Test
@@ -187,14 +187,27 @@ class CameraControlsTest {
     }
 
     @Test
-    fun `closing the session page leaves the camera screen where it was, so a finished one stays until AGAIN`() {
+    fun `closing the session page returns the camera screen to idle, whichever way it closes and whatever it was doing`() {
+        // DONE, DISCARD and the back gesture all land on the camera screen the same way, so the
+        // module has one answer for all three: the finished workout is not left for the athlete.
         for (state in WorkoutState.entries) {
             for (filming in listOf(false, true)) {
                 assertEquals(
                     "$state, filming=$filming",
-                    state,
+                    IDLE,
                     CameraControls.of(state, filming).afterSessionPage
                 )
+            }
+        }
+    }
+
+    @Test
+    fun `nothing the camera screen says or names offers AGAIN`() {
+        for (state in WorkoutState.entries) {
+            val controls = CameraControls.of(state, false)
+            for (control in CameraControl.entries) {
+                val name = controls[control].name
+                assertFalse("$control in $state is called \"$name\"", name.contains("again", ignoreCase = true))
             }
         }
     }

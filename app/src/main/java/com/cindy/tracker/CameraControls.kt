@@ -27,7 +27,7 @@ data class ControlState(val availability: Availability, val name: String) {
 /** Everything the camera screen needs to draw its controls for one state. */
 class CameraControlPanel internal constructor(
     private val controls: Map<CameraControl, ControlState>,
-    /** The state the camera screen is in once the session page has been closed. */
+    /** The state the camera screen is in once the session page has been closed, however it closed. */
     val afterSessionPage: WorkoutState,
     /**
      * Whether a camera switch must ask first: true while a film is recording, because a switch
@@ -61,7 +61,8 @@ class CameraControlPanel internal constructor(
  *  - a control with nothing to act on is dimmed and keeps its place, not hidden: you cannot
  *    learn where a control lives if it is only there half the time. END is the one
  *    exception: it exists only while there is a workout to leave;
- *  - a finished workout stays on the camera screen until the shutter, which then reads AGAIN.
+ *  - a finished workout is not left on the camera screen for the athlete to clear: closing the
+ *    session page, by DONE, DISCARD or back, returns the screen to idle, so START is ready.
  *
  * Whether a film is recording changes no control. It only decides [CameraControlPanel.switchAsksFirst]:
  * a switch ends the film, so while one is recording the switch asks before it acts.
@@ -111,8 +112,9 @@ object CameraControls {
                     if (state == WorkoutState.SETUP) "Skip the setup check" else "Skip to the next movement"
                 )
             ),
-            // Nothing happens when the session page closes: the camera screen is where it was.
-            afterSessionPage = state,
+            // However the session page closes, the next workout is one tap on START away: the
+            // clock full, round 1, the count at zero. The saved session is not touched by it.
+            afterSessionPage = WorkoutState.IDLE,
             switchAsksFirst = filming
         )
     }
@@ -122,6 +124,8 @@ object CameraControls {
         WorkoutState.SETUP -> "Start — available once the setup check finishes"
         WorkoutState.RUNNING -> "Pause"
         WorkoutState.PAUSED -> "Resume"
-        WorkoutState.FINISHED -> "Start again"
+        // Behind the session page, and never seen: closing it resets the screen. Named for what a
+        // tap would do if it ever were seen.
+        WorkoutState.FINISHED -> "Start the workout"
     }
 }
