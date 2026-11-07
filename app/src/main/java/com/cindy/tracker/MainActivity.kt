@@ -1767,7 +1767,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Back from the session page, by DONE, DISCARD or the back gesture: goes where
+     * Back from the session page, by its top bar, DISCARD or the back gesture: goes where
      * [CameraControls] says closing it leads, which is idle. The session was saved, with its
      * heart-rate trace and rep times, before the page opened; resetting touches none of that.
      */

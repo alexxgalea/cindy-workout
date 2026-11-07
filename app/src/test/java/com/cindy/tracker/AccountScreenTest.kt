@@ -375,9 +375,9 @@ class AccountScreenTest {
     }
 
     @Test
-    fun `DONE closes the screen`() {
+    fun `Back closes the screen`() {
         val activity = openAccount()
-        findByText(content(activity), "DONE")!!.performClick()
+        findByDescriptionPrefix(content(activity), "Back")!!.performClick()
         assertTrue(activity.isFinishing)
     }
 
@@ -515,9 +515,7 @@ class AccountScreenTest {
         record(session(rounds = 10))
         val activity = openRecords()
 
-        val actions = activity.findViewById<ViewGroup>(R.id.actions)
-        val labels = (0 until actions.childCount).map { (actions.getChildAt(it) as TextView).text.toString() }
-        assertEquals(listOf("DONE"), labels)
+        assertNull("Progress keeps a bottom bar", activity.findViewById<ViewGroup>(R.id.actions))
     }
 
     @Test

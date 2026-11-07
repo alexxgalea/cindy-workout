@@ -56,7 +56,33 @@ class ScreenSmokeTest {
         )
         root.layout(0, 0, 1080, 2400)
         assertTrue("nothing was laid out", root.width > 0 && root.height > 0)
+        assertEveryIconResolves(T::class.java.simpleName, root)
         controller.destroy()
+    }
+
+    /**
+     * Every icon on the screen is a drawable that resolved and has a size: an image view that
+     * holds one, and a text view's compound drawable. A glyph that failed to load would leave an
+     * empty hole where a control or a row mark should be.
+     */
+    private fun assertEveryIconResolves(screen: String, view: android.view.View) {
+        if (view is android.widget.ImageView) {
+            val drawable = view.drawable
+            if (drawable != null) {
+                assertTrue(
+                    "$screen: an icon has no size",
+                    drawable.intrinsicWidth > 0 && drawable.intrinsicHeight > 0
+                )
+            }
+        }
+        if (view is android.widget.TextView) {
+            view.compoundDrawablesRelative.filterNotNull().forEach {
+                assertTrue("$screen: a text icon has no size", it.intrinsicWidth > 0 && it.intrinsicHeight > 0)
+            }
+        }
+        if (view is android.view.ViewGroup) {
+            for (i in 0 until view.childCount) assertEveryIconResolves(screen, view.getChildAt(i))
+        }
     }
 
     /**
@@ -83,6 +109,11 @@ class ScreenSmokeTest {
         assertEquals("the top band is inset from the glass", 1080, binding.bandTop.width)
         assertEquals("the bottom band is inset from the glass", 1080, binding.bandBottom.width)
         assertTrue("the bands ate the whole screen", binding.bandTop.height + binding.bandBottom.height < 2400)
+        assertEveryIconResolves("the camera HUD", binding.root)
+        // The top band, the count row and the action row each carry an icon: none may be bare.
+        for (button in listOf(binding.btnFlip, binding.btnRec, binding.btnMenu, binding.btnUndo, binding.btnAddRep, binding.btnEnd, binding.btnStart, binding.btnSkipExercise)) {
+            assertNotNull("a camera control has no icon", button.drawable)
+        }
     }
 
     /**
@@ -1130,7 +1161,7 @@ class ScreenSmokeTest {
     // ── reopening a session from Progress ───────────────────────────────────
 
     @Test
-    fun `reopening a saved session shows its date and time, with DISCARD beside DONE`() {
+    fun `reopening a saved session shows its date and time, with DISCARD and no DONE`() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = RecordStore(context)
         store.clear()
@@ -1151,7 +1182,7 @@ class ScreenSmokeTest {
         assertTrue("headline was not a date: $headline", headline != "TIME" && headline != "STOPPED")
         assertEquals(
             "review mode has no PROGRESS, which is the page it came from",
-            listOf("DISCARD", "DONE"), actionLabels(activity)
+            listOf("DISCARD"), actionLabels(activity)
         )
         assertTrue(
             "the streak row describes today, not the reviewed day",
@@ -1227,7 +1258,7 @@ class ScreenSmokeTest {
 
         val activity = openResults(context, attempt)
 
-        assertEquals(listOf("PROGRESS", "DISCARD", "DONE"), actionLabels(activity))
+        assertEquals(listOf("PROGRESS", "DISCARD"), actionLabels(activity))
 
         activity.finish()
         RecordStore(context).clear()
@@ -1241,7 +1272,7 @@ class ScreenSmokeTest {
 
         val activity = openResults(context, neverSaved)
 
-        assertEquals(listOf("PROGRESS", "DONE"), actionLabels(activity))
+        assertEquals(listOf("PROGRESS"), actionLabels(activity))
 
         activity.finish()
     }

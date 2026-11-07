@@ -62,7 +62,7 @@ class CameraControlPanel internal constructor(
  *    learn where a control lives if it is only there half the time. END is the one
  *    exception: it exists only while there is a workout to leave;
  *  - a finished workout is not left on the camera screen for the athlete to clear: closing the
- *    session page, by DONE, DISCARD or back, returns the screen to idle, so START is ready.
+ *    session page, by its top bar, DISCARD or back, returns the screen to idle, so START is ready.
  *
  * Whether a film is recording changes no control. It only decides [CameraControlPanel.switchAsksFirst]:
  * a switch ends the film, so while one is recording the switch asks before it acts.

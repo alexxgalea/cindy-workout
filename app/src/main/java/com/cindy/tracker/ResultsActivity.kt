@@ -159,9 +159,6 @@ class ResultsActivity : AppCompatActivity() {
                 setOnClickListener { confirmDiscard() }
             })
         }
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render(attempt, stoppedEarly)
     }
 
