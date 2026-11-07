@@ -12,8 +12,10 @@
     ["thin", "Thin bands", "One top row with the clock and the icons; the coaching line is a pill on the picture; one row for the count, one for the actions."],
     ["none", "No bands", "The picture fills the screen. Clock, icons, count and actions float on glass; drawn corners mark the real zone."],
     ["today", "Today's bands", "The baseline: two translucent bands, the coaching line inside the top one, round and count in the bottom one."],
-    ["nopm", "No bands, no \u2212/+", "The owner's fourth variant: No bands with the \u2212 and + buttons gone and the round and count redrawn as type on one glass plate. Switch the readout A / B above."],
+    ["nopm", "No bands, no \u2212/+", "Rejected by the owner on 2026-11-07: \u2212 and + stay. Kept for the record: No bands with the two buttons gone and the round and count redrawn as type on one glass plate (readout A or B)."],
   ];
+  const REJECTED = new Set(["nopm"]);                     // the owner turned it down; kept on the page, out of the default views
+  const MAIN = VARIANTS.filter(([v]) => !REJECTED.has(v));
   const STATES = [["idle", "Idle"], ["setup", "Setup"], ["running", "Running"], ["paused", "Paused"], ["finished", "Finished"]];
 
   // Copy and values as the prototype branch's MainActivity sets them in each state (example numbers where the app has live ones).
@@ -202,7 +204,8 @@
     const num = v === "none" || v === "nopm"
       ? `opaque chrome <b>0 %</b> · controls footprint <b>${pct(sh.footprint)}</b>`
       : `chrome <b>${pct(sh.opaque)}</b> · picture ${pct(sh.picture)}`;
-    return `<div class="pane"><p class="cap"><b>${name}${ro ? ", readout " + ro : ""}</b> <span class="badge mock">mock</span></p>${phone(v, state, scale, name + ", " + state + (ro ? ", readout " + ro : ""), ro)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
+    const rej = REJECTED.has(v) ? ' <span class="badge rejected">rejected</span>' : "";
+    return `<div class="pane${REJECTED.has(v) ? " rejected" : ""}"><p class="cap"><b>${name}${ro ? ", readout " + ro : ""}</b> <span class="badge mock">mock</span>${rej}</p>${phone(v, state, scale, name + ", " + state + (ro ? ", readout " + ro : ""), ro)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
   }
 
   function renderStage() {
@@ -211,12 +214,12 @@
     $$("[data-state]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === st.state)));
     $$("[data-variant]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.variant === st.variant)));
     $$("[data-readout]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.readout === st.readout)));
-    $("#seg-readout").classList.toggle("disabled", st.view === "cmp");
+    $("#grp-readout").hidden = !(st.view === "big" && st.variant === "nopm");
     $("#grp-variant").hidden = st.view !== "big";
     $("#grp-state").hidden = st.view === "grid";
     if (st.view === "side") {
       stage.className = "stage";
-      stage.innerHTML = VARIANTS.map(([v]) => pane(v, st.state, 1)).join("");
+      stage.innerHTML = MAIN.map(([v]) => pane(v, st.state, 1)).join("");
     } else if (st.view === "cmp") {
       stage.className = "stage";
       stage.innerHTML = pane("none", st.state, 1) + pane("nopm", st.state, 1, "A") + pane("nopm", st.state, 1, "B");
@@ -228,7 +231,7 @@
       stage.className = "stage grid";
       const sc = 0.62;
       stage.innerHTML = `<div class="gridwrap"><div class="gh"></div>${STATES.map(([k, n]) => `<div class="gh">${n}</div>`).join("")}` +
-        VARIANTS.map(([v, name]) => `<div class="gh row">${name}</div>` + STATES.map(([k]) => `<div>${phone(v, k, sc, name + ", " + k)}</div>`).join("")).join("") + `</div>`;
+        MAIN.map(([v, name]) => `<div class="gh row">${name}</div>` + STATES.map(([k]) => `<div>${phone(v, k, sc, name + ", " + k)}</div>`).join("")).join("") + `</div>`;
     }
     persist();
   }
@@ -238,7 +241,7 @@
       ["Camera switch (top band)", "enabled", "dimmed", "dimmed", "enabled", "dimmed"],
       ["END (left slot)", "empty", "empty", "shown", "shown", "empty"],
       ["Shutter", "play", "play, dimmed", "pause", "play", "again"],
-      ["− and + (gone in the fourth variant)", "dimmed", "dimmed", "enabled", "dimmed", "dimmed"],
+      ["− and + (gone in the rejected variant)", "dimmed", "dimmed", "enabled", "dimmed", "dimmed"],
       ["SKIP", "dimmed", "enabled", "enabled", "enabled", "dimmed"],
     ];
     return `<table class="tbl"><caption>Controls per state, as the branch has them</caption><thead><tr><th></th>${STATES.map((x) => `<th>${x[1]}</th>`).join("")}</tr></thead><tbody>` +
@@ -249,7 +252,7 @@
     const L = B.shares();
     const m = B.MEASURED;
     const row = (s) => {
-      const name = VARIANTS.find((x) => x[0] === s.variant)[1];
+      const name = VARIANTS.find((x) => x[0] === s.variant)[1] + (REJECTED.has(s.variant) ? " (rejected)" : "");
       return `<tr><th>${name}</th><td>${s.topPx.toFixed(0)} px</td><td>${s.bottomPx.toFixed(0)} px</td><td><b>${pct(s.opaque)}</b></td><td>${pct(s.footprint)}</td><td>${pct(s.withPill)}</td><td>${pct(s.picture)}</td></tr>`;
     };
     return `<table class="tbl"><caption>Chrome share, 1080 x 2340</caption><thead><tr><th></th><th>above</th><th>below</th><th>chrome (opaque)</th><th>controls footprint</th><th>+ coaching pill</th><th>picture</th></tr></thead><tbody>${L.map(row).join("")}</tbody></table>`;
@@ -265,7 +268,7 @@
       <p><b>Today's bands:</b> the model gives ${t.topPx.toFixed(0)} px above and ${t.bottomPx.toFixed(0)} px below, ${pct(t.opaque)} of the screen. The 2026-11-06 capture (<code>captures/camera.png</code>) measures ${m.topPx} px above and ${m.bottomPx} px below, ${pct(mp)}. The ticket and spec #139 say ${m.spec.topPx} px above, ${m.spec.bottomPx} px below and 43 %; ${m.spec.topPx} + ${m.spec.bottomPx} is ${m.spec.topPx + m.spec.bottomPx} px, which is ${pct(sp)}, so the spec's own figures do not add up to 43 %. The capture agrees with 426 above and not with 533 below (the progress edge sits at y = 1678 px).</p>
       <p><b>Thin bands:</b> ${pct(thin.opaque)}, against a target of about 25 %. The overshoot is the count row: the prototype keeps the reps number at 44 sp (autosize 24 to 44), a ${thin.g.K.toFixed(0)} dp line, in a row the 48 dp editors alone would size to 48 dp. The coaching pill (${(thin.g.pillH + 8).toFixed(0)} dp with its margin) sits on the picture and is not in the ${pct(thin.opaque)}; with it the thin layout reaches ${pct(thin.withPill)}.</p>
       <p><b>No bands:</b> no band is opaque, so the picture is the whole screen. The controls still occupy ${pct(none.footprint)} of the height (${none.g.topH.toFixed(0)} dp at the top, ${none.g.bottomH.toFixed(0)} dp at the bottom), which is what the prototype's own HUDMEASURE log calls the footprint.</p>
-      <p><b>No bands, no \u2212/+:</b> same top as No bands (${nopm.g.topH.toFixed(0)} dp). The bottom is ${nopm.g.bottomH.toFixed(0)} dp: the readout plate is drawn at ${nopm.g.boxH} dp in both readouts (A: 64 sp reps; B: a 68 dp segmented ring), against ${none.g.boxH.toFixed(0)} dp for No bands' count pill. Controls footprint <b>${pct(nopm.footprint)}</b> (No bands ${pct(none.footprint)}), still 0 % opaque. Removing \u2212 and + takes width, not height, so the footprint does not fall: the reps number grows instead. The plate is sized as a design value with the font's padding off; the other variants are sized with Android's padding on. If the app kept the padding on for a 64 sp ExtraBold line, the footprint would be ${pct(nopm.padded)}.</p>
+      <p><b>No bands, no \u2212/+ (rejected 2026-11-07, \u2212 and + stay):</b> same top as No bands (${nopm.g.topH.toFixed(0)} dp). The bottom is ${nopm.g.bottomH.toFixed(0)} dp: the readout plate is drawn at ${nopm.g.boxH} dp in both readouts (A: 64 sp reps; B: a 68 dp segmented ring), against ${none.g.boxH.toFixed(0)} dp for No bands' count pill. Controls footprint <b>${pct(nopm.footprint)}</b> (No bands ${pct(none.footprint)}), still 0 % opaque. Removing \u2212 and + takes width, not height, so the footprint does not fall: the reps number grows instead. The plate is sized as a design value with the font's padding off; the other variants are sized with Android's padding on. If the app kept the padding on for a 64 sp ExtraBold line, the footprint would be ${pct(nopm.padded)}.</p>
       <details><summary>How the numbers are made</summary>
         <p>All in dp, 1 dp = 3 px. The model is <code>bands-geometry.js</code>; every constant is a number from <code>activity_main.xml</code> or <code>HudVariants.kt</code> on <code>prototype/hud-bands</code> (e6593b1).</p>
         <p>Text height is Android's, with font padding on: the font's bounding box. Manrope: ExtraBold 1.5445 em, Bold 1.507 em, SemiBold 1.47 em (read from <code>fonts/*.ttf</code>). Inter is drawn on the page because #141 chose it, but its line heights are not used: the app's code still sets Manrope, so the shares are for the code as it stands.</p>
@@ -280,10 +283,10 @@
 
   function init() {
     const seg = (id, items, attr) => { $(id).innerHTML = items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="false">${n}</button>`).join(""); };
-    seg("#seg-view", [["side", "Side by side"], ["cmp", "No bands vs A vs B"], ["big", "One big phone"], ["grid", "All 20"]], "data-view");
+    seg("#seg-view", [["side", "Side by side"], ["big", "One big phone"], ["grid", "All 15"], ["cmp", "Rejected: no \u2212/+"]], "data-view");
     seg("#seg-readout", [["A", "A  count, then the words"], ["B", "B  segmented ring"]], "data-readout");
     seg("#seg-state", STATES, "data-state");
-    seg("#seg-variant", VARIANTS.map(([k, n]) => [k, n]), "data-variant");
+    seg("#seg-variant", VARIANTS.map(([k, n]) => [k, REJECTED.has(k) ? n + " (rejected)" : n]), "data-variant");
     document.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-view],button[data-state],button[data-variant],button[data-readout]");
       if (!b) return;

@@ -1,5 +1,8 @@
 /* MOCK for #140. Extends style.css (tokens, fonts, .phone, .t-* type). No blur anywhere. 1 dp = 1 css px inside .phone. */
 .mockbanner { background: #2a1a00; border: 1px solid #6a4306; color: #ffd08a; border-radius: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.4; }
+[hidden] { display: none !important; }
+.badge.rejected { color: #ff453a; border-color: #6a1a14; }
+.pane.rejected .shell { opacity: .72; }
 .mockbanner b { color: #ff9f0a; letter-spacing: .06em; }
 .stage.big { gap: 32px; align-items: flex-start; }
 .bigside { max-width: 560px; display: grid; gap: 18px; }
