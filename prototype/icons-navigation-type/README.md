@@ -21,10 +21,11 @@ No SF Symbols, no SF Pro, no blur.
 
 ## Bands mock for #140
 
-[`bands.html`](bands.html) is a **mock**: the three camera-screen band variants of #140 (Thin bands, No bands, Today's bands) in the states idle, setup, running, paused and finished, side by side, as one big phone with a switcher, or as all 15. It stands in for the phone test the owner cannot do now. It is not the ticket's in-app prototype, which is the branch `prototype/hud-bands` on the live camera. Double-click it; no server, no network.
+[`bands.html`](bands.html) is a **mock**: the camera-screen band variants of #140 (Thin bands, No bands, Today's bands, and a fourth, No bands without −/+) in the states idle, setup, running, paused and finished, side by side, as one big phone with a switcher, or as all 20. It stands in for the phone test the owner cannot do now. It is not the ticket's in-app prototype, which is the branch `prototype/hud-bands` on the live camera. Double-click it; no server, no network.
 
 - What goes where is read from `prototype/hud-bands` (`HudVariants.kt`, `activity_main.xml`, `MainActivity.renderControls()`), in dp. `bands-geometry.js` holds every number; the chrome share per variant is computed from it and printed on the page.
 - The picture is the real adb capture (`assets/lens-covered-picture.jpg`, cropped from `captures/camera.png`). The lens was covered, so the person is a drawn placeholder, labelled on the page.
+- A fourth variant, **No bands, no −/+**, is No bands with the two rep-editing buttons gone and the round and count redrawn on one glass plate. A switch picks the readout: **A** (count, then the words: the reps at 64 sp with the target, and "Pull-ups" over "Round 2" at the right) or **B** (a segmented ring, one segment per rep of the set, with the count inside, the movement at the left and the round at the right). "No bands vs A vs B" shows the three side by side. It is drawn for the owner's question only: no ticket's scope changes, and no app code is touched. Its footprint is printed on the page with the others.
 - The analysis frame outline is one rectangle (480 x 640, mapped as `OverlayView` maps it) drawn the same in every variant. In No bands the real zone is marked by drawn corners, the glass has no blur.
 
 ## What is real and what is not
