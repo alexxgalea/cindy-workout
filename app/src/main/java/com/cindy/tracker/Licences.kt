@@ -5,7 +5,7 @@ import android.content.Context
 /**
  * The licences of what Cindy is built on, and who gets the credit.
  *
- * Apache-2.0 and the SIL Open Font License both ask for a copy of the licence to travel with the
+ * Apache-2.0, the SIL Open Font License and the MIT licence all ask for a copy of the licence to travel with the
  * binary, so the full texts ship as assets and Help shows them. They live here, apart from the
  * screen that draws them, so a test can hold the two lists to each other: a credit cannot name a
  * licence whose text is not in the app.
@@ -19,9 +19,10 @@ object Licences {
 
     val APACHE = Licence("Apache License 2.0", "licences/apache-2.0.txt")
     val OFL = Licence("SIL Open Font License 1.1", "licences/ofl-1.1.txt")
+    val MIT = Licence("MIT License", "licences/mit-phosphor.txt")
 
     /** Every licence whose full text is in the app. */
-    val all = listOf(APACHE, OFL)
+    val all = listOf(APACHE, OFL, MIT)
 
     data class Credit(val what: String, val by: String, val licence: Licence)
 
@@ -39,6 +40,12 @@ object Licences {
             "Manrope, the typeface",
             "Copyright 2019 The Manrope Project Authors (https://github.com/sharanda/manrope)",
             OFL
+        ),
+        // The icon set's own notice, as it heads the licence file that ships with it.
+        Credit(
+            "Phosphor, the icons",
+            "Copyright (c) 2023 Phosphor Icons (https://phosphoricons.com)",
+            MIT
         )
     )
 
