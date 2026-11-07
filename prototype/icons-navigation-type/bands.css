@@ -64,3 +64,20 @@
 .bz-mark i { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; font: 600 8.5px/1 ui-monospace, Menlo, monospace; color: #bf5af2; white-space: nowrap; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
 .show-targets .bz-circ, .show-targets .bz-icon, .show-targets .bz-shutter { outline: 1px dashed #64d2ff; outline-offset: 0; }
 .phone.type-inter .t-metric-m, .phone.type-inter .t-metric-xl { font-weight: 800; }
+
+/* the fourth variant's readout plate (No bands, no -/+): one glass plate, hierarchy by type, tabular figures. Mock-only design. */
+.bz-box.rd { border-radius: 22px; display: flex; align-items: center; padding: 0 20px; }
+.rd .tnum, .rd .t-metric-xl, .rd .tgt { font-variant-numeric: tabular-nums; }
+.rd-a { justify-content: space-between; }
+.rd-a-n { display: flex; align-items: baseline; gap: 2px; }
+.rd-a-n .t-metric-xl { line-height: 1; letter-spacing: -.05em; }
+.rd-a-w { display: grid; gap: 2px; justify-items: end; text-align: right; }
+.rd-a-ex { font-weight: 700; font-size: 17px; line-height: 1.2; letter-spacing: -.014em; color: var(--label); }
+.rd-a-rd { font-weight: 600; font-size: 15px; line-height: 1.2; letter-spacing: -.01em; color: var(--label-secondary); }
+.rd-b { display: grid; grid-template-columns: 1fr 68px 1fr; align-items: center; gap: 12px; padding: 0 20px; }
+.rd-b-ex { font-weight: 700; font-size: 17px; line-height: 1.2; letter-spacing: -.014em; color: var(--label); }
+.rd-b-ring { position: relative; width: 68px; height: 68px; }
+.rd-b-ring svg { position: absolute; inset: 0; }
+.rd-b-n { position: absolute; inset: 0; display: grid; place-items: center; font-size: 38px; letter-spacing: -.05em; }
+.rd-b-rd { display: grid; justify-items: end; gap: 3px; }
+.rd-b-rd .t-metric-m { font-size: 30px; line-height: 1; }

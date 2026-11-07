@@ -3,17 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MOCK #140: the camera screen's three bands</title>
+<title>MOCK #140: the camera screen's bands</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="bands.css">
 </head>
 <body>
 <header class="bench">
-  <h1>Bands mock for #140 <small>Thin bands, No bands, Today's bands. Throwaway, never merged. No blur.</small></h1>
+  <h1>Bands mock for #140 <small>Thin bands, No bands, Today's bands, and No bands without −/+. Throwaway, never merged. No blur.</small></h1>
   <div class="mockbanner"><b>MOCK.</b> An HTML stand-in for the owner's missing phone test. It is not the ticket's in-app prototype (that is the branch <code>prototype/hud-bands</code>, e6593b1, on the live camera). What goes where is read from that branch; the picture is the real adb capture of 2026-11-06, whose lens was covered, so the person is a <b>placeholder silhouette</b>. Opens from disk: no server, no network.</div>
   <div class="row">
     <div class="group"><span class="lbl">View</span><div class="seg" id="seg-view"></div></div>
     <div class="group" id="grp-variant"><span class="lbl">Variant</span><div class="seg" id="seg-variant"></div></div>
+    <div class="group" id="grp-readout"><span class="lbl">Readout (fourth variant)</span><div class="seg" id="seg-readout"></div></div>
     <div class="group" id="grp-state"><span class="lbl">State</span><div class="seg" id="seg-state"></div></div>
   </div>
   <div class="row">

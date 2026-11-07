@@ -1,4 +1,4 @@
-/* MOCK for #140: draws the camera screen's three band variants from bands-geometry.js.
+/* MOCK for #140: draws the camera screen's band variants (three, plus the owner's fourth: No bands without \u2212/+) from bands-geometry.js.
    What goes where is read from prototype/hud-bands (HudVariants.kt, activity_main.xml, MainActivity.kt renderControls()).
    Not the app, not the in-app prototype. Phosphor icons, Inter, the app's tokens, the real camera capture. No blur. */
 (() => {
@@ -12,6 +12,7 @@
     ["thin", "Thin bands", "One top row with the clock and the icons; the coaching line is a pill on the picture; one row for the count, one for the actions."],
     ["none", "No bands", "The picture fills the screen. Clock, icons, count and actions float on glass; drawn corners mark the real zone."],
     ["today", "Today's bands", "The baseline: two translucent bands, the coaching line inside the top one, round and count in the bottom one."],
+    ["nopm", "No bands, no \u2212/+", "The owner's fourth variant: No bands with the \u2212 and + buttons gone and the round and count redrawn as type on one glass plate. Switch the readout A / B above."],
   ];
   const STATES = [["idle", "Idle"], ["setup", "Setup"], ["running", "Running"], ["paused", "Paused"], ["finished", "Finished"]];
 
@@ -57,12 +58,12 @@
 
   function render(variant, state, o) {
     const g = B.geom(variant), s = S[state], c = CTRL(state);
-    const glass = variant === "none", compact = variant !== "today";
+    const glass = variant === "none" || variant === "nopm", compact = variant !== "today";
     let h = "";
     // picture: full screen in every variant (PreviewView and OverlayView are match_parent, so the analysis frame is the same)
     h += `<div class="bz-pic"></div>${o.lift ? '<div class="bz-lift"></div>' : ""}`;
     if (o.person) h += PERSON;
-    if (variant === "none") h += zoneCorners();
+    if (glass) h += zoneCorners();
     if (o.frame) h += frameOutline();
 
     // ---- bands (backgrounds) ----
@@ -108,6 +109,8 @@
       h += circ(20, cy, 52, "minus", 22, c.edit);
       h += circ(W - 20 - 52, cy, 52, "plus", 22, c.edit);
       h += `<div class="bz-count" style="${pos(72, g.countTop, W - 144, g.countH)}"><span class="t-metric-xl" style="font-size:56px;color:${repsCol}">${s.reps}</span><span class="tgt" style="font-size:30px">${s.tgt}</span></div>`;
+    } else if (variant === "nopm") {
+      h += readout(g, s, repsCol, o.readout);
     } else {
       const bx = g.boxX, by = g.boxTop, bw = g.boxW, bh = g.boxH;
       h += `<div class="bz-box ${glass ? "pillglass" : ""}" style="${pos(bx, by, bw, bh)}">`;
@@ -133,6 +136,37 @@
     return h;
   }
 
+  // ---- the fourth variant's readout: one glass plate, type carries the hierarchy, tabular figures throughout ----
+  const sentence = (t) => t.charAt(0) + t.slice(1).toLowerCase();                  // "PULL-UPS" -> "Pull-ups", "SET UP" -> "Set up"
+  const target = (s) => (s.tgt ? parseInt(s.tgt.slice(1), 10) : 2);                // setup counts the two calibration reps
+  const repsDone = (s) => (s.reps === "\u2014" ? 0 : parseInt(s.reps, 10));
+
+  // The set as n segments, done of them filled: the target is the number of segments, so it needs no number.
+  function ring(n, done, col, size, stroke) {
+    const c = size / 2, r = c - stroke / 2, gapDeg = n <= 6 ? 12 : n <= 10 ? 9 : 7, seg = 360 / n - gapDeg;
+    const pt = (deg) => { const a = (deg - 90) * Math.PI / 180; return [c + r * Math.cos(a), c + r * Math.sin(a)]; };
+    let d = "";
+    for (let i = 0; i < n; i++) {
+      const a0 = i * 360 / n + gapDeg / 2, a1 = a0 + seg, [x0, y0] = pt(a0), [x1, y1] = pt(a1);
+      d += `<path d="M${f1(x0)} ${f1(y0)}A${r} ${r} 0 0 1 ${f1(x1)} ${f1(y1)}" stroke="${i < done ? col : "var(--label-quaternary)"}"/>`;
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="none" stroke-width="${stroke}" aria-hidden="true">${d}</svg>`;
+  }
+
+  function readout(g, s, repsCol, which) {
+    const plate = pos(g.boxX, g.boxTop, g.boxW, g.boxH);
+    if (which === "B") {
+      const n = target(s), done = Math.min(repsDone(s), n);
+      return `<div class="bz-box pillglass rd rd-b" style="${plate}">` +
+        `<span class="rd-b-ex">${sentence(s.ex)}</span>` +
+        `<div class="rd-b-ring">${ring(n, done, repsCol, 68, 6)}<span class="t-metric-xl rd-b-n" style="font-size:${String(s.reps).length > 1 ? 30 : 38}px;color:${s.reps === "\u2014" ? "var(--label-tertiary)" : repsCol}">${s.reps}</span></div>` +
+        `<div class="rd-b-rd"><span class="t-eyebrow">Round</span><span class="t-metric-m tnum" style="color:var(--label-secondary)">${s.round}</span></div></div>`;
+    }
+    return `<div class="bz-box pillglass rd rd-a" style="${plate}">` +
+      `<div class="rd-a-n"><span class="t-metric-xl" style="font-size:64px;color:${s.reps === "\u2014" ? "var(--label-tertiary)" : repsCol}">${s.reps}</span><span class="tgt" style="font-size:28px">${s.tgt}</span></div>` +
+      `<div class="rd-a-w"><span class="rd-a-ex">${sentence(s.ex)}</span><span class="rd-a-rd tnum">Round ${s.round}</span></div></div>`;
+  }
+
   // The real zone as today's bands leave it, drawn as ZoneCornersView does: 12 dp inset, 30 dp arms, 3 dp strokes, white at 84%.
   function zoneCorners() {
     const z = B.ZONE, i = 12, a = 30, l = i, r = W - i, t = z.top + i, b = z.bottom - i;
@@ -150,24 +184,25 @@
   }
 
   // ------------------------------------------------------------------ page
-  const st = { view: "side", state: "idle", variant: "thin", frame: true, person: true, lift: true, mark: true, targets: false };
+  const st = { view: "side", state: "idle", variant: "thin", readout: "A", frame: true, person: true, lift: true, mark: true, targets: false };
   try { Object.assign(st, JSON.parse(decodeURIComponent(location.hash.slice(1)) || "{}")); } catch (e) { /* ignore */ }
   const persist = () => { try { history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(st))); } catch (e) { /* file:// */ } };
 
-  const phone = (variant, state, scale, label) => {
-    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="zoom:${scale}">${render(variant, state, st)}</div>`;
+  const phone = (variant, state, scale, label, readout) => {
+    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="zoom:${scale}">${render(variant, state, Object.assign({}, st, { readout: readout || st.readout }))}</div>`;
     return `<div class="shell" style="width:${f1(W * scale)}px;height:${f1(H * scale)}px" role="img" aria-label="${label}">${inner}</div>`;
   };
   const pct = (n) => n.toFixed(1) + " %";
   const shareOf = (v) => B.shares().find((s) => s.variant === v);
 
-  function pane(v, state, scale) {
+  function pane(v, state, scale, readout) {
     const [, name, what] = VARIANTS.find((x) => x[0] === v);
+    const ro = v === "nopm" ? (readout || st.readout) : null;
     const sh = shareOf(v);
-    const num = v === "none"
+    const num = v === "none" || v === "nopm"
       ? `opaque chrome <b>0 %</b> · controls footprint <b>${pct(sh.footprint)}</b>`
       : `chrome <b>${pct(sh.opaque)}</b> · picture ${pct(sh.picture)}`;
-    return `<div class="pane"><p class="cap"><b>${name}</b> <span class="badge mock">mock</span></p>${phone(v, state, scale, name + ", " + state)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
+    return `<div class="pane"><p class="cap"><b>${name}${ro ? ", readout " + ro : ""}</b> <span class="badge mock">mock</span></p>${phone(v, state, scale, name + ", " + state + (ro ? ", readout " + ro : ""), ro)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
   }
 
   function renderStage() {
@@ -175,11 +210,16 @@
     $$("[data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === st.view)));
     $$("[data-state]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === st.state)));
     $$("[data-variant]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.variant === st.variant)));
+    $$("[data-readout]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.readout === st.readout)));
+    $("#seg-readout").classList.toggle("disabled", st.view === "cmp");
     $("#grp-variant").hidden = st.view !== "big";
     $("#grp-state").hidden = st.view === "grid";
     if (st.view === "side") {
       stage.className = "stage";
       stage.innerHTML = VARIANTS.map(([v]) => pane(v, st.state, 1)).join("");
+    } else if (st.view === "cmp") {
+      stage.className = "stage";
+      stage.innerHTML = pane("none", st.state, 1) + pane("nopm", st.state, 1, "A") + pane("nopm", st.state, 1, "B");
     } else if (st.view === "big") {
       const sc = Math.max(0.9, Math.min(1.7, (innerHeight - 210) / H));
       stage.className = "stage big";
@@ -198,7 +238,7 @@
       ["Camera switch (top band)", "enabled", "dimmed", "dimmed", "enabled", "dimmed"],
       ["END (left slot)", "empty", "empty", "shown", "shown", "empty"],
       ["Shutter", "play", "play, dimmed", "pause", "play", "again"],
-      ["− and +", "dimmed", "dimmed", "enabled", "dimmed", "dimmed"],
+      ["− and + (gone in the fourth variant)", "dimmed", "dimmed", "enabled", "dimmed", "dimmed"],
       ["SKIP", "dimmed", "enabled", "enabled", "enabled", "dimmed"],
     ];
     return `<table class="tbl"><caption>Controls per state, as the branch has them</caption><thead><tr><th></th>${STATES.map((x) => `<th>${x[1]}</th>`).join("")}</tr></thead><tbody>` +
@@ -217,7 +257,7 @@
 
   function renderNumbers() {
     $("#shares").innerHTML = sharesTable();
-    const t = shareOf("today"), thin = shareOf("thin"), none = shareOf("none");
+    const t = shareOf("today"), thin = shareOf("thin"), none = shareOf("none"), nopm = shareOf("nopm");
     const m = B.MEASURED;
     const mp = (m.topPx + m.bottomPx) / (B.H * B.PX) * 100;
     const sp = (m.spec.topPx + m.spec.bottomPx) / (B.H * B.PX) * 100;
@@ -225,29 +265,32 @@
       <p><b>Today's bands:</b> the model gives ${t.topPx.toFixed(0)} px above and ${t.bottomPx.toFixed(0)} px below, ${pct(t.opaque)} of the screen. The 2026-11-06 capture (<code>captures/camera.png</code>) measures ${m.topPx} px above and ${m.bottomPx} px below, ${pct(mp)}. The ticket and spec #139 say ${m.spec.topPx} px above, ${m.spec.bottomPx} px below and 43 %; ${m.spec.topPx} + ${m.spec.bottomPx} is ${m.spec.topPx + m.spec.bottomPx} px, which is ${pct(sp)}, so the spec's own figures do not add up to 43 %. The capture agrees with 426 above and not with 533 below (the progress edge sits at y = 1678 px).</p>
       <p><b>Thin bands:</b> ${pct(thin.opaque)}, against a target of about 25 %. The overshoot is the count row: the prototype keeps the reps number at 44 sp (autosize 24 to 44), a ${thin.g.K.toFixed(0)} dp line, in a row the 48 dp editors alone would size to 48 dp. The coaching pill (${(thin.g.pillH + 8).toFixed(0)} dp with its margin) sits on the picture and is not in the ${pct(thin.opaque)}; with it the thin layout reaches ${pct(thin.withPill)}.</p>
       <p><b>No bands:</b> no band is opaque, so the picture is the whole screen. The controls still occupy ${pct(none.footprint)} of the height (${none.g.topH.toFixed(0)} dp at the top, ${none.g.bottomH.toFixed(0)} dp at the bottom), which is what the prototype's own HUDMEASURE log calls the footprint.</p>
+      <p><b>No bands, no \u2212/+:</b> same top as No bands (${nopm.g.topH.toFixed(0)} dp). The bottom is ${nopm.g.bottomH.toFixed(0)} dp: the readout plate is drawn at ${nopm.g.boxH} dp in both readouts (A: 64 sp reps; B: a 68 dp segmented ring), against ${none.g.boxH.toFixed(0)} dp for No bands' count pill. Controls footprint <b>${pct(nopm.footprint)}</b> (No bands ${pct(none.footprint)}), still 0 % opaque. Removing \u2212 and + takes width, not height, so the footprint does not fall: the reps number grows instead. The plate is sized as a design value with the font's padding off; the other variants are sized with Android's padding on. If the app kept the padding on for a 64 sp ExtraBold line, the footprint would be ${pct(nopm.padded)}.</p>
       <details><summary>How the numbers are made</summary>
         <p>All in dp, 1 dp = 3 px. The model is <code>bands-geometry.js</code>; every constant is a number from <code>activity_main.xml</code> or <code>HudVariants.kt</code> on <code>prototype/hud-bands</code> (e6593b1).</p>
         <p>Text height is Android's, with font padding on: the font's bounding box. Manrope: ExtraBold 1.5445 em, Bold 1.507 em, SemiBold 1.47 em (read from <code>fonts/*.ttf</code>). Inter is drawn on the page because #141 chose it, but its line heights are not used: the app's code still sets Manrope, so the shares are for the code as it stands.</p>
         <p>The cutout inset (${B.INSET} dp) is not in the layout; it is the one derived value: 426 px is 142 dp, and 14 + 48 + 4 + 22 + 11 leaves ${B.INSET} dp. The spec's "173 px above the clock" agrees (14 + ${B.INSET} = 57 dp = 171 px).</p>
-        ${["thin", "none", "today"].map((v) => { const s = shareOf(v); const nm = VARIANTS.find((x) => x[0] === v)[1];
+        ${["thin", "none", "today", "nopm"].map((v) => { const s = shareOf(v); const nm = VARIANTS.find((x) => x[0] === v)[1];
           return `<p><b>${nm}</b><br>top ${s.g.topParts.map((p) => p[0] + " " + f1(p[1])).join(" + ")} = ${f1(s.g.topH)} dp<br>bottom ${s.g.bottomParts.map((p) => p[0] + " " + f1(p[1])).join(" + ")} = ${f1(s.g.bottomH)} dp</p>`; }).join("")}
       </details>`;
     const out = B.shares().map((s) => `${s.variant}: above ${s.topPx.toFixed(0)} px, below ${s.bottomPx.toFixed(0)} px, opaque ${s.opaque.toFixed(1)} %, footprint ${s.footprint.toFixed(1)} %`);
     console.log("bands mock, chrome share\n" + out.join("\n"));
-    $("#frameinfo").textContent = `Analysis frame ${B.FRAME.srcW} x ${B.FRAME.srcH}, mapped FILL_CENTER onto ${B.W} x ${B.H} dp: scale ${B.FRAME.scale.toFixed(4)}, ${B.FRAME.w.toFixed(1)} x ${B.FRAME.h.toFixed(1)} dp, ${B.FRAME.cropX.toFixed(1)} dp cropped off each side. One rectangle, drawn the same in all three variants; the second dashed line is its visible edge. The real zone (today's bright middle, drawn as corners in No bands) is y ${B.ZONE.top.toFixed(0)} to ${B.ZONE.bottom.toFixed(1)} dp.`;
+    $("#frameinfo").textContent = `Analysis frame ${B.FRAME.srcW} x ${B.FRAME.srcH}, mapped FILL_CENTER onto ${B.W} x ${B.H} dp: scale ${B.FRAME.scale.toFixed(4)}, ${B.FRAME.w.toFixed(1)} x ${B.FRAME.h.toFixed(1)} dp, ${B.FRAME.cropX.toFixed(1)} dp cropped off each side. One rectangle, drawn the same in all four variants; the second dashed line is its visible edge. The real zone (today's bright middle, drawn as corners in No bands) is y ${B.ZONE.top.toFixed(0)} to ${B.ZONE.bottom.toFixed(1)} dp.`;
   }
 
   function init() {
     const seg = (id, items, attr) => { $(id).innerHTML = items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="false">${n}</button>`).join(""); };
-    seg("#seg-view", [["side", "Side by side"], ["big", "One big phone"], ["grid", "All 15"]], "data-view");
+    seg("#seg-view", [["side", "Side by side"], ["cmp", "No bands vs A vs B"], ["big", "One big phone"], ["grid", "All 20"]], "data-view");
+    seg("#seg-readout", [["A", "A  count, then the words"], ["B", "B  segmented ring"]], "data-readout");
     seg("#seg-state", STATES, "data-state");
     seg("#seg-variant", VARIANTS.map(([k, n]) => [k, n]), "data-variant");
     document.addEventListener("click", (e) => {
-      const b = e.target.closest("button[data-view],button[data-state],button[data-variant]");
+      const b = e.target.closest("button[data-view],button[data-state],button[data-variant],button[data-readout]");
       if (!b) return;
       if (b.dataset.view) st.view = b.dataset.view;
       if (b.dataset.state) st.state = b.dataset.state;
       if (b.dataset.variant) st.variant = b.dataset.variant;
+      if (b.dataset.readout) st.readout = b.dataset.readout;
       renderStage();
     });
     [["frame", "#t-frame"], ["person", "#t-person"], ["lift", "#t-lift"], ["mark", "#t-mark"], ["targets", "#t-targets"]].forEach(([k, id]) => {
