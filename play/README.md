@@ -44,8 +44,8 @@ with stand-in values and is what CI runs.
 ## The graphics
 
 `play/graphics/` holds the SVG sources and the PNGs Play Console takes. `tools/play/render_graphics.py`
-draws the SVGs with the headless Chromium on the machine (so that the app's own Manrope font is
-used), fixes the pixel format with ImageMagick, and then checks size, bit depth, transparency and
+draws the SVGs with the headless Chromium on the machine (so that the Manrope font in
+`play/graphics/fonts/` is used; the app itself is set in Inter now), fixes the pixel format with ImageMagick, and then checks size, bit depth, transparency and
 that the edges are black. Run it again after editing an SVG and commit the PNGs.
 
 ## What keeps it honest

@@ -19,7 +19,6 @@ import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.annotation.ColorInt
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.customview.widget.ExploreByTouchHelper
@@ -149,7 +148,7 @@ class SessionTimelineView @JvmOverloads constructor(
         textSize = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics
         )
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_semibold)
+        typeface = CindyType.semiBold(context)
         fontFeatureSettings = "tnum"
     }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
