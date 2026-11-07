@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The score leads, at the size a score deserves; everything that explains it follows in grouped
-  cards. The old screen put the headline, the number and the detail line in the accent colour,
-  a bordered level box and then a bare column of rows with no card around them at all.
+  The score and the time lead, at the size a score deserves; everything that explains them
+  follows in grouped cards, and a section a short session has nothing for is hidden, not filled
+  with dashes. The old screen put the headline, the number and the detail line in the accent
+  colour, a bordered level box and then a bare column of rows with no card around them at all.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -40,42 +41,92 @@
                 style="@style/Cindy.Eyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="TIME" />
+                android:text="SESSION" />
 
+            <!-- The lead: the score and the time side by side, then the one line that qualifies
+                 them. It is one TalkBack stop, read as the sentences SessionLead gives it. -->
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:baselineAligned="true"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/score"
-                    style="@style/Cindy.MetricXL"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="72sp"
-                    android:text="0" />
-
-                <!-- Rounds are the score; the loose reps are a footnote on it. -->
-                <TextView
-                    android:id="@+id/scoreReps"
-                    style="@style/Cindy.MetricXL"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:fontFamily="@font/manrope_bold"
-                    android:textColor="@color/label_tertiary"
-                    android:textSize="38sp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/scoreDetail"
-                style="@style/Cindy.Callout"
+                android:id="@+id/lead"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="8dp"
+                android:focusable="true"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="top"
+                    android:orientation="horizontal">
+
+                    <!-- Rounds are the score; the loose reps are a footnote on it. -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:baselineAligned="true"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/score"
+                            style="@style/Cindy.MetricXL"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="72sp"
+                            android:text="0" />
+
+                        <TextView
+                            android:id="@+id/scoreReps"
+                            style="@style/Cindy.MetricXL"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:fontFamily="@font/manrope_bold"
+                            android:textColor="@color/label_tertiary"
+                            android:textSize="38sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="12dp"
+                        android:gravity="end"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/Cindy.Eyebrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="TIME" />
+
+                        <TextView
+                            android:id="@+id/leadTime"
+                            style="@style/Cindy.MetricM"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0:00" />
+
+                        <TextView
+                            android:id="@+id/leadTimeNote"
+                            style="@style/Cindy.Footnote"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/scoreDetail"
+                    style="@style/Cindy.Callout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
 
             <!-- What this session earned, when it earned anything. Built in code. -->
             <LinearLayout
