@@ -173,7 +173,19 @@ class MenuActivity : AppCompatActivity() {
         val stravaTokens = StravaTokenStore(this)
         val stravaGrant = stravaTokens.grant
 
-        // The athlete comes first: who the scores belong to, and what they have earned so far.
+        // The way back to the session just finished, two taps from the camera. Absent with no
+        // sessions, because a row that opens nothing is a dead end.
+        LastSessionRow.of(all)?.let { last ->
+            binding.rows.addView(insetGroup {
+                row(navRow(last.title, last.value) {
+                    startActivity(ResultsActivity.review(this@MenuActivity, last.atMillis))
+                }.apply { describeAsButton(last.spokenName) })
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(12) })
+        }
+
+        // The athlete comes next: who the scores belong to, and what they have earned so far.
         val name = profile.displayName
         val photo = AvatarStore.load(this)
         val earned = Badges.earned(

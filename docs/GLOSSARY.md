@@ -92,6 +92,10 @@ _Avoid_: recording (on its own), clip
 The page for one session, shown when a workout ends and when a past session is reopened.
 _Avoid_: results, results screen, summary
 
+**Last session**:
+The most recent session by when it was filed, not the best one. The menu's first row shows its date and score and opens its session page; with no sessions the row is absent.
+_Avoid_: latest result, best session
+
 **Progress**:
 The page of every session over time: the trend, the calendar of trained days and the leaderboard.
 _Avoid_: records, history (a record is a personal best, not a page)
