@@ -95,6 +95,8 @@ class ProgressChartView @JvmOverloads constructor(
             TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics
         )
         typeface = CindyType.semiBold(context)
+        // Axis values and dates are numbers: tabular figures keep a label from shifting as the scale changes.
+        fontFeatureSettings = "tnum"
     }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = colourLabel
