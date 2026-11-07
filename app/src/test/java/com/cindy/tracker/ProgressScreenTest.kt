@@ -11,6 +11,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -89,6 +90,24 @@ class ProgressScreenTest {
         views(activity.findViewById(android.R.id.content))
             .filterIsInstance<TextView>().map { it.text.toString() }.toList()
 
+    /** The three histories the page is built for, each laid out whole at the P40's size. */
+    @Test
+    fun `it builds for an empty, a short and a long history`() {
+        listOf(0, 1, 60).forEach { count ->
+            RecordStore(context).clear()
+            history(count)
+            val activity = open()
+            val content = scroll(activity).getChildAt(0)
+            assertTrue("$count sessions: nothing was laid out", content.height > 0)
+            // Every icon on the page resolved to something with a size.
+            views(content).filterIsInstance<android.widget.ImageView>().forEach {
+                it.drawable?.let { d ->
+                    assertTrue("$count sessions: an icon has no size", d.intrinsicWidth > 0)
+                }
+            }
+        }
+    }
+
     @Test
     fun `the title stands on its own, with no sentence under it`() {
         history(3)
@@ -118,6 +137,95 @@ class ProgressScreenTest {
 
     private fun scroll(activity: Activity): ScrollView =
         first(activity) { it is ScrollView } as ScrollView
+
+    /** The leaderboard's rows, in order: each one speaks as "Rank n, ...". */
+    private fun rankRows(activity: Activity): List<View> =
+        views(activity.findViewById(android.R.id.content))
+            .filter { it.contentDescription?.startsWith("Rank ") == true }.toList()
+
+    private fun byDescription(activity: Activity, description: String): View? =
+        first(activity) { it.contentDescription?.toString() == description }
+
+    @Test
+    fun `no row of the leaderboard is named You`() {
+        history(12)
+        assertFalse("a row called You", "You" in texts(open()))
+    }
+
+    @Test
+    fun `a long history shows the top five sessions under the benchmark and offers the rest`() {
+        history(12)
+        val activity = open()
+        // The benchmark and five sessions.
+        assertEquals(6, rankRows(activity).size)
+        val more = byDescription(activity, "Show all 12 sessions")
+        assertNotNull("no way to see the rest", more)
+        more!!.performClick()
+        assertEquals(13, rankRows(activity).size)
+        val fewer = byDescription(activity, "Show the top 5")
+        assertNotNull("no way back to the top five", fewer)
+        fewer!!.performClick()
+        assertEquals(6, rankRows(activity).size)
+    }
+
+    @Test
+    fun `a short history shows every session and offers nothing more`() {
+        history(3)
+        val activity = open()
+        assertEquals(4, rankRows(activity).size)
+        assertTrue(views(activity.findViewById(android.R.id.content)).none {
+            it.contentDescription?.startsWith("Show all") == true
+        })
+    }
+
+    @Test
+    fun `each session's row says its rank, its day and its score`() {
+        history(3)
+        val rows = rankRows(open()).map { it.contentDescription.toString() }
+        // The benchmark leads: none of the three sessions beats twenty-seven rounds.
+        assertTrue(rows[0], rows[0].startsWith("Rank 1, Tom Holland, 27"))
+        val best = rows[1]
+        assertTrue(best, best.startsWith("Rank 2, "))
+        assertTrue(best, Regex("\\d{1,2} \\w{3} \\d{4}").containsMatchIn(best))
+        assertTrue(best, best.contains("14 + 2"))
+    }
+
+    @Test
+    fun `a session that beats the benchmark is listed above it`() {
+        val store = RecordStore(context)
+        store.add(
+            Attempt(
+                rounds = 28, reps = 0, atMillis = System.currentTimeMillis() - day,
+                durationMs = 20 * 60 * 1000L, roundSplitsMs = List(28) { 42_000L },
+                profile = CindyProfile.STANDARD
+            )
+        )
+        history(2)
+        val rows = rankRows(open()).map { it.contentDescription.toString() }
+        assertTrue(rows[0], rows[0].startsWith("Rank 1, ") && !rows[0].contains("Tom Holland"))
+        assertTrue(rows[1], rows[1].startsWith("Rank 2, Tom Holland"))
+    }
+
+    @Test
+    fun `with no history the page is the first card and the benchmark to chase`() {
+        val activity = open()
+        val shown = texts(activity)
+        assertTrue(shown.any { it == "Your first Cindy starts everything." })
+        assertTrue("no benchmark row", rankRows(activity).size == 1)
+        assertTrue(shown.any { it.startsWith("No attempts yet") })
+        assertNull("a chart with nothing to plot", chart(activity))
+        assertFalse("week figures with nothing in them", "THIS WEEK" in shown)
+    }
+
+    @Test
+    fun `the next streak milestone is kept, under the calendar`() {
+        history(12)
+        val activity = open()
+        val content = scroll(activity).getChildAt(0)
+        val step = first(activity) { it is TextView && it.text.contains("more days to a") }
+        assertNotNull("the next-step line is gone", step)
+        assertTrue(top(step!!, content) > top(chart(activity)!!, content))
+    }
 
     @Test
     fun `the week's figures come before the chart`() {

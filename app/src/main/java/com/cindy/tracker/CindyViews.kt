@@ -234,16 +234,21 @@ fun Context.statRow(
 }
 
 /**
- * A leaderboard row: rank, who, when, and the score in metric type.
+ * A leaderboard row: the rank, what the place is for, the score in metric type.
  *
- * [onTap], when given, opens the session it stands for — the athlete's own rows, never the
+ * The athlete's own sessions are titled by the day they were done, and the benchmark by its
+ * name, so that no two rows read alike. The top three of the athlete's own take a medal, the
+ * earned colour for first; every other rank is a plain figure, and the benchmark never takes a
+ * medal because it is not something the athlete earned.
+ *
+ * [onTap], when given, opens the session the row stands for — the athlete's own rows, never the
  * benchmark's, which is not a session anyone can reopen. It gets the same treatment [navRow]
  * already gives an opener: a chevron, the ripple, and a Button role, rather than [statRow]'s "tap
  * to change", which would be the wrong thing to tell someone about a row that opens a page.
  */
 fun Context.rankRow(
-    rank: String,
-    name: String,
+    rank: Int,
+    title: String,
     detail: String,
     score: String,
     mine: Boolean,
@@ -252,32 +257,42 @@ fun Context.rankRow(
 ): View = rowFrame(tappable = onTap != null).apply {
     // The athlete's own rows sit on a slightly brighter film; the benchmark recedes.
     if (mine) setBackgroundColor(getColor(R.color.surface_glass))
-    addView(styledText(R.style.Cindy_Callout, rank).apply {
-        layoutParams = LinearLayout.LayoutParams(dp(22), ViewGroup.LayoutParams.WRAP_CONTENT)
-        setTextColor(getColor(R.color.label_tertiary))
-    })
+    if (mine && rank <= 3) {
+        addView(medal(rank).apply {
+            (layoutParams as LinearLayout.LayoutParams).marginEnd = dp(12)
+        })
+    } else {
+        addView(styledText(R.style.Cindy_Callout, "$rank").apply {
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                dp(28), ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = dp(12) }
+            setTextColor(getColor(R.color.label_tertiary))
+        })
+    }
     addView(LinearLayout(this@rankRow).apply {
         orientation = LinearLayout.VERTICAL
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(styledText(R.style.Cindy_Headline, name).apply {
-                if (mine) useExtraBold()
+            addView(styledText(R.style.Cindy_Headline, title).apply {
+                if (!mine) setTextColor(getColor(R.color.label_secondary))
             })
-            if (best) addView(badge("BEST").withStartMargin(dp(7)))
+            if (best) addView(badge("BEST").withStartMargin(dp(8)))
         })
         addView(styledText(R.style.Cindy_Footnote, detail).apply { setPadding(0, dp(2), 0, 0) })
     })
     addView(styledText(R.style.Cindy_MetricS, score).apply {
         if (!mine) setTextColor(getColor(R.color.label_secondary))
-    }.withStartMargin(dp(10)))
+    }.withStartMargin(dp(12)))
+    val spoken = "Rank $rank, $title, $score, $detail"
     if (onTap != null) {
         addView(chevron())
         setOnClickListener { onTap() }
-        describeAsButton("$rank, $name, $score, $detail")
+        describeAsButton(spoken)
     } else {
-        contentDescription = "$rank, $name, $score, $detail"
+        contentDescription = spoken
     }
 }
 

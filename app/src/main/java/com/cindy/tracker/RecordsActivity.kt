@@ -41,6 +41,9 @@ class RecordsActivity : AppCompatActivity() {
     private var shownAttempts: List<Attempt> = emptyList()
     private lateinit var progressHolder: LinearLayout
     private lateinit var calendarHolder: LinearLayout
+    private lateinit var leaderboardHolder: LinearLayout
+    /** Whether the ranking shows every session instead of the top few. */
+    private var leaderboardExpanded = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,18 +94,34 @@ class RecordsActivity : AppCompatActivity() {
         if (attempts.isNotEmpty()) calendar(attempts, today, zone, firstDay)
     }
 
+    /**
+     * The athlete's sessions as a ranking, with the benchmark standing among them.
+     *
+     * Each row is a place: its rank, the day it was done and its score. Only the top
+     * [LEADERBOARD_ROWS] sessions show at first, so that a long history stays a ranking and does
+     * not become a log; the rest is one tap away, and the calendar reaches any one day.
+     */
     private fun leaderboard(attempts: List<Attempt>) {
-        val rows = binding.rows
-        val mine = Records.ranked(attempts)
-        val beaten = mine.firstOrNull()?.let { Records.beatsBenchmark(it) } == true
+        binding.rows.addView(section("LEADERBOARD"))
+        leaderboardHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        binding.rows.addView(leaderboardHolder)
+        renderLeaderboard(attempts)
+    }
 
-        rows.addView(section("LEADERBOARD"))
+    /** Rebuilds only the ranking, so showing more rows does not scroll the page to the top. */
+    private fun renderLeaderboard(attempts: List<Attempt>) {
+        leaderboardHolder.removeAllViews()
+        val standings = Records.standings(attempts)
+        val ownRanked = standings.mapNotNull { it.attempt }
 
-        if (mine.isEmpty()) {
-            rows.addView(insetGroup {
-                row(benchmarkRow(if (beaten) "2" else "1"))
-            })
-            rows.addView(styledText(
+        if (ownRanked.isEmpty()) {
+            leaderboardHolder.addView(insetGroup { row(benchmarkRow(1)) })
+            leaderboardHolder.addView(styledText(
                 R.style.Cindy_Footnote,
                 "No attempts yet. Finish a 20-minute Cindy and it lands here."
             ).apply {
@@ -113,30 +132,64 @@ class RecordsActivity : AppCompatActivity() {
         }
 
         val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
-        // The athlete's own name, once they have given one, and "You" until then.
-        val who = Profile(this).displayName ?: "You"
-        rows.addView(insetGroup {
-            row(benchmarkRow(if (beaten) "2" else "1"))
-            mine.forEachIndexed { i, a ->
-                val outranks = Records.beatsBenchmark(a)
-                row(rankRow(
-                    rank = if (outranks) "${i + 1}" else "${i + 2}",
-                    name = who,
-                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.caption}" +
-                        (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
-                    score = a.scoreLabel(),
-                    mine = true,
-                    // "Best" means best at these movements. Across categories it would be
-                    // comparing a band-assisted Cindy with a strict one and calling one better.
-                    best = a == Records.bestIn(mine, a.profile)
-                ) { openSession(a.atMillis) })
+        val timeFormat = SimpleDateFormat(
+            if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm a", Locale.US
+        )
+        // Cut by place, benchmark included, so the athlete's top five always show whole.
+        var sessionsShown = 0
+        val shown = standings.filter { place ->
+            if (leaderboardExpanded) return@filter true
+            if (place.attempt == null) return@filter true
+            sessionsShown++ < LEADERBOARD_ROWS
+        }
+        leaderboardHolder.addView(insetGroup {
+            shown.forEach { place ->
+                val a = place.attempt
+                if (a == null) {
+                    row(benchmarkRow(place.rank))
+                } else {
+                    row(rankRow(
+                        rank = place.rank,
+                        title = dateFormat.format(Date(a.atMillis)),
+                        detail = listOfNotNull(
+                            timeFormat.format(Date(a.atMillis)),
+                            a.caption,
+                            a.avgRoundMs?.let { "${formatDuration(it)}/round" }
+                        ).joinToString(" · "),
+                        score = a.scoreLabel(),
+                        mine = true,
+                        // "Best" means best at these movements. Across categories it would be
+                        // comparing a band-assisted Cindy with a strict one and calling one better.
+                        best = a == Records.bestIn(ownRanked, a.profile)
+                    ) { openSession(a.atMillis) })
+                }
+            }
+            if (ownRanked.size > LEADERBOARD_ROWS) {
+                row(moreRow(
+                    if (leaderboardExpanded) "Show the top $LEADERBOARD_ROWS"
+                    else "Show all ${ownRanked.size} sessions"
+                ) {
+                    leaderboardExpanded = !leaderboardExpanded
+                    renderLeaderboard(attempts)
+                })
             }
         })
     }
 
-    private fun benchmarkRow(rank: String) = rankRow(
+    /** The row that opens or closes the rest of the ranking: a centred label, 56dp to hit. */
+    private fun moreRow(label: String, onTap: () -> Unit): View =
+        styledText(R.style.Cindy_Callout, label).apply {
+            gravity = Gravity.CENTER
+            minimumHeight = dp(56)
+            foreground = rowRipple()
+            setTextColor(getColor(R.color.label_secondary))
+            setOnClickListener { onTap() }
+            describeAsButton(label)
+        }
+
+    private fun benchmarkRow(rank: Int) = rankRow(
         rank = rank,
-        name = Records.BENCHMARK_NAME,
+        title = Records.BENCHMARK_NAME,
         detail = "the benchmark · ${Records.BENCHMARK.totalReps} reps",
         score = Records.BENCHMARK.scoreLabel(),
         mine = false,
@@ -709,5 +762,10 @@ class RecordsActivity : AppCompatActivity() {
         }
         ProgressMetric.PACE -> "Higher is faster. Full 20-minute sessions only."
         ProgressMetric.VOLUME -> "Every session counts toward volume, whatever the movements."
+    }
+
+    private companion object {
+        /** How many of the athlete's own sessions the ranking shows until asked for the rest. */
+        const val LEADERBOARD_ROWS = 5
     }
 }
