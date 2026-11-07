@@ -15,3 +15,4 @@ On 2026-10-19 the owner found the two interfaces "totally different" and decided
 - The camera screen has a SKIP button; skipping is no longer a long press on +1.
 - The status bar and home indicator are hidden on the camera screen.
 - The App Store submission waits until at least the camera screen and the session page match.
+- On 2026-11-07 the Android app's typeface moved from Manrope to Inter (spec #139, ticket #149). The tokens above name Manrope because that was Android's font when this was decided; the iPhone app keeps Manrope until its type is ported, and follows Android to Inter then.
