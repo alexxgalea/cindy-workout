@@ -1,4 +1,5 @@
-/* MOCK for #140: the camera screen's band variants (three from the ticket, plus the owner's fourth: No bands without - and +), in dp.
+/* MOCK for #140: the camera screen's band variants (three from the ticket, the owner's rejected fourth: No bands without - and +,
+   and the owner's hybrid of 2026-11-07: Thin bands' top over today's bottom), in dp.
    Every number below is read from prototype/hud-bands (e6593b1): res/layout/activity_main.xml (today's bands),
    HudVariants.kt (tune(), glass(), makeCompact()) and ZoneCornersView.kt. Nothing here is the app.
 
@@ -20,9 +21,12 @@
   /** The layout of one variant, in dp, from the camera screen's top-left. */
   function geom(variant) {
     const g = { variant, W, H };
-    const compact = variant !== "today";
+    // The hybrid ("Thin top, today's bottom") takes Thin bands' top and today's bottom, each exactly as the branch sizes it.
+    const thinTop = variant !== "today";
+    const compact = variant !== "today" && variant !== "hybrid";   // the bottom band
+    g.thinTop = thinTop; g.thinBottom = compact;
     // ---- top band -----------------------------------------------------------------
-    if (!compact) {
+    if (!thinTop) {
       g.rowTop = 14 + INSET; g.rowH = 48;                  // paddingTop 14 + cutout; clockRow 48dp
       g.statusTop = g.rowTop + g.rowH + 4; g.statusH = stat;   // marginTop 4, in the band
       g.topH = g.rowTop + g.rowH + 4 + stat + 11;          // + paddingBottom 11
@@ -95,7 +99,7 @@
   /** The chrome share per variant, from geom(). opaque: what the bands cover; footprint: what the controls occupy. */
   function shares() {
     const pct = (dp) => 100 * dp / H;
-    return ["thin", "none", "today", "nopm"].map((v) => {
+    return ["hybrid", "thin", "today", "none", "nopm"].map((v) => {
       const g = geom(v);
       const band = v !== "none" && v !== "nopm";
       const pill = g.pillH ? g.pillH + 8 : 0;
