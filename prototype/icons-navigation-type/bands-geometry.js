@@ -1,4 +1,4 @@
-/* MOCK for #140: the camera screen's three band variants, in dp.
+/* MOCK for #140: the camera screen's band variants (three from the ticket, plus the owner's fourth: No bands without - and +), in dp.
    Every number below is read from prototype/hud-bands (e6593b1): res/layout/activity_main.xml (today's bands),
    HudVariants.kt (tune(), glass(), makeCompact()) and ZoneCornersView.kt. Nothing here is the app.
 
@@ -13,6 +13,7 @@
   const INSET = 43;                              // the cutout, applied as padding-top of the top band (derived, see below)
   const MEASURED = { topPx: 426, bottomPx: 662, spec: { topPx: 426, bottomPx: 533, pct: 43 } };
 
+  const NOPM_PLATE = 80;                         // the fourth variant's readout plate, in dp (see geom())
   const eyebrow = 11 * LH.b;                     // Cindy.Eyebrow, 11sp Bold
   const stat = Math.max(22, 14 * LH.sb);         // status row: minHeight 22dp, 14sp SemiBold
 
@@ -35,7 +36,8 @@
     }
     // icons in the clock row: 44 x 40, paddingEnd 12; the camera switch is first of three
     g.icon = { w: 44, h: 40 };
-    const gap = variant === "none" ? 8 : 0;                // glass() gives each a marginStart of 8
+    const glass = variant === "none" || variant === "nopm";
+    const gap = glass ? 8 : 0;                             // glass() gives each a marginStart of 8
     g.menuX = W - 12 - 44;
     g.recX = g.menuX - gap - 44;
     g.switchX = g.recX - gap - 44;
@@ -53,12 +55,20 @@
       g.shutter = 68; g.side = 52; g.edit = 52; g.edX = 20;
     } else {
       const K = Math.max(48, 44 * LH.xb);                  // reps autosize 24..44sp: 44sp ExtraBold sets the height
-      const glass = variant === "none";
-      const boxH = glass ? K + 8 : K;
+      // No bands, no -/+ (variant "nopm"): nothing but type to hold, so the plate is drawn to its own height: 64 sp reps
+      // in readout A, a 68 dp ring in readout B, 80 dp either way. Mock-only design value, not read from the branch.
+      const boxH = variant === "nopm" ? NOPM_PLATE : glass ? K + 8 : K;
       g.K = K; g.boxH = boxH;
       const gapTop = glass ? 6 : 4;
       g.bottomH = 3 + gapTop + boxH + 6 + 56 + 8;
-      g.bottomParts = [["progress edge", 3], ["gap", gapTop], [glass ? "count pill (44 sp reps + 4 dp padding)" : "count row (reps 44 sp)", boxH], ["gap", 6], ["action row (shutter 56)", 56], ["padding bottom", 8]];
+      const plateName = variant === "nopm" ? "readout plate (A: 64 sp reps; B: 68 dp ring; no -/+)" : glass ? "count pill (44 sp reps + 4 dp padding)" : "count row (reps 44 sp)";
+      g.bottomParts = [["progress edge", 3], ["gap", gapTop], [plateName, boxH], ["gap", 6], ["action row (shutter 56)", 56], ["padding bottom", 8]];
+      if (variant === "nopm") {
+        // The other variants are sized with Android's font padding on. If the real app kept it on for a 64 sp ExtraBold
+        // reps line, the plate would be 64 x 1.5445 + 8 dp and the bottom taller by the difference.
+        g.platePadded = 64 * LH.xb + 8;
+        g.bottomHPadded = g.bottomH + (g.platePadded - boxH);
+      }
       g.y0 = H - g.bottomH;
       g.boxTop = g.y0 + 3 + gapTop;
       g.boxX = glass ? 16 : 0; g.boxW = glass ? W - 32 : W;
@@ -85,9 +95,9 @@
   /** The chrome share per variant, from geom(). opaque: what the bands cover; footprint: what the controls occupy. */
   function shares() {
     const pct = (dp) => 100 * dp / H;
-    return ["thin", "none", "today"].map((v) => {
+    return ["thin", "none", "today", "nopm"].map((v) => {
       const g = geom(v);
-      const band = v !== "none";
+      const band = v !== "none" && v !== "nopm";
       const pill = g.pillH ? g.pillH + 8 : 0;
       return {
         variant: v, g,
@@ -97,6 +107,7 @@
         opaque: band ? pct(g.topH + g.bottomH) : 0,
         withPill: pct(g.topH + g.bottomH + pill),
         picture: band ? 100 - pct(g.topH + g.bottomH) : 100,
+        padded: g.bottomHPadded ? pct(g.topH + g.bottomHPadded) : null,
       };
     });
   }
