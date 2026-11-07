@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inter 4.1 (static instances, upright), subset to Latin-1, Latin Extended-A, the Romanian comma
+  letters and the punctuation and signs this app actually prints, at the five weights the type
+  scale uses. Layout features kept: kern, calt, ccmp, locl, mark, mkmk and tnum. tnum is the one
+  that matters: Inter's default figures are proportional, and every numeric style asks for
+  tabular ones so a running clock does not shift sideways.
+
+  Static instances rather than the variable font: android:fontWeight on a <font> needs API 26
+  (fine), but TextView's android:textFontWeight needs 28, so anything wanting 500/600/800
+  references its file directly (through the styles in type.xml and CindyType) instead of
+  resolving through this family.
+
+  This family exists for the theme default, where only normal and bold are ever asked for.
+  Swapping the app's typeface is replacing these five files and this list, and nothing else.
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font android:fontStyle="normal" android:fontWeight="400" android:font="@font/inter_regular" />
+    <font android:fontStyle="normal" android:fontWeight="500" android:font="@font/inter_medium" />
+    <font android:fontStyle="normal" android:fontWeight="600" android:font="@font/inter_semibold" />
+    <font android:fontStyle="normal" android:fontWeight="700" android:font="@font/inter_bold" />
+    <font android:fontStyle="normal" android:fontWeight="800" android:font="@font/inter_extrabold" />
+</font-family>

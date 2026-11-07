@@ -6,7 +6,6 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
-import androidx.core.content.res.ResourcesCompat
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -34,7 +33,7 @@ class WeekStripView @JvmOverloads constructor(
         textSize = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics
         )
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_semibold)
+        typeface = CindyType.semiBold(context)
     }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
