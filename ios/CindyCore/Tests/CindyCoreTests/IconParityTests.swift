@@ -41,7 +41,45 @@ final class IconParityTests: XCTestCase {
         }
     }
 
-    func testEveryAndroidIconHasAnImageset() {
+    /// Android's icons became Phosphor's on the 256 grid (ADR 0008, #170) and lost two (`ic_music`,
+    /// `ic_voice`). The iPhone app keeps the old hand-drawn set until its port (#155; ADR 0003), so
+    /// the tests that hold the iPhone's artwork to Android's artwork are skipped, and say so, until
+    /// that port lands. Delete this and the `XCTSkipIf` calls below when it does.
+    private static let iPhoneKeepsTheOldSet =
+        "Skipped until the iPhone port of the polished interface (#155): Android's icons are Phosphor's "
+        + "(ADR 0008, #170) and the iPhone app keeps the old set until its port (ADR 0003)."
+
+    /// Holds today: every icon Android still has also has an imageset, and has paths to draw.
+    func testEveryAndroidIconStillHasAnImageset() throws {
+        XCTAssertTrue(androidNames.isSubset(of: imagesetNames),
+                      "no imageset for \(androidNames.subtracting(imagesetNames).sorted())")
+        for name in androidNames.sorted() {
+            XCTAssertFalse(try androidPaths(name).isEmpty, name)
+        }
+    }
+
+    /// Holds today: each imageset is a well-formed file pair, its SVG draws at least one path, and
+    /// every path says what it fills (SVG fills black unless told not to; Android's default is none).
+    func testEveryImagesetIsWellFormed() throws {
+        XCTAssertFalse(imagesetNames.isEmpty)
+        for name in imagesetNames.sorted() {
+            let folder = Self.icons.appendingPathComponent("\(name).imageset")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("Contents.json").path),
+                          "\(name) has no Contents.json")
+            let svg = try text(folder.appendingPathComponent("\(name).svg"))
+            let paths = try matches("<path\\b(.*?)/>", in: svg)
+            XCTAssertFalse(paths.isEmpty, "\(name) draws no path")
+            for path in paths {
+                XCTAssertTrue(path[0].contains("fill=\""), "\(name) leaves a path's fill to the default")
+            }
+        }
+    }
+
+    /// The exact set: one imageset per Android icon and no other. The count is the 22 Android had
+    /// before #170; it has 20 now, and the iPhone still has `ic_music` and `ic_voice` as well, so
+    /// there are 22 imagesets. The count is for the port to restate.
+    func testEveryAndroidIconHasAnImageset() throws {
+        try XCTSkipIf(true, Self.iPhoneKeepsTheOldSet)
         XCTAssertEqual(androidNames.count, 22)
         XCTAssertEqual(imagesetNames, androidNames)
     }
@@ -67,23 +105,19 @@ final class IconParityTests: XCTestCase {
     }
 
     func testEachSvgDrawsTheVectorsPathsInOrder() throws {
+        try XCTSkipIf(true, Self.iPhoneKeepsTheOldSet)
         for name in androidNames.sorted() {
-            let android = try androidPaths(name)
-            XCTAssertFalse(android.isEmpty, name)
-            XCTAssertEqual(try svgPaths(name), android, name)
+            XCTAssertEqual(try svgPaths(name), try androidPaths(name), name)
         }
     }
 
     func testEachSvgFillsOnlyWhereAndroidFills() throws {
+        // Only the fill rule is compared here: that every path states its fill, and that each SVG
+        // has paths, are held by `testEveryImagesetIsWellFormed`, which runs.
+        try XCTSkipIf(true, Self.iPhoneKeepsTheOldSet)
         for name in androidNames.sorted() {
             let xml = try text(Self.drawables.appendingPathComponent("\(name).xml"))
             let svg = try text(Self.icons.appendingPathComponent("\(name).imageset/\(name).svg"))
-            let paths = try matches("<path\\b(.*?)/>", in: svg)
-            XCTAssertFalse(paths.isEmpty, name)
-            for path in paths {
-                // SVG fills black unless told not to; Android's default is none.
-                XCTAssertTrue(path[0].contains("fill=\""), "\(name) leaves a path's fill to the default")
-            }
             XCTAssertEqual(xml.contains("evenOdd"), svg.contains("evenodd"), name)
         }
     }
