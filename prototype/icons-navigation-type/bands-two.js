@@ -23,19 +23,19 @@
 
   const ARRS = [
     { id: "A", name: "A. Stepper capsule in the row",
-      what: "One row, as asked: END, the − | + capsule, then the run control and SKIP. The capsule is one shape and the run control another, 40 dp apart; − is the half next to END, which asks before it ends anything.",
-      cost: "Five controls in one row leave no room for the run control in the centre: pause, START and RESUME sit at x 240 in every state." },
+      what: "One row, as asked: END, the − | + capsule, then the shutter and SKIP. The capsule is one shape and the shutter another, 40 dp apart; − is the half next to END, which asks before it ends anything.",
+      cost: "Five controls in one row leave no room for the shutter in the centre: pause, START and RESUME sit at x 240 in every state." },
     { id: "B", name: "B. Stepper beside the figure",
-      what: "− and + leave the row and stand beside the count they change, + over −, as today's editors flank the count. The row is today's: END, the run control in the centre, SKIP, in the same three places in all five states.",
-      cost: "The figure gives 56 dp of its width to the capsule, so 12/15 has about 4 dp of air either side and the takeover is set at 48 sp, not 56. The capsule is on the right edge, a reach for a left hand. It is not one row." },
+      what: "− and + leave the row and stand beside the count they change, + over −, as today's editors flank the count. The row is today's: END, the shutter in the centre, SKIP, in the same three places in all five states.",
+      cost: "The figure gives 64 dp of its width to the capsule: 12/15 keeps 16 dp either side, 3/5 sits 24 dp left of centre, and the takeover is set at 48 sp, not 56. The capsule is on the right edge, a reach for a left hand. It is not one row." },
   ];
   const PICK = "B";
 
   const atBar = (state) => state === "running";
 
   // The takeover's type size: the largest of 56, 48, 40 sp at which the widest word (PUSH-UPS) fits the zone with 8 dp
-  // either side. Widths of Inter ExtraBold caps at -0.02 em, measured in Chrome: PUSH-UPS is 5.3125 em.
-  const takeSp = (arr) => [56, 48, 40].find((sp) => sp * 5.3125 <= T.arr[arr].figW - 16) || 40;
+  // either side. Widths of Inter ExtraBold caps at -0.02 em, measured in Chrome: PUSH-UPS is 5.138 em.
+  const takeSp = (arr) => [56, 48, 40].find((sp) => sp * 5.138 <= T.arr[arr].figW - 16) || 40;
 
   const pos = (x, y, w, h, extra = "") => `left:${x}px;top:${y}px;width:${w}px;height:${h}px;${extra}`;
 
@@ -44,10 +44,12 @@
   function figure(m) {
     const cnt = String(m.count), prev = m.prev == null ? null : String(m.prev).padStart(cnt.length, " ");
     const col = m.receded ? "var(--label-tertiary)" : m.alert ? "var(--alert)" : "var(--label)";
+    const b = (ch) => `<b>${ch === " " ? "&nbsp;" : ch}</b>`;
+    // Digits line up from the right, so 9 to 10 rolls a 1 in and 10 to 9 rolls the 0. Going down, the column runs backwards.
     const cells = [...cnt].map((ch, i) => {
-      const was = prev ? prev[i] : ch;
+      const was = prev ? prev[prev.length - cnt.length + i] : ch;
       return was !== ch
-        ? `<span class="td-d roll${m.still === "pulse" ? " still" : ""}" data-eq><span class="td-col"><b>${was === " " ? "&nbsp;" : was}</b><b>${ch}</b></span></span>`
+        ? `<span class="td-d roll${m.down ? " down" : ""}${m.still === "pulse" ? " still" : ""}" data-eq><span class="td-col">${m.down ? b(ch) + b(was) : b(was) + b(ch)}</span></span>`
         : `<span class="td-d" data-eq>${ch}</span>`;
     }).join("");
     const tgt = m.target == null ? "" :
@@ -58,8 +60,9 @@
   /** The words under the figure, sentence case: the movement and the round. */
   const lineText = (m) => (m.round == null ? m.name : `${m.name} · Round <span class="tnum">${m.round}</span>`);
 
-  /** The next set, as the takeover shows it: the number over the movement, one size. */
-  const takeover = (t) => `<span data-take>${t.n}</span><span data-take>${t.name.toUpperCase()}</span>`;
+  /** The next set, as the takeover shows it: the number over the movement, one size. It covers the figure and the line
+      under it (the zone and the line's row, 120 dp), and leaves every control where it is. */
+  const takeover = (t) => `<span data-take class="tnum">${t.n}</span><span data-take>${t.name.toUpperCase()}</span>`;
 
   /** Everything inside the bottom band, in dp from the screen's top-left. g: geom("two"). c: bands.js CTRL(state).
       m: { count, target, name, round, alert, receded, prev, still, taking: { n, name } }. o.arr: "A" or "B". */
@@ -76,8 +79,8 @@
     const take = bar ? `<div class="td-take" data-td-take style="font-size:${takeSp(arr)}px">${taking ? takeover(m.taking) : ""}</div>` : "";
     const line = `<div class="td-line${m.receded ? " receded" : ""}" data-td-line>${lineText(m)}</div>`;
     if (bar) {
-      h += `<div class="td-zone far${taking ? " taking" : ""}" data-td-zone style="${pos(fx, y0 + T.zoneTop, fw, T.zoneH)}">${fig}${take}</div>`;
-      h += `<div class="td-linerow" style="${pos(fx, y0 + T.lineTop, fw, T.lineH)}">${line}</div>`;
+      h += `<div class="td-zone far${taking ? " taking still" : ""}" data-td-zone style="${pos(fx, y0 + T.zoneTop, fw, T.zoneH)}">${fig}${take}</div>`;
+      h += `<div class="td-linerow${taking ? " taking" : ""}" data-td-linerow style="${pos(fx, y0 + T.lineTop, fw, T.lineH)}">${line}</div>`;
     } else {
       h += `<div class="td-zone near" data-td-zone style="${pos(fx, y0 + T.zoneTop, fw, T.zoneH)}">${fig}${line}</div>`;
     }
@@ -89,7 +92,7 @@
       `<div class="hit bz-circ" data-hit data-td-ctl="${id}" style="${pos(cx - size / 2, cy - size / 2, size, size, `opacity:${dim};color:${tint};border-radius:50%`)}">${ico(key, glyph)}</div>`;
     const label = (cx, text, w) => `<div class="td-lbl" style="${pos(cx - w / 2, y0 + T.labelTop, w, T.labelH)}">${text}</div>`;
     if (c.end) h += circ(a.endCx, side, "stop", bar ? 18 : 22, 1, "var(--alert)", "end");
-    // The run control. At the bar it is a quiet glass circle like its neighbours; at the phone it is the white shutter.
+    // The shutter. At the bar it is a quiet glass circle like its neighbours; at the phone it is the white disc it is today.
     h += bar
       ? circ(a.runCx, run, m.shutter, 18, c.shutter, "var(--label)", "run")
       : `<div class="hit bz-shutter" data-hit data-td-ctl="run" style="${pos(a.runCx - run / 2, cy - run / 2, run, run, `opacity:${c.shutter}`)}">${ico(m.shutter, 30)}</div>`;

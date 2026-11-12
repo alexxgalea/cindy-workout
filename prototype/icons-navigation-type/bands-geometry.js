@@ -117,11 +117,11 @@
     t.paddedFig = t.figSp * LH.xb;
     t.paddedLine = t.lineSp * LH.sb;
     t.paddedRun = 3 + t.zoneGap + t.paddedFig + t.paddedLine + t.rowGap + t.rowH + t.minPad;
-    // Control places, x in dp. A: END, the stepper capsule, then the run control and SKIP, the capsule 40 dp from the
-    // run control. B: END, the run control in the centre, SKIP; the stepper stands beside the figure, + over \u2212.
+    // Control places, x in dp. figX, figW: the figure zone. B's is 8..288, so 12/15 (263 dp at 96 sp) has 16 dp either side. A: END, the stepper capsule, then the shutter and SKIP, the capsule 40 dp from the
+    // shutter. B: END, the shutter in the centre, SKIP; the stepper stands beside the figure, + over \u2212.
     t.arr = {
       A: { endCx: 40, runCx: 240, skipCx: 320, stepper: { x: 80, w: 96, h: 48, vertical: false }, figX: 16, figW: W - 32 },
-      B: { endCx: 40, runCx: 180, skipCx: 320, stepper: { x: 296, w: 48, h: 96, vertical: true }, figX: 16, figW: 272 },
+      B: { endCx: 40, runCx: 180, skipCx: 320, stepper: { x: 296, w: 48, h: 96, vertical: true }, figX: 8, figW: 280 },
     };
     return t;
   })();
