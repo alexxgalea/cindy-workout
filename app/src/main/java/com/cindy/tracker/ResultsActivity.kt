@@ -159,9 +159,6 @@ class ResultsActivity : AppCompatActivity() {
                 setOnClickListener { confirmDiscard() }
             })
         }
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render(attempt, stoppedEarly)
     }
 
@@ -202,28 +199,18 @@ class ResultsActivity : AppCompatActivity() {
 
     private fun render(a: Attempt, stopped: Boolean) {
         val zone = ZoneId.systemDefault()
-        binding.headline.text = when {
-            reviewing -> reviewHeadline(a, zone)
-            stopped -> "STOPPED"
-            else -> "TIME"
-        }
+        // The date and time of the session, whether it has just ended or is reopened: the time
+        // figure under it is the clock, and the eyebrow must not read as a second one.
+        val when_ = reviewHeadline(a, zone)
+        binding.headline.text = if (stopped) "STOPPED · $when_" else when_
 
-        // Rounds are the score; loose reps are a footnote on it, so they drop a weight and a
-        // shade rather than sitting in the same 72sp as the number that matters.
-        binding.score.text = "${a.rounds}"
-        binding.scoreReps.visibility = if (a.reps > 0) View.VISIBLE else View.GONE
-        if (a.reps > 0) binding.scoreReps.text = "+${a.reps}"
+        lead(a)
 
         // Sessions this one could honestly be measured against: in review, only what had
         // already happened — so reopening an old session cannot be credited with a celebration,
         // a record or a comparison that later sessions, not this one, actually earned. After a
         // workout [a] is always the latest attempt on the board, so this changes nothing there.
         val all = RecordStore(this).all().filter { it.atMillis <= a.atMillis }
-        binding.scoreDetail.text = buildString {
-            append("${a.totalReps} reps in ${formatDuration(a.durationMs)} of clock")
-            if (a.pausedMs > 0L) append(" · ${formatDuration(a.realTimeMs)} real")
-            if (Records.beatsBenchmark(a)) append("  ·  past ${Records.BENCHMARK_NAME}")
-        }
 
         celebrate(a, all)
         sessionNumbers(a)
@@ -276,9 +263,31 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * Where each round's time went. Hidden when there is no complete round, because a bar of
-     * nothing says nothing. Built again, whole, every time [render] runs, which is what the body
-     * weight prompt triggers; the comparison ticks are the one part that changes without it.
+     * The score and the time the page opens on, as [SessionLead] words them. Rounds are the
+     * score; loose reps are a footnote on it, so they drop a weight and a shade rather than
+     * sitting in the same 72sp as the number that matters. The whole lead is one TalkBack stop.
+     */
+    private fun lead(a: Attempt) {
+        val lead = SessionLead.of(a, SessionStats.from(a))
+        binding.score.text = lead.score
+        binding.scoreReps.visibility = if (lead.looseReps != null) View.VISIBLE else View.GONE
+        binding.scoreReps.text = lead.looseReps.orEmpty()
+        binding.leadTime.text = lead.time
+        binding.leadTimeNote.visibility = if (lead.timeNote != null) View.VISIBLE else View.GONE
+        binding.leadTimeNote.text = lead.timeNote.orEmpty()
+        binding.scoreDetail.text = lead.detail
+        binding.lead.contentDescription = lead.speech
+        for (i in 0 until binding.lead.childCount) {
+            binding.lead.getChildAt(i).importantForAccessibility =
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+    }
+
+    /**
+     * Where each round's time went. Hidden, note and all, when there is no complete round, because
+     * a bar of nothing says nothing and a line saying so is a placeholder in its place. Built
+     * again, whole, every time [render] runs, which is what the body weight prompt triggers; the
+     * comparison ticks are the one part that changes without it.
      */
     private fun roundSplits(a: Attempt) {
         val split = RoundSplits.of(a)
@@ -286,11 +295,12 @@ class ResultsActivity : AppCompatActivity() {
         if (split == null) {
             binding.splitsTitle.visibility = View.GONE
             binding.splitsCard.visibility = View.GONE
-            binding.splitsNote.text = "No complete rounds to chart."
+            binding.splitsNote.visibility = View.GONE
             return
         }
         binding.splitsTitle.visibility = View.VISIBLE
         binding.splitsCard.visibility = View.VISIBLE
+        binding.splitsNote.visibility = View.VISIBLE
         binding.splits.onSelect = { showSplitReadout(it) }
         binding.splits.show(
             split.bars, split.fastest, split.averageMs, "AVG ${formatDuration(split.averageMs)}"
@@ -546,27 +556,34 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /**
-     * The session in numbers, right under the score: six tiles, a pill per round, and what each
-     * movement came to. Each part is hidden when the record cannot give it, rather than drawn
-     * empty: the tiles always have something to say from the attempt's own totals, but the round
-     * track and the movement card need the sets, which an older record never filed. Cleared first
-     * because [render] runs again when the body weight changes.
+     * The session in numbers, right under the lead: the round figures, a pill per round, and
+     * what each movement came to. Each part is hidden when the record cannot give it, rather
+     * than drawn empty: the tiles need a finished round, and the round track and the movement
+     * card need the sets, which an older record never filed. Cleared first because [render] runs
+     * again when the body weight changes.
      */
     private fun sessionNumbers(a: Attempt) {
         val stats = SessionStats.from(a)
         binding.tiles.removeAllViews()
-        binding.tiles.addView(statTileGrid(SessionTiles.of(a, stats)))
+        val tiles = SessionTiles.of(a, stats)
+        binding.tiles.visibility = if (tiles.isEmpty()) View.GONE else View.VISIBLE
+        if (tiles.isNotEmpty()) binding.tiles.addView(statTileGrid(tiles))
         roundTrack(a, stats)
         renderMovements(a, stats)
     }
 
+    /**
+     * A pill per round, but only once a round was finished: with one unfinished round the track
+     * is a single hollow pill, and its hint and its key to the three segments explain nothing the
+     * movement card does not already say.
+     */
     private fun roundTrack(a: Attempt, stats: SessionStats?) {
         binding.track.removeAllViews()
         val rounds = stats?.rounds.orEmpty()
-        val show = if (rounds.isEmpty()) View.GONE else View.VISIBLE
+        val show = if (rounds.none { it.finished }) View.GONE else View.VISIBLE
         binding.trackTitle.visibility = show
         binding.track.visibility = show
-        if (rounds.isEmpty()) return
+        if (show == View.GONE) return
 
         val plurals = SessionStats.plurals(a.profile)
         val hint = "Tap a round to see what went into it."

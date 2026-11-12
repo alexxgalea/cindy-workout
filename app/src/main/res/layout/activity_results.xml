@@ -1,372 +1,436 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The score leads, at the size a score deserves; everything that explains it follows in grouped
-  cards. The old screen put the headline, the number and the detail line in the accent colour,
-  a bordered level box and then a bare column of rows with no card around them at all.
+  The score and the time lead, at the size a score deserves; everything that explains them
+  follows in grouped cards, and a section a short session has nothing for is hidden, not filled
+  with dashes. The old screen put the headline, the number and the detail line in the accent
+  colour, a bordered level box and then a bare column of rows with no card around them at all.
 -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
     android:fitsSystemWindows="true"
-    android:overScrollMode="never"
-    android:scrollbars="none">
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- Fixed above the scroll, so closing the page never needs the scroll back at the top. -->
+    <com.cindy.tracker.TopBar
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
         android:paddingHorizontal="@dimen/screen_margin"
-        android:paddingTop="@dimen/space_6"
-        android:paddingBottom="@dimen/space_6">
+        app:title="Session" />
 
-        <TextView
-            android:id="@+id/headline"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="TIME" />
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:baselineAligned="true"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/screen_margin"
+            android:paddingTop="8dp"
+            android:paddingBottom="@dimen/space_6">
 
             <TextView
-                android:id="@+id/score"
-                style="@style/Cindy.MetricXL"
+                android:id="@+id/headline"
+                style="@style/Cindy.Eyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="72sp"
-                android:text="0" />
+                android:text="SESSION" />
 
-            <!-- Rounds are the score; the loose reps are a footnote on it. -->
-            <TextView
-                android:id="@+id/scoreReps"
-                style="@style/Cindy.MetricXL"
-                android:layout_width="wrap_content"
+            <!-- The lead: the score and the time side by side, then the one line that qualifies
+                 them. It is one TalkBack stop, read as the sentences SessionLead gives it. -->
+            <LinearLayout
+                android:id="@+id/lead"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:fontFamily="@font/manrope_bold"
-                android:textColor="@color/label_tertiary"
-                android:textSize="38sp"
+                android:layout_marginTop="8dp"
+                android:focusable="true"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="top"
+                    android:orientation="horizontal">
+
+                    <!-- Rounds are the score; the loose reps are a footnote on it. -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:baselineAligned="true"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/score"
+                            style="@style/Cindy.MetricXL"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="72sp"
+                            android:text="0" />
+
+                        <TextView
+                            android:id="@+id/scoreReps"
+                            style="@style/Cindy.MetricXL.Quiet"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:textSize="38sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="12dp"
+                        android:gravity="end"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/Cindy.Eyebrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="TIME" />
+
+                        <TextView
+                            android:id="@+id/leadTime"
+                            style="@style/Cindy.MetricM"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="0:00" />
+
+                        <TextView
+                            android:id="@+id/leadTimeNote"
+                            style="@style/Cindy.Footnote"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/scoreDetail"
+                    style="@style/Cindy.Callout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <!-- What this session earned, when it earned anything. Built in code. -->
+            <LinearLayout
+                android:id="@+id/celebration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:background="@drawable/glass_card"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingVertical="16dp"
                 android:visibility="gone" />
-        </LinearLayout>
 
-        <TextView
-            android:id="@+id/scoreDetail"
-            style="@style/Cindy.Callout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
+            <!-- The session in numbers: six tiles, a pill per round, and what each movement came to. Built in code. -->
+            <LinearLayout
+                android:id="@+id/tiles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:orientation="vertical" />
 
-        <!-- What this session earned, when it earned anything. Built in code. -->
-        <LinearLayout
-            android:id="@+id/celebration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:background="@drawable/glass_card"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingVertical="16dp"
-            android:visibility="gone" />
+            <TextView
+                android:id="@+id/trackTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="ROUND BY ROUND"
+                android:visibility="gone" />
 
-        <!-- The session in numbers: six tiles, a pill per round, and what each movement came to. Built in code. -->
-        <LinearLayout
-            android:id="@+id/tiles"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:orientation="vertical" />
+            <LinearLayout
+                android:id="@+id/track"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/trackTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="ROUND BY ROUND"
-            android:visibility="gone" />
+            <TextView
+                android:id="@+id/movementsTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="MOVEMENTS"
+                android:visibility="gone" />
 
-        <LinearLayout
-            android:id="@+id/track"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone" />
+            <LinearLayout
+                android:id="@+id/movements"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/movementsTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="MOVEMENTS"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/movements"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <!-- ── the rung, and what the next one costs ── -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:background="@drawable/glass_card"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="18dp"
-            android:paddingBottom="20dp">
-
+            <!-- ── the rung, and what the next one costs ── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:baselineAligned="true"
-                android:orientation="horizontal">
+                android:layout_marginTop="@dimen/space_6"
+                android:background="@drawable/glass_card"
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="20dp">
 
-                <TextView
-                    android:id="@+id/levelTitle"
-                    style="@style/Cindy.Title2"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1" />
+                    android:baselineAligned="true"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/levelTitle"
+                        style="@style/Cindy.Title2"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/levelRung"
+                        style="@style/Cindy.Footnote"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/levelRung"
+                    android:id="@+id/levelBlurb"
                     style="@style/Cindy.Footnote"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:textColor="@color/label_secondary"
+                    android:textSize="13sp" />
+
+                <ProgressBar
+                    android:id="@+id/levelProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="5dp"
+                    android:layout_marginTop="16dp"
+                    android:max="100"
+                    android:progressDrawable="@drawable/track" />
+
+                <TextView
+                    android:id="@+id/levelNext"
+                    style="@style/Cindy.Footnote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp" />
+            </LinearLayout>
+
+            <!-- What the session lifted and burned, as animals and tea. Built in code. -->
+            <LinearLayout
+                android:id="@+id/lifted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/compareTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="COMPARED WITH"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/compare"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Reps and heart rate across the clock, scrubbed by touch. Hidden without either. -->
+            <TextView
+                android:id="@+id/timelineTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="TIMELINE"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/timeline"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/glass_card"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/timelineReadout"
+                    style="@style/Cindy.MetricS"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:textSize="18sp"
+                    app:autoSizeMaxTextSize="18sp"
+                    app:autoSizeMinTextSize="12sp"
+                    app:autoSizeStepGranularity="1sp"
+                    app:autoSizeTextType="uniform" />
+
+                <TextView
+                    android:id="@+id/timelineDetail"
+                    style="@style/Cindy.Callout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFeatureSettings="tnum"
+                    android:minLines="2" />
+
+                <com.cindy.tracker.SessionTimelineView
+                    android:id="@+id/timelineChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp" />
+
+                <TextView
+                    android:id="@+id/timelineLegend"
+                    style="@style/Cindy.Footnote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/levelBlurb"
+                android:id="@+id/splitsTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="12dp"
+                android:layout_marginStart="4dp"
+                android:text="ROUND SPLITS" />
+
+            <!-- The readout has a fixed height (its lines are minimums), so choosing another bar
+                 never moves the chart under the finger that is scrubbing it. -->
+            <LinearLayout
+                android:id="@+id/splitsCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/glass_card"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/splitsReadout"
+                    style="@style/Cindy.MetricS"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autoSizeMaxTextSize="17sp"
+                    android:autoSizeMinTextSize="12sp"
+                    android:autoSizeStepGranularity="1sp"
+                    android:autoSizeTextType="uniform" />
+
+                <TextView
+                    android:id="@+id/splitsDetail"
+                    style="@style/Cindy.Callout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:fontFeatureSettings="tnum"
+                    android:maxLines="3"
+                    android:minLines="2" />
+
+                <TextView
+                    android:id="@+id/splitsVersus"
+                    style="@style/Cindy.Callout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFeatureSettings="tnum"
+                    android:maxLines="1" />
+
+                <com.cindy.tracker.RoundSplitsView
+                    android:id="@+id/splits"
+                    android:layout_width="match_parent"
+                    android:layout_height="176dp"
+                    android:layout_marginTop="12dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/splitsNote"
                 style="@style/Cindy.Footnote"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
-                android:textColor="@color/label_secondary"
-                android:textSize="13sp" />
+                android:layout_marginTop="10dp"
+                android:layout_marginStart="4dp" />
 
-            <ProgressBar
-                android:id="@+id/levelProgress"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="5dp"
-                android:layout_marginTop="16dp"
-                android:max="100"
-                android:progressDrawable="@drawable/track" />
-
+            <!-- Average, maximum, zones and the hardest round. Built in code; hidden without a trace. -->
             <TextView
-                android:id="@+id/levelNext"
-                style="@style/Cindy.Footnote"
+                android:id="@+id/heartTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="HEART RATE"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/heart"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp" />
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/statsTitle"
+                style="@style/Cindy.Eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:layout_marginBottom="10dp"
+                android:layout_marginStart="4dp"
+                android:text="DETAILS" />
+
+            <LinearLayout
+                android:id="@+id/stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_6"
+                android:orientation="horizontal" />
         </LinearLayout>
-
-        <!-- What the session lifted and burned, as animals and tea. Built in code. -->
-        <LinearLayout
-            android:id="@+id/lifted"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/compareTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="COMPARED WITH"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/compare"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <!-- Reps and heart rate across the clock, scrubbed by touch. Hidden without either. -->
-        <TextView
-            android:id="@+id/timelineTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="TIMELINE"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/timeline"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/glass_card"
-            android:orientation="vertical"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="12dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/timelineReadout"
-                style="@style/Cindy.MetricS"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:textSize="18sp"
-                app:autoSizeMaxTextSize="18sp"
-                app:autoSizeMinTextSize="12sp"
-                app:autoSizeStepGranularity="1sp"
-                app:autoSizeTextType="uniform" />
-
-            <TextView
-                android:id="@+id/timelineDetail"
-                style="@style/Cindy.Callout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:fontFeatureSettings="tnum"
-                android:minLines="2" />
-
-            <com.cindy.tracker.SessionTimelineView
-                android:id="@+id/timelineChart"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp" />
-
-            <TextView
-                android:id="@+id/timelineLegend"
-                style="@style/Cindy.Footnote"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/splitsTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="12dp"
-            android:layout_marginStart="4dp"
-            android:text="ROUND SPLITS" />
-
-        <!-- The readout has a fixed height (its lines are minimums), so choosing another bar
-             never moves the chart under the finger that is scrubbing it. -->
-        <LinearLayout
-            android:id="@+id/splitsCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/glass_card"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:id="@+id/splitsReadout"
-                style="@style/Cindy.MetricS"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:autoSizeMaxTextSize="17sp"
-                android:autoSizeMinTextSize="12sp"
-                android:autoSizeStepGranularity="1sp"
-                android:autoSizeTextType="uniform" />
-
-            <TextView
-                android:id="@+id/splitsDetail"
-                style="@style/Cindy.Callout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:fontFeatureSettings="tnum"
-                android:maxLines="3"
-                android:minLines="2" />
-
-            <TextView
-                android:id="@+id/splitsVersus"
-                style="@style/Cindy.Callout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:ellipsize="end"
-                android:fontFeatureSettings="tnum"
-                android:maxLines="1" />
-
-            <com.cindy.tracker.RoundSplitsView
-                android:id="@+id/splits"
-                android:layout_width="match_parent"
-                android:layout_height="176dp"
-                android:layout_marginTop="12dp" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/splitsNote"
-            style="@style/Cindy.Footnote"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:layout_marginStart="4dp" />
-
-        <!-- Average, maximum, zones and the hardest round. Built in code; hidden without a trace. -->
-        <TextView
-            android:id="@+id/heartTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="HEART RATE"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/heart"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/statsTitle"
-            style="@style/Cindy.Eyebrow"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:layout_marginBottom="10dp"
-            android:layout_marginStart="4dp"
-            android:text="DETAILS" />
-
-        <LinearLayout
-            android:id="@+id/stats"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-
-        <LinearLayout
-            android:id="@+id/actions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_6"
-            android:orientation="horizontal" />
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

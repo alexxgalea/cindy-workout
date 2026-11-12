@@ -24,7 +24,8 @@ class LicencesTest {
     fun `every licence's full text ships in the app, and is that licence`() {
         val markers = mapOf(
             Licences.APACHE to listOf("Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"),
-            Licences.OFL to listOf("SIL OPEN FONT LICENSE Version 1.1", "PERMISSION & CONDITIONS", "OTHER DEALINGS IN THE FONT SOFTWARE.")
+            Licences.OFL to listOf("SIL OPEN FONT LICENSE Version 1.1", "PERMISSION & CONDITIONS", "OTHER DEALINGS IN THE FONT SOFTWARE."),
+            Licences.MIT to listOf("MIT License", "Copyright (c) 2023 Phosphor Icons", "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT")
         )
         assertEquals("a licence has no markers here", Licences.all.toSet(), markers.keys)
         for ((licence, expected) in markers) {
@@ -49,10 +50,19 @@ class LicencesTest {
         }
     }
 
+    /** The icons on every screen are Phosphor's; MIT asks for its notice to travel with them. */
+    @Test
+    fun `Help credits the icon set, whose notice ships`() {
+        val phosphor = Licences.credits.single { it.licence == Licences.MIT }
+        assertTrue(phosphor.what, phosphor.what.contains("Phosphor"))
+        assertTrue(phosphor.by, phosphor.by.contains("Phosphor Icons"))
+    }
+
     @Test
     fun `the font's notice in the credit is the notice its licence text opens with`() {
-        val manrope = Licences.credits.single { it.licence == Licences.OFL }
+        val font = Licences.credits.single { it.licence == Licences.OFL }
         val firstLine = Licences.text(context, Licences.OFL).lines().first()
-        assertEquals(manrope.by, firstLine)
+        assertEquals(font.by, firstLine)
+        assertTrue("the credit is not for Inter", font.what.startsWith("Inter"))
     }
 }

@@ -12,8 +12,8 @@ beside them. Play wants the icon as a 512 x 512 32-bit PNG under 1 MB, and the f
 1024 x 500 PNG or JPEG with no transparency, so the script ends by reading each file's header back
 and exits 1 if either rule is broken.
 
-Needs a Chromium or Chrome to draw the SVG, because only a browser loads the app's own Manrope font
-from the SVG's @font-face rule, and ImageMagick's `convert` to fix the pixel format. Set CHROME to
+Needs a Chromium or Chrome to draw the SVG, because only a browser loads the Manrope font in
+play/graphics/fonts from the SVG's @font-face rule, and ImageMagick's `convert` to fix the pixel format. Set CHROME to
 a binary to use another. Standard library otherwise.
 """
 

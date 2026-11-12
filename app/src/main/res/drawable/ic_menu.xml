@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Open the menu. Phosphor list-dashes.
+  One set, one grid: Phosphor's 256 unit grid, shown at 24dp. See ADR 0008.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24"
+    android:viewportWidth="256" android:viewportHeight="256"
     android:tint="@color/label">
     <path
-        android:pathData="M4,7 L20,7 M4,12 L20,12 M4,17 L14,17"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.9"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        android:pathData="M88,64a8,8,0,0,1,8-8H216a8,8,0,0,1,0,16H96A8,8,0,0,1,88,64Zm128,56H96a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Zm0,64H96a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16ZM56,56H40a8,8,0,0,0,0,16H56a8,8,0,0,0,0-16Zm0,64H40a8,8,0,0,0,0,16H56a8,8,0,0,0,0-16Zm0,64H40a8,8,0,0,0,0,16H56a8,8,0,0,0,0-16Z"
+        android:fillColor="#FFFFFFFF" />
 </vector>

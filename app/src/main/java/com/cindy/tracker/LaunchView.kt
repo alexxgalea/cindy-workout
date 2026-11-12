@@ -6,7 +6,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.res.ResourcesCompat
 import kotlin.math.max
 import kotlin.math.min
 
@@ -61,17 +60,17 @@ class LaunchView @JvmOverloads constructor(
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     private val wordmark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_extrabold)
+        typeface = CindyType.extraBold(context)
         textAlign = Paint.Align.CENTER
         letterSpacing = 0.1875f
     }
     private val eyebrow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_bold)
+        typeface = CindyType.bold(context)
         textAlign = Paint.Align.CENTER
         letterSpacing = 0.218f
     }
     private val foot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_semibold)
+        typeface = CindyType.semiBold(context)
         textAlign = Paint.Align.CENTER
         letterSpacing = 0.035f
     }

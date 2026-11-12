@@ -261,4 +261,37 @@ class RecordsTest {
             back.setSplits
         )
     }
+
+    // ── the leaderboard's order ─────────────────────────────────────────────
+
+    private fun standing(vararg a: Attempt) =
+        Records.standings(a.toList()).map { it.rank to it.attempt?.totalReps }
+
+    @Test
+    fun `with nothing recorded the benchmark stands alone at first`() {
+        assertEquals(listOf(1 to null), standing())
+    }
+
+    @Test
+    fun `a session that does not beat the benchmark ranks below it`() {
+        assertEquals(
+            listOf(1 to null, 2 to 780, 3 to 600),
+            standing(attempt(20, 0, 1L), attempt(26, 0, 2L))
+        )
+    }
+
+    @Test
+    fun `every session that beats the benchmark ranks above it, best first`() {
+        assertEquals(
+            listOf(1 to 870, 2 to 840, 3 to null, 4 to 780),
+            standing(attempt(26, 0, 1L), attempt(29, 0, 2L), attempt(28, 0, 3L))
+        )
+    }
+
+    @Test
+    fun `a session of other movements never outranks the benchmark, however many reps`() {
+        val knees = attempt(30, 0, 1L).copy(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP))
+        assertEquals(listOf(1 to null, 2 to 900), Records.standings(listOf(knees))
+            .map { it.rank to it.attempt?.totalReps })
+    }
 }

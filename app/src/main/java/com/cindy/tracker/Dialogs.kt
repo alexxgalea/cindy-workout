@@ -19,81 +19,17 @@ import java.util.Locale
 /**
  * The sheets that outlived the one screen they were written on, plus one written straight here.
  *
- * The first two used to be private methods: the movement picker on [MainActivity] behind a HUD
- * chip, and the body-weight prompt on [ResultsActivity] behind the calorie line. Moving the
- * picker to [MenuActivity] would have meant a second copy of eighty lines, and body weight was
- * only ever reachable *after* a workout, which is the one moment nobody wants to fill in a form.
- * Hoisting them here lets the menu offer both without either screen owning them.
+ * The body-weight prompt used to be a private method on [ResultsActivity] behind the calorie
+ * line, reachable only *after* a workout, which is the one moment nobody wants to fill in a form.
+ * Hoisting it here lets the menu offer it without either screen owning it. (The movement picker
+ * lived here too, until it became a page of its own: see [MovementsActivity].)
  *
  * [askHeartRateDetails] has no such history — the heart-rate settings the menu and the results
- * screen both need to reach are new — but it belongs beside the other two for the same reason:
- * one place owns a sheet that more than one screen opens.
+ * screen both need to reach are new — but it belongs beside the other for the same reason: one
+ * place owns a sheet that more than one screen opens.
  *
  * They were `AlertDialog`s until the redesign. See [CindySheet] for why they no longer are.
  */
-
-/**
- * "Make Cindy yours": one choice per movement, taken before the clock starts.
- *
- * Neutral names only. No "easy", "beginner", "scaled" or "cheat" — a band-assisted pull-up is a
- * different prescription, not a lesser athlete, and the app has no business editorialising about
- * which one someone ought to be doing. What it does say plainly is which choices it can score
- * with the camera and which it will ask to be tapped in, because that is a fact about the app
- * rather than a judgement about the person.
- *
- * Beneath them sits one setting that is about how the squats are counted rather than which squat
- * was chosen: whether an air-squat session may switch itself to heels flat (see
- * [Profile.smartSquats]). It is saved and discarded with the choices, so SAVE is the one place
- * anything here changes.
- *
- * [onSave] receives the new profile only when something is actually chosen.
- */
-fun Activity.chooseMovements(
-    current: CindyProfile,
-    profile: Profile = Profile(this),
-    onSave: (CindyProfile) -> Unit
-) {
-    val sheet = CindySheet(
-        this,
-        title = "Make Cindy yours",
-        subtitle = "Anything other than the standard three is saved as an Adaptive Cindy and " +
-            "ranked against your own sessions at the same movements."
-    )
-
-    // Printed as "+1" to match the button it points at, but said in words: a screen reader's
-    // reading of a bare glyph is not something to leave to chance.
-    val shown = { t: Tracking -> if (t == Tracking.MANUAL) "you tap +1" else null }
-    val said = { t: Tracking -> if (t == Tracking.MANUAL) "you tap plus one" else null }
-    val pull = sheet.choiceGroup(
-        "PULL", PullVariant.entries, current.pull, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
-    )
-    val push = sheet.choiceGroup(
-        "PUSH", PushVariant.entries, current.push, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
-    )
-    val squat = sheet.choiceGroup(
-        "SQUAT", SquatVariant.entries, current.squat, { it.label }, { shown(it.tracking) }, { said(it.tracking) }
-    )
-
-    var smart = profile.smartSquats
-    sheet.toggle("Spot heels-flat squats", smart) { smart = it }
-    sheet.add(
-        sheetNote(
-            "Off while it's being tested. When on, three heels-flat squats in a standard Cindy " +
-                "switch it to Adaptive Cindy — Cindy says so out loud — and count them, the " +
-                "first three included. Applies when Air squat is chosen."
-        )
-    )
-
-    sheet.actions(
-        primary = "SAVE",
-        onPrimary = {
-            profile.smartSquats = smart
-            onSave(CindyProfile(pull = pull()!!, push = push()!!, squat = squat()!!))
-        },
-        secondary = "CANCEL",
-        onSecondary = {}
-    ).show()
-}
 
 /**
  * Asks for body weight in kilograms, the one thing about the athlete [Calories] needs and the
@@ -239,14 +175,10 @@ fun Activity.sheetNote(text: String): TextView =
  *
  * Returns a getter for the current choice: the sheet is built once and read when SAVE is tapped,
  * so the selection lives in the rows themselves rather than in a field on the caller. [selected]
- * may be null — [askHeartRateDetails] opens with a sex that has never been chosen, which
- * [chooseMovements] never does, since every movement already has one.
+ * may be null — [askHeartRateDetails] opens with a sex that has never been chosen.
  *
- * [note] is the one thing that varies between the two callers: a movement says when it is tapped
- * in rather than seen, a sex says which one is the average of the other two. Whatever it returns
- * is shown under the option's label, and read out after it, so the choice and its consequence
- * arrive together whichever field this is building. [spoken] is the same note in the words a
- * screen reader should say, when the printed one leans on a symbol.
+ * The rows are [choiceSection]'s, which [MovementsActivity] builds too, there with a callback on
+ * every tap rather than a getter at the end.
  */
 private fun <T> CindySheet.choiceGroup(
     title: String,
@@ -256,11 +188,39 @@ private fun <T> CindySheet.choiceGroup(
     note: (T) -> String?,
     spoken: (T) -> String? = note
 ): () -> T? {
-    val ctx = content.context
     var chosen = selected
+    content.addView(content.context.choiceSection(title, options, selected, label, note, spoken) {
+        chosen = it
+    })
+    return { chosen }
+}
+
+/**
+ * An eyebrow over one field's options, as a grouped list with a check on the chosen row.
+ *
+ * [onChoose] runs on every tap, with the option tapped, after the check has moved. [selected] may
+ * be null, for a field that has never been chosen.
+ *
+ * [note] is the one thing that varies between the callers: a movement says when it is tapped in
+ * rather than seen, a sex says which one is the average of the other two. Whatever it returns
+ * is shown under the option's label, and read out after it, so the choice and its consequence
+ * arrive together whichever field this is building. [spoken] is the same note in the words a
+ * screen reader should say, when the printed one leans on a symbol.
+ */
+internal fun <T> Context.choiceSection(
+    title: String,
+    options: List<T>,
+    selected: T?,
+    label: (T) -> String,
+    note: (T) -> String?,
+    spoken: (T) -> String? = note,
+    onChoose: (T) -> Unit
+): View {
+    val ctx = this
     val ticks = mutableListOf<ImageView>()
 
-    content.addView(ctx.eyebrow(title).apply {
+    val section = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+    section.addView(ctx.eyebrow(title).apply {
         setPadding(ctx.dp(4), ctx.dp(18), 0, ctx.dp(8))
     })
 
@@ -270,7 +230,7 @@ private fun <T> CindySheet.choiceGroup(
             setImageResource(R.drawable.ic_check)
             imageTintList = ColorStateList.valueOf(ctx.getColor(R.color.label))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            visibility = if (option == chosen) View.VISIBLE else View.INVISIBLE
+            visibility = if (option == selected) View.VISIBLE else View.INVISIBLE
             layoutParams = LinearLayout.LayoutParams(ctx.dp(19), ctx.dp(19))
                 .apply { marginStart = ctx.dp(12) }
         }
@@ -299,15 +259,15 @@ private fun <T> CindySheet.choiceGroup(
             addView(tick)
 
             setOnClickListener {
-                chosen = option
                 ticks.forEachIndexed { i, t ->
                     t.visibility = if (i == index) View.VISIBLE else View.INVISIBLE
                 }
+                onChoose(option)
             }
             describeAsButton(label(option) + (spoken(option)?.let { ", $it" } ?: ""))
         }
         group.row(row)
     }
-    content.addView(group)
-    return { chosen }
+    section.addView(group)
+    return section
 }

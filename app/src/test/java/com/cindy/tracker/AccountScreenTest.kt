@@ -375,9 +375,9 @@ class AccountScreenTest {
     }
 
     @Test
-    fun `DONE closes the screen`() {
+    fun `Back closes the screen`() {
         val activity = openAccount()
-        findByText(content(activity), "DONE")!!.performClick()
+        findByDescriptionPrefix(content(activity), "Back")!!.performClick()
         assertTrue(activity.isFinishing)
     }
 
@@ -502,12 +502,16 @@ class AccountScreenTest {
     // ── the record board ──────────────────────────────────────────────────────
 
     @Test
-    fun `the leaderboard says You until there is a name, and the name after`() {
+    fun `the leaderboard titles a session by its day, with or without a name`() {
         record(session(rounds = 10))
-        assertNotNull(findByDescriptionPrefix(content(openRecords()), "2, You, "))
+        // A session is a place in the ranking, so its row says when it was done, not who did it:
+        // every row would otherwise carry the same word.
+        assertNotNull(findByDescriptionPrefix(content(openRecords()), "Rank 2, "))
+        assertNull(findByDescriptionPrefix(content(openRecords()), "Rank 2, You"))
 
         Profile(context).displayName = "Alex"
-        assertNotNull(findByDescriptionPrefix(content(openRecords()), "2, Alex, "))
+        assertNotNull(findByDescriptionPrefix(content(openRecords()), "Rank 2, "))
+        assertNull(findByDescriptionPrefix(content(openRecords()), "Rank 2, Alex"))
     }
 
     @Test
@@ -515,9 +519,7 @@ class AccountScreenTest {
         record(session(rounds = 10))
         val activity = openRecords()
 
-        val actions = activity.findViewById<ViewGroup>(R.id.actions)
-        val labels = (0 until actions.childCount).map { (actions.getChildAt(it) as TextView).text.toString() }
-        assertEquals(listOf("DONE"), labels)
+        assertNull("Progress keeps a bottom bar", activity.findViewById<ViewGroup>(R.id.actions))
     }
 
     @Test
@@ -525,13 +527,13 @@ class AccountScreenTest {
         val shown = session(rounds = 10)
         record(shown)
         val progress = Robolectric.buildActivity(RecordsActivity::class.java).setup()
-        assertNotNull(findByDescriptionPrefix(content(progress.get()), "2, You, "))
+        assertNotNull(findByDescriptionPrefix(content(progress.get()), "Rank 2, "))
 
         // What discarding from the session's own page does, while Progress waits underneath it.
         assertTrue(RecordStore(context).remove(shown.atMillis))
         progress.pause().resume()
 
-        assertNull(findByDescriptionPrefix(content(progress.get()), "2, You, "))
+        assertNull(findByDescriptionPrefix(content(progress.get()), "Rank 2, "))
     }
 
     @Test

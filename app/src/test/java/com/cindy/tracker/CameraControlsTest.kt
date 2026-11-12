@@ -188,7 +188,7 @@ class CameraControlsTest {
 
     @Test
     fun `closing the session page returns the camera screen to idle, whichever way it closes and whatever it was doing`() {
-        // DONE, DISCARD and the back gesture all land on the camera screen the same way, so the
+        // The top bar, DISCARD and the back gesture all land on the camera screen the same way, so the
         // module has one answer for all three: the finished workout is not left for the athlete.
         for (state in WorkoutState.entries) {
             for (filming in listOf(false, true)) {

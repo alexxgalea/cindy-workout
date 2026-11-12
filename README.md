@@ -15,7 +15,7 @@ or pose data is ever sent.
 What stays on the phone, what Android's own backup may copy, and how to delete it are in Help under
 PRIVACY, and in the [privacy policy](https://alexxgalea.github.io/cindy-privacy/) Google Play
 links to. The licences of what Cindy is built on (MoveNet, LiteRT, AndroidX and the rest, and the
-Manrope typeface) are credited under LICENCES in Help, with their full texts in
+Inter typeface) are credited under LICENCES in Help, with their full texts in
 [app/src/main/assets/licences/](app/src/main/assets/licences/). The address lives in
 [AppLinks.kt](app/src/main/java/com/cindy/tracker/AppLinks.kt).
 
@@ -463,8 +463,7 @@ with one line that is always true and never scolds. Below it, top to bottom:
   (810 reps), the score that prompted this app.
 
 Any session can be reopened on the page it ended on: tap a leaderboard row, a day's session in
-the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it shows DONE and
-DISCARD but no PROGRESS and no streak (that describes today, not the day being looked at), and a
+the calendar sheet, or **OPEN** on a selected point of the chart. Reopened, it closes from the top bar's back control and shows DISCARD but no PROGRESS and no streak (that describes today, not the day being looked at), and a
 **COMPARED WITH** card stands in for the usual against-your-best row: your best or last session at
 the same movements, whichever is chosen, and only ever an earlier one — a session cannot honestly
 be measured against something that had not happened yet. Tapping the card opens that one too.

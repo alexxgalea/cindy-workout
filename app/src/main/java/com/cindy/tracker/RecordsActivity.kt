@@ -41,6 +41,9 @@ class RecordsActivity : AppCompatActivity() {
     private var shownAttempts: List<Attempt> = emptyList()
     private lateinit var progressHolder: LinearLayout
     private lateinit var calendarHolder: LinearLayout
+    private lateinit var leaderboardHolder: LinearLayout
+    /** Whether the ranking shows every session instead of the top few. */
+    private var leaderboardExpanded = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,9 +53,6 @@ class RecordsActivity : AppCompatActivity() {
 
         // Sessions are deleted one at a time, from their own page: there is deliberately no
         // button here that takes the whole board at once.
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render()
     }
 
@@ -85,26 +85,43 @@ class RecordsActivity : AppCompatActivity() {
             category = Progress.defaultCategory(attempts)
         }
 
+        // How am I doing, first: the habit and the week in one card, then whether the score is
+        // moving. What is only reference (the bests, the ranking, the calendar) follows.
         hero(attempts, today, zone, firstDay)
-        if (attempts.isNotEmpty()) thisWeek(attempts, today, zone, firstDay)
         progressCard(attempts, today, zone, firstDay)
         if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
-        if (attempts.isNotEmpty()) calendar(Streak.daysTrained(attempts, zone), today)
         leaderboard(attempts)
+        if (attempts.isNotEmpty()) calendar(attempts, today, zone, firstDay)
     }
 
+    /**
+     * The athlete's sessions as a ranking, with the benchmark standing among them.
+     *
+     * Each row is a place: its rank, the day it was done and its score. Only the top
+     * [LEADERBOARD_ROWS] sessions show at first, so that a long history stays a ranking and does
+     * not become a log; the rest is one tap away, and the calendar reaches any one day.
+     */
     private fun leaderboard(attempts: List<Attempt>) {
-        val rows = binding.rows
-        val mine = Records.ranked(attempts)
-        val beaten = mine.firstOrNull()?.let { Records.beatsBenchmark(it) } == true
+        binding.rows.addView(section("LEADERBOARD"))
+        leaderboardHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        binding.rows.addView(leaderboardHolder)
+        renderLeaderboard(attempts)
+    }
 
-        rows.addView(section("LEADERBOARD"))
+    /** Rebuilds only the ranking, so showing more rows does not scroll the page to the top. */
+    private fun renderLeaderboard(attempts: List<Attempt>) {
+        leaderboardHolder.removeAllViews()
+        val standings = Records.standings(attempts)
+        val ownRanked = standings.mapNotNull { it.attempt }
 
-        if (mine.isEmpty()) {
-            rows.addView(insetGroup {
-                row(benchmarkRow(if (beaten) "2" else "1"))
-            })
-            rows.addView(styledText(
+        if (ownRanked.isEmpty()) {
+            leaderboardHolder.addView(insetGroup { row(benchmarkRow(1)) })
+            leaderboardHolder.addView(styledText(
                 R.style.Cindy_Footnote,
                 "No attempts yet. Finish a 20-minute Cindy and it lands here."
             ).apply {
@@ -115,30 +132,64 @@ class RecordsActivity : AppCompatActivity() {
         }
 
         val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
-        // The athlete's own name, once they have given one, and "You" until then.
-        val who = Profile(this).displayName ?: "You"
-        rows.addView(insetGroup {
-            row(benchmarkRow(if (beaten) "2" else "1"))
-            mine.forEachIndexed { i, a ->
-                val outranks = Records.beatsBenchmark(a)
-                row(rankRow(
-                    rank = if (outranks) "${i + 1}" else "${i + 2}",
-                    name = who,
-                    detail = "${dateFormat.format(Date(a.atMillis))} · ${a.caption}" +
-                        (a.avgRoundMs?.let { " · ${formatDuration(it)}/round" } ?: ""),
-                    score = a.scoreLabel(),
-                    mine = true,
-                    // "Best" means best at these movements. Across categories it would be
-                    // comparing a band-assisted Cindy with a strict one and calling one better.
-                    best = a == Records.bestIn(mine, a.profile)
-                ) { openSession(a.atMillis) })
+        val timeFormat = SimpleDateFormat(
+            if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm a", Locale.US
+        )
+        // Cut by place, benchmark included, so the athlete's top five always show whole.
+        var sessionsShown = 0
+        val shown = standings.filter { place ->
+            if (leaderboardExpanded) return@filter true
+            if (place.attempt == null) return@filter true
+            sessionsShown++ < LEADERBOARD_ROWS
+        }
+        leaderboardHolder.addView(insetGroup {
+            shown.forEach { place ->
+                val a = place.attempt
+                if (a == null) {
+                    row(benchmarkRow(place.rank))
+                } else {
+                    row(rankRow(
+                        rank = place.rank,
+                        title = dateFormat.format(Date(a.atMillis)),
+                        detail = listOfNotNull(
+                            timeFormat.format(Date(a.atMillis)),
+                            a.caption,
+                            a.avgRoundMs?.let { "${formatDuration(it)}/round" }
+                        ).joinToString(" · "),
+                        score = a.scoreLabel(),
+                        mine = true,
+                        // "Best" means best at these movements. Across categories it would be
+                        // comparing a band-assisted Cindy with a strict one and calling one better.
+                        best = a == Records.bestIn(ownRanked, a.profile)
+                    ) { openSession(a.atMillis) })
+                }
+            }
+            if (ownRanked.size > LEADERBOARD_ROWS) {
+                row(moreRow(
+                    if (leaderboardExpanded) "Show the top $LEADERBOARD_ROWS"
+                    else "Show all ${ownRanked.size} sessions"
+                ) {
+                    leaderboardExpanded = !leaderboardExpanded
+                    renderLeaderboard(attempts)
+                })
             }
         })
     }
 
-    private fun benchmarkRow(rank: String) = rankRow(
+    /** The row that opens or closes the rest of the ranking: a centred label, 56dp to hit. */
+    private fun moreRow(label: String, onTap: () -> Unit): View =
+        styledText(R.style.Cindy_Callout, label).apply {
+            gravity = Gravity.CENTER
+            minimumHeight = dp(56)
+            foreground = rowRipple()
+            setTextColor(getColor(R.color.label_secondary))
+            setOnClickListener { onTap() }
+            describeAsButton(label)
+        }
+
+    private fun benchmarkRow(rank: Int) = rankRow(
         rank = rank,
-        name = Records.BENCHMARK_NAME,
+        title = Records.BENCHMARK_NAME,
         detail = "the benchmark · ${Records.BENCHMARK.totalReps} reps",
         score = Records.BENCHMARK.scoreLabel(),
         mine = false,
@@ -214,31 +265,13 @@ class RecordsActivity : AppCompatActivity() {
             show(Streak.weekStart(today, firstDay), days, today)
         })
 
-        Cheer.nextStep(attempts, today, zone, firstDay)?.let { step ->
-            card.addView(styledText(R.style.Cindy_Footnote, step).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(0, dp(12), 0, 0)
-            })
-        }
-
         card.addView(View(this).apply {
             setBackgroundColor(getColor(R.color.hairline))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, hairlinePx()
-            ).apply { topMargin = dp(14) }
+            ).apply { topMargin = dp(16) }
         })
-        card.addView(styledText(
-            R.style.Cindy_Footnote,
-            "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
-                "${attempts.size} session${if (attempts.size == 1) "" else "s"}"
-        ).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(0, dp(13), 0, 0)
-        })
+        thisWeek(card, attempts, today, zone, firstDay)
     }
 
     /**
@@ -296,21 +329,24 @@ class RecordsActivity : AppCompatActivity() {
             }
         }
 
-    /** Sessions, reps and time this week against last, then the month so far. */
+    /** Sessions, reps and time this week against last, as the last block of the hero card. */
     private fun thisWeek(
-        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+        card: LinearLayout, attempts: List<Attempt>, today: LocalDate, zone: ZoneId,
+        firstDay: DayOfWeek
     ) {
         val s = Progress.summary(attempts, today, zone, firstDay)
         val now = s.thisWeek
         val before = s.lastWeek
-        binding.rows.addView(section("THIS WEEK"))
-        binding.rows.addView(LinearLayout(this).apply {
+        card.addView(eyebrow("THIS WEEK").apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(16) }
+        })
+        card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundResource(R.drawable.glass_card)
-            setPadding(dp(8), dp(16), dp(8), dp(16))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(6) }
+            ).apply { topMargin = dp(8) }
             addView(tile(
                 "Sessions", "${now.sessions}", now.sessions - before.sessions, ""
             ))
@@ -322,24 +358,13 @@ class RecordsActivity : AppCompatActivity() {
                 ((now.clockMs - before.clockMs) / 60_000L).toInt(), " min"
             ))
         })
-        val month = s.thisMonth
-        binding.rows.addView(styledText(
-            R.style.Cindy_Footnote,
-            "This month: ${month.sessions} session${if (month.sessions == 1) "" else "s"} · " +
-                "${Progress.formatReps(month.reps)} reps · ${Progress.formatClock(month.clockMs)}."
-        ).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(dp(4), dp(6), 0, dp(6))
-        })
     }
 
     /** One figure of the week: label, value and, when it moved, the change since last week. */
     private fun tile(label: String, value: String, delta: Int, suffix: String): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, dp(12), 0)
+            setPadding(0, 0, dp(12), 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             addView(styledText(R.style.Cindy_Footnote, label).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -397,8 +422,14 @@ class RecordsActivity : AppCompatActivity() {
         })
     }
 
-    /** The month grid, with arrows back through the athlete's history. */
-    private fun calendar(days: Set<LocalDate>, today: LocalDate) {
+    /**
+     * The month grid, with arrows back through the athlete's history, and under it the totals
+     * that are about the whole history rather than about this week.
+     */
+    private fun calendar(
+        attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
+    ) {
+        val days = Streak.daysTrained(attempts, zone)
         calendarHolder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -407,6 +438,23 @@ class RecordsActivity : AppCompatActivity() {
         }
         binding.rows.addView(calendarHolder)
         renderCalendar(days, today, Streak.currentRun(days, today))
+
+        val month = Progress.summary(attempts, today, zone, firstDay).thisMonth
+        // What the next streak milestone costs lives here, with the days it counts, rather than
+        // in the first card, where the headline above already says where the streak stands.
+        val lines = listOfNotNull(
+            Cheer.nextStep(attempts, today, zone, firstDay),
+            "This month: ${month.sessions} session${if (month.sessions == 1) "" else "s"} · " +
+                "${Progress.formatReps(month.reps)} reps · ${Progress.formatClock(month.clockMs)}",
+            "${days.size} day${if (days.size == 1) "" else "s"} trained · " +
+                "${attempts.size} session${if (attempts.size == 1) "" else "s"} in all"
+        )
+        binding.rows.addView(styledText(R.style.Cindy_Footnote, lines.joinToString("\n")).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp(4), dp(4), 0, dp(6))
+        })
     }
 
     /**
@@ -524,7 +572,6 @@ class RecordsActivity : AppCompatActivity() {
         attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDay: DayOfWeek
     ) {
         if (attempts.size < 2) return
-        binding.rows.addView(section("PROGRESS"))
         progressHolder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -610,7 +657,7 @@ class RecordsActivity : AppCompatActivity() {
         } else {
             val chart = ProgressChartView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(200)
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(176)
                 ).apply { topMargin = dp(8) }
             }
             val describe = { i: Int ->
@@ -715,5 +762,10 @@ class RecordsActivity : AppCompatActivity() {
         }
         ProgressMetric.PACE -> "Higher is faster. Full 20-minute sessions only."
         ProgressMetric.VOLUME -> "Every session counts toward volume, whatever the movements."
+    }
+
+    private companion object {
+        /** How many of the athlete's own sessions the ranking shows until asked for the rest. */
+        const val LEADERBOARD_ROWS = 5
     }
 }

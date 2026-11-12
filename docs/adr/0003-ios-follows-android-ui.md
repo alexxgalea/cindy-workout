@@ -11,7 +11,8 @@ On 2026-10-19 the owner found the two interfaces "totally different" and decided
 ## Consequences
 
 - In-app questions (stop, skip the setup check, discard) and the menu's choice sheets use the Cindy sheet, not system alerts. What belongs to the system stays native: the photo and file pickers, permission prompts, the share sheet, swipe-back and swipe-down gestures.
-- The menu and the session page are full-screen, closed by DONE as on Android, with push navigation inside the menu.
+- The menu and the session page are full-screen, with push navigation inside the menu. They were closed by DONE as on Android; ADR 0007 replaced the DONE pill with the top bar and the back gesture, on Android first, and iOS follows it.
 - The camera screen has a SKIP button; skipping is no longer a long press on +1.
 - The status bar and home indicator are hidden on the camera screen.
 - The App Store submission waits until at least the camera screen and the session page match.
+- On 2026-11-07 the Android app's typeface moved from Manrope to Inter (spec #139, ticket #149). The tokens above name Manrope because that was Android's font when this was decided; the iPhone app keeps Manrope until its type is ported, and follows Android to Inter then.

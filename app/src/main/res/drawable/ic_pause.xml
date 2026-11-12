@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pause. Phosphor pause, fill.
+  One set, one grid: Phosphor's 256 unit grid, shown at 24dp. See ADR 0008.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
+    android:viewportWidth="256" android:viewportHeight="256">
     <path
-        android:pathData="M9.4,5.8 L9.4,18.2 M14.6,5.8 L14.6,18.2"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3.2"
-        android:strokeLineCap="round" />
+        android:pathData="M216,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h40A16,16,0,0,1,216,48ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"
+        android:fillColor="#FFFFFFFF" />
 </vector>

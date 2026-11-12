@@ -12,7 +12,6 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.res.ResourcesCompat
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -71,14 +70,14 @@ class CountdownView @JvmOverloads constructor(
     private val digitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         color = context.getColor(R.color.label)
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_extrabold)
-        // Manrope's figures are proportional, so a 3 and a 1 sit at different widths without it.
+        typeface = CindyType.extraBold(context)
+        // Inter's default figures are proportional, so a 3 and a 1 sit at different widths without it.
         fontFeatureSettings = "tnum"
     }
     private val captionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         color = context.getColor(R.color.state_alert)
-        typeface = ResourcesCompat.getFont(context, R.font.manrope_extrabold)
+        typeface = CindyType.extraBold(context)
         letterSpacing = 0.14f
     }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

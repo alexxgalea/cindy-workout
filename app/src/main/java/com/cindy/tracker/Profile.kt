@@ -52,7 +52,7 @@ class Profile(context: Context) {
      * Off until real sessions have shown it was the right call: a counter that changes its own
      * mind about a movement has to be asked for before it is trusted. It does not change
      * [movements], which stays what the athlete chose; it only lets the engine notice one of
-     * them. Edited together with [movements], in the same sheet, and refused while a workout is
+     * them. Edited together with [movements], on the same page ([MovementsActivity]), and refused while a workout is
      * live for the same reason.
      */
     var smartSquats: Boolean

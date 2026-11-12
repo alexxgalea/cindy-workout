@@ -234,16 +234,21 @@ fun Context.statRow(
 }
 
 /**
- * A leaderboard row: rank, who, when, and the score in metric type.
+ * A leaderboard row: the rank, what the place is for, the score in metric type.
  *
- * [onTap], when given, opens the session it stands for — the athlete's own rows, never the
+ * The athlete's own sessions are titled by the day they were done, and the benchmark by its
+ * name, so that no two rows read alike. The top three of the athlete's own take a medal, the
+ * earned colour for first; every other rank is a plain figure, and the benchmark never takes a
+ * medal because it is not something the athlete earned.
+ *
+ * [onTap], when given, opens the session the row stands for — the athlete's own rows, never the
  * benchmark's, which is not a session anyone can reopen. It gets the same treatment [navRow]
  * already gives an opener: a chevron, the ripple, and a Button role, rather than [statRow]'s "tap
  * to change", which would be the wrong thing to tell someone about a row that opens a page.
  */
 fun Context.rankRow(
-    rank: String,
-    name: String,
+    rank: Int,
+    title: String,
     detail: String,
     score: String,
     mine: Boolean,
@@ -252,38 +257,48 @@ fun Context.rankRow(
 ): View = rowFrame(tappable = onTap != null).apply {
     // The athlete's own rows sit on a slightly brighter film; the benchmark recedes.
     if (mine) setBackgroundColor(getColor(R.color.surface_glass))
-    addView(styledText(R.style.Cindy_Callout, rank).apply {
-        layoutParams = LinearLayout.LayoutParams(dp(22), ViewGroup.LayoutParams.WRAP_CONTENT)
-        setTextColor(getColor(R.color.label_tertiary))
-    })
+    if (mine && rank <= 3) {
+        addView(medal(rank).apply {
+            (layoutParams as LinearLayout.LayoutParams).marginEnd = dp(12)
+        })
+    } else {
+        addView(styledText(R.style.Cindy_Callout, "$rank").apply {
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                dp(28), ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = dp(12) }
+            setTextColor(getColor(R.color.label_tertiary))
+        })
+    }
     addView(LinearLayout(this@rankRow).apply {
         orientation = LinearLayout.VERTICAL
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(styledText(R.style.Cindy_Headline, name).apply {
-                if (mine) useExtraBold()
+            addView(styledText(R.style.Cindy_Headline, title).apply {
+                if (!mine) setTextColor(getColor(R.color.label_secondary))
             })
-            if (best) addView(badge("BEST").withStartMargin(dp(7)))
+            if (best) addView(badge("BEST").withStartMargin(dp(8)))
         })
         addView(styledText(R.style.Cindy_Footnote, detail).apply { setPadding(0, dp(2), 0, 0) })
     })
     addView(styledText(R.style.Cindy_MetricS, score).apply {
         if (!mine) setTextColor(getColor(R.color.label_secondary))
-    }.withStartMargin(dp(10)))
+    }.withStartMargin(dp(12)))
+    val spoken = "Rank $rank, $title, $score, $detail"
     if (onTap != null) {
         addView(chevron())
         setOnClickListener { onTap() }
-        describeAsButton("$rank, $name, $score, $detail")
+        describeAsButton(spoken)
     } else {
-        contentDescription = "$rank, $name, $score, $detail"
+        contentDescription = spoken
     }
 }
 
 /** Lifts one word to the heaviest weight without disturbing the rest of its style. */
 private fun TextView.useExtraBold() {
-    typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.manrope_extrabold)
+    typeface = CindyType.extraBold(context)
 }
 
 /** A small filled marker. Reserved for facts, never decoration. */
@@ -450,4 +465,65 @@ fun Context.avatarRow(
     addView(chevron())
     setOnClickListener { onTap() }
     describeAsButton("$title, $value")
+}
+
+/**
+ * A switch row, in place of a Material checkbox: the label, a track and a thumb, on a glass card.
+ *
+ * Tapping it flips the switch, re-names it for TalkBack ("Remind me, on") and calls [onChange]
+ * with the new state. Used on the sheets ([CindySheet.toggle]) and on pages ([MovementsActivity]).
+ */
+fun Context.switchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit): View {
+    val ctx = this
+    var on = checked
+
+    val thumb = View(ctx).apply { setBackgroundResource(R.drawable.toggle_thumb) }
+    val track = android.widget.FrameLayout(ctx).apply {
+        setBackgroundResource(
+            if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
+        )
+        addView(thumb, android.widget.FrameLayout.LayoutParams(ctx.dp(23), ctx.dp(23)).apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            marginStart = ctx.dp(2)
+        })
+    }
+    thumb.translationX = if (on) ctx.dpf(20f) else 0f
+
+    fun describe(row: View) {
+        row.contentDescription = "$label, ${if (on) "on" else "off"}"
+    }
+
+    val row = LinearLayout(ctx).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setBackgroundResource(R.drawable.glass_card_small)
+        minimumHeight = ctx.dp(52)
+        setPadding(ctx.dp(16), ctx.dp(8), ctx.dp(12), ctx.dp(8))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = ctx.dp(20) }
+
+        addView(ctx.styledText(R.style.Cindy_Callout, label).apply {
+            setTextColor(ctx.getColor(R.color.label))
+            layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            )
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        })
+        addView(track, LinearLayout.LayoutParams(ctx.dp(47), ctx.dp(28)))
+
+        setOnClickListener {
+            on = !on
+            track.setBackgroundResource(
+                if (on) R.drawable.toggle_track_on else R.drawable.toggle_track_off
+            )
+            thumb.animate().translationX(if (on) ctx.dpf(20f) else 0f)
+                .setDuration(160).start()
+            describe(this)
+            onChange(on)
+        }
+    }
+    describe(row)
+    row.describeAsButton()
+    return row
 }

@@ -103,15 +103,22 @@ class MenuActivity : AppCompatActivity() {
         records = RecordStore(this)
         workoutLive = intent.getBooleanExtra(EXTRA_WORKOUT_LIVE, false)
 
-        binding.actions.addView(primaryButton("DONE").apply {
-            setOnClickListener { finish() }
-        })
         render()
         settleRowsIn()
         // Only on a fresh start: a recreated screen must not put the sheet back after it was closed.
         if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_OPEN_HEART_RATE, false)) {
             chooseHeartRate()
         }
+    }
+
+    /**
+     * Coming back from a page that changes what a row says: Movements saves on every tap, so its
+     * row has to read what was chosen rather than what the menu was opened with. [render] only,
+     * and not [settleRowsIn], for the reason given there.
+     */
+    override fun onRestart() {
+        super.onRestart()
+        render()
     }
 
     /**
@@ -150,9 +157,9 @@ class MenuActivity : AppCompatActivity() {
     /**
      * Down the way it came, rather than whatever the system would have chosen.
      *
-     * Overridden here rather than at the two call sites that leave this screen — DONE and the
-     * back gesture — because they are both this screen ending, and one of them is not a call
-     * site at all.
+     * Overridden here rather than at the two call sites that leave this screen — the top bar's
+     * back control and the back gesture — because they are both this screen ending, and one of
+     * them is not a call site at all.
      */
     override fun finish() {
         super.finish()
@@ -176,7 +183,19 @@ class MenuActivity : AppCompatActivity() {
         val stravaTokens = StravaTokenStore(this)
         val stravaGrant = stravaTokens.grant
 
-        // The athlete comes first: who the scores belong to, and what they have earned so far.
+        // The way back to the session just finished, two taps from the camera. Absent with no
+        // sessions, because a row that opens nothing is a dead end.
+        LastSessionRow.of(all)?.let { last ->
+            binding.rows.addView(insetGroup {
+                row(navRow(last.title, last.value) {
+                    startActivity(ResultsActivity.review(this@MenuActivity, last.atMillis))
+                }.apply { describeAsButton(last.spokenName) })
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(12) })
+        }
+
+        // The athlete comes next: who the scores belong to, and what they have earned so far.
         val name = profile.displayName
         val photo = AvatarStore.load(this)
         val earned = Badges.earned(
@@ -202,13 +221,9 @@ class MenuActivity : AppCompatActivity() {
                 if (workoutLive) {
                     toast("Reset the workout first to change movements")
                 } else {
-                    chooseMovements(movements, profile) { chosen ->
-                        profile.movements = chosen
-                        // The subtitle rather than the label, so that turning the squat setting
-                        // on or off is confirmed too: the label alone would repeat what it was.
-                        toast(movementsSubtitle(chosen))
-                        render()
-                    }
+                    // The page saves each tap itself; the row says what was chosen when this
+                    // screen comes back (see onRestart).
+                    startActivity(Intent(this@MenuActivity, MovementsActivity::class.java))
                 }
             })
             row(navRow(

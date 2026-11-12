@@ -3,7 +3,9 @@
   The Google Play feature graphic, 1024 x 500: the mark, the name and the scheme, on black.
 
   The mark is the launcher icon's three arcs (see icon.svg) scaled up, and "Cindy" is Manrope
-  ExtraBold, the app's own typeface, loaded from the font file in the app's resources. Nothing
+  ExtraBold, the typeface the app had when the listing was drawn, loaded from play/graphics/fonts
+  (the app itself moved to Inter in spec #139; redrawing the listing in Inter is a separate
+  decision, so the artwork is unchanged and keeps its own copy of the font). Nothing
   important sits near the edges, which Play crops on some screens, and there is no transparency:
   Play rejects a feature graphic that has any. The line under the name is the workout's scheme,
   5 pull-ups, 10 push-ups, 15 squats, and says nothing else about the app.
@@ -13,8 +15,8 @@
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
   <style>
-    @font-face { font-family: "Manrope"; font-weight: 800; src: url("../../app/src/main/res/font/manrope_extrabold.ttf"); }
-    @font-face { font-family: "Manrope"; font-weight: 500; src: url("../../app/src/main/res/font/manrope_medium.ttf"); }
+    @font-face { font-family: "Manrope"; font-weight: 800; src: url("fonts/manrope_extrabold.ttf"); }
+    @font-face { font-family: "Manrope"; font-weight: 500; src: url("fonts/manrope_medium.ttf"); }
     .name   { font: 800 150px "Manrope", sans-serif; fill: #FFFFFF; letter-spacing: -2px; }
     .scheme { font: 500 44px "Manrope", sans-serif; fill: #FFFFFF; fill-opacity: 0.58; letter-spacing: 3px; }
   </style>
