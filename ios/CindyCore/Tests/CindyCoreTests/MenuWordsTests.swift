@@ -16,12 +16,15 @@ final class MenuWordsTests: XCTestCase {
     func testEveryWordIsTheKotlins() throws {
         let menu = try read("app/src/main/res/layout/activity_menu.xml")
         let account = try read("app/src/main/res/layout/activity_account.xml")
-        for (name, word) in [("menuTitle", MenuWords.menuTitle), ("menuSubtitle", MenuWords.menuSubtitle)] {
-            XCTAssertTrue(menu.contains("android:text=\"\(word)\""), "\(name) is not in activity_menu.xml: \(word)")
-        }
-        for (name, word) in [("youTitle", MenuWords.youTitle), ("youSubtitle", MenuWords.youSubtitle)] {
-            XCTAssertTrue(account.contains("android:text=\"\(word)\""), "\(name) is not in activity_account.xml: \(word)")
-        }
+        // Since #147 the titles are the top bar's `app:title`; the lines under them are still text.
+        XCTAssertTrue(menu.contains("app:title=\"\(MenuWords.menuTitle)\""),
+                      "menuTitle is not the top bar's title in activity_menu.xml: \(MenuWords.menuTitle)")
+        XCTAssertTrue(menu.contains("android:text=\"\(MenuWords.menuSubtitle)\""),
+                      "menuSubtitle is not in activity_menu.xml: \(MenuWords.menuSubtitle)")
+        XCTAssertTrue(account.contains("app:title=\"\(MenuWords.youTitle)\""),
+                      "youTitle is not the top bar's title in activity_account.xml: \(MenuWords.youTitle)")
+        XCTAssertTrue(account.contains("android:text=\"\(MenuWords.youSubtitle)\""),
+                      "youSubtitle is not in activity_account.xml: \(MenuWords.youSubtitle)")
     }
 
     func testTheOldWordsAreGone() throws {

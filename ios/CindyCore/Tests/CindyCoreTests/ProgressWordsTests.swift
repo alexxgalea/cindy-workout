@@ -16,11 +16,11 @@ final class ProgressWordsTests: XCTestCase {
     func testEveryWordIsTheKotlins() throws {
         let kotlin = try read("app/src/main/java/com/cindy/tracker/RecordsActivity.kt")
         let layout = try read("app/src/main/res/layout/activity_records.xml")
-        for (name, word) in [("title", ProgressWords.title), ("subtitle", ProgressWords.subtitle)] {
-            XCTAssertTrue(layout.contains("android:text=\"\(word)\""), "\(name) is not in activity_records.xml: \(word)")
-        }
+        // Since #147 the title is the top bar's `app:title`.
+        XCTAssertTrue(layout.contains("app:title=\"\(ProgressWords.title)\""),
+                      "title is not the top bar's title in activity_records.xml: \(ProgressWords.title)")
         let inKotlin: [(String, String)] = [
-            ("thisWeekTitle", ProgressWords.thisWeekTitle), ("progressTitle", ProgressWords.progressTitle),
+            ("thisWeekTitle", ProgressWords.thisWeekTitle),
             ("peaksTitle", ProgressWords.peaksTitle), ("leaderboardTitle", ProgressWords.leaderboardTitle),
             ("open", ProgressWords.open), ("previousMonth", ProgressWords.previousMonth),
             ("nextMonth", ProgressWords.nextMonth),
@@ -28,6 +28,21 @@ final class ProgressWordsTests: XCTestCase {
         for (name, word) in inKotlin {
             XCTAssertTrue(kotlin.contains("\"\(word)\""), "\(name) is not in RecordsActivity.kt: \(word)")
         }
+    }
+
+    /// Two words the iPhone's Progress screen draws that Android no longer does: the sentence under
+    /// the title (dropped in 4d0ec12, since the top bar names the page) and the PROGRESS section title
+    /// (dropped in d3a9b32, when the score chart went straight after the week's card). They were held
+    /// to the Kotlin's; the iPhone keeps them until its port (#155; ADR 0003, ADR 0007).
+    func testTheWordsAndroidDroppedAreStillTheKotlins() throws {
+        try XCTSkipIf(true, "Skipped until the iPhone port of the polished interface (#155): Android dropped "
+            + "the Progress subtitle and the PROGRESS section title, and the iPhone app keeps them until its port.")
+        let kotlin = try read("app/src/main/java/com/cindy/tracker/RecordsActivity.kt")
+        let layout = try read("app/src/main/res/layout/activity_records.xml")
+        XCTAssertTrue(layout.contains("android:text=\"\(ProgressWords.subtitle)\""),
+                      "subtitle is not in activity_records.xml: \(ProgressWords.subtitle)")
+        XCTAssertTrue(kotlin.contains("\"\(ProgressWords.progressTitle)\""),
+                      "progressTitle is not in RecordsActivity.kt: \(ProgressWords.progressTitle)")
     }
 
     func testTheOldWordsAreGone() throws {
