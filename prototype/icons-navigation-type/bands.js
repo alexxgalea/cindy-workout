@@ -250,21 +250,21 @@
   }
 
   // ------------------------------------------------------------------ page
-  const st = { view: "hybrid", arr: TW.PICK, fig: "1", still: "", auto: false, rm: false, rej: "polish", state: "running", variant: "hybrid", readout: "A", digits: "1", pzsize: "fit", popup: HY.PICK, line: 0, equal: false, hold: false, foot: true, frame: true, person: true, lift: true, mark: true, targets: false };
+  const st = { view: "two", arr: TW.PICK, fig: "1", still: "", auto: false, rm: false, rej: "polish", state: "running", variant: "hybrid", readout: "A", digits: "1", pzsize: "fit", popup: HY.PICK, line: 0, equal: false, hold: false, foot: true, frame: true, person: true, lift: true, mark: true, targets: false };
   try { Object.assign(st, JSON.parse(decodeURIComponent(location.hash.slice(1)) || "{}")); } catch (e) { /* ignore */ }
   // links made before No bands was rejected: its views now live under "Rejected"
   if (st.view === "polish" || st.view === "cmp") { st.rej = st.view === "polish" ? "polish" : "nopm"; st.view = "rejected"; }
   sim = simFor(st.fig);
   const persist = () => { try { history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(st))); } catch (e) { /* file:// */ } };
 
-  const phone = (variant, state, scale, label, readout) => {
-    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""} ${st.hold ? "hold" : ""}" style="zoom:${scale}">${render(variant, state, Object.assign({}, st, { readout: readout || st.readout }))}</div>`;
+  const phone = (variant, state, scale, label, readout, live) => {
+    const inner = `<div class="phone type-inter ${st.targets ? "show-targets" : ""} ${st.hold ? "hold" : ""} ${st.rm ? "rm" : ""} ${live ? "td-live" : ""}" style="zoom:${scale}">${render(variant, state, Object.assign({}, st, { readout: readout || st.readout }))}</div>`;
     return `<div class="shell" style="width:${f1(W * scale)}px;height:${f1(H * scale)}px" role="img" aria-label="${label}">${inner}</div>`;
   };
   const pct = (n) => n.toFixed(1) + " %";
   const shareOf = (v) => B.shares().find((s) => s.variant === v);
 
-  function pane(v, state, scale, readout) {
+  function pane(v, state, scale, readout, live) {
     const [, name, what] = VARIANTS.find((x) => x[0] === v);
     const ro = v === "nopm" ? (readout || st.readout) : null;
     const sh = shareOf(v);
@@ -274,11 +274,18 @@
         ? `chrome <b>${pct(sh.opaque)}</b> · with the pop-up ${pct(sh.withPill)} · picture ${pct(sh.picture)}`
         : `chrome <b>${pct(sh.opaque)}</b> · picture ${pct(sh.picture)}`;
     const rej = REJECTED.has(v) ? ' <span class="badge rejected">rejected</span>' : "";
-    return `<div class="pane${REJECTED.has(v) ? " rejected" : ""}"><p class="cap"><b>${name}${ro ? ", readout " + ro : ""}</b> <span class="badge mock">mock</span>${rej}</p>${phone(v, state, scale, name + ", " + state + (ro ? ", readout " + ro : ""), ro)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
+    return `<div class="pane${REJECTED.has(v) ? " rejected" : ""}"><p class="cap"><b>${name}${ro ? ", readout " + ro : ""}</b> <span class="badge mock">mock</span>${rej}</p>${phone(v, state, scale, name + ", " + state + (ro ? ", readout " + ro : ""), ro, live)}<p class="note">${what}</p><p class="note num">${num}</p></div>`;
   }
 
   function renderStage() {
     const stage = $("#stage");
+    tdStop();
+    const twoOn = st.view === "two" || (st.view === "big" && st.variant === "two");
+    $$(".td-only").forEach((el) => { el.hidden = !twoOn; });
+    $$("[data-arr]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.arr === st.arr)));
+    $$("[data-fig]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.fig === st.fig)));
+    $$("[data-still]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.still === st.still)));
+    $("#t-auto").checked = !!st.auto;
     $$("[data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === st.view)));
     $$("[data-state]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.state === st.state)));
     $$("[data-variant]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.variant === st.variant)));
@@ -297,7 +304,11 @@
     $$("[data-pzsize]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pzsize === st.pzsize)));
     $("#grp-state").hidden = st.view === "grid";
     $$(".pz-only").forEach((el) => { el.hidden = !polishOn; });
-    if (st.view === "hybrid") {
+    if (st.view === "two") {
+      stage.className = "stage hy td";
+      stage.innerHTML = twoStage();
+      measureTwo();
+    } else if (st.view === "hybrid") {
       stage.className = "stage hy";
       stage.innerHTML = hybridStage();
       measureHybrid();
@@ -314,8 +325,9 @@
     } else if (st.view === "big") {
       const sc = Math.max(0.9, Math.min(1.7, (innerHeight - 210) / H));
       stage.className = "stage big";
-      stage.innerHTML = pane(st.variant, st.state, sc) + `<div class="bigside">${st.variant === "hybrid" ? popupCards() : ""}${sharesTable()}${statesNote()}</div>`;
+      stage.innerHTML = pane(st.variant, st.state, sc, null, st.variant === "two") + `<div class="bigside">${st.variant === "hybrid" ? popupCards() : ""}${st.variant === "two" ? arrCards() : ""}${sharesTable()}${statesNote()}</div>`;
       if (st.variant === "hybrid") measureHybrid();
+      if (st.variant === "two") measureTwo();
     } else {
       stage.className = "stage grid";
       const sc = 0.62;
@@ -323,6 +335,283 @@
         MAIN.map(([v, name]) => `<div class="gh row">${name}</div>` + STATES.map(([k]) => `<div>${phone(v, k, sc, name + ", " + k)}</div>`).join("")).join("") + `</div>`;
     }
     persist();
+    autoStart();
+  }
+
+  // ------------------------------------------------------------------ Two distances (bands-two.js)
+  const TT = TW.TIMING;
+  const mvNow = () => TW.MOVES[sim.mv];
+
+  /** The hybrid beside it shows the same set, so the two are compared on the same numbers. */
+  function hyFigs(state) {
+    if (state === "running" || state === "paused") {
+      const mv = mvNow();
+      return { reps: String(sim.count), tgt: "/" + mv.n, ex: mv.name.toUpperCase(), round: sim.round, prog: 100 * sim.count / mv.n };
+    }
+    return state === "finished" && st.fig === "2" ? { reps: "12", tgt: "/15", ex: "SQUATS", round: 12, prog: 80 } : undefined;
+  }
+  const hyInner = () => render("hybrid", st.state, Object.assign({}, st, { popup: HY.PICK, equal: false, figs: hyFigs(st.state) }));
+
+  function arrCards() {
+    const cards = TW.ARRS.map((a) =>
+      `<button class="hy-card" data-arr="${a.id}" aria-pressed="${String(st.arr === a.id)}"><span class="hy-name"><b>${a.name}</b>${a.id === TW.PICK ? '<span class="badge pick">pick</span>' : ""}</span>` +
+      `<span>${a.what}</span><span>${a.cost}</span><span class="num" data-tddist="${a.id}">…</span></button>`).join("");
+    return `<div class="hy-cards"><p class="hy-cap">Where \u2212 and + go: two arrangements (click one)</p>${cards}<p class="hy-why" id="tdwhy">${arrWhy()}</p></div>`;
+  }
+
+  function arrWhy() {
+    return `<b>Pick: B, the stepper beside the figure.</b> The rule to meet is that a missed + must not pause the workout. In B the shutter has no editor near it at all, ` +
+      `and \u2212 and + sit by the number they change, where today's editors already are. The row under them is today's row, so START, pause, RESUME and AGAIN are one place in the centre in every state. ` +
+      `A meets the rule with a 40 dp gap and keeps everything in one row, as asked, and its figure stands alone and centred; it pays with a shutter that is right of centre in all five states. ` +
+      `The plain row END, \u2212, pause, +, SKIP was not drawn: five 48 dp targets across 360 dp leave 22 dp between + and pause, which is the miss this design is meant to rule out.`;
+  }
+
+  function twoNumbers() {
+    const T = B.TWO, g = B.geom("two");
+    const rows = ["today", "hybrid", "two"].map((v) => {
+      const sh = shareOf(v), nm = VARIANTS.find((x) => x[0] === v)[1];
+      return `<tr${v === "two" ? ' class="hy-me"' : ""}><th>${nm}</th><td class="num">${dp1(sh.topDp)} dp · ${sh.topPx.toFixed(0)} px</td><td class="num">${dp1(sh.bottomDp)} dp · ${sh.bottomPx.toFixed(0)} px</td>` +
+        `<td class="num"><b>${pct(sh.opaque)}</b></td><td class="num">${v === "today" ? "in the band" : pct(sh.withPill)}</td><td class="num">${pct(sh.picture)}</td></tr>`;
+    }).join("");
+    const padRun = g.bottomH - T.runUsed, padPhone = g.bottomH - T.phoneUsed, padded = (g.topH + T.paddedRun) / H * 100;
+    return `<table class="tbl"><caption>Band heights and chrome share, 1080 x 2340</caption><thead><tr><th></th><th>top band</th><th>bottom band</th><th>chrome (bands)</th><th>+ pop-up, height</th><th>picture</th></tr></thead><tbody>${rows}</tbody></table>` +
+      `<p class="pz-note" id="tdnums">Two distances keeps the hybrid's bands to the dp: bottom band <b>${dp1(g.bottomH)} dp</b> (hybrid ${dp1(B.geom("hybrid").bottomH)} dp), chrome <b>${pct(shareOf("two").opaque)}</b> (hybrid ${pct(shareOf("hybrid").opaque)}, today ${pct(shareOf("today").opaque)}). The picture and the real zone do not change. ` +
+      `At the bar the band's content is ${dp1(T.runUsed)} dp (edge 3, gap ${T.zoneGap}, figure zone ${T.zoneH}, line ${T.lineH}, gap ${T.rowGap}, row ${T.rowH}), which leaves ${dp1(padRun)} dp under the row. ` +
+      `At the phone it is ${dp1(T.phoneUsed)} dp (edge 3, gap ${T.zoneGap}, zone ${T.zoneH}, gap ${T.phoneGap}, row ${T.phoneRowH}, gap ${T.labelGap}, names ${T.labelH}), which leaves <b>${dp1(padPhone)} dp</b> under the names: ${dp1(T.minPad - padPhone)} dp less than today's ${T.minPad} dp bottom padding. With the full ${T.minPad} dp it would need ${dp1(T.needPhone)} dp. ` +
+      `<b>This fits only with the font padding off.</b> The ${T.figSp} sp figure is drawn in a line 1 em (${T.figSp} dp) tall. As a plain Android line with font padding on, in Manrope ExtraBold as the code sets it, it is ${dp1(T.paddedFig)} dp tall, the band would be <b>${dp1(T.paddedRun)} dp</b>, ${dp1(T.paddedRun - g.bottomH)} dp taller than today's, and the chrome ${pct(padded)} against the hybrid's ${pct(shareOf("hybrid").opaque)} and today's ${pct(shareOf("today").opaque)}.</p>`;
+  }
+
+  function twoStatesTable() {
+    const rows = [
+      ["Idle", "at the phone", "0/5 and the set, receded", "The shutter, 72 dp, white, with the idle line under it. \u2212, + and SKIP dimmed. Camera switch enabled, in the top band. No pop-up: the line is under the shutter it names."],
+      ["Setup", "at the phone, then walking to the bar", "\u2014, or 1/2 while the two slow reps are counted; \u201cSetup check\u201d", "SKIP, 56 dp, named. The shutter dimmed, as the app has it. The coaching line stays in the pop-up."],
+      ["Running", "at the bar", "3/5 at 96 sp, then \u201cPull-ups · Round 2\u201d", "One quiet row of 48 dp targets, no names: nothing small is meant to be read from the bar."],
+      ["Paused", "at the phone", "3/5 at 56 sp and its line", "END 56 dp, RESUME 72 dp, SKIP 56 dp, named. \u2212 and + dimmed (they act only while the clock runs). Camera switch enabled."],
+      ["Finished", "at the phone", "the last count, red, as today", "AGAIN, 72 dp, named; the rest dimmed. This is the branch's finished state: on main the session page covers it and closing the page returns to idle."],
+    ];
+    return `<table class="tbl"><caption>Two distances, state by state</caption><thead><tr><th></th><th>where the athlete is</th><th>readout</th><th>controls</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr${r[0].toLowerCase() === st.state ? ' class="hy-me"' : ""}><th>${r[0]}</th><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("") + `</tbody></table>`;
+  }
+
+  function legibilityTable() {
+    const rows = [
+      ["Two distances: count and target, running", 800, B.TWO.figSp, "two"],
+      ["Hybrid and today: count, running", 800, 56, ""],
+      ["Hybrid and today: target, running", 700, 30, ""],
+      ["Two distances: the next set, arrangement A", 800, TW.takeSp("A"), ""],
+      ["Two distances: the next set, arrangement B", 800, TW.takeSp("B"), ""],
+      ["Two distances: count and target, at the phone", 800, B.TWO.phoneFigSp, ""],
+      ["Two distances: the line under the figure", 600, B.TWO.lineSp, ""],
+      ["The clock in the thin top band (hybrid and Two distances)", 800, 28, ""],
+    ];
+    return `<table class="tbl"><caption>Legibility: height of the figures, and the angle they make</caption><thead><tr><th></th><th>size</th><th>height</th><th>on the glass</th><th>at 2 m</th><th>at 3 m</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr${r[3] ? ' class="hy-me"' : ""}><th>${r[0]}</th><td class="num">${r[2]} sp</td><td class="num" data-lg="dp:${r[1]}:${r[2]}">…</td><td class="num" data-lg="mm:${r[1]}:${r[2]}">…</td><td class="num" data-lg="a2:${r[1]}:${r[2]}">…</td><td class="num" data-lg="a3:${r[1]}:${r[2]}">…</td></tr>`).join("") + `</tbody></table>` +
+      `<p class="pz-note" id="tdlegib">…</p>`;
+  }
+
+  function twoStage() {
+    const gap = 28, cw = document.documentElement.clientWidth;
+    const big = Math.max(0.7, Math.min(1.3, (innerHeight - 190) / H, (cw - 32 - 3 * gap - 520) / 2 / W));
+    const small = Math.max(0.42, Math.min(0.6, (cw - 32 - 90 - 5 * 14) / 5 / W));
+    const L = lineOf(st.state), arr = TW.ARRS.find((a) => a.id === st.arr);
+    const strip = TW.ARRS.map((a) => `<div class="gh row">${a.name}</div>` + STATES.map(([k]) =>
+      `<div><div class="shell" style="width:${f1(W * small)}px;height:${f1(H * small)}px" role="img" aria-label="Two distances, ${a.id}, ${k}"><div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="zoom:${small}">${render("two", k, Object.assign({}, st, { arr: a.id, still: "" }))}</div></div></div>`).join("")).join("");
+    const hyPane = `<div class="pane td-hy"><p class="cap"><b>Thin top, today's bottom</b> <span class="badge mock">mock</span></p>` +
+      `<div class="shell" style="width:${f1(W * big)}px;height:${f1(H * big)}px" role="img" aria-label="Thin top, today's bottom, ${st.state}"><div class="phone type-inter ${st.targets ? "show-targets" : ""}" style="zoom:${big}">${hyInner()}</div></div>` +
+      `<p class="note">The owner's hybrid, for comparison: the same bands, today's bottom band inside. It shows the same set.</p><p class="note num">bottom band <b>${dp1(B.geom("hybrid").bottomH)} dp</b> · chrome <b>${pct(shareOf("hybrid").opaque)}</b></p></div>`;
+    const twoPane = `<div class="pane td-main"><p class="cap"><b>Two distances, ${arr.name.slice(0, 1)}</b> <span class="badge mock">mock</span></p>${phone("two", st.state, big, "Two distances, " + st.state, null, true)}` +
+      `<p class="note">${TW.atBar(st.state) ? "At the bar: a scoreboard. Press + or \u2212 on the phone, or \u201cBank a rep\u201d above." : "At the phone: the controls come forward and are named."}</p>` +
+      `<p class="note num">bottom band <b>${dp1(B.geom("two").bottomH)} dp</b> · chrome <b>${pct(shareOf("two").opaque)}</b></p></div>`;
+    return `<div class="hy-intro"><b>Two distances.</b> The camera screen is used from two distances. At the phone (idle, setup, paused, finished) the athlete is at arm's length and presses buttons. ` +
+      `At the bar (running) they are 2 to 3 m away, cannot touch and cannot read small text. Each state is drawn for the distance the athlete is at. ` +
+      `The bands are the hybrid's: the thin top, the coaching line as a pop-up, and a bottom band of today's height. Only the inside of the bottom band is new.</div>` +
+      `<h3 class="hy-h">${STATE_NAME[st.state]} · ${st.state === "idle" ? "the idle line is under the shutter" : "\u201c" + L.text + "\u201d"} · \u2212 and + ${st.arr === "A" ? "in the row" : "beside the figure"}${st.still ? " · still: " + (st.still === "pulse" ? "mid-pulse" : "the takeover") : ""}</h3>` +
+      `<div class="td-stage" style="gap:${gap}px">${twoPane}${hyPane}<div class="bigside">${arrCards()}${twoNumbers()}${legibilityTable()}${twoStatesTable()}${statesNote()}<p class="pz-check" id="tdcheck">Two distances self-check: running…</p></div></div>` +
+      `<h3 class="hy-h">Every state, both arrangements</h3><div class="td-strip"><div class="gridwrap"><div class="gh"></div>${STATES.map(([k, n]) => `<div class="gh">${n}</div>`).join("")}${strip}</div></div>`;
+  }
+
+  // ---- a banked rep, seen: the roll, the pulse, and the takeover when a set completes ----
+  let tdTimers = [], tdPhase = null, autoTimer = null;
+  const later = (fn, ms) => { tdTimers.push(setTimeout(fn, ms)); };
+  const reduced = () => st.rm || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const livePhone = () => $(".phone.td-live");
+  const advance = () => { sim.mv = (sim.mv + 1) % TW.MOVES.length; if (sim.mv === 0) sim.round += 1; sim.count = 0; };
+  /** Stop whatever is in motion and leave the set where the motion was taking it. */
+  function tdStop() {
+    tdTimers.forEach(clearTimeout); tdTimers = [];
+    clearTimeout(autoTimer); autoTimer = null;
+    if (tdPhase === "complete") advance();
+    tdPhase = null;
+  }
+
+  /** Redraw the live readout from the set. x: { prev, pulse, down } for a changed count, { taking } for the next set. */
+  function tdPaint(x) {
+    const ph = livePhone();
+    if (!ph || !$("[data-td-take]", ph)) return;
+    const mv = mvNow(), m = Object.assign({ count: sim.count, target: mv.n, name: mv.name, round: sim.round }, x || {});
+    $("[data-td-fig]", ph).innerHTML = TW.figure(m);
+    $("[data-td-line]", ph).innerHTML = TW.lineText(m);
+    $("[data-td-prog]", ph).style.width = (100 * sim.count / mv.n).toFixed(1) + "%";
+    $("[data-td-zone]", ph).classList.remove("still");
+    $("[data-td-zone]", ph).classList.toggle("taking", !!m.taking);
+    $("[data-td-linerow]", ph).classList.toggle("taking", !!m.taking);
+    if (m.taking) $("[data-td-take]", ph).innerHTML = TW.takeover(m.taking);
+    const hy = $(".td-hy .phone");
+    if (hy) hy.innerHTML = hyInner();
+  }
+
+  /** Bank a rep: the count goes up, rolls and pulses. On the set's last rep the next set takes over the band. */
+  function bank() {
+    if (st.state !== "running" || st.still || !livePhone()) {
+      Object.assign(st, { state: "running", line: 0, still: "" });
+      if (!$(".phone.td-live") && st.view !== "big") st.view = "two";
+      renderStage();
+    }
+    tdTimers.forEach(clearTimeout); tdTimers = [];
+    if (tdPhase === "complete") advance();
+    tdPhase = null;
+    const prev = sim.count;
+    sim.count = prev + 1;
+    tdPaint({ prev: reduced() ? null : prev, pulse: true });
+    if (sim.count >= mvNow().n) {
+      tdPhase = "complete";
+      later(() => {
+        advance(); tdPhase = "taking";
+        tdPaint({ taking: mvNow() });
+        later(() => { tdPhase = null; tdPaint(); }, TT.takeover);
+      }, TT.roll + TT.pulse);
+    }
+  }
+
+  /** Take back a rep: the count rolls down, with no pulse. Refused while the next set is being shown. */
+  function takeBack() {
+    if (tdPhase || st.state !== "running" || st.still || sim.count < 1) return;
+    const prev = sim.count;
+    sim.count = prev - 1;
+    tdPaint({ prev: reduced() ? null : prev, down: true });
+  }
+
+  function autoTick() {
+    if (!st.auto) return;
+    bank();
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(autoTick, tdPhase === "complete" ? TT.roll + TT.pulse + TT.takeover + TT.rep : TT.rep);
+  }
+  function autoStart() {
+    clearTimeout(autoTimer); autoTimer = null;
+    if (st.auto && livePhone()) autoTimer = setTimeout(autoTick, TT.rep);
+  }
+
+  let twoDigitEm = {};                                   // Inter's capital and digit height per em, by weight, measured once
+  function measureTwo() {
+    const f = document.fonts;
+    const run = () => {
+      const cx = document.createElement("canvas").getContext("2d");
+      [800, 700, 600].forEach((w) => { if (!twoDigitEm[w]) { cx.font = `${w} 1000px "CindyInter"`; twoDigitEm[w] = cx.measureText("0123456789").actualBoundingBoxAscent / 1000; } });
+      // 1 dp = 1/160 in, the page's unit elsewhere. The P40's panel is larger than its density bucket says: see the note.
+      const dp = (w, sp) => sp * twoDigitEm[w], mm = (w, sp) => dp(w, sp) * 25.4 / 160;
+      const arc = (w, sp, m) => mm(w, sp) / (m * 1000) * 180 / Math.PI * 60;
+      const a = (v) => `${v.toFixed(1)}\u2032${v < 5 ? " (under 5\u2032, the acuity limit)" : v < 10 ? " (under 10\u2032)" : ""}`;
+      $$("[data-lg]").forEach((el) => {
+        const [k, w, sp] = el.dataset.lg.split(":"), W8 = parseInt(w, 10), SP = parseFloat(sp);
+        el.textContent = k === "dp" ? `${dp(W8, SP).toFixed(1)} dp` : k === "mm" ? `${mm(W8, SP).toFixed(1)} mm` : a(arc(W8, SP, k === "a2" ? 2 : 3));
+      });
+      const out = $("#tdlegib");
+      if (out) {
+        const sp = B.TWO.figSp, panel = Math.hypot(1080, 2340) / 6.1, k = 480 / panel;
+        out.innerHTML = `The count's digits at ${sp} sp are <b>${dp(800, sp).toFixed(1)} dp</b> tall, <b>${mm(800, sp).toFixed(1)} mm</b> at 1 dp = 1/160 in: <b>${arc(800, sp, 2).toFixed(1)}\u2032</b> at 2 m and <b>${arc(800, sp, 3).toFixed(1)}\u2032</b> at 3 m. ` +
+          `Today's 56 sp count is ${arc(800, 56, 2).toFixed(1)}\u2032 and ${arc(800, 56, 3).toFixed(1)}\u2032, and its 30 sp target ${arc(700, 30, 2).toFixed(1)}\u2032 and ${arc(700, 30, 3).toFixed(1)}\u2032. ` +
+          `5\u2032 is the 20/20 acuity limit; this mock asks at least 10\u2032 of anything meant to be read mid-workout. Heights are Inter's digit height, measured from the bundled font (canvas <code>measureText</code>). ` +
+          `The P40's glass is larger than the 480 dpi bucket implies: at its published 6.1 in diagonal it is ${panel.toFixed(0)} px per inch, so every height and angle here is ${(100 * (k - 1)).toFixed(0)} % larger on that phone ` +
+          `(the count: ${(mm(800, sp) * k).toFixed(1)} mm, ${(arc(800, sp, 2) * k).toFixed(1)}\u2032 at 2 m, ${(arc(800, sp, 3) * k).toFixed(1)}\u2032 at 3 m). The diagonal is the published figure, not a measurement.`;
+      }
+      twoCheck();
+    };
+    Promise.all(["800 100px CindyInter", "700 100px CindyInter", "600 100px CindyInter", "800 100px CindyManrope", "600 100px CindyManrope"].map((x) => f.load(x))).then(() => f.ready).then(run, run);
+  }
+
+  // Render Two distances off-screen in both arrangements, every state, both figure sets, the two stills and each next set,
+  // and check what a reviewer would catch: anything outside the band, a target under 48 dp, a count and target of unequal
+  // size, figures or a line that overflow or run under a control, and an analysis frame that differs from the hybrid's.
+  function twoCheck() {
+    const box = document.createElement("div");
+    box.className = "pz-offscreen";
+    const saved = { state: st.state, line: st.line, arr: st.arr, fig: st.fig, still: st.still }, savedSim = sim;
+    const jobs = [];
+    ["A", "B"].forEach((arr) => {
+      STATES.forEach(([k]) => ["1", "2"].forEach((fig) => jobs.push({ arr, k, fig, i: 0 })));
+      jobs.push({ arr, k: "setup", fig: "1", i: 2 });
+      ["1", "2"].forEach((fig) => jobs.push({ arr, k: "running", fig, i: 0, still: "pulse" }));
+      [0, 1, 2].forEach((mv) => jobs.push({ arr, k: "running", fig: "1", i: 0, still: "takeover", sim: { mv, round: 2, count: TW.MOVES[mv].n } }));
+      jobs.push({ arr, k: "running", fig: "2", i: 0, manrope: true });
+    });
+    jobs.push({ hybrid: true, k: "running", i: 0 });
+    box.innerHTML = jobs.map((j) => {
+      Object.assign(st, { state: j.k, line: j.i, arr: j.arr || st.arr, fig: j.fig || "1", still: j.still || "" });
+      sim = j.sim || simFor(st.fig);
+      const o = Object.assign({}, st, { frame: true, person: false });
+      return `<div class="shell"><div class="phone ${j.manrope ? "" : "type-inter"}">${render(j.hybrid ? "hybrid" : "two", j.k, o)}</div></div>`;
+    }).join("");
+    Object.assign(st, saved); sim = savedSim;
+    document.body.appendChild(box);
+    const g = B.geom("two"), problems = [], frames = new Set(), dist = { A: {}, B: {} }, widths = {}, pad = { far: 1e9, near: 1e9 };
+    $$(".shell", box).forEach((shell, n) => {
+      const j = jobs[n], ph = $(".phone", shell), pr = ph.getBoundingClientRect();
+      const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.left - pr.left, y: r.top - pr.top, w: r.width, h: r.height }; };
+      const fr = $("svg.frame", ph); if (fr) frames.add(fr.innerHTML.replace(/\s+/g, " "));
+      if (j.hybrid) return;
+      const tag = `${j.arr}, ${j.k}${j.fig === "2" ? ", 12/15" : ""}${j.still ? ", " + j.still : ""}${j.manrope ? ", Manrope" : ""}${j.sim ? ", after " + TW.MOVES[j.sim.mv].name : ""}`;
+      const inter = (a, b) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+      const gapOf = (a, b) => Math.hypot(Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w)), Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h)));
+      const hits = $$("[data-hit]", ph).map((el) => ({ id: el.dataset.tdCtl, r: rect(el), on: parseFloat(getComputedStyle(el.closest("[data-td-capsule]") || el).opacity) > 0.5 }));
+      const zone = rect($("[data-td-zone]", ph));
+      let low = 0;
+      $$("[data-td-zone], .td-linerow, [data-hit], [data-td-capsule], .td-lbl, .td-one", ph).forEach((el) => {
+        const r = rect(el);
+        low = Math.max(low, r.y + r.h);
+        if (r.y < g.y0 - 0.5 || r.y + r.h > H + 0.5 || r.x < -0.5 || r.x + r.w > W + 0.5) problems.push(`${tag}: something leaves the band`);
+      });
+      const where = j.k === "running" ? "far" : "near";
+      pad[where] = Math.min(pad[where], H - low);
+      hits.forEach((h) => { if (h.r.w < 47.5 || h.r.h < 47.5) problems.push(`${tag}: ${h.id} is a ${h.r.w.toFixed(0)} x ${h.r.h.toFixed(0)} dp target`); });
+      hits.forEach((a, i) => hits.slice(i + 1).forEach((b) => { if (inter(a.r, b.r)) problems.push(`${tag}: ${a.id} and ${b.id} overlap`); }));
+      const eq = $$("[data-td-fig] [data-eq]", ph), taking = $("[data-td-zone]", ph).classList.contains("taking");
+      const sizes = new Set(eq.map((sp) => getComputedStyle(sp).fontSize));
+      if (sizes.size > 1) problems.push(`${tag}: the count and its target differ in size (${[...sizes].join(", ")})`);
+      if (eq.length && !taking) {
+        const rs = eq.map(rect), x0 = Math.min(...rs.map((r) => r.x)), x1 = Math.max(...rs.map((r) => r.x + r.w));
+        const u = { x: x0, y: zone.y, w: x1 - x0, h: zone.h };
+        if (x0 < zone.x - 0.5 || x1 > zone.x + zone.w + 0.5) problems.push(`${tag}: ${(x1 - x0).toFixed(0)} dp of figures in a ${zone.w.toFixed(0)} dp zone`);
+        if (hits.some((h) => inter(u, h.r))) problems.push(`${tag}: the figures run under a control`);
+        if (j.k === "running" && !j.still) widths[`${j.arr}${j.manrope ? " Manrope" : ""} ${eq.map((sp) => sp.textContent).join("")}`] = `${(x1 - x0).toFixed(0)} of ${zone.w.toFixed(0)} dp`;
+      }
+      if (taking) $$("[data-take]", ph).forEach((sp) => {
+        const r = rect(sp);
+        if (r.x < zone.x - 0.5 || r.x + r.w > zone.x + zone.w + 0.5) problems.push(`${tag}: \u201c${sp.textContent}\u201d (${r.w.toFixed(0)} dp) leaves the ${zone.w.toFixed(0)} dp zone`);
+        if (hits.some((h) => inter(r, h.r))) problems.push(`${tag}: the next set runs under a control`);
+      });
+      $$("[data-td-line], .td-one span", ph).forEach((el) => { if (el.scrollWidth > el.clientWidth + 0.5) problems.push(`${tag}: \u201c${el.textContent}\u201d is cut`); });
+      if (j.k === "running" && !j.still && !j.manrope && j.fig === "1") {
+        const by = Object.fromEntries(hits.map((h) => [h.id, h.r]));
+        dist[j.arr] = { run: gapOf(by.plus, by.run), skip: gapOf(by.plus, by.skip), mrun: gapOf(by.minus, by.run), mskip: gapOf(by.minus, by.skip), end: gapOf(by.minus, by.end) };
+      }
+    });
+    box.remove();
+    if (frames.size !== 1) problems.push(`the analysis frame differs between Two distances and the hybrid (${frames.size} versions)`);
+    if (Math.abs(g.bottomH - B.geom("hybrid").bottomH) > 0.01 || Math.abs(g.topH - B.geom("hybrid").topH) > 0.01) problems.push("the bands are not the hybrid's");
+    $$("[data-tddist]").forEach((el) => {
+      const d = dist[el.dataset.tddist];
+      el.textContent = `edge to edge: + to the shutter ${d.run.toFixed(0)} dp · + to SKIP ${d.skip.toFixed(0)} dp · \u2212 to the shutter ${d.mrun.toFixed(0)} dp · \u2212 to SKIP ${d.mskip.toFixed(0)} dp · \u2212 to END ${d.end.toFixed(0)} dp`;
+    });
+    const out = $("#tdcheck");
+    const uniq = [...new Set(problems)];
+    const text = `Two distances self-check over ${jobs.length - 1} phones (two arrangements, five states, 3/5 and 12/15, the pulse and takeover stills, each next set, and 12/15 in Manrope): ` +
+      (uniq.length ? uniq.length + " problems. " + uniq.join("; ") : "no problems.") +
+      ` The analysis frame is ${frames.size === 1 ? "identical to the hybrid's" : "NOT identical to the hybrid's"}. Bottom band ${dp1(g.bottomH)} dp, the hybrid's ${dp1(B.geom("hybrid").bottomH)} dp. ` +
+      `Least room under the content: ${dp1(pad.far)} dp at the bar, ${dp1(pad.near)} dp at the phone. Running figures, width: ${Object.entries(widths).map(([k, v]) => k + " " + v).join("; ")}. ` +
+      `Reduced motion: ${reduced() ? "on, no roll and no slide" : "off"}.`;
+    if (out) out.textContent = text;
+    console.log(text, dist);
   }
 
   // ------------------------------------------------------------------ Thin top, today's bottom (bands-hybrid.js)
@@ -632,6 +921,7 @@
     const sp = (m.spec.topPx + m.spec.bottomPx) / (B.H * B.PX) * 100;
     $("#numnote").innerHTML = `
       <p><b>Today's bands:</b> the model gives ${t.topPx.toFixed(0)} px above and ${t.bottomPx.toFixed(0)} px below, ${pct(t.opaque)} of the screen. The 2026-11-06 capture (<code>captures/camera.png</code>) measures ${m.topPx} px above and ${m.bottomPx} px below, ${pct(mp)}. The ticket and spec #139 say ${m.spec.topPx} px above, ${m.spec.bottomPx} px below and 43 %; ${m.spec.topPx} + ${m.spec.bottomPx} is ${m.spec.topPx + m.spec.bottomPx} px, which is ${pct(sp)}, so the spec's own figures do not add up to 43 %. The capture agrees with 426 above and not with 533 below (the progress edge sits at y = 1678 px).</p>
+      <p><b>Two distances:</b> the hybrid's bands to the dp, ${hy.topPx.toFixed(0)} px above and ${hy.bottomPx.toFixed(0)} px below, <b>${pct(shareOf("two").opaque)}</b> of the screen. Only the inside of the bottom band differs: its rows are in <code>bands-geometry.js</code> (TWO) and the view "Two distances" prints what each layout uses of the ${f1(hy.g.bottomH)} dp.</p>
       <p><b>Thin top, today's bottom:</b> ${hy.topPx.toFixed(0)} px above (Thin bands' top) and ${hy.bottomPx.toFixed(0)} px below (today's bottom), <b>${pct(hy.opaque)}</b> of the screen, against today's ${pct(t.opaque)}. The coaching pop-up is not in it: counted as a band, as HUDMEASURE counts it, the share with it is ${pct(hy.withPill)}; in area the pill is a few percent of the screen (measured in the hybrid view).</p>
       <p><b>Thin bands:</b> ${pct(thin.opaque)}, against a target of about 25 %. The overshoot is the count row: the prototype keeps the reps number at 44 sp (autosize 24 to 44), a ${thin.g.K.toFixed(0)} dp line, in a row the 48 dp editors alone would size to 48 dp. The coaching pill (${(thin.g.pillH + 8).toFixed(0)} dp with its margin) sits on the picture and is not in the ${pct(thin.opaque)}; with it the thin layout reaches ${pct(thin.withPill)}.</p>
       <p><b>No bands (rejected 2026-11-07):</b> no band is opaque, so the picture is the whole screen. The controls still occupy ${pct(none.footprint)} of the height (${none.g.topH.toFixed(0)} dp at the top, ${none.g.bottomH.toFixed(0)} dp at the bottom), which is what the prototype's own HUDMEASURE log calls the footprint.</p>
@@ -650,7 +940,10 @@
 
   function init() {
     const seg = (id, items, attr) => { $(id).innerHTML = items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="false">${n}</button>`).join(""); };
-    seg("#seg-view", [["hybrid", "Thin top, today's bottom"], ["side", "Side by side"], ["big", "One big phone"], ["grid", "All " + MAIN.length * STATES.length], ["rejected", "Rejected: No bands"]], "data-view");
+    seg("#seg-arr", TW.ARRS.map((a) => [a.id, a.name]), "data-arr");
+    seg("#seg-fig", [["1", "3/5, round 2"], ["2", "12/15, round 12"]], "data-fig");
+    seg("#seg-still", [["", "Off"], ["pulse", "Mid-pulse"], ["takeover", "The takeover"]], "data-still");
+    seg("#seg-view", [["two", "Two distances"], ["hybrid", "Thin top, today's bottom"], ["side", "Side by side"], ["big", "One big phone"], ["grid", "All " + MAIN.length * STATES.length], ["rejected", "Rejected: No bands"]], "data-view");
     seg("#seg-rej", [["polish", "Polish No bands, six designs"], ["nopm", "No bands, and without \u2212/+"]], "data-rej");
     seg("#seg-popup", HY.POPUPS.map((p) => [p.id, p.name]), "data-popup");
     seg("#seg-readout", [["A", "A  count, then the words"], ["B", "B  segmented ring"]], "data-readout");
@@ -660,9 +953,15 @@
     seg("#seg-variant", VARIANTS.map(([k, n]) => [k, REJECTED.has(k) ? n + " (rejected)" : n]), "data-variant");
     document.addEventListener("click", (e) => {
       if (e.target.closest("#replay")) { renderStage(); return; }
-      const b = e.target.closest("button[data-view],button[data-state],button[data-variant],button[data-readout],button[data-digits],button[data-pzsize],button[data-rej],button[data-popup],button[data-line]");
+      if (e.target.closest("#bank")) { bank(); return; }
+      const act = e.target.closest(".phone.td-live [data-td-act]");
+      if (act) { if (act.dataset.tdAct === "plus") bank(); else takeBack(); return; }
+      const b = e.target.closest("button[data-arr],button[data-fig],button[data-still],button[data-view],button[data-state],button[data-variant],button[data-readout],button[data-digits],button[data-pzsize],button[data-rej],button[data-popup],button[data-line]");
       if (!b) return;
       if (b.dataset.view) st.view = b.dataset.view;
+      if (b.dataset.arr) st.arr = b.dataset.arr;
+      if (b.dataset.fig) { tdStop(); st.fig = b.dataset.fig; sim = simFor(st.fig); }
+      if (b.dataset.still !== undefined) { st.still = b.dataset.still; if (st.still) Object.assign(st, { state: "running", line: 0, auto: false }); }
       if (b.dataset.state && b.dataset.state !== st.state) { st.state = b.dataset.state; st.line = 0; }
       if (b.dataset.rej) st.rej = b.dataset.rej;
       if (b.dataset.popup) st.popup = b.dataset.popup;
@@ -673,11 +972,23 @@
       if (b.dataset.pzsize) st.pzsize = b.dataset.pzsize;
       renderStage();
     });
-    [["equal", "#t-equal"], ["hold", "#t-hold"], ["foot", "#t-foot"], ["frame", "#t-frame"], ["person", "#t-person"], ["lift", "#t-lift"], ["mark", "#t-mark"], ["targets", "#t-targets"]].forEach(([k, id]) => {
+    $("#t-auto").addEventListener("change", (e) => {
+      st.auto = e.target.checked;
+      if (st.auto) Object.assign(st, { state: "running", line: 0, still: "" });
+      renderStage();
+    });
+    [["rm", "#t-rm"], ["equal", "#t-equal"], ["hold", "#t-hold"], ["foot", "#t-foot"], ["frame", "#t-frame"], ["person", "#t-person"], ["lift", "#t-lift"], ["mark", "#t-mark"], ["targets", "#t-targets"]].forEach(([k, id]) => {
       const el = $(id); el.checked = !!st[k];
       el.addEventListener("change", () => { st[k] = el.checked; renderStage(); });
     });
-    addEventListener("resize", () => { if (st.view === "big" || st.view === "rejected" || st.view === "hybrid") renderStage(); });
+    // Redraw only when the window's size has changed: a redraw stops a roll or a takeover that is under way.
+    let size = innerWidth + "x" + innerHeight;
+    addEventListener("resize", () => {
+      const now = innerWidth + "x" + innerHeight;
+      if (now === size) return;
+      size = now;
+      if (st.view === "big" || st.view === "rejected" || st.view === "hybrid" || st.view === "two") renderStage();
+    });
     renderNumbers();
     renderStage();
   }
