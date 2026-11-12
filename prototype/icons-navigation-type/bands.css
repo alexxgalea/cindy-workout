@@ -200,7 +200,7 @@ button.plain:focus-visible { outline: 2px solid #64d2ff; outline-offset: 1px; }
 .phone .td-n.pulse.still > .td-d { animation: none; color: var(--ok); }
 .phone .td-linerow { display: flex; align-items: center; justify-content: center; }
 .phone .td-line { font-weight: 600; font-size: 17px; line-height: 24px; letter-spacing: -.0125em; color: var(--label-secondary);
-  font-feature-settings: "tnum"; white-space: nowrap; overflow: hidden; max-width: 100%; }
+  white-space: nowrap; overflow: hidden; max-width: 100%; }
 .phone .td-line.receded { color: var(--label-tertiary); }
 /* A movement change: the next set takes the figure's place for 1.5 s. Two lines, one size, no slash: it cannot be read as a count. */
 .phone .td-take { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px;

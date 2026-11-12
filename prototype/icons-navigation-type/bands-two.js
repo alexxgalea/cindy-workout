@@ -56,7 +56,7 @@
   }
 
   /** The words under the figure, sentence case: the movement and the round. */
-  const lineText = (m) => (m.round == null ? m.name : `${m.name} · Round ${m.round}`);
+  const lineText = (m) => (m.round == null ? m.name : `${m.name} · Round <span class="tnum">${m.round}</span>`);
 
   /** The next set, as the takeover shows it: the number over the movement, one size. */
   const takeover = (t) => `<span data-take>${t.n}</span><span data-take>${t.name.toUpperCase()}</span>`;
