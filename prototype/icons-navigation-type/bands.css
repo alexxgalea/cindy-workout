@@ -47,7 +47,9 @@
 .bz-shutter { border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; }
 .bz-statuswrap { left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
 .bz-pill { border-radius: 17px; padding: 0 14px; display: flex; align-items: center; max-width: 328px; white-space: nowrap; }
-.bz-status { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+.bz-status { display: flex; align-items: center; justify-content: center; white-space: nowrap; padding: 0 20px; }
+/* one line, cut at the edge with no ellipsis, as the app's maxLines="1" does */
+.bz-line { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .bz-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; flex: none; }
 .bz-track { background: var(--label-quaternary); border-radius: 0; }
 .bz-track i { display: block; height: 100%; background: #fff; }
@@ -139,3 +141,39 @@
 .phone .pz-foot:not(.bot) b { bottom: -13px; }
 .phone .pz-foot.bot b { top: -13px; }
 .phone .pz-abs { position: absolute; }
+
+/* ---- Thin top, today's bottom (bands-hybrid.js): the owner's hybrid, and the views of what was rejected. */
+.stage.hy, .stage.rejwrap { display: block; overflow-x: auto; }
+.hy-intro, .rejbanner { max-width: 980px; margin: 0 auto 14px; font-size: 13px; color: var(--chrome-dim); }
+.hy-intro b { color: var(--chrome-fg); }
+.rejbanner { border: 1px solid #6a1a14; background: #1f0d0b; color: #ffb4ad; border-radius: 8px; padding: 8px 12px; }
+.rejbanner b { color: #ff453a; }
+.hy-h { font-size: 12px; font-weight: 600; color: var(--chrome-dim); text-transform: uppercase; letter-spacing: .08em; text-align: center; margin: 18px 0 12px; }
+.hy-row { display: flex; justify-content: center; align-items: flex-start; }
+.stage.hy .stage.big { justify-content: center; overflow: visible; }
+.stage.hy .bigside { max-width: 640px; }
+.hy-cards { display: grid; gap: 8px; }
+.hy-cap { margin: 0; color: var(--chrome-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.hy-card { display: grid; gap: 3px; text-align: left; font: inherit; font-size: 12px; line-height: 1.4; color: var(--chrome-dim); background: #17181b; border: 1px solid #34363b; border-radius: 10px; padding: 9px 12px; cursor: pointer; }
+.hy-card b { color: var(--chrome-fg); font-size: 13px; }
+.hy-card[aria-pressed="true"] { border-color: #e8e8ee; background: #1f2024; }
+.hy-card:focus-visible { outline: 2px solid #64d2ff; outline-offset: 1px; }
+.hy-card .num { color: var(--chrome-fg); }
+.hy-why { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--chrome-dim); }
+.hy-why b { color: var(--chrome-fg); }
+.badge.pick { color: #30d158; border-color: #1c5a30; margin-left: 6px; }
+.good { color: #30d158; }
+.bad { color: #ff453a; }
+.tbl tr.hy-me th, .tbl tr.hy-me td { background: #1b1c20; }
+.tbl td.src { color: var(--chrome-dim); }
+.tbl td.num { white-space: nowrap; }
+.bz-dot.inl { display: inline-block; vertical-align: middle; }
+.seg.wrap { flex-wrap: wrap; }
+button.plain { font: inherit; color: var(--chrome-fg); background: transparent; border: 1px solid #34363b; border-radius: 8px; padding: 6px 11px; cursor: pointer; }
+button.plain:focus-visible { outline: 2px solid #64d2ff; outline-offset: 1px; }
+/* Option C: in 150 ms, held 3 s, out 400 ms (bands-hybrid.js TOAST). The page's "Hold" switch stops it for a still. */
+@keyframes hy-toast { 0% { opacity: 0; } 4.2254% { opacity: 1; } 88.7324% { opacity: 1; } 100% { opacity: 0; } }
+.bz-pill.toast { animation: hy-toast 3550ms linear forwards; }
+.phone.hold .bz-pill.toast { animation: none; }
+@media (prefers-reduced-motion: reduce) { .bz-pill.toast { animation: none; } }
+.bz-count.same { gap: 0; }
