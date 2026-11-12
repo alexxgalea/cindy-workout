@@ -1,1 +1,7 @@
-A smaller, tighter build: the app's code is now shrunk and optimised before it reaches your phone. Nothing changes in how Cindy counts, looks or sounds.
+Counting is steadier: push-ups are no longer missed when a warm phone slows down, and the pull-up bar setup no longer gets stuck.
+
+The spoken count arrives sooner, the skeleton is quieter, and the pull-up bar is drawn on the real bar.
+
+You can switch cameras before you start or on a pause, and closing the session page leaves the camera ready for the next workout.
+
+The app is also smaller: its code is now shrunk and optimised.
