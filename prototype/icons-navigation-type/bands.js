@@ -1,5 +1,6 @@
 /* MOCK for #140: draws the camera screen's band variants from bands-geometry.js: the ticket's three, the owner's rejected
-   fourth (No bands without \u2212/+), and the owner's hybrid of 2026-11-07 (Thin bands' top over today's bottom, bands-hybrid.js).
+   fourth (No bands without \u2212/+), the owner's hybrid of 2026-11-07 (Thin bands' top over today's bottom, bands-hybrid.js),
+   and Two distances of 2026-11-12 (the hybrid's bands with the bottom band redrawn for the distance the athlete is at, bands-two.js).
    No bands and its six polish designs were rejected on 2026-11-07 and are kept under the view "Rejected".
    What goes where is read from prototype/hud-bands (HudVariants.kt, activity_main.xml, MainActivity.kt renderControls()).
    Not the app, not the in-app prototype. Phosphor icons, Inter, the app's tokens, the real camera capture. No blur. */
@@ -11,6 +12,7 @@
   const { W, H, LH } = B;
 
   const VARIANTS = [
+    ["two", "Two distances", "The hybrid's bands, with the bottom band drawn for where the athlete is: a scoreboard at the bar (running), the controls forward at the phone (idle, setup, paused, finished)."],
     ["hybrid", "Thin top, today's bottom", "The owner's hybrid: Thin bands' one-row top with the camera switch, the coaching line as a pop-up on the picture, and today's bottom band exactly as it is."],
     ["thin", "Thin bands", "One top row with the clock and the icons; the coaching line is a pill on the picture; one row for the count, one for the actions."],
     ["none", "No bands", "Rejected by the owner on 2026-11-07, with all six of its polish designs. The picture fills the screen. Clock, icons, count and actions float on glass; drawn corners mark the real zone."],
@@ -18,7 +20,7 @@
     ["nopm", "No bands, no \u2212/+", "Rejected by the owner on 2026-11-07: \u2212 and + stay. Kept for the record: No bands with the two buttons gone and the round and count redrawn as type on one glass plate (readout A or B)."],
   ];
   const REJECTED = new Set(["none", "nopm"]);             // the owner turned these down; kept on the page, out of the default views
-  const HY = window.HYBRID;
+  const HY = window.HYBRID, TW = window.TWO;
   const MAIN = VARIANTS.filter(([v]) => !REJECTED.has(v));
   const STATES = [["idle", "Idle"], ["setup", "Setup"], ["running", "Running"], ["paused", "Paused"], ["finished", "Finished"]];
 
@@ -106,7 +108,7 @@
       const hy = variant === "hybrid", popup = o.popup || HY.PICK;
       const y = hy ? HY.pillY(g, popup) : g.pillTop;
       const toast = hy && popup === "toast" && !s.stays;
-      h += `<div class="bz-statuswrap" style="top:${f1(y)}px"><div class="bz-pill${toast ? " toast" : ""}" data-pill style="height:${f1(g.pillH)}px">${dot}${line}</div></div>`;
+      if (!o.nopill) h += `<div class="bz-statuswrap" style="top:${f1(y)}px"><div class="bz-pill${toast ? " toast" : ""}" data-pill style="height:${f1(g.pillH)}px">${dot}${line}</div></div>`;
     }
     return h;
   }
@@ -117,7 +119,36 @@
     return L[i];
   }
 
+  // ---- Two distances (bands-two.js): what the scoreboard counts, and the phone drawn in a state ----
+  // The set the page shows while running or paused. "Figures" resets it; "Bank a rep" and auto-play move it on.
+  const simFor = (fig) => (fig === "2" ? { mv: 2, round: 12, count: 12 } : { mv: 0, round: 2, count: 3 });
+  let sim = null;
+
+  /** What the Two distances readout shows in a state: the app's values where the hybrid has them, the set otherwise. */
+  function twoModel(state, o) {
+    const L = lineOf(state), mv = TW.MOVES[sim.mv];
+    const m = { shutter: S[state].shutter };
+    if (state === "idle") return Object.assign(m, { count: 0, target: TW.MOVES[0].n, name: TW.MOVES[0].name, round: 1, receded: true });
+    if (state === "setup") return Object.assign(m, L.fig ? { count: L.fig.reps, target: 2 } : { count: "\u2014", target: null, receded: true }, { name: "Setup check", round: null });
+    if (state === "finished") return Object.assign(m, o.fig === "2" ? { count: 12, target: 15, name: "Squats", round: 12 } : { count: 4, target: 5, name: "Pull-ups", round: 4 }, { alert: true });
+    Object.assign(m, { count: sim.count, target: mv.n, name: mv.name, round: sim.round });
+    if (state === "running" && o.still === "pulse" && sim.count > 0) Object.assign(m, { prev: sim.count - 1, still: "pulse" });
+    if (state === "running" && o.still === "takeover") {
+      const nx = TW.MOVES[(sim.mv + 1) % 3];
+      Object.assign(m, { count: 0, target: nx.n, name: nx.name, round: sim.round + (sim.mv === 2 ? 1 : 0), taking: nx });
+    }
+    return m;
+  }
+
+  function renderTwo(state, o) {
+    const g = B.geom("two"), c = CTRL(state), L = lineOf(state);
+    // The top band, the picture and the pop-up are the hybrid's, pop-up A. In idle the one line is under the shutter.
+    const s = Object.assign({}, S[state], { status: L.text, dot: L.dot, stays: true });
+    return base("two", s, c, Object.assign({}, o, { popup: HY.PICK, nopill: state === "idle" })) + TW.bottom(g, state, twoModel(state, o), c, ico, o);
+  }
+
   function render(variant, state, o) {
+    if (variant === "two") return renderTwo(state, o);
     const g = B.geom(variant), c = CTRL(state), L = lineOf(state);
     const s = Object.assign({}, S[state], { status: L.text, dot: L.dot, stays: HY.stays(state, L) }, L.fig || {}, o.figs || {});
     const glass = variant === "none" || variant === "nopm", compact = g.thinBottom;
@@ -219,10 +250,11 @@
   }
 
   // ------------------------------------------------------------------ page
-  const st = { view: "hybrid", rej: "polish", state: "running", variant: "hybrid", readout: "A", digits: "1", pzsize: "fit", popup: HY.PICK, line: 0, equal: false, hold: false, foot: true, frame: true, person: true, lift: true, mark: true, targets: false };
+  const st = { view: "hybrid", arr: TW.PICK, fig: "1", still: "", auto: false, rm: false, rej: "polish", state: "running", variant: "hybrid", readout: "A", digits: "1", pzsize: "fit", popup: HY.PICK, line: 0, equal: false, hold: false, foot: true, frame: true, person: true, lift: true, mark: true, targets: false };
   try { Object.assign(st, JSON.parse(decodeURIComponent(location.hash.slice(1)) || "{}")); } catch (e) { /* ignore */ }
   // links made before No bands was rejected: its views now live under "Rejected"
   if (st.view === "polish" || st.view === "cmp") { st.rej = st.view === "polish" ? "polish" : "nopm"; st.view = "rejected"; }
+  sim = simFor(st.fig);
   const persist = () => { try { history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(st))); } catch (e) { /* file:// */ } };
 
   const phone = (variant, state, scale, label, readout) => {
@@ -238,7 +270,7 @@
     const sh = shareOf(v);
     const num = v === "none" || v === "nopm"
       ? `opaque chrome <b>0 %</b> · controls footprint <b>${pct(sh.footprint)}</b>`
-      : v === "hybrid" || v === "thin"
+      : v === "hybrid" || v === "thin" || v === "two"
         ? `chrome <b>${pct(sh.opaque)}</b> · with the pop-up ${pct(sh.withPill)} · picture ${pct(sh.picture)}`
         : `chrome <b>${pct(sh.opaque)}</b> · picture ${pct(sh.picture)}`;
     const rej = REJECTED.has(v) ? ' <span class="badge rejected">rejected</span>' : "";
@@ -608,7 +640,7 @@
         <p>All in dp, 1 dp = 3 px. The model is <code>bands-geometry.js</code>; every constant is a number from <code>activity_main.xml</code> or <code>HudVariants.kt</code> on <code>prototype/hud-bands</code> (e6593b1).</p>
         <p>Text height is Android's, with font padding on: the font's bounding box. Manrope: ExtraBold 1.5445 em, Bold 1.507 em, SemiBold 1.47 em (read from <code>fonts/*.ttf</code>). Inter is drawn on the page because #141 chose it, but its line heights are not used: the app's code still sets Manrope, so the shares are for the code as it stands.</p>
         <p>The cutout inset (${B.INSET} dp) is not in the layout; it is the one derived value: 426 px is 142 dp, and 14 + 48 + 4 + 22 + 11 leaves ${B.INSET} dp. The spec's "173 px above the clock" agrees (14 + ${B.INSET} = 57 dp = 171 px).</p>
-        ${["hybrid", "thin", "today", "none", "nopm"].map((v) => { const s = shareOf(v); const nm = VARIANTS.find((x) => x[0] === v)[1];
+        ${["two", "hybrid", "thin", "today", "none", "nopm"].map((v) => { const s = shareOf(v); const nm = VARIANTS.find((x) => x[0] === v)[1];
           return `<p><b>${nm}</b><br>top ${s.g.topParts.map((p) => p[0] + " " + f1(p[1])).join(" + ")} = ${f1(s.g.topH)} dp<br>bottom ${s.g.bottomParts.map((p) => p[0] + " " + f1(p[1])).join(" + ")} = ${f1(s.g.bottomH)} dp</p>`; }).join("")}
       </details>`;
     const out = B.shares().map((s) => `${s.variant}: above ${s.topPx.toFixed(0)} px, below ${s.bottomPx.toFixed(0)} px, opaque ${s.opaque.toFixed(1)} %, footprint ${s.footprint.toFixed(1)} %`);
@@ -618,7 +650,7 @@
 
   function init() {
     const seg = (id, items, attr) => { $(id).innerHTML = items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="false">${n}</button>`).join(""); };
-    seg("#seg-view", [["hybrid", "Thin top, today's bottom"], ["side", "Side by side"], ["big", "One big phone"], ["grid", "All 15"], ["rejected", "Rejected: No bands"]], "data-view");
+    seg("#seg-view", [["hybrid", "Thin top, today's bottom"], ["side", "Side by side"], ["big", "One big phone"], ["grid", "All " + MAIN.length * STATES.length], ["rejected", "Rejected: No bands"]], "data-view");
     seg("#seg-rej", [["polish", "Polish No bands, six designs"], ["nopm", "No bands, and without \u2212/+"]], "data-rej");
     seg("#seg-popup", HY.POPUPS.map((p) => [p.id, p.name]), "data-popup");
     seg("#seg-readout", [["A", "A  count, then the words"], ["B", "B  segmented ring"]], "data-readout");

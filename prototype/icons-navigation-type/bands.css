@@ -177,3 +177,54 @@ button.plain:focus-visible { outline: 2px solid #64d2ff; outline-offset: 1px; }
 .phone.hold .bz-pill.toast { animation: none; }
 @media (prefers-reduced-motion: reduce) { .bz-pill.toast { animation: none; } }
 .bz-count.same { gap: 0; }
+
+/* ---- Two distances (bands-two.js). Mock-only design values. The band is black glass with no blur, as every band here. */
+.phone .td-zone { display: flex; align-items: center; justify-content: center; }
+.phone .td-zone.near { flex-direction: column; gap: 4px; }   /* at the phone: the figure over its line */
+/* The figure: Inter ExtraBold, tabular, the count and its target one size and one weight in a line 1 em tall. */
+.phone .td-fig { display: flex; align-items: center; justify-content: center; font-weight: 800; line-height: 1; letter-spacing: -.048em;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; white-space: nowrap; }
+.phone .td-fig > span, .phone .td-n { display: flex; height: 1em; }
+.phone .td-d, .phone .td-s, .phone .td-t { display: block; height: 1em; line-height: 1; }
+.phone .td-d.roll { overflow: hidden; }
+.phone .td-col { display: block; }
+.phone .td-col b { display: block; height: 1em; font-weight: inherit; }
+/* A banked rep: the changed digits roll up over 150 ms and the count is green for 300 ms, then white again. */
+@keyframes td-roll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes td-pulse { 0%, 60% { color: var(--ok); } 100% { color: inherit; } }
+.phone .td-d.roll .td-col { animation: td-roll 150ms cubic-bezier(.2, .8, .2, 1) forwards; }
+.phone .td-d.roll.down .td-col { animation-direction: reverse; animation-fill-mode: both; }
+.phone .td-n.pulse > .td-d { animation: td-pulse 300ms linear; }
+/* a still for the page's "Hold" switch: half-way through the roll, in the pulse's green */
+.phone .td-d.roll.still .td-col { animation: none; transform: translateY(-25%); }
+.phone .td-n.pulse.still > .td-d { animation: none; color: var(--ok); }
+.phone .td-linerow { display: flex; align-items: center; justify-content: center; }
+.phone .td-line { font-weight: 600; font-size: 17px; line-height: 24px; letter-spacing: -.0125em; color: var(--label-secondary);
+  font-feature-settings: "tnum"; white-space: nowrap; overflow: hidden; max-width: 100%; }
+.phone .td-line.receded { color: var(--label-tertiary); }
+/* A movement change: the next set takes the figure's place for 1.5 s. Two lines, one size, no slash: it cannot be read as a count. */
+.phone .td-take { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 800; line-height: 44px; letter-spacing: -.02em; font-feature-settings: "tnum"; white-space: nowrap; color: var(--label); }
+.phone .td-take span { display: block; height: 44px; }
+.phone .td-zone { position: absolute; }
+.phone .td-zone.taking .td-fig { visibility: hidden; }
+.phone .td-zone.taking .td-take { display: flex; animation: td-take-in 150ms ease-out; }
+@keyframes td-take-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.phone .td-capsule { display: flex; align-items: center; border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255,255,255,.2) 0, rgba(255,255,255,.09) 2%, rgba(255,255,255,.09) 100%); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.13); }
+.phone .td-capsule.v { flex-direction: column; }
+.phone .td-half { width: 48px; height: 48px; display: grid; place-items: center; color: var(--label); flex: none; }
+.phone .td-capsule i { flex: none; width: 1px; height: 24px; margin: 0 -.5px; background: var(--hairline); }
+.phone .td-capsule.v i { width: 24px; height: 1px; margin: -.5px 0; }
+.phone .td-lbl { font-weight: 700; font-size: 11px; line-height: 16px; letter-spacing: .145em; text-transform: uppercase; text-align: center; color: var(--label-secondary); white-space: nowrap; }
+.phone .td-one { display: flex; justify-content: center; font-weight: 600; font-size: 15px; line-height: 16px; letter-spacing: -.0125em; color: var(--label); white-space: nowrap; }
+.phone .td-one span { overflow: hidden; max-width: 100%; }
+.show-targets .td-half { outline: 1px dashed #64d2ff; outline-offset: 0; }
+.phone.td-live [data-td-act] { cursor: pointer; }
+/* prefers-reduced-motion, and the page's switch that stands in for it: no roll and no slide, a colour change only. */
+@media (prefers-reduced-motion: reduce) {
+  .phone .td-d.roll .td-col { animation: none; transform: translateY(-50%); }
+  .phone .td-zone.taking .td-take { animation: none; }
+}
+.phone.rm .td-d.roll .td-col { animation: none; transform: translateY(-50%); }
+.phone.rm .td-zone.taking .td-take { animation: none; }
