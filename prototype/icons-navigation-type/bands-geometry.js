@@ -1,5 +1,6 @@
 /* MOCK for #140: the camera screen's band variants (three from the ticket, the owner's rejected fourth: No bands without - and +,
-   and the owner's hybrid of 2026-11-07: Thin bands' top over today's bottom), in dp.
+   the owner's hybrid of 2026-11-07: Thin bands' top over today's bottom, and "Two distances" of 2026-11-12, which
+   keeps the hybrid's top and the height of today's bottom and redraws what is inside the bottom band), in dp.
    Every number below is read from prototype/hud-bands (e6593b1): res/layout/activity_main.xml (today's bands),
    HudVariants.kt (tune(), glass(), makeCompact()) and ZoneCornersView.kt. Nothing here is the app.
 
@@ -23,7 +24,7 @@
     const g = { variant, W, H };
     // The hybrid ("Thin top, today's bottom") takes Thin bands' top and today's bottom, each exactly as the branch sizes it.
     const thinTop = variant !== "today";
-    const compact = variant !== "today" && variant !== "hybrid";   // the bottom band
+    const compact = variant !== "today" && variant !== "hybrid" && variant !== "two";   // the bottom band
     g.thinTop = thinTop; g.thinBottom = compact;
     // ---- top band -----------------------------------------------------------------
     if (!thinTop) {
@@ -57,6 +58,13 @@
       g.countTop = g.eyebrowTop + eyebrow + 4;
       g.actionTop = g.countTop + C + 12; g.actionH = 68;
       g.shutter = 68; g.side = 52; g.edit = 52; g.edX = 20;
+      if (variant === "two") {
+        // Two distances: the band is today's height to the dp, so the picture and the real zone are the hybrid's.
+        g.two = TWO;
+        g.bottomParts = [["progress edge", 3], ["gap", TWO.zoneGap], ["figure zone (the count and its target at " + TWO.figSp + " sp in a 1 em line)", TWO.zoneH],
+          ["movement and round line", TWO.lineH], ["gap", TWO.rowGap], ["control row (48 dp targets)", TWO.rowH],
+          ["padding bottom", g.bottomH - TWO.runUsed]];
+      }
     } else {
       const K = Math.max(48, 44 * LH.xb);                  // reps autosize 24..44sp: 44sp ExtraBold sets the height
       // No bands, no -/+ (variant "nopm"): nothing but type to hold, so the plate is drawn to its own height: 64 sp reps
@@ -85,6 +93,39 @@
     return g;
   }
 
+  /** Two distances, inside today's bottom band. Mock-only design values on an 8 grid, measured from the band's top edge.
+      Running (at the bar): a 96 dp figure zone, one 24 dp line, a 48 dp control row.
+      Idle, setup, paused, finished (at the phone): the same 96 dp zone holding a 56 sp figure and its line, then a
+      72 dp control row and a 16 dp label row.
+      The figure is set in a line 1 em tall (font padding off, fixed height). With Android's font padding on, a 96 sp
+      Manrope ExtraBold line is 96 x 1.5445 dp tall: paddedBottom() gives the band that would need. */
+  const TWO = (() => {
+    const t = { figSp: 96, phoneFigSp: 56, lineSp: 17, zoneGap: 8, zoneH: 96, lineH: 24, rowGap: 16, rowH: 48,
+      phoneGap: 8, phoneRowH: 72, labelGap: 4, labelH: 16, minPad: 16 };
+    t.zoneTop = 3 + t.zoneGap;                              // under the progress edge
+    t.lineTop = t.zoneTop + t.zoneH;
+    t.rowTop = t.lineTop + t.lineH + t.rowGap;
+    t.runUsed = t.rowTop + t.rowH;                          // what the running layout uses, before the bottom padding
+    t.phoneRowTop = t.zoneTop + t.zoneH + t.phoneGap;
+    t.labelTop = t.phoneRowTop + t.phoneRowH + t.labelGap;
+    t.phoneUsed = t.labelTop + t.labelH;
+    // The least each layout needs: its content and a 16 dp bottom padding. A's figure needs only its own 1 em line of
+    // the zone if the zone were cut to it; B's zone is the 96 dp of its two stacked 48 dp targets.
+    t.needRun = t.runUsed + t.minPad;
+    t.needPhone = t.phoneUsed + t.minPad;
+    // Android's line with font padding on, Manrope as the code has it: ExtraBold figure, SemiBold line.
+    t.paddedFig = t.figSp * LH.xb;
+    t.paddedLine = t.lineSp * LH.sb;
+    t.paddedRun = 3 + t.zoneGap + t.paddedFig + t.paddedLine + t.rowGap + t.rowH + t.minPad;
+    // Control places, x in dp. A: END, the stepper capsule, then the run control and SKIP, the capsule 40 dp from the
+    // run control. B: END, the run control in the centre, SKIP; the stepper stands beside the figure, + over \u2212.
+    t.arr = {
+      A: { endCx: 40, runCx: 240, skipCx: 320, stepper: { x: 80, w: 96, h: 48, vertical: false }, figX: 16, figW: W - 32 },
+      B: { endCx: 40, runCx: 180, skipCx: 320, stepper: { x: 296, w: 48, h: 96, vertical: true }, figX: 16, figW: 272 },
+    };
+    return t;
+  })();
+
   /** The real zone as today's bands leave it. Identical in every variant: it is a fact about the picture. */
   const todayG = geom("today");
   const ZONE = { top: todayG.topH, bottom: H - todayG.bottomH };
@@ -99,7 +140,7 @@
   /** The chrome share per variant, from geom(). opaque: what the bands cover; footprint: what the controls occupy. */
   function shares() {
     const pct = (dp) => 100 * dp / H;
-    return ["hybrid", "thin", "today", "none", "nopm"].map((v) => {
+    return ["two", "hybrid", "thin", "today", "none", "nopm"].map((v) => {
       const g = geom(v);
       const band = v !== "none" && v !== "nopm";
       const pill = g.pillH ? g.pillH + 8 : 0;
@@ -116,5 +157,5 @@
     });
   }
 
-  window.BANDS = { W, H, PX, LH, INSET, MEASURED, geom, ZONE, FRAME, shares, eyebrow };
+  window.BANDS = { W, H, PX, LH, INSET, MEASURED, geom, ZONE, FRAME, shares, eyebrow, TWO };
 })();
