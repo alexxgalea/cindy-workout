@@ -45,8 +45,8 @@ final class PlacementFactsTests: XCTestCase {
             from = hit.upperBound
         }
         XCTAssertEqual(PlacementFacts.all.filter { $0.warning }.map { $0.icon }, ["ic_dont_move"])
-        XCTAssertTrue(kotlin.contains("if (icon == R.drawable.ic_dont_move) R.color.state_caution"),
-                      "Android tints ic_dont_move as the caution")
+        XCTAssertTrue(kotlin.contains("if (icon == R.drawable.ic_dont_move) R.color.label"),
+                      "Android tints ic_dont_move brighter than its neighbours, and not orange")
     }
 
     /// the guide's title, line, toggle and two buttons are the literals of `showPlacementGuide`
