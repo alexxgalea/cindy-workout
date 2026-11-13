@@ -1,8 +1,10 @@
 package com.cindy.tracker
 
+import android.animation.ValueAnimator
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.TextView
 import com.cindy.tracker.databinding.ActivityMainBinding
 
@@ -97,7 +99,25 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         hud.movementLine.visibility = View.INVISIBLE
         hud.nextSet.visibility = View.VISIBLE
         hud.repProgress.progress = 0
+        fadeIn()
         clock.postDelayed(endNext, NextSet.SHOWN_MS)
+    }
+
+    /**
+     * The mock's 150 ms ease-out, up 8 dp from below and from clear to whole. With the system's
+     * animations off it is simply there, and it always leaves at once.
+     */
+    private fun fadeIn() {
+        val view = hud.nextSet
+        view.animate().cancel()
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            view.alpha = 1f
+            view.translationY = 0f
+            return
+        }
+        view.alpha = 0f
+        view.translationY = RISE_DP * view.resources.displayMetrics.density
+        view.animate().alpha(1f).translationY(0f).setDuration(FADE_MS).setInterpolator(DecelerateInterpolator()).start()
     }
 
     /** Ends the hold, if there is one, and shows the set the engine is on. */
@@ -105,6 +125,9 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         clock.removeCallbacks(showNext)
         clock.removeCallbacks(endNext)
         next = null
+        hud.nextSet.animate().cancel()
+        hud.nextSet.alpha = 1f
+        hud.nextSet.translationY = 0f
         hud.nextSet.visibility = View.GONE
         hud.reps.visibility = View.VISIBLE
         hud.movementLine.visibility = View.VISIBLE
@@ -148,5 +171,11 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
                 view.contentDescription = say
             }
         }
+    }
+
+    private companion object {
+        /** The mock's take-in (bands-two.js TIMING.takeIn), and how far up it comes. */
+        const val FADE_MS = 150L
+        const val RISE_DP = 8f
     }
 }

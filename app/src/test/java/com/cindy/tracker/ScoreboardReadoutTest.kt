@@ -1,5 +1,6 @@
 package com.cindy.tracker
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.RectF
 import android.os.Looper
@@ -8,6 +9,7 @@ import android.view.View
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.cindy.tracker.databinding.ActivityMainBinding
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -320,6 +322,45 @@ class ScoreboardReadoutTest {
             assertTrue("${row.text} is taller than its row", row.textSize <= row.height + 0.5f)
         }
         assertTrue("the band grew", hud.bandBottom.height / density <= 219f + 0.5f)
+    }
+
+    @After
+    fun animationsBackOn() = durationScale(1f)
+
+    /** The system's "remove animations" switch, as the platform itself reads it. */
+    private fun durationScale(scale: Float) {
+        ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType)
+            .invoke(null, scale)
+    }
+
+    @Test
+    fun `the next set fades in over about 150 ms, and leaves at once`() {
+        fourOfFivePullUps()
+        frame(Exercise.PUSHUP, reps = 0, total = 5, event = RepEvent.EXERCISE_DONE, eventReps = 5)
+        advance(464)
+        assertEquals(listOf("10", "PUSH-UPS"), nextSet())
+        assertTrue("the next set did not fade in: ${hud.nextSet.alpha}", hud.nextSet.alpha < 1f)
+        advance(200)
+        assertEquals("the fade did not end", 1f, hud.nextSet.alpha)
+        assertEquals("the next set did not settle in its place", 0f, hud.nextSet.translationY)
+
+        advance(1_400)
+        assertEquals("the next set faded out", null, nextSet())
+    }
+
+    @Test
+    fun `with animations off the next set appears and leaves without a fade`() {
+        durationScale(0f)
+        fourOfFivePullUps()
+        frame(Exercise.PUSHUP, reps = 0, total = 5, event = RepEvent.EXERCISE_DONE, eventReps = 5)
+        advance(450)
+        assertEquals(listOf("10", "PUSH-UPS"), nextSet())
+        assertEquals("the next set faded in with animations off", 1f, hud.nextSet.alpha)
+        assertEquals(0f, hud.nextSet.translationY)
+
+        advance(1_500)
+        assertEquals(null, nextSet())
+        assertEquals("0/10", figure())
     }
 
     private companion object {
