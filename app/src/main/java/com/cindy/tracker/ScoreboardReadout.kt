@@ -82,6 +82,12 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         if (coming.inMs > 0) clock.postDelayed(showNext, coming.inMs) else takeOver()
     }
 
+    /**
+     * The clock has stopped, by a pause or the end: the athlete is at the phone, so a hold under
+     * way ends at once and the band shows the set the engine is on.
+     */
+    fun clockStopped() = release()
+
     private fun takeOver() {
         val set = next ?: return
         hud.nextSetTarget.text = set.figure

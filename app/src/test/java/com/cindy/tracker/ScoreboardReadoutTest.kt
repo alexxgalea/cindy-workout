@@ -1,6 +1,7 @@
 package com.cindy.tracker
 
 import android.content.Context
+import android.graphics.RectF
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
@@ -8,6 +9,7 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.cindy.tracker.databinding.ActivityMainBinding
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -189,6 +191,92 @@ class ScoreboardReadoutTest {
         assertEquals(null, nextSet())
         assertEquals("4/5", figure())
         assertEquals("Pull-ups · Round 1", line())
+    }
+
+    @Test
+    fun `the last squat of a round keeps its round on the line, and the new round shows once the next set leaves`() {
+        frame(Exercise.SQUAT, reps = 14, total = 29)
+
+        // The engine has counted the round and moved on to the next round's pull-ups.
+        frame(Exercise.PULLUP, reps = 0, total = 30, rounds = 1, event = RepEvent.ROUND_DONE, eventReps = 15)
+        val stateFrame = { frame(Exercise.PULLUP, reps = 0, total = 30, rounds = 1) }
+        assertEquals("15/15", figure())
+        assertEquals("the round moved on before the next set was shown", "Squats · Round 1", line())
+
+        advance(600, stateFrame)
+        assertEquals(listOf("5", "PULL-UPS"), nextSet())
+
+        advance(1_500, stateFrame)
+        assertEquals("0/5", figure())
+        assertEquals("Pull-ups · Round 2", line())
+    }
+
+    /** Where [view] is on the screen, in dp. */
+    private fun box(view: View): RectF {
+        var x = 0
+        var y = 0
+        var current = view
+        while (current !== hud.root) {
+            x += current.left
+            y += current.top
+            current = current.parent as View
+        }
+        return RectF(x / density, y / density, (x + view.width) / density, (y + view.height) / density)
+    }
+
+    /** The next set on the band, a set having just been finished. */
+    private fun showingTheNextSet() {
+        fourOfFivePullUps()
+        frame(Exercise.PUSHUP, reps = 0, total = 5, event = RepEvent.EXERCISE_DONE, eventReps = 5)
+        advance(600) { frame(Exercise.PUSHUP, reps = 0, total = 5) }
+        assertEquals(listOf("10", "PUSH-UPS"), nextSet())
+    }
+
+    @Test
+    fun `while the next set is shown END, minus, plus, the shutter and SKIP are drawn, answer and are not under it`() {
+        showingTheNextSet()
+        val over = box(hud.nextSet)
+        for (control in listOf(hud.btnEnd, hud.btnUndo, hud.btnAddRep, hud.btnStart, hud.btnSkipExercise)) {
+            val name = control.contentDescription
+            assertTrue("$name is not drawn", drawn(control))
+            assertTrue("$name does not answer", control.isEnabled)
+            assertEquals("$name is faded", 1f, control.alpha)
+            assertTrue("$name is under the next set: $over", !RectF.intersects(over, box(control)))
+        }
+    }
+
+    @Test
+    fun `plus pressed while the next set is shown banks a rep, and the count shows at once`() {
+        showingTheNextSet()
+        hud.btnAddRep.setOnClickListener { frame(Exercise.PUSHUP, reps = 1, total = 6, event = RepEvent.REP) }
+
+        assertTrue("plus did not answer", hud.btnAddRep.performClick())
+        assertEquals(null, nextSet())
+        assertEquals("1/10", figure())
+    }
+
+    @Test
+    fun `a pause while the next set is shown ends it, and the band shows the set the engine is on`() {
+        showingTheNextSet()
+
+        BottomBand.apply(hud, WorkoutState.PAUSED, CameraControls.of(WorkoutState.PAUSED, filming = false), statusBlank = false)
+        readout.clockStopped()
+        layout(hud)
+        assertEquals("the next set stayed on at the phone", null, nextSet())
+        assertEquals("0/10", figure())
+        assertEquals("Push-ups · Round 1", line())
+
+        advance(2_000)
+        assertEquals("the next set came back on a pause", null, nextSet())
+    }
+
+    @Test
+    fun `a skip on a pause moves the set on with no next set over the figure`() {
+        frame(Exercise.PUSHUP, reps = 3, total = 8)
+        frame(Exercise.SQUAT, reps = 0, total = 8, event = RepEvent.EXERCISE_DONE, eventReps = 3, running = false)
+        assertEquals(null, nextSet())
+        assertEquals("0/15", figure())
+        assertEquals("Squats · Round 1", line())
     }
 
     private companion object {
