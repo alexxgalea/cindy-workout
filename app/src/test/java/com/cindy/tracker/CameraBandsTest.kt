@@ -173,7 +173,7 @@ class CameraBandsTest {
     }
 
     @Test
-    fun `from the band's top edge: the progress edge, a gap, the figure zone, the line, a gap, the row`() {
+    fun `from the band's top edge come the progress edge, a gap, the figure zone, the line, a gap and the row`() {
         val hud = hud()
         val edge = fromBand(hud, hud.repProgress)
         val figure = fromBand(hud, hud.reps)
@@ -210,6 +210,13 @@ class CameraBandsTest {
         assertEquals("font padding is off, or the band grows by about 44 dp", false, hud.reps.includeFontPadding)
     }
 
+    /** The height of what the figure draws, as the paint measures it. */
+    private fun inkHeight(hud: ActivityMainBinding): Int {
+        val bounds = android.graphics.Rect()
+        hud.reps.paint.getTextBounds(hud.reps.text.toString(), 0, hud.reps.text.length, bounds)
+        return bounds.height()
+    }
+
     private fun show(hud: ActivityMainBinding, count: String, target: String) {
         hud.reps.text = Scoreboard.figure(count, target, 0xFF000001.toInt(), 0xFF000002.toInt())
         layout(hud)
@@ -244,7 +251,7 @@ class CameraBandsTest {
         assertTrue("the type setting reached the test", context.resources.configuration.fontScale > 1.9f)
         assertTrue("the figure's text is ${dp(hud.reps.textSize.toInt())} dp tall in a 96 dp zone",
             hud.reps.textSize <= 96f * density + 0.5f)
-        assertTrue("the line is ${dp(hud.reps.layout.height)} dp", hud.reps.layout.height <= 96f * density + 0.5f)
+        assertTrue("the digits are ${dp(inkHeight(hud))} dp tall", inkHeight(hud) <= 96f * density + 0.5f)
         assertTrue("the band is ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 215.33f + 0.5f)
     }
 
