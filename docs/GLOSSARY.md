@@ -75,12 +75,16 @@ The pull-up bar as the picture shows it: a tilted line the app finds in the pict
 _Avoid_: bar line, rail
 
 **Scoreboard**:
-The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. Idle, setup and paused take the same layout until their own design.
+The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. In idle, setup and a pause the athlete is at the phone, not at the bar, and the band is drawn for that distance instead (see Control row); the band is the same height in both. A finished workout sits behind the session page and is drawn as idle.
 _Avoid_: rep panel, counter
 
 **Figure**:
-The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter.
+The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter. It is 96 sp while the clock runs and 56 sp at the phone.
 _Avoid_: rep count, reps label
+
+**Control row**:
+END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names. The names are labels only; what a screen reader says is still the control's own name.
+_Avoid_: action row, button bar
 
 **Skeleton lag**:
 The skeleton showing the body where it was a moment ago, so it trails or jumps off the athlete in the picture. It is about the skeleton against the picture, not against the real athlete.

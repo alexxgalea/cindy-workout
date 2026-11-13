@@ -36,6 +36,18 @@ class FitFigureView @JvmOverloads constructor(
         ceiling = textSize
     }
 
+    /**
+     * Sets the size the figure is as big as when it fits, in sp, as the style's own would. The
+     * screen draws the figure at 56sp for an athlete at the phone and at 96sp for one at the bar.
+     */
+    fun ceilingSp(sp: Float) {
+        val next = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
+        if (abs(next - ceiling) < 0.01f) return
+        ceiling = next
+        fit(width - paddingLeft - paddingRight, height - paddingTop - paddingBottom)
+        requestLayout()
+    }
+
     private fun fit(width: Int, height: Int) {
         if (ceiling == 0f || width <= 0) return
         val text = text
