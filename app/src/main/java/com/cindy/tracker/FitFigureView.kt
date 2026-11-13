@@ -1,10 +1,14 @@
 package com.cindy.tracker
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Rect
+import android.graphics.RectF
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
+import android.view.animation.PathInterpolator
 import androidx.appcompat.widget.AppCompatTextView
 import kotlin.math.abs
 import kotlin.math.min
@@ -21,6 +25,10 @@ import kotlin.math.min
  *
  * The style's size is the ceiling. On the largest system text that ceiling is also held to the
  * height, so the figure cannot outgrow the band however the athlete has set their type.
+ *
+ * It can also roll: the digits of the count that changed slide out and in, each in its own cell,
+ * while the rest of the figure stands still. The text already holds the new value while it
+ * rolls; the roll is only drawn over it, and [ScoreboardFigure] decides when and which way.
  */
 class FitFigureView @JvmOverloads constructor(
     context: Context,
@@ -34,6 +42,92 @@ class FitFigureView @JvmOverloads constructor(
 
     init {
         ceiling = textSize
+    }
+
+    /** Which way a roll moves the digits: up for a banked rep, down for one taken back. */
+    enum class Roll { UP, DOWN }
+
+    /** A digit cell that is rolling: where it is in the text, and what it showed before. */
+    private class Cell(val index: Int, val was: Char?)
+
+    private var roll: Roll? = null
+    private var cells: List<Cell> = emptyList()
+    private var rolled = 0f
+    private val digit = Rect()
+    private val box = RectF()
+
+    /** Which way the count's digits are rolling, or null while they stand still. */
+    val rolling: Roll? get() = roll
+
+    /**
+     * Starts rolling the count from [from] to [to], the count the view now shows at the start of
+     * its text. Digits line up from the right, so 9 to 10 rolls a 1 in and the 9 over to a 0,
+     * and 10 to 9 rolls the 0 over to a 9.
+     */
+    fun startRoll(from: String, to: String, direction: Roll) {
+        cells = to.indices.mapNotNull { i ->
+            val was = from.getOrNull(from.length - to.length + i)
+            if (was == to[i]) null else Cell(i, was)
+        }
+        roll = if (cells.isEmpty()) null else direction
+        rolled = 0f
+        invalidate()
+    }
+
+    /** Moves the roll on to [fraction] of its way, 0 to 1, before its easing. */
+    fun rollTo(fraction: Float) {
+        if (roll == null) return
+        rolled = fraction.coerceIn(0f, 1f)
+        invalidate()
+    }
+
+    /** Ends the roll: the count stands still at the value the text already holds. */
+    fun endRoll() {
+        if (roll == null) return
+        roll = null
+        cells = emptyList()
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val direction = roll
+        val layout = layout
+        if (direction == null || layout == null || cells.isEmpty()) return super.onDraw(canvas)
+        val text = text
+        val left = totalPaddingLeft.toFloat()
+        val baseline = (totalPaddingTop + layout.getLineBaseline(0)).toFloat()
+        // Each cell is one em tall and centred on the digits, so a digit one em off is out of it.
+        paint.getTextBounds("0", 0, 1, digit)
+        val em = textSize
+        val middle = baseline + digit.exactCenterY()
+        fun cell(c: Cell): RectF {
+            val end = if (c.index + 1 < text.length) layout.getPrimaryHorizontal(c.index + 1) else layout.getLineRight(0)
+            box.set(left + layout.getPrimaryHorizontal(c.index), middle - em / 2, left + end, middle + em / 2)
+            return box
+        }
+
+        // The figure as it stands, without the cells that are rolling.
+        canvas.save()
+        for (c in cells) {
+            val r = cell(c)
+            canvas.clipOutRect(r.left, 0f, r.right, height.toFloat())
+        }
+        super.onDraw(canvas)
+        canvas.restore()
+
+        // Each rolling cell: the old digit leaving, the new one arriving behind it.
+        val eased = EASE.getInterpolation(rolled)
+        val away = if (direction == Roll.UP) -em else em
+        paint.color = currentTextColor
+        for (c in cells) {
+            val r = cell(c)
+            canvas.save()
+            canvas.clipRect(r)
+            val was = c.was
+            if (was != null && was != ' ') canvas.drawText(was.toString(), r.left, baseline + eased * away, paint)
+            canvas.drawText(text, c.index, c.index + 1, r.left, baseline - (1f - eased) * away, paint)
+            canvas.restore()
+        }
     }
 
     private fun fit(width: Int, height: Int) {
@@ -69,5 +163,8 @@ class FitFigureView @JvmOverloads constructor(
 
     private companion object {
         const val MIN_DP = 24f
+
+        /** The mock's cubic-bezier(.2, .8, .2, 1): quick off the mark, settling into place. */
+        val EASE = PathInterpolator(0.2f, 0.8f, 0.2f, 1f)
     }
 }
