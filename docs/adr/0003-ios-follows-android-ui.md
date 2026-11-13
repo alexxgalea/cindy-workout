@@ -16,3 +16,4 @@ On 2026-10-19 the owner found the two interfaces "totally different" and decided
 - The status bar and home indicator are hidden on the camera screen.
 - The App Store submission waits until at least the camera screen and the session page match.
 - On 2026-11-07 the Android app's typeface moved from Manrope to Inter (spec #139, ticket #149). The tokens above name Manrope because that was Android's font when this was decided; the iPhone app keeps Manrope until its type is ported, and follows Android to Inter then.
+- On 2026-11-12 the Android camera screen's two bands changed shape (ADR 0009, spec #139): a one-row top band, the coaching line as a pill on the picture, and a scoreboard below. The iPhone app keeps the September bands until its port, and follows Android to the new ones then.
