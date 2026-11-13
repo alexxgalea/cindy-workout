@@ -17,7 +17,25 @@ enum class FigureMotion {
     BANKED,
 
     /** A rep was taken back: the changed digits roll down, and nothing is green. */
-    TAKEN_BACK
+    TAKEN_BACK;
+
+    companion object {
+        /**
+         * How the figure moves for the frame that carried [event], from the engine's banked total
+         * before it, [before], to after it, [after].
+         *
+         * Read off the total, never off the count on show: the count drops to 0 both when a set
+         * is finished and when it is skipped, and only the first banked a rep. Only a frame with
+         * an event moves the figure. A state frame can be drawn after an event it is older than,
+         * and a new workout clears the score; neither is a rep banked or taken back.
+         */
+        fun of(event: RepEvent, before: Int, after: Int): FigureMotion = when {
+            event == RepEvent.NONE -> NONE
+            after > before -> BANKED
+            after < before -> TAKEN_BACK
+            else -> NONE
+        }
+    }
 }
 
 /**
