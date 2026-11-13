@@ -279,6 +279,49 @@ class ScoreboardReadoutTest {
         assertEquals("Squats · Round 1", line())
     }
 
+    @Test
+    fun `the next set is two rows at 48 sp over the figure zone and its line, and leaves the capsule clear`() {
+        showingTheNextSet()
+        val zone = box(hud.reps)
+        val line = box(hud.movementLine)
+        val over = box(hud.nextSet)
+        assertEquals("it does not start where the zone does", zone.top, over.top, 0.5f)
+        assertEquals("it does not end where the line does", line.bottom, over.bottom, 0.5f)
+        assertEquals("it is not the figure's width", zone.left, over.left, 0.5f)
+        assertEquals("it is not the figure's width", zone.right, over.right, 0.5f)
+        assertTrue("it covers the capsule", !RectF.intersects(over, box(hud.stepper)))
+
+        val target = box(hud.nextSetTarget)
+        val movement = box(hud.nextSetMovement)
+        assertTrue("the target is not over the movement", target.bottom <= movement.top + 0.5f)
+        for (row in listOf(hud.nextSetTarget, hud.nextSetMovement)) {
+            row as TextView
+            assertEquals("${row.text} is not 48 sp", 48f * density, row.textSize, 0.5f)
+            assertEquals("${row.text} is not one row", 1, row.layout.lineCount)
+            assertEquals("${row.text} is cut", 0, row.layout.getEllipsisCount(0))
+            assertTrue("${row.text} is wider than its zone", row.layout.getLineWidth(0) <= row.width - row.totalPaddingLeft - row.totalPaddingRight)
+            assertTrue("${row.text} has a slash", "/" !in row.text)
+        }
+        assertEquals("the band grew", 219f, hud.bandBottom.height / density, 0.5f)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi", fontScale = 2f)
+    fun `at the largest system text the next set shrinks to fit its rows and the band does not grow`() {
+        assertTrue("the type setting reached the test", context.resources.configuration.fontScale > 1.9f)
+        // A skip, so the next set is on at once.
+        frame(Exercise.PULLUP, reps = 4, total = 4)
+        frame(Exercise.PUSHUP, reps = 0, total = 4, event = RepEvent.EXERCISE_DONE, eventReps = 4)
+        layout(hud)
+        assertEquals(listOf("10", "PUSH-UPS"), nextSet())
+        for (row in listOf(hud.nextSetTarget, hud.nextSetMovement)) {
+            assertEquals("${row.text} is cut", 0, row.layout.getEllipsisCount(0))
+            assertTrue("${row.text} is wider than its zone", row.layout.getLineWidth(0) <= row.width)
+            assertTrue("${row.text} is taller than its row", row.textSize <= row.height + 0.5f)
+        }
+        assertTrue("the band grew", hud.bandBottom.height / density <= 219f + 0.5f)
+    }
+
     private companion object {
         const val FRAME_MS = 16L
     }
