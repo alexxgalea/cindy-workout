@@ -233,8 +233,9 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="@color/band_bottom"
+        android:minHeight="219dp"
         android:orientation="vertical"
-        android:paddingBottom="20dp"
+        android:paddingBottom="12dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -323,6 +324,7 @@
           switch lives in the top band, where it stays on the screen, dimmed, while the clock runs.
         -->
         <FrameLayout
+            android:id="@+id/controlRow"
             android:layout_width="match_parent"
             android:layout_height="@dimen/shutter"
             android:layout_marginTop="16dp">
@@ -361,6 +363,55 @@
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_skip"
                 tools:ignore="ContentDescription" />
+        </FrameLayout>
+
+        <!--
+          The names row, there only when the athlete is at the phone (BottomBand): the word under
+          each enabled control, or in idle the one line under the shutter. 16dp tall whatever the
+          type setting, so it can never grow the band. The names are labels and no stop for a
+          screen reader: what TalkBack says for a control is the name CameraControls gives it.
+        -->
+        <FrameLayout
+            android:id="@+id/controlNames"
+            android:layout_width="match_parent"
+            android:layout_height="16dp"
+            android:layout_marginTop="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/nameEnd"
+                style="@style/Cindy.ControlName"
+                android:layout_width="80dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:text="END"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/nameShutter"
+                style="@style/Cindy.ControlName"
+                android:layout_width="96dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_horizontal"
+                android:text="RESUME"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/nameSkip"
+                style="@style/Cindy.ControlName"
+                android:layout_width="80dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end"
+                android:text="SKIP"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/idleLine"
+                style="@style/Cindy.IdleLine"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="16dp"
+                android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
 
