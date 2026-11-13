@@ -78,6 +78,36 @@ class CameraBandsTest {
         assertEquals(91f, dp(hud.bandTop.height), 0.5f)
     }
 
+    // ── the chrome share: what the two bands take of the screen ───────────────
+
+    /**
+     * The verdict on #140 set the bound: 39.9 % of the screen's height on 1080 x 2340 px, against
+     * 46.4 % for the September bands. Its mock modelled the bottom band at 220.1 dp; the band as
+     * built is 219 dp (#167), so the share is measured here from the layout, not from the mock.
+     */
+    private fun chromeShare(hud: ActivityMainBinding): Double =
+        (hud.bandTop.height + hud.bandBottom.height).toDouble() / hud.root.height
+
+    @Test
+    fun `the two bands take no more of the screen than the verdict set, 39_9 percent`() {
+        val hud = hud()
+        val share = chromeShare(hud)
+        assertEquals("the screen is 1080 x 2340 px", 2340, hud.root.height)
+        assertTrue("the bands take ${"%.2f".format(share * 100)} % of the screen, over the 39.9 % the verdict set",
+            share <= 0.399)
+        assertTrue("the bands take ${"%.2f".format(share * 100)} %, no better than the 46.4 % of before", share < 0.464)
+    }
+
+    @Test
+    fun `the share is the same in every state, because neither band changes height`() {
+        val running = chromeShare(at(WorkoutState.RUNNING))
+        for (state in WorkoutState.entries) {
+            val share = chromeShare(at(state))
+            assertEquals("$state", running, share, 0.0005)
+            assertTrue("$state: ${"%.2f".format(share * 100)} %", share <= 0.399)
+        }
+    }
+
     // ── the coaching line: a pill on the picture ──────────────────────────────
 
     /** Where [view] is on the screen, in dp: its offsets up to the root, added together. */
