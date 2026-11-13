@@ -3,14 +3,14 @@
   The camera runs edge to edge; the HUD is kept clear of the cutout from code, because padding
   this root would letterbox the preview instead of the overlay.
 
-  The HUD is no longer a set of cards floating on the picture. It is the two bands at the edges
-  of it, the way a camera app does it: everything the athlete can touch lives in a band, and the
-  bright middle is left alone for the body. The bands are translucent, so the picture carries on
-  underneath and a foot that has drifted low is still visible — dimmed, but there.
+  The HUD is the two bands at the edges of the picture, the way a camera app does it:
+  everything the athlete can touch lives in a band, and the bright middle is left alone for the
+  body. The bands are translucent, so the picture carries on underneath and a foot that has
+  drifted low is still visible — dimmed, but there.
 
-  Two surfaces, then, where there were four. The clock bar and the icon rail are one band; the
-  status line joins them rather than floating beneath; the rep panel is the other band, with the
-  progress bar as the band's own top edge, which is both one row less and a boundary you can see.
+  The top band is one 48dp row under the cutout. The coaching line is not in a band: it is a
+  glass pill on the picture, 8dp under the top band. The rep panel is the other band, with the
+  progress bar as the band's own top edge, which is a boundary you can see.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -39,11 +39,11 @@
         app:layout_constraintEnd_toEndOf="@id/preview" />
 
     <!--
-      ── the top band: the clock, what changes mid-set, and the coaching line ──
+      ── the top band: one row, and nothing else ──
 
-      Height is whatever its rows need, so a large font scale grows the band rather than clipping
-      it. The system bars are hidden on this screen, so the only thing pushing the first row down
-      is the camera cutout, applied as padding from code.
+      The clock at the start edge; the camera switch, REC and MENU at the end edge. The band is
+      the cutout and this 48dp row, so the only thing above the row is the inset, applied as
+      padding from code. The coaching line is not in it: it is the pill below, on the picture.
     -->
     <LinearLayout
         android:id="@+id/bandTop"
@@ -51,8 +51,6 @@
         android:layout_height="wrap_content"
         android:background="@color/band_top"
         android:orientation="vertical"
-        android:paddingTop="14dp"
-        android:paddingBottom="11dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -63,7 +61,7 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="20dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="8dp">
 
             <TextView
                 android:id="@+id/timer"
@@ -80,72 +78,87 @@
               The camera switch. It lives with the other things that are about the camera rather
               than the count, beside REC and MENU, and not in the left slot of the action row:
               that slot is END's alone while a workout is live, and the switch has to stay on the
-              screen, dimmed, while the clock runs. Where exactly it sits in this row is the bands
-              verdict's to settle; this is only the first place it fits.
+              screen, dimmed, while the clock runs.
+
+              Each of the three is a 48dp touch target with a 24dp glyph. The names here are the
+              ones a screen reader gets before the activity sets the state-dependent ones.
             -->
             <ImageView
                 android:id="@+id/btnFlip"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Switch camera"
+                android:padding="12dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_flip"
-                tools:ignore="ContentDescription" />
+                android:src="@drawable/ic_flip" />
 
             <!--
-              Icons, not words: four labelled chips wanted 330dp of row and this one has 320.
-              Two of them now. Music went to the menu, where the track can be chosen with a tap
-              rather than found behind a long press, and the voice followed it there — it is a
-              switch and a volume, which only read as one setting when they sit together, and
-              neither is an adjustment anyone makes between two pull-ups. REC stays: it carries
-              live state the athlete changes mid-session, which is the whole test for this row.
+              Icons, not words. Music went to the menu, where the track can be chosen with a tap
+              rather than found behind a long press, and the voice followed it there. REC stays: it
+              carries live state the athlete changes mid-session, which is the whole test for this
+              row.
             -->
             <ImageView
                 android:id="@+id/btnRec"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Record this workout"
+                android:padding="12dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_rec"
-                tools:ignore="ContentDescription" />
+                android:src="@drawable/ic_rec" />
 
             <ImageView
                 android:id="@+id/btnMenu"
-                android:layout_width="44dp"
-                android:layout_height="40dp"
-                android:padding="11dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Menu"
+                android:padding="12dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_menu"
-                tools:ignore="ContentDescription" />
+                android:src="@drawable/ic_menu" />
         </LinearLayout>
+    </LinearLayout>
 
-        <!-- The coaching line. It sat in a pill over the athlete; on the band it needs no pill. -->
-        <LinearLayout
-            android:id="@+id/statusRow"
-            android:layout_width="match_parent"
+    <!--
+      ── the coaching line ──
+
+      One pill on the picture, in the design system's glass (no blur): the status dot and the
+      line. Centred, 8dp under the top band and never closer than 16dp to a screen edge; a line
+      too long for one row wraps to a second, centred, rather than being cut at the edge.
+    -->
+    <LinearLayout
+        android:id="@+id/statusRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/screen_margin"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="@dimen/screen_margin"
+        android:background="@drawable/glass_pill"
+        android:gravity="center"
+        android:minHeight="34dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/bandTop">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_marginEnd="8dp"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/status"
+            style="@style/Cindy.Headline"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
             android:gravity="center"
-            android:minHeight="22dp"
-            android:orientation="horizontal"
-            android:paddingHorizontal="20dp">
-
-            <View
-                android:id="@+id/statusDot"
-                android:layout_width="7dp"
-                android:layout_height="7dp"
-                android:layout_marginEnd="8dp"
-                android:importantForAccessibility="no" />
-
-            <TextView
-                android:id="@+id/status"
-                style="@style/Cindy.Headline"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:text="Grant camera access to begin"
-                android:textSize="14sp" />
-        </LinearLayout>
+            android:maxLines="2"
+            android:text="Grant camera access to begin"
+            android:textSize="14sp" />
     </LinearLayout>
 
     <!--
@@ -160,13 +173,13 @@
         android:layout_width="132dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/screen_margin"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/glass_panel"
         android:orientation="vertical"
         android:paddingHorizontal="10dp"
         android:paddingVertical="12dp"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/bandTop"
+        app:layout_constraintTop_toBottomOf="@id/statusRow"
         app:layout_constraintStart_toStartOf="parent">
 
 <!--
