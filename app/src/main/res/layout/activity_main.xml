@@ -72,6 +72,8 @@
             android:paddingStart="20dp"
             android:paddingEnd="8dp">
 
+            <!-- The clock's sizes are dp, not sp: it sits in a 48dp row, and at the largest system text
+                 its 58dp line was taller than the row (ticket #150). -->
             <TextView
                 android:id="@+id/timer"
                 style="@style/Cindy.MetricM"
@@ -79,8 +81,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="20:00"
-                app:autoSizeMaxTextSize="30sp"
-                app:autoSizeMinTextSize="20sp"
+                app:autoSizeMaxTextSize="30dp"
+                app:autoSizeMinTextSize="20dp"
                 app:autoSizeTextType="uniform" />
 
             <!--
@@ -132,7 +134,8 @@
 
       One pill on the picture, in the design system's glass (no blur): the status dot and the
       line. Centred, 8dp under the top band and never closer than 16dp to a screen edge; a line
-      too long for one row wraps to a second, centred, rather than being cut at the edge.
+      too long for one row wraps to a second, centred, rather than being cut at the edge; at the
+      largest system text the longest line needs a third, and the pill is allowed it (ticket #150).
     -->
     <LinearLayout
         android:id="@+id/statusRow"
@@ -165,7 +168,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:maxLines="2"
+            android:maxLines="3"
             android:text="Grant camera access to begin"
             android:textSize="14sp" />
     </LinearLayout>

@@ -74,6 +74,14 @@ _Avoid_: overlay, stick figure, pose
 The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. It is drawn thin, in the skeleton's colour, and nothing is drawn in its place until the app is sure of it. The gate that decides whether a rep counts is separate and never reads it.
 _Avoid_: bar line, rail
 
+**Top band**:
+The top of the camera screen: the cutout and one 48 dp row holding the clock at the start edge and the camera switch, REC and MENU at the end edge. It is 91 dp on the owner's phone. It holds nothing else; the coaching line is the pill below it.
+_Avoid_: header, top bar (that is a page's)
+
+**Coaching pill**:
+The one line of coaching on the camera screen, a glass pill on the picture 8 dp under the top band, centred. A line too long for one row wraps. In idle it is there only while it has something to tell the athlete; the idle line is under the shutter.
+_Avoid_: status line, status chip
+
 **Scoreboard**:
 The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. In idle, setup and a pause the athlete is at the phone, not at the bar, and the band is drawn for that distance instead (see Control row); the band is the same height in both. A finished workout sits behind the session page and is drawn as idle.
 _Avoid_: rep panel, counter
