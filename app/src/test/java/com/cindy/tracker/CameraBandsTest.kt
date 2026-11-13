@@ -61,11 +61,12 @@ class CameraBandsTest {
     // ── the bottom band: the height it may not outgrow ────────────────────────
 
     @Test
-    fun `the bottom band is no taller than it was before the scoreboard`() {
+    fun `the bottom band is 219 dp while the clock runs`() {
         val hud = hud()
-        // Read off this layout on origin/main (031dd48) before #165 touched it, with native
-        // graphics so the text has the real fonts' metrics. About 5 dp under the phone's 220.
-        assertTrue("the band is ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 215.33f + 0.5f)
+        // Origin/main (031dd48) drew it 215.33 dp tall. #167 needs 219: its names row and the
+        // 12 dp under it are 3.67 dp more than the old band had, and the band may be no taller
+        // when the athlete is at the phone than at the bar, so the bar's band is the 219 too.
+        assertEquals(219f, dp(hud.bandBottom.height), 0.5f)
     }
 
     // ── the top band: one row ─────────────────────────────────────────────────
@@ -187,8 +188,8 @@ class CameraBandsTest {
         assertEquals("the line is 24 dp", 24f, line.height(), 0.5f)
         assertEquals("a gap of 16 dp, then the control row", line.bottom + 16f, shutter.top - (48f - shutter.height()) / 2f, 0.5f)
         assertEquals("the control row is 48 dp, 147 dp down", 147f, shutter.top - (48f - shutter.height()) / 2f, 0.5f)
-        assertTrue("at least 16 dp is left under the row: ${dp(hud.bandBottom.height) - 195f}",
-            dp(hud.bandBottom.height) - 195f >= 16f - 0.5f)
+        assertTrue("at least 12 dp is left under the row: ${dp(hud.bandBottom.height) - 195f}",
+            dp(hud.bandBottom.height) - 195f >= 12f - 0.5f)
     }
 
     @Test
@@ -252,7 +253,7 @@ class CameraBandsTest {
         assertTrue("the figure's text is ${dp(hud.reps.textSize.toInt())} dp tall in a 96 dp zone",
             hud.reps.textSize <= 96f * density + 0.5f)
         assertTrue("the digits are ${dp(inkHeight(hud))} dp tall", inkHeight(hud) <= 96f * density + 0.5f)
-        assertTrue("the band is ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 215.33f + 0.5f)
+        assertTrue("the band is ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 219f + 0.5f)
     }
 
     @Test
@@ -338,6 +339,221 @@ class CameraBandsTest {
         val hud = hud()
         for (view in listOf(hud.btnEnd, hud.btnStart, hud.btnSkipExercise, hud.btnUndo, hud.btnAddRep)) {
             assertTrue("a control is not an icon", view is android.widget.ImageView)
+        }
+    }
+
+    // ── the controls come forward when the athlete is at the phone (#167) ─────
+
+    /** The HUD in [state], drawn the way the activity draws it, with the status line blank. */
+    private fun at(state: WorkoutState, statusBlank: Boolean = true): ActivityMainBinding {
+        val hud = hud()
+        BottomBand.apply(hud, state, CameraControls.of(state, filming = false), statusBlank)
+        layout(hud)
+        show(hud, "3", "/5")
+        return hud
+    }
+
+    private val atThePhone = listOf(WorkoutState.IDLE, WorkoutState.SETUP, WorkoutState.PAUSED)
+
+    @Test
+    fun `at the phone the shutter is a 72 dp disc, END and SKIP are 56 dp, and the figure is 56 sp`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            val shutter = boxIn(hud.root, hud.btnStart)
+            val skip = boxIn(hud.root, hud.btnSkipExercise)
+            assertEquals("$state: shutter width", 72f, shutter.width(), 0.5f)
+            assertEquals("$state: shutter height", 72f, shutter.height(), 0.5f)
+            assertEquals("$state: SKIP width", 56f, skip.width(), 0.5f)
+            assertEquals("$state: SKIP height", 56f, skip.height(), 0.5f)
+            assertEquals("$state: the figure", 56f * density, hud.reps.textSize, 0.5f)
+        }
+        val paused = at(WorkoutState.PAUSED)
+        val end = boxIn(paused.root, paused.btnEnd)
+        assertEquals(56f, end.width(), 0.5f)
+        assertEquals(56f, end.height(), 0.5f)
+    }
+
+    @Test
+    fun `the controls keep their places, the shutter in the centre`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            val shutter = boxIn(hud.root, hud.btnStart)
+            val skip = boxIn(hud.root, hud.btnSkipExercise)
+            assertEquals("$state: centred", screenW / 2f, shutter.centerX(), 0.5f)
+            assertEquals("$state: SKIP is 40 dp from the end edge", screenW - 40f, skip.centerX(), 0.5f)
+            assertEquals("$state: on the row's line", shutter.centerY(), skip.centerY(), 0.5f)
+        }
+        val paused = at(WorkoutState.PAUSED)
+        assertEquals(40f, boxIn(paused.root, paused.btnEnd).centerX(), 0.5f)
+    }
+
+    @Test
+    fun `the band's parts, from its top edge, are the ticket's table`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            val edge = fromBand(hud, hud.repProgress)
+            val zone = fromBand(hud, hud.repBlock)
+            val figure = fromBand(hud, hud.reps)
+            val line = fromBand(hud, hud.movementLine)
+            val row = fromBand(hud, hud.controlRow)
+            val names = fromBand(hud, hud.controlNames)
+            assertEquals("$state: progress edge", 3f, edge.height(), 0.5f)
+            assertEquals("$state: gap of 8", 3f + 8f, zone.top, 0.5f)
+            assertEquals("$state: figure zone", 96f, zone.height(), 0.5f)
+            assertTrue("$state: the figure is in the zone", figure.top >= zone.top - 0.5f && figure.bottom <= zone.bottom + 0.5f)
+            assertTrue("$state: the line is in the zone, under the figure",
+                line.top >= figure.bottom - 0.5f && line.bottom <= zone.bottom + 0.5f)
+            assertEquals("$state: gap of 8", zone.bottom + 8f, row.top, 0.5f)
+            assertEquals("$state: control row", 72f, row.height(), 0.5f)
+            assertEquals("$state: gap of 4", row.bottom + 4f, names.top, 0.5f)
+            assertEquals("$state: name row", 16f, names.height(), 0.5f)
+            assertEquals("$state: where the name row ends, 207 dp down", 207f, names.bottom, 0.5f)
+        }
+    }
+
+    @Test
+    fun `the band is no taller at the phone than at the bar, with 12 dp or more under the name row`() {
+        val running = dp(at(WorkoutState.RUNNING).bandBottom.height)
+        for (state in atThePhone) {
+            val hud = at(state)
+            val band = dp(hud.bandBottom.height)
+            assertTrue("$state: $band dp against $running running", band <= running + 0.5f)
+            val under = band - fromBand(hud, hud.controlNames).bottom
+            assertTrue("$state: $under dp under the name row", under >= 12f - 0.5f)
+        }
+    }
+
+    @Test
+    fun `the capsule keeps its place beside the figure zone at the phone`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            val capsule = fromBand(hud, hud.stepper)
+            val zone = fromBand(hud, hud.repBlock)
+            assertEquals(48f, capsule.width(), 0.5f)
+            assertEquals(zone.top, capsule.top, 0.5f)
+            assertEquals(zone.bottom, capsule.bottom, 0.5f)
+            assertEquals(screenW - 16f, capsule.right, 0.5f)
+        }
+    }
+
+    @Test
+    fun `12 over 15 still fits whole at 56 sp`() {
+        val hud = at(WorkoutState.PAUSED)
+        show(hud, "12", "/15")
+        assertEquals(56f * density, hud.reps.textSize, 0.5f)
+        assertEquals(0, hud.reps.layout.getEllipsisCount(0))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi", fontScale = 2f)
+    fun `at the largest system text the band at the phone does not grow either`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            assertTrue("$state: ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 219f + 0.5f)
+            assertTrue("$state: the figure is taller than its box", hud.reps.textSize <= 72f * density + 0.5f)
+        }
+    }
+
+    // ── the names under the controls ──────────────────────────────────────────
+
+    private fun named(hud: ActivityMainBinding) =
+        listOf(hud.nameEnd, hud.nameShutter, hud.nameSkip).filter { it.visibility == View.VISIBLE }
+
+    @Test
+    fun `a pause names END, RESUME and SKIP, each centred under its control`() {
+        val hud = at(WorkoutState.PAUSED)
+        assertEquals(listOf("END", "RESUME", "SKIP"), named(hud).map { it.text.toString() })
+        val pairs = listOf(hud.nameEnd to hud.btnEnd, hud.nameShutter to hud.btnStart, hud.nameSkip to hud.btnSkipExercise)
+        for ((name, control) in pairs) {
+            assertEquals("${name.text} is centred under its control",
+                boxIn(hud.root, control).centerX(), boxIn(hud.root, name).centerX(), 0.5f)
+            assertTrue("${name.text} is under its control",
+                boxIn(hud.root, name).top >= boxIn(hud.root, control).bottom - 0.5f)
+        }
+    }
+
+    @Test
+    fun `setup names SKIP alone and the dimmed shutter has no name`() {
+        val hud = at(WorkoutState.SETUP)
+        assertEquals(listOf("SKIP"), named(hud).map { it.text.toString() })
+        assertEquals("the shutter is dimmed", 0.3f, hud.btnStart.alpha, 0.01f)
+    }
+
+    @Test
+    fun `idle names nothing and says its one line under the shutter, centred`() {
+        val hud = at(WorkoutState.IDLE)
+        assertEquals(0, named(hud).size)
+        assertEquals(View.VISIBLE, hud.idleLine.visibility)
+        assertEquals("Press the shutter to start the setup check", hud.idleLine.text.toString())
+        val line = boxIn(hud.root, hud.idleLine)
+        val shutter = boxIn(hud.root, hud.btnStart)
+        assertEquals(screenW / 2f, line.centerX(), 0.5f)
+        assertTrue("under the shutter", line.top >= shutter.bottom - 0.5f)
+        assertEquals("one row", 1, hud.idleLine.layout.lineCount)
+        assertEquals("not cut", 0, hud.idleLine.layout.getEllipsisCount(0))
+    }
+
+    @Test
+    fun `a label is no stop for a screen reader, and the shutter keeps the name the rules give it`() {
+        val hud = at(WorkoutState.PAUSED)
+        for (view in listOf(hud.nameEnd, hud.nameShutter, hud.nameSkip)) {
+            assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, view.importantForAccessibility)
+        }
+        assertEquals("Resume", hud.btnStart.contentDescription.toString())
+    }
+
+    // ── the coaching pill ─────────────────────────────────────────────────────
+
+    @Test
+    fun `idle shows no coaching pill, setup and a pause show it`() {
+        assertEquals(View.GONE, at(WorkoutState.IDLE).statusRow.visibility)
+        assertEquals(View.VISIBLE, at(WorkoutState.SETUP, statusBlank = false).statusRow.visibility)
+        assertEquals(View.VISIBLE, at(WorkoutState.PAUSED, statusBlank = false).statusRow.visibility)
+    }
+
+    @Test
+    fun `a finished workout is drawn as idle`() {
+        val finished = at(WorkoutState.FINISHED, statusBlank = false)
+        val idle = at(WorkoutState.IDLE)
+        assertEquals(View.GONE, finished.statusRow.visibility)
+        assertEquals(View.VISIBLE, finished.idleLine.visibility)
+        assertEquals(boxIn(idle.root, idle.btnStart), boxIn(finished.root, finished.btnStart))
+        assertEquals(idle.bandBottom.height, finished.bandBottom.height)
+    }
+
+    // ── going between the two layouts ─────────────────────────────────────────
+
+    @Test
+    fun `while the clock runs there is no name row, and the row is as quiet as before`() {
+        val hud = at(WorkoutState.RUNNING)
+        assertEquals(View.GONE, hud.controlNames.visibility)
+        assertEquals(48f, boxIn(hud.root, hud.btnStart).width(), 0.5f)
+        assertEquals(48f, boxIn(hud.root, hud.btnEnd).width(), 0.5f)
+        assertEquals(96f * density, hud.reps.textSize, 0.5f)
+        assertEquals(View.VISIBLE, hud.statusRow.visibility)
+    }
+
+    @Test
+    fun `starting, pausing and resuming switch between the two layouts, and running is the same each time`() {
+        val hud = at(WorkoutState.RUNNING)
+        fun boxes() = listOf(hud.btnStart, hud.btnEnd, hud.btnSkipExercise, hud.reps, hud.movementLine, hud.stepper)
+            .map { boxIn(hud.root, it) }
+        val first = boxes()
+        val course = listOf(
+            WorkoutState.SETUP, WorkoutState.RUNNING, WorkoutState.PAUSED,
+            WorkoutState.RUNNING, WorkoutState.IDLE, WorkoutState.RUNNING
+        )
+        for (state in course) {
+            BottomBand.apply(hud, state, CameraControls.of(state, filming = false), statusBlank = true)
+            layout(hud)
+            show(hud, "3", "/5")
+            if (state == WorkoutState.RUNNING) {
+                assertEquals("running after a change is not as it was", first, boxes())
+                assertEquals(96f * density, hud.reps.textSize, 0.5f)
+            } else {
+                assertEquals("$state: 72 dp shutter", 72f, boxIn(hud.root, hud.btnStart).width(), 0.5f)
+            }
+            assertEquals("$state: band", 219f, dp(hud.bandBottom.height), 0.5f)
         }
     }
 }
