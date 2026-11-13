@@ -87,9 +87,6 @@ class MainActivity : AppCompatActivity() {
          */
         const val RECORD_COUNTDOWN_SECONDS = 3
 
-        /** What an unavailable control fades to: plainly off, still plainly there. */
-        const val DIMMED = 0.3f
-
         /** About once a second at the analyser's rate; the status is a binder call. */
         const val THERMAL_EVERY = 20
     }
@@ -102,7 +99,7 @@ class MainActivity : AppCompatActivity() {
      * Holding the current value here also lets the burned-in recording overlay be fed from
      * plain strings instead of reading four TextViews back on the hot path.
      */
-    private class HudText(private val view: TextView) {
+    private class HudText(private val view: TextView, private val onChange: (() -> Unit)? = null) {
         private var shown: String? = null
         private var spoken: String? = null
         private var colour: Int? = null
@@ -113,6 +110,7 @@ class MainActivity : AppCompatActivity() {
                 if (shown == value) return
                 shown = value
                 view.text = value
+                onChange?.invoke()
             }
 
         /** What a screen reader should say, for fields whose glyphs do not read aloud well. */
@@ -576,7 +574,7 @@ class MainActivity : AppCompatActivity() {
         clock = HudText(binding.timer)
         scoreLine = HudLine(binding.movementLine)
         reps = ScoreboardFigure(binding.reps)
-        status = HudText(binding.status)
+        status = HudText(binding.status) { renderPill() }
         coachCue = HudText(binding.coachCue)
         ok = getColor(R.color.state_ok)
         alert = getColor(R.color.state_alert)
@@ -853,7 +851,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        status.text = CameraControls.IDLE_LINE
+        status.text = ""
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -1727,44 +1725,26 @@ class MainActivity : AppCompatActivity() {
     private fun renderControls() {
         val panel = controlPanel()
 
-        render(binding.btnFlip, panel[CameraControl.SWITCH_CAMERA])
+        BottomBand.show(binding.btnFlip, panel[CameraControl.SWITCH_CAMERA])
         binding.btnFlip.setImageResource(R.drawable.ic_flip)
         binding.btnFlip.imageTintList = ColorStateList.valueOf(label)
 
-        render(binding.btnEnd, panel[CameraControl.END])
         binding.btnEnd.imageTintList = ColorStateList.valueOf(alert)
 
-        render(binding.btnUndo, panel[CameraControl.MINUS])
-        render(binding.btnAddRep, panel[CameraControl.PLUS])
-        render(binding.btnStart, panel[CameraControl.SHUTTER])
-        render(binding.btnSkipExercise, panel[CameraControl.SKIP])
-        quietShutter(state == WorkoutState.RUNNING)
+        // The bottom band, for the distance the athlete is at: the scoreboard while the clock
+        // runs, the controls forward and named in idle, setup and a pause. It also draws the
+        // controls from the table above, and decides whether the coaching pill is there.
+        BottomBand.apply(binding, state, panel, status.text.isBlank(), coachShowing)
     }
-
-    private var shutterQuiet: Boolean? = null
 
     /**
-     * While the clock runs the shutter is a glass circle like its neighbours, so the row is quiet
-     * under the figure the athlete reads from the bar. In every other state it is the white disc
-     * it has always been, the one filled control on the screen.
+     * The coaching pill again, for a status line that has been written. In idle it is there only
+     * while it carries something the athlete has to be told: the idle line is under the shutter.
      */
-    private fun quietShutter(quiet: Boolean) {
-        if (shutterQuiet == quiet) return
-        shutterQuiet = quiet
-        binding.btnStart.setBackgroundResource(if (quiet) R.drawable.btn_glass else R.drawable.btn_shutter)
-        binding.btnStart.imageTintList =
-            ColorStateList.valueOf(getColor(if (quiet) R.color.label else R.color.on_primary))
-    }
+    private fun renderPill() = BottomBand.pill(binding, state, status.text.isBlank(), coachShowing)
 
     /** What the camera screen's controls are, for the state it is in and whether it is filming. */
     private fun controlPanel() = CameraControls.of(state, video.isRecording)
-
-    private fun render(view: View, control: ControlState) {
-        view.visibility = if (control.present) View.VISIBLE else View.GONE
-        view.isEnabled = control.enabled
-        view.alpha = if (control.enabled) 1f else DIMMED
-        view.contentDescription = control.name
-    }
 
     /**
      * SKIP means the same thing everywhere — leave this movement — but leaving it during the
@@ -1847,7 +1827,8 @@ class MainActivity : AppCompatActivity() {
         detector?.resetRoi()
         primary(R.drawable.ic_play)
         statusDot(neutral)
-        status.text = CameraControls.IDLE_LINE
+        // Idle's line is under the shutter now; the pill has nothing to say and goes away.
+        status.text = ""
         reps.colour(label)
         music.stop()
         renderClock()
@@ -2107,7 +2088,7 @@ class MainActivity : AppCompatActivity() {
         binding.coachCard.visibility = if (show) View.VISIBLE else View.GONE
         // One voice: while the figure is up it carries the cue, so the pill stands down. INVISIBLE
         // rather than GONE, because the card hangs off the pill's bottom edge.
-        binding.statusRow.visibility = if (show) View.INVISIBLE else View.VISIBLE
+        renderPill()
     }
 
     /**

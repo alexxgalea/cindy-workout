@@ -60,6 +60,28 @@
         <item name="android:maxLines">1</item>
     </style>
 
+    <!-- The word under a control, read at arm's length: END, RESUME, SKIP. Centred in a 16dp row,
+         so it is held to one line and shrinks rather than grow the band at the largest type. -->
+    <style name="Cindy.ControlName" parent="Cindy.Eyebrow">
+        <item name="android:textColor">@color/label_secondary</item>
+        <item name="android:gravity">center</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">8sp</item>
+        <item name="android:autoSizeMaxTextSize">11sp</item>
+    </style>
+
+    <!-- Idle's one line of text, under the shutter: the screen's single prompt, one line, shrunk
+         to fit rather than cut. -->
+    <style name="Cindy.IdleLine" parent="Cindy.ScoreLine">
+        <item name="android:textColor">@color/label</item>
+        <item name="android:gravity">center</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">10sp</item>
+        <item name="android:autoSizeMaxTextSize">15sp</item>
+    </style>
+
     <style name="Cindy.MetricXL.Quiet">
         <item name="android:fontFamily">@font/inter_bold</item>
         <item name="android:textColor">@color/label_tertiary</item>
