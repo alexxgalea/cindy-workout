@@ -15,6 +15,11 @@
   The bottom band is a scoreboard the athlete can read from the bar, 2 to 3m away: the count and
   its target as one 96sp figure, the movement and round under it on one line, − and + in a glass
   capsule beside the figure, and the controls in a quiet row of 48dp targets.
+
+  That is how it is drawn while the clock runs, which is how this file leaves it. In idle, setup
+  and a pause the athlete is at the phone, and BottomBand redraws the same views for that: the
+  figure at 56sp with the line under it in the same 96dp zone, a 72dp shutter, 56dp END and
+  SKIP, and a row of names under them. The band is 219dp either way.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
