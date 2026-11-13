@@ -128,41 +128,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The scoreboard's figure, "3/5", written only when it changes, like [HudText].
-     *
-     * The count, the slash and the target are one piece of text in one view (see [Scoreboard]),
-     * so the whole figure shrinks together and is never two sizes. The count takes the view's
-     * colour, which [colour] sets; the slash and the target are quieter.
-     */
-    private inner class HudFigure(private val view: TextView) {
-        private var shownCount: String? = null
-        private var shownTarget: String? = null
-        private var spoken: String? = null
-        private var colour: Int? = null
-
-        fun show(count: String, target: String = "") {
-            if (shownCount == count && shownTarget == target) return
-            shownCount = count
-            shownTarget = target
-            view.text = Scoreboard.figure(
-                count, target, getColor(R.color.label_tertiary), getColor(R.color.label_secondary)
-            )
-        }
-
-        fun spoken(value: String) {
-            if (spoken == value) return
-            spoken = value
-            view.contentDescription = value
-        }
-
-        fun colour(argb: Int) {
-            if (colour == argb) return
-            colour = argb
-            view.setTextColor(argb)
-        }
-    }
-
-    /**
      * The line under the figure, "Pull-ups · Round 2", written only when the movement or the round
      * changes. [movement] stays the engine's own label ("PULL-UPS"): the film's burned-in HUD reads
      * it back, and only the line on the screen is set in sentence case.
@@ -239,7 +204,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var clock: HudText
     private lateinit var scoreLine: HudLine
-    private lateinit var reps: HudFigure
+    private lateinit var reps: ScoreboardFigure
+
+    /** The engine's banked total the figure last showed, to tell a banked rep from a skip. */
+    private var figureTotal = 0
     private lateinit var status: HudText
     private lateinit var coachCue: HudText
     private var ok = 0
@@ -605,7 +573,7 @@ class MainActivity : AppCompatActivity() {
 
         clock = HudText(binding.timer)
         scoreLine = HudLine(binding.movementLine)
-        reps = HudFigure(binding.reps)
+        reps = ScoreboardFigure(binding.reps)
         status = HudText(binding.status) { renderPill() }
         coachCue = HudText(binding.coachCue)
         ok = getColor(R.color.state_ok)
@@ -1382,7 +1350,14 @@ class MainActivity : AppCompatActivity() {
     private fun apply(snap: Snapshot) {
         scoreLine.movement = snap.exercise.label
         scoreLine.round = snap.rounds + 1
-        reps.show("${snap.reps}", "/${snap.exercise.target}")
+        // A banked rep rolls the count and pulses it green, whether the camera saw it or + was
+        // tapped; one taken back rolls it down. Drawn only: the value, the voice and the engine
+        // never wait on it.
+        reps.show(
+            "${snap.reps}", "/${snap.exercise.target}",
+            FigureMotion.of(snap.event, figureTotal, snap.totalReps)
+        )
+        figureTotal = snap.totalReps
         reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
         recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
         // Readable from the bar, when the digits are not.
