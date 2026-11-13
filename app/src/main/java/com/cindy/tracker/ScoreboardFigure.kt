@@ -84,9 +84,10 @@ class ScoreboardFigure(private val view: FitFigureView) {
         view.contentDescription = value
     }
 
+    /** Sets the count's own colour. A pulse under way keeps its green and ends on this colour. */
     fun colour(argb: Int) {
         base = argb
-        if (motion == null) view.setTextColor(argb)
+        if (motion == null && !stillPulse) view.setTextColor(argb)
     }
 
     private fun play(from: String, to: String, banked: Boolean) {
@@ -95,6 +96,7 @@ class ScoreboardFigure(private val view: FitFigureView) {
         if (!ValueAnimator.areAnimatorsEnabled()) {
             if (banked) {
                 view.setTextColor(ok)
+                stillPulse = true
                 clock.postDelayed(unpulse, PULSE_MS)
             }
             return
@@ -123,6 +125,7 @@ class ScoreboardFigure(private val view: FitFigureView) {
     /** Stops any motion under way and leaves the figure still, in its own colour. */
     private fun stop() {
         clock.removeCallbacks(unpulse)
+        stillPulse = false
         val running = motion
         motion = null
         running?.cancel()
@@ -132,8 +135,12 @@ class ScoreboardFigure(private val view: FitFigureView) {
     /** Not the view's own queue, which holds a post back until the view is on screen. */
     private val clock = Handler(Looper.getMainLooper())
 
-    /** The end of a pulse played without animation. */
-    private val unpulse = Runnable { settle() }
+    /** A pulse played without animation: green, held, then gone at once. */
+    private var stillPulse = false
+    private val unpulse = Runnable {
+        stillPulse = false
+        settle()
+    }
 
     private fun settle() {
         view.endRoll()

@@ -183,6 +183,23 @@ class ScoreboardFigureTest {
     }
 
     @Test
+    fun `a workout ending mid-pulse keeps the green, then leaves the count in the stop colour`() {
+        val red = context.getColor(R.color.state_alert)
+        for (scale in listOf(1f, 0f)) {
+            durationScale(scale)
+            figure.colour(white)
+            figure.show("0", "/5")
+            figure.show("1", "/5", FigureMotion.BANKED)
+            advance(50)
+
+            figure.colour(red)
+            assertEquals("the pulse was cut short (animation scale $scale)", green, view.currentTextColor)
+            advance(500)
+            assertEquals("the count is not in the stop colour (animation scale $scale)", red, view.currentTextColor)
+        }
+    }
+
+    @Test
     fun `with animations off a rep taken back changes the count and nothing else`() {
         durationScale(0f)
         figure.show("1", "/5", FigureMotion.BANKED)
