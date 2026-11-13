@@ -11,7 +11,7 @@
 
   letterSpacing is in em, not sp: -0.048em at 62sp is the -3px the design calls for.
 -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── numerals ── -->
     <style name="Cindy.MetricXL" parent="">
@@ -72,7 +72,7 @@
          system text, 17sp is 34dp and wrapped to two rows, cut by the row (ticket #150). -->
     <style name="Cindy.ScoreLine" parent="">
         <item name="android:fontFamily">@font/inter_semibold</item>
-        <item name="android:textSize">17dp</item>
+        <item name="android:textSize" tools:ignore="SpUsage">17dp</item>
         <item name="android:includeFontPadding">false</item>
         <item name="android:textColor">@color/label_secondary</item>
         <item name="android:maxLines">1</item>
