@@ -51,6 +51,22 @@
         <item name="android:maxLines">1</item>
     </style>
 
+    <!--
+      The next set, over the figure when the movement changes: "10" over "PUSH-UPS", both rows at
+      48sp, the largest size at which PUSH-UPS fits the figure's zone with 8dp either side. Each row
+      is a 52dp box (44dp in the mock, plus its 8dp gap), and shrinks to fit rather than being cut.
+    -->
+    <style name="Cindy.NextSet" parent="">
+        <item name="android:fontFamily">@font/inter_extrabold</item>
+        <item name="android:textSize">48sp</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
     <!-- The line under the figure: "Pull-ups · Round 2". Tabular figures come from code, for the round only. -->
     <style name="Cindy.ScoreLine" parent="">
         <item name="android:fontFamily">@font/inter_semibold</item>
