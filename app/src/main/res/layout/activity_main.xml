@@ -320,6 +320,40 @@
             android:text="Pull-ups · Round 1" />
 
         <!--
+          The next set, over the figure zone and the line for about 1.5s when the movement changes
+          while the clock runs: its target over the movement's name, "10" over "PUSH-UPS", one size,
+          two rows, no slash, so it cannot be read as a count. It covers the 120dp of the zone and
+          the line, and only the figure's 280dp of width, so the capsule and the control row stay
+          where they are and answer. It adds no height: the margin takes back what it is given.
+          Gone until a movement changes; see ScoreboardReadout.
+        -->
+        <LinearLayout
+            android:id="@+id/nextSet"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="-120dp"
+            android:layout_marginEnd="72dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.cindy.tracker.FitFigureView
+                android:id="@+id/nextSetTarget"
+                style="@style/Cindy.NextSet"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:importantForAccessibility="no" />
+
+            <com.cindy.tracker.FitFigureView
+                android:id="@+id/nextSetMovement"
+                style="@style/Cindy.NextSet"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+
+        <!--
           The control row, a quiet 48dp row: END centred 40dp from the start edge, the shutter in
           the centre, SKIP centred 40dp from the end edge. Each is a 48dp target with its icon and
           no word; the spoken names come from [CameraControls], through renderControls.

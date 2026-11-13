@@ -82,6 +82,10 @@ _Avoid_: rep panel, counter
 The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter. It is 96 sp while the clock runs and 56 sp at the phone.
 _Avoid_: rep count, reps label
 
+**Next set**:
+What the scoreboard shows over the figure and its line for about 1.5 s when the movement changes while the clock runs: the set's target over the movement's name in capitals, "10" over "PUSH-UPS", on two rows at 48 sp with no slash, so it cannot be read as a count. After a finished set it waits about 450 ms for the last rep's roll and pulse; after SKIP it comes at once. − and + and the control row stay and answer under it; any rep banked or taken back ends it at once, and so does a pause.
+_Avoid_: takeover, banner, interstitial
+
 **Control row**:
 END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names. The names are labels only; what a screen reader says is still the control's own name.
 _Avoid_: action row, button bar

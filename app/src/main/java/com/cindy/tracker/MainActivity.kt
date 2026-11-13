@@ -128,40 +128,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The line under the figure, "Pull-ups · Round 2", written only when the movement or the round
-     * changes. [movement] stays the engine's own label ("PULL-UPS"): the film's burned-in HUD reads
-     * it back, and only the line on the screen is set in sentence case.
-     */
-    private class HudLine(private val view: TextView) {
-        private var shown: String? = null
-        private var spoken: String? = null
-
-        var movement: String = ""
-            set(value) {
-                field = value
-                render()
-            }
-
-        var round: Int = 1
-            set(value) {
-                field = value
-                render()
-            }
-
-        private fun render() {
-            val key = "$movement|$round"
-            if (shown == key) return
-            shown = key
-            view.text = Scoreboard.line(movement, round)
-            val say = Scoreboard.spokenLine(movement, round)
-            if (spoken != say) {
-                spoken = say
-                view.contentDescription = say
-            }
-        }
-    }
-
-    /**
      * An immutable read of the engine taken on the analysis thread.
      *
      * The engine is mutated from the camera thread and read from the main thread, so the UI is
@@ -203,11 +169,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var clock: HudText
-    private lateinit var scoreLine: HudLine
+    private lateinit var scoreboard: ScoreboardReadout
     private lateinit var reps: ScoreboardFigure
 
-    /** The engine's banked total the figure last showed, to tell a banked rep from a skip. */
-    private var figureTotal = 0
+    /**
+     * The movement the film's burned-in HUD names: the engine's own label ("PULL-UPS"), as the
+     * frame has it. Not what the scoreboard shows, which holds the set just left for a moment when
+     * the movement changes; the film does not.
+     */
+    private var filmMovement = ""
     private lateinit var status: HudText
     private lateinit var coachCue: HudText
     private var ok = 0
@@ -472,7 +442,7 @@ class MainActivity : AppCompatActivity() {
         val hud = if (state == WorkoutState.SETUP) {
             recordedHud.forSetup(now, frame.setup, setupExerciseLabel())
         } else {
-            recordedHud.forWorkout(now, clock.text, scoreLine.movement)
+            recordedHud.forWorkout(now, clock.text, filmMovement)
         }
         video.overlay.update(
             width = frame.width,
@@ -572,8 +542,8 @@ class MainActivity : AppCompatActivity() {
         hideSystemBars()
 
         clock = HudText(binding.timer)
-        scoreLine = HudLine(binding.movementLine)
-        reps = ScoreboardFigure(binding.reps)
+        scoreboard = ScoreboardReadout(binding)
+        reps = scoreboard.figure
         status = HudText(binding.status) { renderPill() }
         coachCue = HudText(binding.coachCue)
         ok = getColor(R.color.state_ok)
@@ -1348,21 +1318,21 @@ class MainActivity : AppCompatActivity() {
         )
 
     private fun apply(snap: Snapshot) {
-        scoreLine.movement = snap.exercise.label
-        scoreLine.round = snap.rounds + 1
+        filmMovement = snap.exercise.label
         // A banked rep rolls the count and pulses it green, whether the camera saw it or + was
-        // tapped; one taken back rolls it down. Drawn only: the value, the voice and the engine
-        // never wait on it.
-        reps.show(
-            "${snap.reps}", "/${snap.exercise.target}",
-            FigureMotion.of(snap.event, figureTotal, snap.totalReps)
+        // tapped; one taken back rolls it down. When the movement changes while the clock runs,
+        // the next set is shown over the figure for a moment. Drawn only: the value, the voice,
+        // the film and the engine never wait on it, and are all fed from this frame below.
+        scoreboard.workout(
+            movement = snap.exercise,
+            reps = snap.reps,
+            rounds = snap.rounds,
+            event = snap.event,
+            eventReps = snap.eventReps,
+            totalReps = snap.totalReps,
+            running = state == WorkoutState.RUNNING
         )
-        figureTotal = snap.totalReps
-        reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
         recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
-        // Readable from the bar, when the digits are not.
-        binding.repProgress.progress =
-            snap.reps * 100 / snap.exercise.target.coerceAtLeast(1)
         if (state == WorkoutState.RUNNING) {
             status.text = when {
                 readout == Readout.COUNTING -> debugLine(snap)
@@ -1476,7 +1446,8 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
         primary(R.drawable.ic_play)
-        scoreLine.movement = "SET UP"
+        filmMovement = "SET UP"
+        scoreboard.line("SET UP")
         reps.show("—")
         reps.spoken("Setting up")
         statusDot(neutral)
@@ -1730,6 +1701,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnFlip.imageTintList = ColorStateList.valueOf(label)
 
         binding.btnEnd.imageTintList = ColorStateList.valueOf(alert)
+
+        // The next set over the figure is for an athlete at the bar: a pause, the end or the
+        // setup check put them at the phone, and the band shows the set the engine is on.
+        if (!BottomBand.atTheBar(state)) scoreboard.clockStopped()
 
         // The bottom band, for the distance the athlete is at: the scoreboard while the clock
         // runs, the controls forward and named in idle, setup and a pause. It also draws the
