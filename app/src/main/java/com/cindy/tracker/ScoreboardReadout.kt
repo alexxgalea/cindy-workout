@@ -38,7 +38,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     private var held: Set? = null
 
     private val clock = Handler(Looper.getMainLooper())
-    private val showNext = Runnable { takeOver() }
+    private val showNext = Runnable { bringNextSet() }
     private val endNext = Runnable { release() }
     private var next: NextSet? = null
 
@@ -81,7 +81,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         draw(left, motion)
         held = now
         next = coming
-        if (coming.inMs > 0) clock.postDelayed(showNext, coming.inMs) else takeOver()
+        if (coming.inMs > 0) clock.postDelayed(showNext, coming.inMs) else bringNextSet()
     }
 
     /**
@@ -90,7 +90,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
      */
     fun clockStopped() = release()
 
-    private fun takeOver() {
+    private fun bringNextSet() {
         val set = next ?: return
         hud.nextSetTarget.text = set.figure
         hud.nextSetMovement.text = set.name
