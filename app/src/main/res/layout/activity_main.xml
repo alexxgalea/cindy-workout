@@ -11,6 +11,10 @@
   The top band is one 48dp row under the cutout. The coaching line is not in a band: it is a
   glass pill on the picture, 8dp under the top band. The rep panel is the other band, with the
   progress bar as the band's own top edge, which is a boundary you can see.
+
+  The bottom band is a scoreboard the athlete can read from the bar, 2 to 3m away: the count and
+  its target as one 96sp figure, the movement and round under it on one line, − and + in a glass
+  capsule beside the figure, and the controls in a quiet row of 48dp targets.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -230,7 +234,7 @@
         android:layout_height="wrap_content"
         android:background="@color/band_bottom"
         android:orientation="vertical"
-        android:paddingBottom="16dp"
+        android:paddingBottom="20dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -248,141 +252,89 @@
             android:max="100"
             android:progressDrawable="@drawable/track" />
 
-        <!-- The round moved down off the clock bar: 72 + 55 + 176dp of row against 320 available. -->
-        <LinearLayout
+        <!--
+          The figure and the capsule that edits it. The zone is 96dp tall: the count, a slash and
+          the target as one piece of text at 96sp, in the 280dp between 8dp from the start edge
+          and 8dp before the capsule, centred, and shrunk to fit rather than cut ("12/15" fits at
+          full size). The capsule is + over -, each half a 48dp target, 16dp from the end edge.
+          The athlete is 2 to 3m from the phone while the clock runs; this is what they read.
+        -->
+        <FrameLayout
+            android:id="@+id/repBlock"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:baselineAligned="true"
-            android:orientation="horizontal"
-            android:paddingHorizontal="20dp">
+            android:layout_height="96dp"
+            android:layout_marginTop="8dp">
 
-            <TextView
-                android:id="@+id/roundsLabel"
-                style="@style/Cindy.Eyebrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:importantForAccessibility="no"
-                android:text="ROUND" />
-
-            <TextView
-                android:id="@+id/rounds"
-                style="@style/Cindy.Eyebrow"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:fontFeatureSettings="tnum"
-                android:text="1"
-                android:textColor="@color/label_secondary" />
-
-            <TextView
-                android:id="@+id/exercise"
-                style="@style/Cindy.Eyebrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:text="PULL-UPS"
-                android:textColor="@color/label_secondary"
-                app:autoSizeMaxTextSize="11sp"
-                app:autoSizeMinTextSize="8sp"
-                app:autoSizeTextType="uniform" />
-        </LinearLayout>
-
-        <!-- Rep edits sit either side of the number they change, not lost among the actions. -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="20dp">
-
-            <ImageView
-                android:id="@+id/btnUndo"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="@drawable/btn_glass"
-                android:padding="15dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_minus"
-                tools:ignore="ContentDescription" />
+            <com.cindy.tracker.FitFigureView
+                android:id="@+id/reps"
+                style="@style/Cindy.Scoreboard"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="72dp"
+                android:gravity="center"
+                android:text="0" />
 
             <LinearLayout
-                android:id="@+id/repBlock"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="10dp"
-                android:layout_weight="1"
-                android:baselineAligned="true"
-                android:gravity="center"
-                android:orientation="horizontal">
+                android:id="@+id/stepper"
+                android:layout_width="48dp"
+                android:layout_height="96dp"
+                android:layout_gravity="end"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/glass_capsule"
+                android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/reps"
-                    style="@style/Cindy.MetricXL"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="56sp"
-                    app:autoSizeMaxTextSize="56sp"
-                    app:autoSizeMinTextSize="30sp"
-                    app:autoSizeTextType="uniform" />
+                <ImageView
+                    android:id="@+id/btnAddRep"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="14dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_plus"
+                    tools:ignore="ContentDescription" />
 
-                <!-- Drops back a weight and a shade so the eye lands on the number that moves. -->
-                <TextView
-                    android:id="@+id/repsTarget"
-                    style="@style/Cindy.MetricXL.Quiet"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="/5"
-                    android:textSize="30sp" />
+                <ImageView
+                    android:id="@+id/btnUndo"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="14dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_minus"
+                    tools:ignore="ContentDescription" />
             </LinearLayout>
+        </FrameLayout>
 
-            <ImageView
-                android:id="@+id/btnAddRep"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="@drawable/btn_glass"
-                android:padding="15dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_plus"
-                tools:ignore="ContentDescription" />
-        </LinearLayout>
+        <!-- The movement and the round, on one line: "Pull-ups · Round 2". -->
+        <TextView
+            android:id="@+id/movementLine"
+            style="@style/Cindy.ScoreLine"
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:gravity="center"
+            android:text="Pull-ups · Round 1" />
 
         <!--
-          The action row, laid out the way a camera lays one out: the shutter dead centre of the
-          screen with a satellite parked at a fixed inset from either edge, rather than hung off
-          the shutter, so the middle of the band stays the middle at any width.
+          The control row, a quiet 48dp row: END centred 40dp from the start edge, the shutter in
+          the centre, SKIP centred 40dp from the end edge. Each is a 48dp target with its icon and
+          no word; the spoken names come from [CameraControls], through renderControls.
 
-          The primary carries a mark and no word. Play, pause, again — the states it takes are
-          ones a player already draws, and the word it used to hold forced a pill wide enough for
-          the longest label, which is most of what made this band feel crowded. The status line
-          above narrates the state, and the spoken description names the action for anyone who
-          cannot see the mark.
-
-          SKIP is its own control on the right and is there in every state, because it means one
-          thing — leave this movement — and a control that means one thing should not be a long
-          press on a control that means another.
-
-          The left slot holds END, in red, and only while a workout is live: getting out of a
-          workout is always in the same place. The camera switch used to share it; it is in the
-          top band now, because it stays on the screen, dimmed, while the clock runs.
+          END is alone in the left slot, once a workout is live and empty before it. SKIP is its
+          own control in every state, because it means one thing, leave this movement. The camera
+          switch lives in the top band, where it stays on the screen, dimmed, while the clock runs.
         -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="@dimen/shutter"
-            android:layout_marginTop="12dp"
-            android:paddingHorizontal="20dp">
+            android:layout_marginTop="16dp">
 
-            <!-- Alone in the left slot, once a workout is live. Empty before it. -->
             <ImageView
                 android:id="@+id/btnEnd"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="16dp"
                 android:background="@drawable/btn_glass"
-                android:padding="15dp"
+                android:padding="14dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_stop"
                 tools:ignore="ContentDescription" />
@@ -393,16 +345,17 @@
                 android:layout_height="@dimen/shutter"
                 android:layout_gravity="center"
                 android:background="@drawable/btn_shutter"
-                android:padding="19dp"
+                android:padding="14dp"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_play"
                 tools:ignore="ContentDescription" />
 
             <ImageView
                 android:id="@+id/btnSkipExercise"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/btn_glass"
                 android:padding="14dp"
                 android:scaleType="fitCenter"

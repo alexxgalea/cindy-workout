@@ -74,6 +74,14 @@ _Avoid_: overlay, stick figure, pose
 The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. It is drawn thin, in the skeleton's colour, and nothing is drawn in its place until the app is sure of it. The gate that decides whether a rep counts is separate and never reads it.
 _Avoid_: bar line, rail
 
+**Scoreboard**:
+The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. Idle, setup and paused take the same layout until their own design.
+_Avoid_: rep panel, counter
+
+**Figure**:
+The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter.
+_Avoid_: rep count, reps label
+
 **Skeleton lag**:
 The skeleton showing the body where it was a moment ago, so it trails or jumps off the athlete in the picture. It is about the skeleton against the picture, not against the real athlete.
 _Avoid_: delay, latency (on their own)

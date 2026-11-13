@@ -34,6 +34,32 @@
 
     <!-- A number that sits beside a bigger one and drops back: the loose reps after the rounds,
          the target after the count. Size stays with the screen; family, weight and shade do not. -->
+    <!--
+      The camera screen's figure, read from the bar: the count, a slash and the target, all in this
+      one style so they are one size and one weight. 96sp is the ceiling, not a promise: the figure
+      shrinks to fit its zone (FitFigureView), and is never taller than the zone is. Font padding is
+      off: with it on, the figure's line would take about 44dp more than the 96dp zone it is given. The colour steps down for the slash and the target from code (see Scoreboard), never
+      the size or the weight.
+    -->
+    <style name="Cindy.Scoreboard" parent="">
+        <item name="android:fontFamily">@font/inter_extrabold</item>
+        <item name="android:textSize">96sp</item>
+        <item name="android:letterSpacing">-0.03</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- The line under the figure: "Pull-ups · Round 2". Tabular figures come from code, for the round only. -->
+    <style name="Cindy.ScoreLine" parent="">
+        <item name="android:fontFamily">@font/inter_semibold</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label_secondary</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
     <style name="Cindy.MetricXL.Quiet">
         <item name="android:fontFamily">@font/inter_bold</item>
         <item name="android:textColor">@color/label_tertiary</item>

@@ -130,6 +130,75 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * The scoreboard's figure, "3/5", written only when it changes, like [HudText].
+     *
+     * The count, the slash and the target are one piece of text in one view (see [Scoreboard]),
+     * so the whole figure shrinks together and is never two sizes. The count takes the view's
+     * colour, which [colour] sets; the slash and the target are quieter.
+     */
+    private inner class HudFigure(private val view: TextView) {
+        private var shownCount: String? = null
+        private var shownTarget: String? = null
+        private var spoken: String? = null
+        private var colour: Int? = null
+
+        fun show(count: String, target: String = "") {
+            if (shownCount == count && shownTarget == target) return
+            shownCount = count
+            shownTarget = target
+            view.text = Scoreboard.figure(
+                count, target, getColor(R.color.label_tertiary), getColor(R.color.label_secondary)
+            )
+        }
+
+        fun spoken(value: String) {
+            if (spoken == value) return
+            spoken = value
+            view.contentDescription = value
+        }
+
+        fun colour(argb: Int) {
+            if (colour == argb) return
+            colour = argb
+            view.setTextColor(argb)
+        }
+    }
+
+    /**
+     * The line under the figure, "Pull-ups · Round 2", written only when the movement or the round
+     * changes. [movement] stays the engine's own label ("PULL-UPS"): the film's burned-in HUD reads
+     * it back, and only the line on the screen is set in sentence case.
+     */
+    private class HudLine(private val view: TextView) {
+        private var shown: String? = null
+        private var spoken: String? = null
+
+        var movement: String = ""
+            set(value) {
+                field = value
+                render()
+            }
+
+        var round: Int = 1
+            set(value) {
+                field = value
+                render()
+            }
+
+        private fun render() {
+            val key = "$movement|$round"
+            if (shown == key) return
+            shown = key
+            view.text = Scoreboard.line(movement, round)
+            val say = Scoreboard.spokenLine(movement, round)
+            if (spoken != say) {
+                spoken = say
+                view.contentDescription = say
+            }
+        }
+    }
+
+    /**
      * An immutable read of the engine taken on the analysis thread.
      *
      * The engine is mutated from the camera thread and read from the main thread, so the UI is
@@ -171,10 +240,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var clock: HudText
-    private lateinit var round: HudText
-    private lateinit var exercise: HudText
-    private lateinit var reps: HudText
-    private lateinit var repsTarget: HudText
+    private lateinit var scoreLine: HudLine
+    private lateinit var reps: HudFigure
     private lateinit var status: HudText
     private lateinit var coachCue: HudText
     private var ok = 0
@@ -439,7 +506,7 @@ class MainActivity : AppCompatActivity() {
         val hud = if (state == WorkoutState.SETUP) {
             recordedHud.forSetup(now, frame.setup, setupExerciseLabel())
         } else {
-            recordedHud.forWorkout(now, clock.text, exercise.text)
+            recordedHud.forWorkout(now, clock.text, scoreLine.movement)
         }
         video.overlay.update(
             width = frame.width,
@@ -539,10 +606,8 @@ class MainActivity : AppCompatActivity() {
         hideSystemBars()
 
         clock = HudText(binding.timer)
-        round = HudText(binding.rounds)
-        exercise = HudText(binding.exercise)
-        reps = HudText(binding.reps)
-        repsTarget = HudText(binding.repsTarget)
+        scoreLine = HudLine(binding.movementLine)
+        reps = HudFigure(binding.reps)
         status = HudText(binding.status)
         coachCue = HudText(binding.coachCue)
         ok = getColor(R.color.state_ok)
@@ -1317,12 +1382,10 @@ class MainActivity : AppCompatActivity() {
         )
 
     private fun apply(snap: Snapshot) {
-        exercise.text = snap.exercise.label
-        reps.text = "${snap.reps}"
-        repsTarget.text = "/${snap.exercise.target}"
+        scoreLine.movement = snap.exercise.label
+        scoreLine.round = snap.rounds + 1
+        reps.show("${snap.reps}", "/${snap.exercise.target}")
         reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
-        round.text = "${snap.rounds + 1}"
-        round.spoken("Round ${snap.rounds + 1}")
         recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
         // Readable from the bar, when the digits are not.
         binding.repProgress.progress =
@@ -1440,9 +1503,8 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
         primary(R.drawable.ic_play)
-        exercise.text = "SET UP"
-        reps.text = "—"
-        repsTarget.text = ""
+        scoreLine.movement = "SET UP"
+        reps.show("—")
         reps.spoken("Setting up")
         statusDot(neutral)
         status.text = "Get in frame"
@@ -1460,15 +1522,13 @@ class MainActivity : AppCompatActivity() {
     private fun applySetup(setup: Setup) {
         when (setup.stage) {
             SetupStage.FRAMING -> {
-                reps.text = "—"
-                repsTarget.text = ""
+                reps.show("—")
                 reps.spoken("Setting up")
                 statusDot(alert)
                 status.text = "Can't see your ${setup.missing.joinToString(", ")}"
             }
             SetupStage.MOVING -> {
-                reps.text = "${setup.reps}"
-                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.show("${setup.reps}", "/${RecordedHud.CALIBRATION_REPS}")
                 reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(neutral)
                 status.text = if (readout == Readout.COUNTING) {
@@ -1478,8 +1538,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             SetupStage.POOR -> {
-                reps.text = "${setup.reps}"
-                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.show("${setup.reps}", "/${RecordedHud.CALIBRATION_REPS}")
                 reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(alert)
                 status.text = "Movement barely registers — raise the phone or step back"
@@ -1704,6 +1763,22 @@ class MainActivity : AppCompatActivity() {
         render(binding.btnAddRep, panel[CameraControl.PLUS])
         render(binding.btnStart, panel[CameraControl.SHUTTER])
         render(binding.btnSkipExercise, panel[CameraControl.SKIP])
+        quietShutter(state == WorkoutState.RUNNING)
+    }
+
+    private var shutterQuiet: Boolean? = null
+
+    /**
+     * While the clock runs the shutter is a glass circle like its neighbours, so the row is quiet
+     * under the figure the athlete reads from the bar. In every other state it is the white disc
+     * it has always been, the one filled control on the screen.
+     */
+    private fun quietShutter(quiet: Boolean) {
+        if (shutterQuiet == quiet) return
+        shutterQuiet = quiet
+        binding.btnStart.setBackgroundResource(if (quiet) R.drawable.btn_glass else R.drawable.btn_shutter)
+        binding.btnStart.imageTintList =
+            ColorStateList.valueOf(getColor(if (quiet) R.color.label else R.color.on_primary))
     }
 
     /** What the camera screen's controls are, for the state it is in and whether it is filming. */
