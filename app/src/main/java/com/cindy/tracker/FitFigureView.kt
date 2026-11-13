@@ -10,6 +10,8 @@ import android.util.TypedValue
 import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withSave
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -107,13 +109,13 @@ class FitFigureView @JvmOverloads constructor(
         }
 
         // The figure as it stands, without the cells that are rolling.
-        canvas.save()
-        for (c in cells) {
-            val r = cell(c)
-            canvas.clipOutRect(r.left, 0f, r.right, height.toFloat())
+        canvas.withSave {
+            for (c in cells) {
+                val r = cell(c)
+                clipOutRect(r.left, 0f, r.right, this@FitFigureView.height.toFloat())
+            }
+            super.onDraw(this)
         }
-        super.onDraw(canvas)
-        canvas.restore()
 
         // Each rolling cell: the old digit leaving, the new one arriving behind it.
         val eased = EASE.getInterpolation(rolled)
@@ -121,12 +123,11 @@ class FitFigureView @JvmOverloads constructor(
         paint.color = currentTextColor
         for (c in cells) {
             val r = cell(c)
-            canvas.save()
-            canvas.clipRect(r)
-            val was = c.was
-            if (was != null && was != ' ') canvas.drawText(was.toString(), r.left, baseline + eased * away, paint)
-            canvas.drawText(text, c.index, c.index + 1, r.left, baseline - (1f - eased) * away, paint)
-            canvas.restore()
+            canvas.withClip(r) {
+                val was = c.was
+                if (was != null && was != ' ') drawText(was.toString(), r.left, baseline + eased * away, paint)
+                drawText(text, c.index, c.index + 1, r.left, baseline - (1f - eased) * away, paint)
+            }
         }
     }
 
