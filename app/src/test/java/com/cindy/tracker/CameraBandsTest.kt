@@ -568,9 +568,12 @@ class CameraBandsTest {
 
     @Test
     fun `a finished workout is drawn as idle`() {
-        val finished = at(WorkoutState.FINISHED, statusBlank = false)
+        val finished = at(WorkoutState.FINISHED)
         val idle = at(WorkoutState.IDLE)
         assertEquals(View.GONE, finished.statusRow.visibility)
+        assertEquals("with something to tell, the pill is there as it is in idle",
+            at(WorkoutState.IDLE, statusBlank = false).statusRow.visibility,
+            at(WorkoutState.FINISHED, statusBlank = false).statusRow.visibility)
         assertEquals(View.VISIBLE, finished.idleLine.visibility)
         assertEquals(boxIn(idle.root, idle.btnStart), boxIn(finished.root, finished.btnStart))
         assertEquals(idle.bandBottom.height, finished.bandBottom.height)
