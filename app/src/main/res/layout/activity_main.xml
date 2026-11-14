@@ -313,12 +313,18 @@
             </LinearLayout>
         </FrameLayout>
 
-        <!-- The movement and the round, on one line: "Pull-ups · Round 2". -->
+        <!--
+          The movement and the round, on one line: "Pull-ups · Round 2". It shares the figure's
+          zone, the same 8dp and 72dp margins, so the two are centred on one point (148dp on a
+          360dp phone) in every state; the capsule sits beside the figure, not the screen's centre.
+        -->
         <TextView
             android:id="@+id/movementLine"
             style="@style/Cindy.ScoreLine"
             android:layout_width="match_parent"
             android:layout_height="24dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="72dp"
             android:gravity="center"
             android:text="Pull-ups · Round 1" />
 

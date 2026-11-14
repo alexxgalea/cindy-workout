@@ -51,14 +51,15 @@ object BottomBand {
         fun dim(id: Int) = res.getDimensionPixelSize(id)
         fun dp(value: Int) = (value * res.displayMetrics.density).toInt()
 
-        // ── the figure zone: at the phone the line moves up into the zone, under a 56 sp figure ──
+        // ── the figure zone: at the phone the line moves up into the zone, under a 56 sp figure; in
+        // every state the line is centred where the figure is, not on the screen ──
         hud.reps.ceilingSp(if (bar) FIGURE_AT_BAR_SP else FIGURE_AT_PHONE_SP)
         hud.reps.updateLayoutParams<ViewGroup.LayoutParams> { height = dp(if (bar) 96 else 72) }
         hud.movementLine.updateLayoutParams<LinearLayout.LayoutParams> {
             // The line takes the 24 dp the zone has left under the figure and adds no height.
+            // Its start and end margins are the figure's (8 dp and 72 dp, in the layout), in every
+            // state, so the two share one centre; only the top margin changes.
             topMargin = if (bar) 0 else -dp(24)
-            marginStart = if (bar) 0 else dp(8)
-            marginEnd = if (bar) 0 else dp(72)
         }
 
         // ── the control row ──
