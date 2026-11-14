@@ -162,6 +162,7 @@ class ScoreboardReadoutTest {
         assertEquals("the rep waited for the next set", "1/10", figure())
         assertEquals("Push-ups · Round 1", line())
         assertEquals("the rep did not roll", FitFigureView.Roll.UP, hud.reps.rolling)
+        assertEquals("the rep did not roll up from the new set's 0", "0", hud.reps.rollingFrom)
 
         advance(2_000) { frame(Exercise.PUSHUP, reps = 1, total = 6) }
         assertEquals("the next set came back", null, nextSet())
@@ -193,6 +194,8 @@ class ScoreboardReadoutTest {
         assertEquals(null, nextSet())
         assertEquals("4/5", figure())
         assertEquals("Pull-ups · Round 1", line())
+        assertEquals("the count did not roll down", FitFigureView.Roll.DOWN, hud.reps.rolling)
+        assertEquals("the roll did not start from the set that was left", "5", hud.reps.rollingFrom)
     }
 
     @Test

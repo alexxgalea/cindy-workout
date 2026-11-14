@@ -65,7 +65,10 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
                 held = now
                 return
             }
-            release()
+            // A rep taken back steps into the set that was left, whose figure is still the one on
+            // show under the next set, so it rolls down from that: 5 to 4, never 0 to 4. A rep
+            // banked is in the new set, and rolls up from its 0.
+            release(drawHeld = motion != FigureMotion.TAKEN_BACK)
         }
         val coming = NextSet.after(event, motion, running, movement)
         if (coming == null) {
@@ -120,8 +123,11 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         view.animate().alpha(1f).translationY(0f).setDuration(FADE_MS).setInterpolator(DecelerateInterpolator()).start()
     }
 
-    /** Ends the hold, if there is one, and shows the set the engine is on. */
-    private fun release() {
+    /**
+     * Ends the hold, if there is one, and shows the set the engine is on, unless [drawHeld] is
+     * false: then the caller draws the frame that ended it straight over the figure on show.
+     */
+    private fun release(drawHeld: Boolean = true) {
         clock.removeCallbacks(showNext)
         clock.removeCallbacks(endNext)
         next = null
@@ -133,7 +139,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         hud.movementLine.visibility = View.VISIBLE
         val set = held ?: return
         held = null
-        draw(set, FigureMotion.NONE)
+        if (drawHeld) draw(set, FigureMotion.NONE)
     }
 
     private fun draw(set: Set, motion: FigureMotion) {

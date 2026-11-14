@@ -61,12 +61,17 @@ class FitFigureView @JvmOverloads constructor(
     /** Which way the count's digits are rolling, or null while they stand still. */
     val rolling: Roll? get() = roll
 
+    /** The count the roll under way started from, or null while the digits stand still. */
+    val rollingFrom: String? get() = from.takeIf { roll != null }
+    private var from: String? = null
+
     /**
      * Starts rolling the count from [from] to [to], the count the view now shows at the start of
      * its text. Digits line up from the right, so 9 to 10 rolls a 1 in and the 9 over to a 0,
      * and 10 to 9 rolls the 0 over to a 9.
      */
     fun startRoll(from: String, to: String, direction: Roll) {
+        this.from = from
         cells = to.indices.mapNotNull { i ->
             val was = from.getOrNull(from.length - to.length + i)
             if (was == to[i]) null else Cell(i, was)
