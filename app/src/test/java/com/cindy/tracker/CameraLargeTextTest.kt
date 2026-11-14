@@ -42,7 +42,7 @@ class CameraLargeTextTest {
     private val longestLine = "Movement barely registers — raise the phone or step back"
 
     /** The HUD in [state] at 2x text, with the longest coaching line and a two-digit round. */
-    private fun at(state: WorkoutState): ActivityMainBinding {
+    private fun at(state: WorkoutState, line: CharSequence = Scoreboard.line("Push-ups", 12)): ActivityMainBinding {
         // An AppCompat activity's inflater, because the clock's autosize is an `app:` attribute
         // that only AppCompatTextView reads; a bare inflater would leave the clock unsized.
         val activity = Robolectric.buildActivity(AppCompatActivity::class.java)
@@ -56,7 +56,7 @@ class CameraLargeTextTest {
             hud.bandTop.paddingRight, hud.bandTop.paddingBottom
         )
         hud.status.text = longestLine
-        hud.movementLine.text = Scoreboard.line("Push-ups", 12)
+        hud.movementLine.text = line
         hud.reps.text = Scoreboard.figure("12", "/15", 0xFF000001.toInt(), 0xFF000002.toInt())
         val panel = CameraControls.of(state, filming = false)
         BottomBand.show(hud.btnFlip, panel[CameraControl.SWITCH_CAMERA])
@@ -169,6 +169,26 @@ class CameraLargeTextTest {
             assertTrue("$state: the movement line is wider than its row",
                 hud.movementLine.layout.getLineWidth(0) <= hud.movementLine.width)
             assertTrue("$state: the band grew to ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 219f + 0.5f)
+        }
+    }
+
+    @Test
+    fun `the longest line, a movement and a three-digit round, is one row in the figure's zone at 2x, in every state`() {
+        for (state in WorkoutState.entries) {
+            for (movement in Exercise.entries) {
+                val hud = at(state, Scoreboard.line(movement.label, 100))
+                val label = "$state ${movement.label}"
+                assertShownWhole("$label: the line", hud.movementLine)
+                assertEquals("$label: one row", 1, hud.movementLine.layout.lineCount)
+                assertFitsItsHeight("$label: the line", hud.movementLine)
+                assertTrue("$label: the line is ${dp(hud.movementLine.layout.getLineWidth(0).toInt())} dp, wider than its zone",
+                    hud.movementLine.layout.getLineWidth(0) <= hud.movementLine.width)
+                val line = boxIn(hud.root, hud.movementLine)
+                val figure = boxIn(hud.root, hud.reps)
+                assertTrue("$label: the line is ${line.width()} dp wide, past the 280 dp zone", line.width() <= 280f + 0.5f)
+                assertEquals("$label: the line shares the figure's centre", figure.centerX(), line.centerX(), 0.5f)
+                assertTrue("$label: the band grew to ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 219f + 0.5f)
+            }
         }
     }
 
