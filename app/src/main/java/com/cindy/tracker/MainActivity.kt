@@ -1724,7 +1724,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * The coaching pill again, for a status line that has been written. In idle it is there only
+     * The coaching pill again, for a coaching line that has been written. In idle it is there only
      * while it carries something the athlete has to be told: the idle line is under the shutter.
      */
     private fun renderPill() = BottomBand.pill(binding, state, status.text.isBlank(), coachShowing)

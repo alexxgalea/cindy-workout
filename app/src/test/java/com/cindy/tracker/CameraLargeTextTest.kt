@@ -41,7 +41,7 @@ class CameraLargeTextTest {
     /** The longest line the app prints while it counts or sets up (MainActivity.applySetup). */
     private val longestLine = "Movement barely registers — raise the phone or step back"
 
-    /** The HUD in [state] at 2x text, with the longest status line and a two-digit round. */
+    /** The HUD in [state] at 2x text, with the longest coaching line and a two-digit round. */
     private fun at(state: WorkoutState): ActivityMainBinding {
         // An AppCompat activity's inflater, because the clock's autosize is an `app:` attribute
         // that only AppCompatTextView reads; a bare inflater would leave the clock unsized.

@@ -374,7 +374,7 @@ class CameraBandsTest {
 
     // ── the controls come forward when the athlete is at the phone (#167) ─────
 
-    /** The HUD in [state], drawn the way the activity draws it, with the status line blank. */
+    /** The HUD in [state], drawn the way the activity draws it, with the coaching line blank. */
     private fun at(state: WorkoutState, statusBlank: Boolean = true): ActivityMainBinding {
         val hud = hud()
         BottomBand.apply(hud, state, CameraControls.of(state, filming = false), statusBlank)

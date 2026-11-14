@@ -28,7 +28,7 @@ object BottomBand {
 
     /**
      * Draws the band for [state]. [panel] says which controls are there and which answer, and
-     * [statusBlank] whether the status line has anything to say (only idle cares: see
+     * [statusBlank] whether the coaching line has anything to say (only idle cares: see
      * [ControlNames.pillShown]). [coachCovers] keeps the pill out of the way of the
      * start-position card, which hangs from its bottom edge.
      */
@@ -93,7 +93,7 @@ object BottomBand {
 
     /**
      * The coaching pill on the picture: there in setup, a pause and while counting, and in idle
-     * only while the status line carries something the athlete has to be told. INVISIBLE rather
+     * only while the coaching line carries something the athlete has to be told. INVISIBLE rather
      * than GONE while the start-position card covers it, because the card hangs off its edge.
      */
     fun pill(hud: ActivityMainBinding, state: WorkoutState, statusBlank: Boolean, coachCovers: Boolean) {
