@@ -97,7 +97,7 @@ class ScoreboardFigure(private val view: FitFigureView) {
             if (banked) {
                 view.setTextColor(ok)
                 stillPulse = true
-                clock.postDelayed(unpulse, PULSE_MS)
+                timer.postDelayed(unpulse, PULSE_MS)
             }
             return
         }
@@ -124,7 +124,7 @@ class ScoreboardFigure(private val view: FitFigureView) {
 
     /** Stops any motion under way and leaves the figure still, in its own colour. */
     private fun stop() {
-        clock.removeCallbacks(unpulse)
+        timer.removeCallbacks(unpulse)
         stillPulse = false
         val running = motion
         motion = null
@@ -133,7 +133,7 @@ class ScoreboardFigure(private val view: FitFigureView) {
     }
 
     /** Not the view's own queue, which holds a post back until the view is on screen. */
-    private val clock = Handler(Looper.getMainLooper())
+    private val timer = Handler(Looper.getMainLooper())
 
     /** A pulse played without animation: green, held, then gone at once. */
     private var stillPulse = false

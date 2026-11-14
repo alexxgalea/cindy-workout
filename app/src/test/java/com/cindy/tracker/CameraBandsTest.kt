@@ -374,7 +374,7 @@ class CameraBandsTest {
 
     // ── the controls come forward when the athlete is at the phone (#167) ─────
 
-    /** The HUD in [state], drawn the way the activity draws it, with the status line blank. */
+    /** The HUD in [state], drawn the way the activity draws it, with the coaching line blank. */
     private fun at(state: WorkoutState, statusBlank: Boolean = true): ActivityMainBinding {
         val hud = hud()
         BottomBand.apply(hud, state, CameraControls.of(state, filming = false), statusBlank)
@@ -466,6 +466,31 @@ class CameraBandsTest {
         }
     }
 
+    /** How strongly [view] is drawn: its own alpha times every alpha above it in the band. */
+    private fun seenAlpha(hud: ActivityMainBinding, view: View): Float {
+        var alpha = 1f
+        var current: View? = view
+        while (current != null && current !== hud.root) {
+            alpha *= current.alpha
+            current = current.parent as? View
+        }
+        return alpha
+    }
+
+    @Test
+    fun `at the phone the capsule is dimmed with its two marks, and while the clock runs all three are whole`() {
+        for (state in atThePhone) {
+            val hud = at(state)
+            assertEquals("$state: the capsule is not dimmed", 0.3f, seenAlpha(hud, hud.stepper), 0.01f)
+            assertEquals("$state: minus is not dimmed", 0.3f, seenAlpha(hud, hud.btnUndo), 0.01f)
+            assertEquals("$state: plus is not dimmed", 0.3f, seenAlpha(hud, hud.btnAddRep), 0.01f)
+        }
+        val running = at(WorkoutState.RUNNING)
+        for (view in listOf(running.stepper, running.btnUndo, running.btnAddRep)) {
+            assertEquals("running: a part of the capsule is faded", 1f, seenAlpha(running, view), 0.01f)
+        }
+    }
+
     @Test
     fun `12 over 15 still fits whole at 56 sp`() {
         val hud = at(WorkoutState.PAUSED)
@@ -543,9 +568,12 @@ class CameraBandsTest {
 
     @Test
     fun `a finished workout is drawn as idle`() {
-        val finished = at(WorkoutState.FINISHED, statusBlank = false)
+        val finished = at(WorkoutState.FINISHED)
         val idle = at(WorkoutState.IDLE)
         assertEquals(View.GONE, finished.statusRow.visibility)
+        assertEquals("with something to tell, the pill is there as it is in idle",
+            at(WorkoutState.IDLE, statusBlank = false).statusRow.visibility,
+            at(WorkoutState.FINISHED, statusBlank = false).statusRow.visibility)
         assertEquals(View.VISIBLE, finished.idleLine.visibility)
         assertEquals(boxIn(idle.root, idle.btnStart), boxIn(finished.root, finished.btnStart))
         assertEquals(idle.bandBottom.height, finished.bandBottom.height)

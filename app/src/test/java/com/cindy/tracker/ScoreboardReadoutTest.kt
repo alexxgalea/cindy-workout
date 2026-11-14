@@ -60,7 +60,14 @@ class ScoreboardReadoutTest {
         hud.root.layout(0, 0, (360 * density).toInt(), (780 * density).toInt())
     }
 
-    /** One frame from the engine, as [MainActivity.apply] hands it over. */
+    /** The engine's sequence number of the last frame [frame] made up. */
+    private var sequence = 0L
+
+    /**
+     * One frame from the engine, as [MainActivity.apply] hands it over. Each is the engine's next
+     * one unless [at] says which it was: a camera frame can reach the screen after a tap the
+     * engine took later.
+     */
     private fun frame(
         movement: Exercise,
         reps: Int,
@@ -68,8 +75,9 @@ class ScoreboardReadoutTest {
         rounds: Int = 0,
         event: RepEvent = RepEvent.NONE,
         eventReps: Int = reps,
-        running: Boolean = true
-    ) = readout.workout(movement, reps, rounds, event, eventReps, total, running)
+        running: Boolean = true,
+        at: Long = ++sequence
+    ) = readout.workout(movement, reps, rounds, event, eventReps, total, running, at)
 
     /** Lets [ms] pass a frame at a time, at a 60 Hz screen's pace, with a state frame on each. */
     private fun advance(ms: Long, each: () -> Unit = {}) {
@@ -162,6 +170,7 @@ class ScoreboardReadoutTest {
         assertEquals("the rep waited for the next set", "1/10", figure())
         assertEquals("Push-ups · Round 1", line())
         assertEquals("the rep did not roll", FitFigureView.Roll.UP, hud.reps.rolling)
+        assertEquals("the rep did not roll up from the new set's 0", "0", hud.reps.rollingFrom)
 
         advance(2_000) { frame(Exercise.PUSHUP, reps = 1, total = 6) }
         assertEquals("the next set came back", null, nextSet())
@@ -193,6 +202,47 @@ class ScoreboardReadoutTest {
         assertEquals(null, nextSet())
         assertEquals("4/5", figure())
         assertEquals("Pull-ups · Round 1", line())
+        assertEquals("the count did not roll down", FitFigureView.Roll.DOWN, hud.reps.rolling)
+        assertEquals("the roll did not start from the set that was left", "5", hud.reps.rollingFrom)
+    }
+
+    /**
+     * Eight push-ups of ten, then the ninth seen by the camera, whose frame is still on its way to
+     * the screen when + is tapped for the tenth and finishes the set. Returns the camera's frame
+     * number, for the test to deliver late.
+     */
+    private fun cameraNineThenPlusTen(): Long {
+        frame(Exercise.PUSHUP, reps = 8, total = 13)
+        val camera = ++sequence
+        frame(Exercise.SQUAT, reps = 0, total = 15, event = RepEvent.EXERCISE_DONE, eventReps = 10)
+        return camera
+    }
+
+    @Test
+    fun `a camera rep that reaches the screen after the plus that came after it does not roll the count down`() {
+        val camera = cameraNineThenPlusTen()
+        assertEquals("10/10", figure())
+
+        frame(Exercise.PUSHUP, reps = 9, total = 14, event = RepEvent.REP, at = camera)
+        assertEquals("the late frame was drawn", "10/10", figure())
+        assertTrue("the late frame rolled the count down", hud.reps.rolling != FitFigureView.Roll.DOWN)
+
+        advance(600) { frame(Exercise.SQUAT, reps = 0, total = 15) }
+        assertEquals("the late frame ended the next set", listOf("15", "SQUATS"), nextSet())
+        advance(1_500) { frame(Exercise.SQUAT, reps = 0, total = 15) }
+        assertEquals("0/15", figure())
+        assertEquals("Squats · Round 1", line())
+    }
+
+    @Test
+    fun `a state frame older than the set the band holds does not become the set it returns to`() {
+        val camera = cameraNineThenPlusTen()
+        frame(Exercise.PUSHUP, reps = 8, total = 13, at = camera)
+
+        advance(2_100)
+        assertEquals(null, nextSet())
+        assertEquals("the band went back to an older set", "0/15", figure())
+        assertEquals("Squats · Round 1", line())
     }
 
     @Test

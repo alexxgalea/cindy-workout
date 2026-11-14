@@ -43,8 +43,7 @@ data class ControlNames(
          */
         fun pillShown(state: WorkoutState, statusBlank: Boolean): Boolean = when (state) {
             WorkoutState.SETUP, WorkoutState.RUNNING, WorkoutState.PAUSED -> true
-            WorkoutState.IDLE -> !statusBlank
-            WorkoutState.FINISHED -> false
+            WorkoutState.IDLE, WorkoutState.FINISHED -> !statusBlank
         }
     }
 }

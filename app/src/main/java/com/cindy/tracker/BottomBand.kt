@@ -28,7 +28,7 @@ object BottomBand {
 
     /**
      * Draws the band for [state]. [panel] says which controls are there and which answer, and
-     * [statusBlank] whether the status line has anything to say (only idle cares: see
+     * [statusBlank] whether the coaching line has anything to say (only idle cares: see
      * [ControlNames.pillShown]). [coachCovers] keeps the pill out of the way of the
      * start-position card, which hangs from its bottom edge.
      */
@@ -44,8 +44,7 @@ object BottomBand {
 
         // ── what each control is: there or not, answering or dimmed, and its spoken name ──
         show(hud.btnEnd, panel[CameraControl.END])
-        show(hud.btnUndo, panel[CameraControl.MINUS])
-        show(hud.btnAddRep, panel[CameraControl.PLUS])
+        capsule(hud, panel[CameraControl.MINUS], panel[CameraControl.PLUS])
         show(hud.btnStart, panel[CameraControl.SHUTTER])
         show(hud.btnSkipExercise, panel[CameraControl.SKIP])
         val res = context.resources
@@ -94,7 +93,7 @@ object BottomBand {
 
     /**
      * The coaching pill on the picture: there in setup, a pause and while counting, and in idle
-     * only while the status line carries something the athlete has to be told. INVISIBLE rather
+     * only while the coaching line carries something the athlete has to be told. INVISIBLE rather
      * than GONE while the start-position card covers it, because the card hangs off its edge.
      */
     fun pill(hud: ActivityMainBinding, state: WorkoutState, statusBlank: Boolean, coachCovers: Boolean) {
@@ -115,6 +114,22 @@ object BottomBand {
         view.isEnabled = control.enabled
         view.alpha = if (control.enabled) 1f else DIMMED
         view.contentDescription = control.name
+    }
+
+    /**
+     * The − | + capsule. When neither editor answers, the capsule is dimmed as one piece, its glass
+     * with its two marks, and keeps its place; the marks are then drawn whole inside it, so they
+     * are not dimmed twice over. Otherwise each mark is drawn as [show] draws any control.
+     */
+    private fun capsule(hud: ActivityMainBinding, minus: ControlState, plus: ControlState) {
+        show(hud.btnUndo, minus)
+        show(hud.btnAddRep, plus)
+        val off = !minus.enabled && !plus.enabled
+        hud.stepper.alpha = if (off) DIMMED else 1f
+        if (off) {
+            hud.btnUndo.alpha = 1f
+            hud.btnAddRep.alpha = 1f
+        }
     }
 
     private fun TextView.name(text: String?) {

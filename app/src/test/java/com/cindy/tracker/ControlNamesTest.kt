@@ -73,7 +73,15 @@ class ControlNamesTest {
         assertTrue(ControlNames.pillShown(WorkoutState.PAUSED, statusBlank = false))
         assertTrue(ControlNames.pillShown(WorkoutState.RUNNING, statusBlank = false))
         assertFalse(ControlNames.pillShown(WorkoutState.IDLE, statusBlank = true))
-        assertFalse(ControlNames.pillShown(WorkoutState.FINISHED, statusBlank = false))
+        assertFalse(ControlNames.pillShown(WorkoutState.FINISHED, statusBlank = true))
+    }
+
+    @Test
+    fun `a finished workout shows the coaching pill exactly when idle would`() {
+        for (blank in listOf(true, false)) {
+            assertEquals("statusBlank = $blank",
+                ControlNames.pillShown(WorkoutState.IDLE, blank), ControlNames.pillShown(WorkoutState.FINISHED, blank))
+        }
     }
 
     @Test
