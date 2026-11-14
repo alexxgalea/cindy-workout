@@ -28,6 +28,11 @@ import kotlin.math.abs
  *
  * A missing opt-in flag, catalog, or fixture produces a JUnit skip with an explicit message. It
  * is never presented as a successful regression run.
+ *
+ * Scenarios that carry `light` or `expectedTracking` are not run: only the desktop batch applies
+ * the low-light model and checks the tracking verdict, so here they would get clean frames and be
+ * judged against a label for dim ones. Each is logged as "NOT RUN on device", written to the
+ * report's `notRunOnDevice` list, and named in the failure message if the run fails.
  */
 @RunWith(AndroidJUnit4::class)
 class VideoRegressionInstrumentationTest {
@@ -48,9 +53,23 @@ class VideoRegressionInstrumentationTest {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
         )
 
-        val scenarios = CATALOGS.flatMap(::loadCatalog)
+        val declared = CATALOGS.flatMap(::loadCatalog)
         assumeTrue(
             "SKIPPED: no video scenarios found in tests/scenarios. Generate or add fixture labels first.",
+            declared.isNotEmpty()
+        )
+
+        // A scenario that needs the desktop batch's low-light model or tracking verdict cannot be
+        // judged here. It is named, logged and reported, and never counted as a pass.
+        val reasons = declared.associateWith {
+            DeviceRunPlan.notRunReason(it.id, it.hasLight, it.expectedTracking)
+        }
+        val notRun = reasons.values.filterNotNull()
+        notRun.forEach { Log.w(TAG, it) }
+        val notRunNote = if (notRun.isEmpty()) "" else DeviceRunPlan.notRunSummary(notRun)
+        val scenarios = declared.filter { reasons.getValue(it) == null }
+        assumeTrue(
+            "SKIPPED: every declared scenario needs the desktop batch.\n$notRunNote",
             scenarios.isNotEmpty()
         )
 
@@ -63,11 +82,12 @@ class VideoRegressionInstrumentationTest {
         )
 
         val reports = scenarios.map(::runScenario)
-        val output = writeReports(reports)
+        val output = writeReports(reports, notRun)
         Log.i(TAG, "Video regression reports: ${output.absolutePath}")
+        Log.i(TAG, "Ran ${reports.size} scenario(s); ${notRun.size} NOT RUN on device")
 
         val failures = reports.flatMap { report -> report.failures.map { "${report.id}: $it" } }
-        if (failures.isNotEmpty()) fail(failures.joinToString("\n"))
+        if (failures.isNotEmpty()) fail((failures + notRunNote).filter { it.isNotEmpty() }.joinToString("\n"))
     }
 
     private fun runScenario(scenario: Scenario): ScenarioReport {
@@ -184,11 +204,14 @@ class VideoRegressionInstrumentationTest {
             val frameCount = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
                 ?.toIntOrNull()
                 ?: error("Video has no frame-count metadata; re-encode it with a native frame index")
-            val fps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
-                ?.toFloatOrNull()
-                ?: error("Video has no FPS metadata; re-encode it with a native frame rate")
+            // A phone recording carries its capture rate; a downloaded clip does not, so the rate
+            // falls back to the frame count over the duration.
+            val fps = DeviceRunPlan.framesPerSecond(
+                captureRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE),
+                frameCount = frameCount,
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            ) ?: error("Video has neither FPS nor duration metadata; re-encode it with a native frame rate")
             require(frameCount > 0) { "Video has no frames" }
-            require(fps > 0f) { "Video has invalid FPS '$fps'" }
 
             val model = when (scenario.model?.lowercase(Locale.US)) {
                 null, "thunder", "movenet_thunder.tflite" -> PoseDetector.THUNDER
@@ -301,8 +324,8 @@ class VideoRegressionInstrumentationTest {
         file.writeText(root.toString(2))
     }
 
-    private fun writeReports(reports: List<ScenarioReport>): File {
-        val root = JSONObject().put("scenarios", JSONArray())
+    private fun writeReports(reports: List<ScenarioReport>, notRun: List<String>): File {
+        val root = JSONObject().put("scenarios", JSONArray()).put("notRunOnDevice", JSONArray(notRun))
         val scenarios = root.getJSONArray("scenarios")
         reports.forEach { report ->
             scenarios.put(JSONObject().apply {
@@ -419,7 +442,9 @@ class VideoRegressionInstrumentationTest {
             tags = tags,
             expectedRepEventsMs = events,
             eventToleranceMs = optLong("eventToleranceMs", DEFAULT_EVENT_TOLERANCE_MS),
-            model = optString("model").takeIf { it.isNotBlank() }
+            model = optString("model").takeIf { it.isNotBlank() },
+            hasLight = optJSONObject("light") != null,
+            expectedTracking = optString("expectedTracking").takeIf { it.isNotBlank() }
         )
     }
 
@@ -461,7 +486,9 @@ class VideoRegressionInstrumentationTest {
         val tags: List<String>,
         val expectedRepEventsMs: List<Long>,
         val eventToleranceMs: Long,
-        val model: String?
+        val model: String?,
+        val hasLight: Boolean,
+        val expectedTracking: String?
     )
 
     private data class Bar(
@@ -511,7 +538,8 @@ class VideoRegressionInstrumentationTest {
         val CATALOGS = listOf(
             "scenarios/infiniterep.json",
             "scenarios/repcount.json",
-            "scenarios/local_regressions.json"
+            "scenarios/local_regressions.json",
+            "scenarios/youtube.json"
         )
     }
 }
