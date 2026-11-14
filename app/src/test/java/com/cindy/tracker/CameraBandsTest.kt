@@ -233,6 +233,54 @@ class CameraBandsTest {
     }
 
     @Test
+    fun `in every state the line shares the figure's centre, 148 dp on the P40, and is no wider than the zone`() {
+        for (state in WorkoutState.entries) {
+            val hud = at(state)
+            val figure = boxIn(hud.root, hud.reps)
+            val line = boxIn(hud.root, hud.movementLine)
+            assertEquals("$state: the figure's centre", 148f, figure.centerX(), 0.5f)
+            assertEquals("$state: the line's centre is the figure's", figure.centerX(), line.centerX(), 0.5f)
+            assertTrue("$state: the line is ${line.width()} dp wide in a 280 dp zone", line.width() <= 280f + 0.5f)
+            assertTrue("$state: the line leaves the zone: $line", line.left >= 8f - 0.5f && line.right <= 288f + 0.5f)
+        }
+    }
+
+    @Test
+    fun `the next set covers the figure zone and the line's row, in the same 280 dp, in every state the clock runs`() {
+        val hud = at(WorkoutState.RUNNING)
+        hud.nextSet.visibility = View.VISIBLE
+        layout(hud)
+        val next = boxIn(hud.root, hud.nextSet)
+        val figure = boxIn(hud.root, hud.reps)
+        val line = boxIn(hud.root, hud.movementLine)
+        assertEquals("it starts where the figure zone does", figure.left, next.left, 0.5f)
+        assertEquals("it ends where the figure zone does", figure.right, next.right, 0.5f)
+        assertEquals("it starts where the line does", line.left, next.left, 0.5f)
+        assertEquals("it ends where the line does", line.right, next.right, 0.5f)
+        assertEquals("its centre is the line's", line.centerX(), next.centerX(), 0.5f)
+        assertEquals("it begins at the zone's top", figure.top, next.top, 0.5f)
+        assertEquals("it ends at the line's bottom", line.bottom, next.bottom, 0.5f)
+    }
+
+    @Test
+    fun `the longest line is one row at 17 sp, whole, inside its 280 dp zone`() {
+        for (state in WorkoutState.entries) {
+            val hud = at(state)
+            for (movement in Exercise.entries) {
+                hud.movementLine.text = Scoreboard.line(movement.label, 100)
+                layout(hud)
+                val layout = hud.movementLine.layout
+                assertEquals("$state ${movement.label}: one row", 1, layout.lineCount)
+                assertEquals("$state ${movement.label}: cut", 0, layout.getEllipsisCount(0))
+                assertEquals("$state ${movement.label}: 17 sp", 17f * density, hud.movementLine.textSize, 0.5f)
+                assertTrue("$state ${movement.label}: ${dp(layout.getLineWidth(0).toInt())} dp in ${dp(hud.movementLine.width)}",
+                    layout.getLineWidth(0) <= hud.movementLine.width)
+                assertTrue("$state: the band grew to ${dp(hud.bandBottom.height)} dp", dp(hud.bandBottom.height) <= 219f + 0.5f)
+            }
+        }
+    }
+
+    @Test
     fun `the figure is one line, centred, and set at 96 sp`() {
         val hud = hud()
         assertEquals(96f * density, hud.reps.textSize, 0.5f)
