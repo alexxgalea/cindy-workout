@@ -20,6 +20,12 @@ import com.cindy.tracker.databinding.ActivityMainBinding
  *
  * Only what is drawn waits. The engine, the voice, the film and the session's record are fed from
  * the frame itself by the caller, and never from what this shows.
+ *
+ * A frame older than one already drawn is not drawn. Taps reach the band at once and camera
+ * frames through the handoff, so a camera rep can arrive after the + the engine took later: drawn,
+ * it would roll the count back down, or hand a hold an older set to return to. The newer frame
+ * already holds everything the older one did, and the caller still feeds the older one to the
+ * voice, the buzz, the sets and the film as before.
  */
 class ScoreboardReadout(private val hud: ActivityMainBinding) {
 
@@ -34,6 +40,9 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     /** The engine's banked total the figure last showed, to tell a banked rep from a skip. */
     private var total = 0
 
+    /** Where the newest frame drawn comes in the engine's order: an older one is not drawn. */
+    private var newest = Long.MIN_VALUE
+
     /** The set the engine is on, while the band holds another one on show; null while it holds none. */
     private var held: Set? = null
 
@@ -45,7 +54,8 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     /**
      * One frame of a live workout. [reps] is the movement's count now and [eventReps] the count
      * the movement had reached when [event] fired, which a finished set has already cleared.
-     * [running] is whether the clock runs: only then is the athlete at the bar.
+     * [running] is whether the clock runs: only then is the athlete at the bar. [sequence] is the
+     * frame's place in the engine's order, one up on the read before it.
      */
     fun workout(
         movement: Exercise,
@@ -54,8 +64,11 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         event: RepEvent,
         eventReps: Int,
         totalReps: Int,
-        running: Boolean
+        running: Boolean,
+        sequence: Long
     ) {
+        if (sequence <= newest) return
+        newest = sequence
         val motion = FigureMotion.of(event, total, totalReps)
         total = totalReps
         val now = Set(reps, movement, rounds + 1)

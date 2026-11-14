@@ -162,6 +162,12 @@ class MainActivity : AppCompatActivity() {
         val heelsFlatSpotted: Boolean,
         /** Whether every joint this movement scores from was confidently seen this frame. */
         val poseLegible: Boolean = false,
+        /**
+         * Where this read comes in the engine's own order, one up on the read before it. A camera
+         * frame can reach the screen after a tap the engine took later, and this is how the
+         * scoreboard knows it is older than what it already shows.
+         */
+        val sequence: Long,
         /** Filled in after the monitor has seen this frame; see [analyse]. */
         val health: TrackingHealth = TrackingHealth.GOOD,
         val advice: String? = null
@@ -268,6 +274,9 @@ class MainActivity : AppCompatActivity() {
      */
     @Volatile private var engine = WorkoutEngine()
     private val engineLock = Any()
+
+    /** How many reads of the engine [runEngine] has taken: each [Snapshot]'s place in that order. Under [engineLock]. */
+    private var engineReads = 0L
 
     /**
      * Whether this workout has already been told that smart squat counting switched it over to
@@ -1216,7 +1225,8 @@ class MainActivity : AppCompatActivity() {
             awaitingStart = engine.awaitingStart,
             manualReps = engine.manualReps,
             heelsFlatSpotted = engine.heelsFlatSpotted,
-            poseLegible = engine.diagnostics.poseLegible
+            poseLegible = engine.diagnostics.poseLegible,
+            sequence = ++engineReads
         )
     }
 
@@ -1330,7 +1340,8 @@ class MainActivity : AppCompatActivity() {
             event = snap.event,
             eventReps = snap.eventReps,
             totalReps = snap.totalReps,
-            running = state == WorkoutState.RUNNING
+            running = state == WorkoutState.RUNNING,
+            sequence = snap.sequence
         )
         recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
         if (state == WorkoutState.RUNNING) {
