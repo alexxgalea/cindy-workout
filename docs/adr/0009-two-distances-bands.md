@@ -1,0 +1,27 @@
+# The camera screen's bands are drawn for two distances
+
+On 2026-11-12 the owner chose "Two distances", arrangement B, for the bands of the camera screen (verdict on #140, under the spec #139). The athlete is at the bar, 2 to 3 m from the phone, while the clock runs, and at the phone, at arm's length, in idle, setup and a pause. The top band is one 48 dp row under the cutout (91 dp on the owner's phone); the bottom band keeps today's height but is a scoreboard while the clock runs and brings its controls forward, named, at the phone. Together they take 39.7 % of the screen's height on the owner's 1080 × 2340 phone, where the bands of September took 46.4 %. This supersedes the September bands decision: the two bands of PR #11 (2026-09-11), a top band of about 104 dp holding the clock, four icons and the coaching line, and a bottom band of about 200 dp holding the round and movement eyebrow, the rep count with − and + and two actions. That decision was never written as an ADR, so there is no file to mark; this is its record, and the iPhone plan's description of those bands (`ios/ui-parity/PLAN.md`, U1) is out of date until the port.
+
+The decision was made from an HTML mock (`prototype/icons-navigation-type`, `bands.html`, view "Two distances"), not from the in-app prototype on the phone, and the chrome share in the verdict was modelled. The share is now measured from the built layout (see Consequences); the phone check is still owed.
+
+## Considered Options
+
+- **Today's bands**, the baseline: rejected. 46.4 % of the screen is chrome, 173 px of it empty above the clock, and the picture is what the athlete is there to see.
+- **Thin bands, top and bottom** (one top row, one row for the count, one for the actions; about 25 % chrome): the owner kept its top and today's bottom height, and gave no written reason for the bottom.
+- **No bands**, the picture full screen with the controls floating on glass and the real zone marked by drawn corners, with its six polish designs: rejected by the owner after the polish round; no written reason was given, so none is recorded here.
+- **No bands without − and +**: rejected. The owner insists that − and + stay.
+- **Arrangement A**, the − and + capsule inside the button row: rejected. + would sit 40 dp from the shutter; in B it is 127 dp away (the tests hold it to at least 100 dp).
+- **Two distances, arrangement B**: chosen.
+
+## Consequences
+
+- **The top band is one row.** The clock at the start edge, then the camera switch, REC and MENU at the end edge, each a 48 dp target with a spoken name. The camera switch answers in idle and on a pause and is dimmed otherwise.
+- **The coaching line is a pill on the picture**, 8 dp under the top band, centred and never closer than 16 dp to an edge. A line too long for one row wraps; at the largest system text the longest line takes three rows.
+- **The bottom band is 219 dp in every state**, so the picture never moves when the athlete goes from the bar to the phone. While the clock runs it is the scoreboard: the figure ("3/5", 96 sp, one size and one weight), the movement and round on one line under it, − and + as one capsule beside the figure, and END, the shutter and SKIP as a quiet row of 48 dp targets. At the phone the figure drops to 56 sp, the shutter is a 72 dp disc, END and SKIP are 56 dp, and each enabled control carries its name under it (the **Control row**). The band's height is 12 dp more than the ticket's table sums to (207 dp), for the 12 dp of padding the band keeps under its last row, and it is 3.67 dp taller than the September band's 215.33 dp.
+- **The band's height holds only with font padding off on the figure.** With it on, the figure's zone grows by about 44 dp and the chrome share goes over the verdict.
+- **A banked rep rolls the figure and pulses it green; a new movement shows the next set over the figure for about 1.5 s** (#168, #169). Both are decoration over a value that has already changed, and neither delays the count, the voice or the film.
+- **The chrome share is measured, not modelled.** `CameraBandsTest` lays out the HUD on a 1080 × 2340 phone and holds the two bands to at most 39.9 % of the screen's height, the verdict's figure. As built they take 39.7 % (91 dp and 219 dp of 780 dp), a little under the mock's 39.9 % (91 dp and 220.1 dp), in every state.
+- **What does not move.** The analysis frame (480 × 640), the counting and the film's burned-in HUD are as they were; the bands are an overlay on a full-bleed picture. The bright middle remains the real zone, a framing target and not a boundary. The bands stay translucent and there is still no blur, on either platform, by design.
+- **The camera screen's text holds at the largest system text** (#150). The clock, the movement line, the idle line and the control names are sized in dp, because each lives in a row of a fixed height that may not grow the band, and `CameraLargeTextTest` holds every control to a name and a 48 dp target and every line to its room, at 2x in each state.
+- **Still owed, on the phone:** that an athlete can frame themselves in the real zone, that counting is unchanged across a full workout, and captures of every state. The verdict was reached without the phone.
+- **The iPhone port is owed** (ADR 0003, #155). CindyTracker still draws the September bands as capsules over a full-bleed picture; it takes this arrangement in its own ticket.

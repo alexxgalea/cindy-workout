@@ -87,9 +87,6 @@ class MainActivity : AppCompatActivity() {
          */
         const val RECORD_COUNTDOWN_SECONDS = 3
 
-        /** What an unavailable control fades to: plainly off, still plainly there. */
-        const val DIMMED = 0.3f
-
         /** About once a second at the analyser's rate; the status is a binder call. */
         const val THERMAL_EVERY = 20
     }
@@ -102,7 +99,7 @@ class MainActivity : AppCompatActivity() {
      * Holding the current value here also lets the burned-in recording overlay be fed from
      * plain strings instead of reading four TextViews back on the hot path.
      */
-    private class HudText(private val view: TextView) {
+    private class HudText(private val view: TextView, private val onChange: (() -> Unit)? = null) {
         private var shown: String? = null
         private var spoken: String? = null
         private var colour: Int? = null
@@ -113,6 +110,7 @@ class MainActivity : AppCompatActivity() {
                 if (shown == value) return
                 shown = value
                 view.text = value
+                onChange?.invoke()
             }
 
         /** What a screen reader should say, for fields whose glyphs do not read aloud well. */
@@ -164,6 +162,12 @@ class MainActivity : AppCompatActivity() {
         val heelsFlatSpotted: Boolean,
         /** Whether every joint this movement scores from was confidently seen this frame. */
         val poseLegible: Boolean = false,
+        /**
+         * Where this read comes in the engine's own order, one up on the read before it. A camera
+         * frame can reach the screen after a tap the engine took later, and this is how the
+         * scoreboard knows it is older than what it already shows.
+         */
+        val sequence: Long,
         /** Filled in after the monitor has seen this frame; see [analyse]. */
         val health: TrackingHealth = TrackingHealth.GOOD,
         val advice: String? = null
@@ -171,10 +175,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var clock: HudText
-    private lateinit var round: HudText
-    private lateinit var exercise: HudText
-    private lateinit var reps: HudText
-    private lateinit var repsTarget: HudText
+    private lateinit var scoreboard: ScoreboardReadout
+    private lateinit var reps: ScoreboardFigure
+
+    /**
+     * The movement the film's burned-in HUD names: the engine's own label ("PULL-UPS"), as the
+     * frame has it. Not what the scoreboard shows, which holds the set just left for a moment when
+     * the movement changes; the film does not.
+     */
+    private var filmMovement = ""
     private lateinit var status: HudText
     private lateinit var coachCue: HudText
     private var ok = 0
@@ -265,6 +274,9 @@ class MainActivity : AppCompatActivity() {
      */
     @Volatile private var engine = WorkoutEngine()
     private val engineLock = Any()
+
+    /** How many reads of the engine [runEngine] has taken: each [Snapshot]'s place in that order. Under [engineLock]. */
+    private var engineReads = 0L
 
     /**
      * Whether this workout has already been told that smart squat counting switched it over to
@@ -439,7 +451,7 @@ class MainActivity : AppCompatActivity() {
         val hud = if (state == WorkoutState.SETUP) {
             recordedHud.forSetup(now, frame.setup, setupExerciseLabel())
         } else {
-            recordedHud.forWorkout(now, clock.text, exercise.text)
+            recordedHud.forWorkout(now, clock.text, filmMovement)
         }
         video.overlay.update(
             width = frame.width,
@@ -539,11 +551,9 @@ class MainActivity : AppCompatActivity() {
         hideSystemBars()
 
         clock = HudText(binding.timer)
-        round = HudText(binding.rounds)
-        exercise = HudText(binding.exercise)
-        reps = HudText(binding.reps)
-        repsTarget = HudText(binding.repsTarget)
-        status = HudText(binding.status)
+        scoreboard = ScoreboardReadout(binding)
+        reps = scoreboard.figure
+        status = HudText(binding.status) { renderPill() }
         coachCue = HudText(binding.coachCue)
         ok = getColor(R.color.state_ok)
         alert = getColor(R.color.state_alert)
@@ -820,7 +830,7 @@ class MainActivity : AppCompatActivity() {
     // ── camera ────────────────────────────────────────────────────────────────
 
     private fun startCamera() {
-        status.text = CameraControls.IDLE_LINE
+        status.text = ""
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
@@ -1215,7 +1225,8 @@ class MainActivity : AppCompatActivity() {
             awaitingStart = engine.awaitingStart,
             manualReps = engine.manualReps,
             heelsFlatSpotted = engine.heelsFlatSpotted,
-            poseLegible = engine.diagnostics.poseLegible
+            poseLegible = engine.diagnostics.poseLegible,
+            sequence = ++engineReads
         )
     }
 
@@ -1317,16 +1328,22 @@ class MainActivity : AppCompatActivity() {
         )
 
     private fun apply(snap: Snapshot) {
-        exercise.text = snap.exercise.label
-        reps.text = "${snap.reps}"
-        repsTarget.text = "/${snap.exercise.target}"
-        reps.spoken("${snap.reps} of ${snap.exercise.target} ${snap.exercise.label}")
-        round.text = "${snap.rounds + 1}"
-        round.spoken("Round ${snap.rounds + 1}")
+        filmMovement = snap.exercise.label
+        // A banked rep rolls the count and pulses it green, whether the camera saw it or + was
+        // tapped; one taken back rolls it down. When the movement changes while the clock runs,
+        // the next set is shown over the figure for a moment. Drawn only: the value, the voice,
+        // the film and the engine never wait on it, and are all fed from this frame below.
+        scoreboard.workout(
+            movement = snap.exercise,
+            reps = snap.reps,
+            rounds = snap.rounds,
+            event = snap.event,
+            eventReps = snap.eventReps,
+            totalReps = snap.totalReps,
+            running = state == WorkoutState.RUNNING,
+            sequence = snap.sequence
+        )
         recordedHud.workout(rounds = snap.rounds, reps = snap.reps, target = snap.exercise.target)
-        // Readable from the bar, when the digits are not.
-        binding.repProgress.progress =
-            snap.reps * 100 / snap.exercise.target.coerceAtLeast(1)
         if (state == WorkoutState.RUNNING) {
             status.text = when {
                 readout == Readout.COUNTING -> debugLine(snap)
@@ -1440,9 +1457,9 @@ class MainActivity : AppCompatActivity() {
         synchronized(engineLock) { engine.beginSetup() }
         detector?.resetRoi()
         primary(R.drawable.ic_play)
-        exercise.text = "SET UP"
-        reps.text = "—"
-        repsTarget.text = ""
+        filmMovement = "SET UP"
+        scoreboard.line("SET UP")
+        reps.show("—")
         reps.spoken("Setting up")
         statusDot(neutral)
         status.text = "Get in frame"
@@ -1460,15 +1477,13 @@ class MainActivity : AppCompatActivity() {
     private fun applySetup(setup: Setup) {
         when (setup.stage) {
             SetupStage.FRAMING -> {
-                reps.text = "—"
-                repsTarget.text = ""
+                reps.show("—")
                 reps.spoken("Setting up")
                 statusDot(alert)
                 status.text = "Can't see your ${setup.missing.joinToString(", ")}"
             }
             SetupStage.MOVING -> {
-                reps.text = "${setup.reps}"
-                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.show("${setup.reps}", "/${RecordedHud.CALIBRATION_REPS}")
                 reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(neutral)
                 status.text = if (readout == Readout.COUNTING) {
@@ -1478,8 +1493,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             SetupStage.POOR -> {
-                reps.text = "${setup.reps}"
-                repsTarget.text = "/${RecordedHud.CALIBRATION_REPS}"
+                reps.show("${setup.reps}", "/${RecordedHud.CALIBRATION_REPS}")
                 reps.spoken("${setup.reps} of ${RecordedHud.CALIBRATION_REPS} calibration reps")
                 statusDot(alert)
                 status.text = "Movement barely registers — raise the phone or step back"
@@ -1693,28 +1707,30 @@ class MainActivity : AppCompatActivity() {
     private fun renderControls() {
         val panel = controlPanel()
 
-        render(binding.btnFlip, panel[CameraControl.SWITCH_CAMERA])
+        BottomBand.show(binding.btnFlip, panel[CameraControl.SWITCH_CAMERA])
         binding.btnFlip.setImageResource(R.drawable.ic_flip)
         binding.btnFlip.imageTintList = ColorStateList.valueOf(label)
 
-        render(binding.btnEnd, panel[CameraControl.END])
         binding.btnEnd.imageTintList = ColorStateList.valueOf(alert)
 
-        render(binding.btnUndo, panel[CameraControl.MINUS])
-        render(binding.btnAddRep, panel[CameraControl.PLUS])
-        render(binding.btnStart, panel[CameraControl.SHUTTER])
-        render(binding.btnSkipExercise, panel[CameraControl.SKIP])
+        // The next set over the figure is for an athlete at the bar: a pause, the end or the
+        // setup check put them at the phone, and the band shows the set the engine is on.
+        if (!BottomBand.atTheBar(state)) scoreboard.clockStopped()
+
+        // The bottom band, for the distance the athlete is at: the scoreboard while the clock
+        // runs, the controls forward and named in idle, setup and a pause. It also draws the
+        // controls from the table above, and decides whether the coaching pill is there.
+        BottomBand.apply(binding, state, panel, status.text.isBlank(), coachShowing)
     }
+
+    /**
+     * The coaching pill again, for a coaching line that has been written. In idle it is there only
+     * while it carries something the athlete has to be told: the idle line is under the shutter.
+     */
+    private fun renderPill() = BottomBand.pill(binding, state, status.text.isBlank(), coachShowing)
 
     /** What the camera screen's controls are, for the state it is in and whether it is filming. */
     private fun controlPanel() = CameraControls.of(state, video.isRecording)
-
-    private fun render(view: View, control: ControlState) {
-        view.visibility = if (control.present) View.VISIBLE else View.GONE
-        view.isEnabled = control.enabled
-        view.alpha = if (control.enabled) 1f else DIMMED
-        view.contentDescription = control.name
-    }
 
     /**
      * SKIP means the same thing everywhere — leave this movement — but leaving it during the
@@ -1797,7 +1813,8 @@ class MainActivity : AppCompatActivity() {
         detector?.resetRoi()
         primary(R.drawable.ic_play)
         statusDot(neutral)
-        status.text = CameraControls.IDLE_LINE
+        // Idle's line is under the shutter now; the pill has nothing to say and goes away.
+        status.text = ""
         reps.colour(label)
         music.stop()
         renderClock()
@@ -2057,7 +2074,7 @@ class MainActivity : AppCompatActivity() {
         binding.coachCard.visibility = if (show) View.VISIBLE else View.GONE
         // One voice: while the figure is up it carries the cue, so the pill stands down. INVISIBLE
         // rather than GONE, because the card hangs off the pill's bottom edge.
-        binding.statusRow.visibility = if (show) View.INVISIBLE else View.VISIBLE
+        renderPill()
     }
 
     /**

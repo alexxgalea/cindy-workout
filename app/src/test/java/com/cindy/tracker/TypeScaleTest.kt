@@ -27,7 +27,8 @@ class TypeScaleTest {
         "MetricL" to R.style.Cindy_MetricL,
         "MetricM" to R.style.Cindy_MetricM,
         "MetricS" to R.style.Cindy_MetricS,
-        "MetricXL.Quiet" to R.style.Cindy_MetricXL_Quiet
+        "MetricXL.Quiet" to R.style.Cindy_MetricXL_Quiet,
+        "Scoreboard" to R.style.Cindy_Scoreboard
     )
 
     private val prose = mapOf(
@@ -39,7 +40,8 @@ class TypeScaleTest {
         "Footnote" to R.style.Cindy_Footnote,
         "Eyebrow" to R.style.Cindy_Eyebrow,
         "Button" to R.style.Cindy_Button,
-        "Button.Small" to R.style.Cindy_Button_Small
+        "Button.Small" to R.style.Cindy_Button_Small,
+        "ScoreLine" to R.style.Cindy_ScoreLine
     )
 
     private fun fontOf(style: Int): String {

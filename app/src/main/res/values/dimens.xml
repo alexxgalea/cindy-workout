@@ -15,7 +15,12 @@
     <!-- 54dp keeps every control clear of the 48dp minimum touch target. -->
     <dimen name="screen_margin">16dp</dimen>
 
-    <!-- The shutter outsizes the glass circles around it, because it is the one control the
-         athlete reaches for from across the room. -->
-    <dimen name="shutter">68dp</dimen>
+    <!-- Every control of the camera screen's row is a 48dp target, the shutter too: while the clock
+         runs the athlete reads the band from the bar and the row is quiet. -->
+    <dimen name="shutter">48dp</dimen>
+
+    <!-- With the athlete at the phone (idle, setup, a pause) the controls come forward: a 72dp
+         shutter and 56dp END and SKIP, each named underneath (BottomBand). -->
+    <dimen name="shutter_near">72dp</dimen>
+    <dimen name="control_near">56dp</dimen>
 </resources>

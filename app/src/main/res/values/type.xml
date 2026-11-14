@@ -11,7 +11,7 @@
 
   letterSpacing is in em, not sp: -0.048em at 62sp is the -3px the design calls for.
 -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── numerals ── -->
     <style name="Cindy.MetricXL" parent="">
@@ -34,6 +34,73 @@
 
     <!-- A number that sits beside a bigger one and drops back: the loose reps after the rounds,
          the target after the count. Size stays with the screen; family, weight and shade do not. -->
+    <!--
+      The camera screen's figure, read from the bar: the count, a slash and the target, all in this
+      one style so they are one size and one weight. 96sp is the ceiling, not a promise: the figure
+      shrinks to fit its zone (FitFigureView), and is never taller than the zone is. Font padding is
+      off: with it on, the figure's line would take about 44dp more than the 96dp zone it is given. The colour steps down for the slash and the target from code (see Scoreboard), never
+      the size or the weight.
+    -->
+    <style name="Cindy.Scoreboard" parent="">
+        <item name="android:fontFamily">@font/inter_extrabold</item>
+        <item name="android:textSize">96sp</item>
+        <item name="android:letterSpacing">-0.03</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!--
+      The next set, over the figure when the movement changes: "10" over "PUSH-UPS", both rows at
+      48sp, the largest size at which PUSH-UPS fits the figure's zone with 8dp either side. Each row
+      is a 52dp box (44dp in the mock, plus its 8dp gap), and shrinks to fit rather than being cut.
+    -->
+    <style name="Cindy.NextSet" parent="">
+        <item name="android:fontFamily">@font/inter_extrabold</item>
+        <item name="android:textSize">48sp</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- The line under the figure: "Pull-ups · Round 2". Tabular figures come from code, for the round only.
+         Set in dp, not sp, because it lives in a 24dp row of a band that may not grow: at the largest
+         system text, 17sp is 34dp and wrapped to two rows, cut by the row (ticket #150). -->
+    <style name="Cindy.ScoreLine" parent="">
+        <item name="android:fontFamily">@font/inter_semibold</item>
+        <item name="android:textSize" tools:ignore="SpUsage">17dp</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textColor">@color/label_secondary</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- The word under a control, read at arm's length: END, RESUME, SKIP. Centred in a 16dp row,
+         so it is held to one line and shrinks rather than grow the band at the largest type. Its sizes are in dp for the same reason as
+         ScoreLine: an autosize range in sp scales whole, so its floor at 2x is taller than the row. -->
+    <style name="Cindy.ControlName" parent="Cindy.Eyebrow">
+        <item name="android:textColor">@color/label_secondary</item>
+        <item name="android:gravity">center</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">8dp</item>
+        <item name="android:autoSizeMaxTextSize">11dp</item>
+    </style>
+
+    <!-- Idle's one line of text, under the shutter: the screen's single prompt, one line, shrunk
+         to fit rather than cut. -->
+    <style name="Cindy.IdleLine" parent="Cindy.ScoreLine">
+        <item name="android:textColor">@color/label</item>
+        <item name="android:gravity">center</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">10dp</item>
+        <item name="android:autoSizeMaxTextSize">15dp</item>
+    </style>
+
     <style name="Cindy.MetricXL.Quiet">
         <item name="android:fontFamily">@font/inter_bold</item>
         <item name="android:textColor">@color/label_tertiary</item>

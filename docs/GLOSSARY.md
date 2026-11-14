@@ -74,6 +74,30 @@ _Avoid_: overlay, stick figure, pose
 The pull-up bar as the picture shows it: a tilted line the app finds in the picture while the athlete hangs, then holds until the phone moves. It is only drawn. It is drawn thin, in the skeleton's colour, and nothing is drawn in its place until the app is sure of it. The gate that decides whether a rep counts is separate and never reads it.
 _Avoid_: bar line, rail
 
+**Top band**:
+The top of the camera screen: the cutout and one 48 dp row holding the clock at the start edge and the camera switch, REC and MENU at the end edge. It is 91 dp on the owner's phone. It holds nothing else; the coaching line is the pill below it.
+_Avoid_: header, top bar (that is a page's)
+
+**Coaching pill**:
+The one line of coaching on the camera screen, a glass pill on the picture 8 dp under the top band, centred. A line too long for one row wraps. In idle it is there only while it has something to tell the athlete; the idle line is under the shutter.
+_Avoid_: status line, status chip
+
+**Scoreboard**:
+The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. In idle, setup and a pause the athlete is at the phone, not at the bar, and the band is drawn for that distance instead (see Control row); the band is the same height in both. A finished workout sits behind the session page and is drawn as idle.
+_Avoid_: rep panel, counter
+
+**Figure**:
+The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter. It is 96 sp while the clock runs and 56 sp at the phone.
+_Avoid_: rep count, reps label
+
+**Next set**:
+What the scoreboard shows over the figure and its line for about 1.5 s when the movement changes while the clock runs: the set's target over the movement's name in capitals, "10" over "PUSH-UPS", on two rows at 48 sp with no slash, so it cannot be read as a count. After a finished set it waits about 450 ms for the last rep's roll and pulse; after SKIP it comes at once. − and + and the control row stay and answer under it; any rep banked or taken back ends it at once, and so does a pause.
+_Avoid_: takeover, banner, interstitial
+
+**Control row**:
+END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names. The names are labels only; what a screen reader says is still the control's own name.
+_Avoid_: action row, button bar
+
 **Skeleton lag**:
 The skeleton showing the body where it was a moment ago, so it trails or jumps off the athlete in the picture. It is about the skeleton against the picture, not against the real athlete.
 _Avoid_: delay, latency (on their own)

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One glass capsule holding two 48dp targets, + over -, with a hairline between them. It is the
+  design system's control glass (a gradient with a lit top edge and a hairline stroke, no blur),
+  drawn as a full capsule: 24dp is half its 48dp width.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#33FFFFFF"
+                android:centerColor="@color/surface_glass_raised"
+                android:endColor="@color/surface_glass_raised"
+                android:centerY="0.01" />
+            <stroke android:width="@dimen/hairline" android:color="@color/hairline_strong" />
+            <corners android:radius="24dp" />
+        </shape>
+    </item>
+    <item
+        android:height="@dimen/hairline"
+        android:gravity="center_vertical"
+        android:left="12dp"
+        android:right="12dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/hairline_strong" />
+        </shape>
+    </item>
+</layer-list>
