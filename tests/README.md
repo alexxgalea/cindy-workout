@@ -62,6 +62,12 @@ If the flag, scenarios, or any declared fixture is absent, the test is marked **
 reason. That is intentional: a green result never means that unavailable proprietary fixtures
 were tested.
 
+The job also runs `scenarios/youtube.json`. Only the desktop batch applies a scenario's `light`
+model and checks its `expectedTracking`, so the job leaves those scenarios out, logs one
+`NOT RUN on device` line for each, lists them in the report as `notRunOnDevice` and names them if
+the run fails. They are never counted as passes; score them with `run_batch.py`. A downloaded clip
+has no capture rate, so the job takes its frame rate from the frame count over the duration.
+
 Reports are emitted on the test device at:
 
 ```text

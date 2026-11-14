@@ -129,6 +129,11 @@ android {
         // Keep licenced/large fixtures at the repository root, outside the application APK and
         // outside git. The instrumentation APK sees them as assets/fixtures and assets/scenarios.
         getByName("androidTest").assets.srcDir("../tests")
+
+        // The device video test's plain decisions (which clips it may claim, how it finds a frame
+        // rate) live in one folder that both the JVM unit tests and the instrumentation APK compile.
+        getByName("test").java.srcDir("src/videoRegressionShared/java")
+        getByName("androidTest").java.srcDir("src/videoRegressionShared/java")
     }
 }
 
