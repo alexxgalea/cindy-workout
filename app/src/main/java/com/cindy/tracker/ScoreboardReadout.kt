@@ -35,7 +35,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     private val line = ScoreLine(hud.movementLine)
 
     /** One set as the band reads it: "3/5" over "Pull-ups · Round 2". */
-    private data class Set(val count: Int, val movement: Exercise, val round: Int)
+    private data class ShownSet(val count: Int, val movement: Exercise, val round: Int)
 
     /** The engine's banked total the figure last showed, to tell a banked rep from a skip. */
     private var total = 0
@@ -44,9 +44,9 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     private var newest = Long.MIN_VALUE
 
     /** The set the engine is on, while the band holds another one on show; null while it holds none. */
-    private var held: Set? = null
+    private var held: ShownSet? = null
 
-    private val clock = Handler(Looper.getMainLooper())
+    private val timer = Handler(Looper.getMainLooper())
     private val showNext = Runnable { bringNextSet() }
     private val endNext = Runnable { release() }
     private var next: NextSet? = null
@@ -71,7 +71,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         newest = sequence
         val motion = FigureMotion.of(event, total, totalReps)
         total = totalReps
-        val now = Set(reps, movement, rounds + 1)
+        val now = ShownSet(reps, movement, rounds + 1)
         if (held != null) {
             // A state frame while the band holds: kept for when it lets go.
             if (event == RepEvent.NONE && running) {
@@ -89,7 +89,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
             return
         }
         // The set that was just left, as it stood when it was: its last rep, its round.
-        val left = Set(
+        val left = ShownSet(
             eventReps,
             movement.previous(),
             if (event == RepEvent.ROUND_DONE) rounds else rounds + 1
@@ -97,7 +97,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         draw(left, motion)
         held = now
         next = coming
-        if (coming.inMs > 0) clock.postDelayed(showNext, coming.inMs) else bringNextSet()
+        if (coming.inMs > 0) timer.postDelayed(showNext, coming.inMs) else bringNextSet()
     }
 
     /**
@@ -116,7 +116,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         hud.nextSet.visibility = View.VISIBLE
         hud.repProgress.progress = 0
         fadeIn()
-        clock.postDelayed(endNext, NextSet.SHOWN_MS)
+        timer.postDelayed(endNext, NextSet.SHOWN_MS)
     }
 
     /**
@@ -141,8 +141,8 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
      * false: then the caller draws the frame that ended it straight over the figure on show.
      */
     private fun release(drawHeld: Boolean = true) {
-        clock.removeCallbacks(showNext)
-        clock.removeCallbacks(endNext)
+        timer.removeCallbacks(showNext)
+        timer.removeCallbacks(endNext)
         next = null
         hud.nextSet.animate().cancel()
         hud.nextSet.alpha = 1f
@@ -155,7 +155,7 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         if (drawHeld) draw(set, FigureMotion.NONE)
     }
 
-    private fun draw(set: Set, motion: FigureMotion) {
+    private fun draw(set: ShownSet, motion: FigureMotion) {
         val target = set.movement.target
         line.show(set.movement.label, set.round)
         figure.show("${set.count}", "/$target", motion)
