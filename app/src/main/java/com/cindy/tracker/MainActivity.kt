@@ -418,6 +418,13 @@ class MainActivity : AppCompatActivity() {
         if (BuildConfig.DEBUG) EngineTrace(File(getExternalFilesDir(null) ?: filesDir, "engine_trace")) else null
     }
 
+    /**
+     * Debug builds only: says where the athlete is, from every frame the camera analyses, with or
+     * without a workout running. Made in [onCreate] inside `if (BuildConfig.DEBUG)`, so a release
+     * build has none. It counts nothing and changes nothing the engine banks.
+     */
+    @Volatile private var recognitionLine: RecognitionLine? = null
+
     /** The phone's thermal status, read every [THERMAL_EVERY] traced frames. Analysis thread only. */
     private var thermal = -1
     private var thermalAge = 0
@@ -433,7 +440,9 @@ class MainActivity : AppCompatActivity() {
         val width: Int,
         val height: Int,
         val mirrored: Boolean,
-        val readyNanos: Long
+        val readyNanos: Long,
+        /** What recognition made of this frame, in debug builds. State: the next frame restates it. */
+        val recognition: Recognition?
     )
 
     /** Stale state is dropped, events never are. The reasoning lives in [FrameHandoff]. */
@@ -445,6 +454,7 @@ class MainActivity : AppCompatActivity() {
         latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
         if (frame.snap != null && state == WorkoutState.RUNNING) apply(frame.snap)
         if (frame.setup != null && state == WorkoutState.SETUP) applySetup(frame.setup)
+        frame.recognition?.let { recognitionLine?.show(it) }
         // Feed the burned-in overlay what the film shows right now -- apart from the score while
         // the setup check runs, not the screen's own numbers.
         val now = SystemClock.elapsedRealtime()
@@ -549,6 +559,11 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         hideSystemBars()
+        if (BuildConfig.DEBUG) {
+            recognitionLine = RecognitionLine(this).also {
+                it.attachTo(binding.root, above = binding.bandBottom, marginPx = dp(8))
+            }
+        }
 
         clock = HudText(binding.timer)
         scoreboard = ScoreboardReadout(binding)
@@ -1051,6 +1066,7 @@ class MainActivity : AppCompatActivity() {
         binding.overlay.clear()
         // Anything still owed was analysed through the other lens, so its mirroring is wrong.
         handoff.clear()
+        recognitionLine?.reset()
         detector?.resetRoi()
         synchronized(engineLock) { engine.recalibrate() }
         railTracker.reset()
@@ -1095,6 +1111,9 @@ class MainActivity : AppCompatActivity() {
             val frameH = OverlayTransform.uprightHeight(rawW, rawH, rotation).toInt()
             val keypoints = det.detect(yuv, upright, frameW, frameH)
             val now = SystemClock.elapsedRealtime()
+            // Every analysed frame, in every state, in order: its timers need them all, and the
+            // hand-off below keeps only the newest.
+            val recognition = recognise(keypoints, now, det.tracking)
             val snap = if (state == WorkoutState.RUNNING) {
                 val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }
                 // Touched only from this thread, so it needs no lock of its own; the legibility
@@ -1156,7 +1175,7 @@ class MainActivity : AppCompatActivity() {
             // finished — the round's split is appended when it is rendered — so those are never
             // allowed to be the frame that gets dropped.
             val outcome = handoff.submit(
-                UiFrame(snap, setup, keypoints, frameW, frameH, mirrored, System.nanoTime()),
+                UiFrame(snap, setup, keypoints, frameW, frameH, mirrored, System.nanoTime(), recognition),
                 isEvent = snap != null && snap.event != RepEvent.NONE
             )
             latency.posted(replacedUnrendered = outcome == FrameHandoff.Outcome.REPLACED_PENDING)
@@ -1169,6 +1188,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    /**
+     * Debug builds only; null in a release build. In a try of its own, so a fault here cannot take
+     * the skeleton, the film overlay or the counting frame down with it.
+     */
+    private fun recognise(keypoints: Array<Keypoint>, now: Long, identityStable: Boolean): Recognition? {
+        val line = recognitionLine ?: return null
+        return try {
+            line.feed(keypoints, now, identityStable)
+        } catch (t: Throwable) {
+            Log.e(TAG, "recognition failed", t)
+            null
+        }
+    }
 
     // ── engine access ─────────────────────────────────────────────────────────
 
@@ -1522,6 +1555,7 @@ class MainActivity : AppCompatActivity() {
     /** Starts the clock. [calibrated] only changes what is announced. */
     private fun beginWorkout(calibrated: Boolean) {
         synchronized(engineLock) { engine.finishSetup() }
+        recognitionLine?.reset()
         state = WorkoutState.RUNNING
         LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
         val now = SystemClock.elapsedRealtime()
