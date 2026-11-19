@@ -593,6 +593,20 @@ class WorkoutEngine:
             return not upright(k)
         return standing(k)
 
+    def drop_climb_on_arrival(self) -> None:
+        """Throws away the climb in flight when the athlete arrives in the position again.
+
+        Mirror of WorkoutEngine.dropClimbOnArrival. Deliberately not the start gate: that gate
+        waits for the engine's own posture test and loses whole sets the athlete is already in
+        (head-on push-ups read upright two frames in three; continuous squatting never gives the
+        still moment). The caller decides the athlete has arrived; this only makes sure that
+        arriving is not booked as the top of a rep. Nothing in the workout calls it.
+        """
+        if self.exercise is Exercise.PULLUP:
+            self._invalidate_pullup_cycle()
+        else:
+            self._counters[self.exercise].require_fresh_down()
+
     def _settle(self) -> RepEvent:
         if self._fixed_exercise is None and self.reps >= self.exercise.target:
             return self._advance()

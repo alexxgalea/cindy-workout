@@ -716,6 +716,28 @@ class WorkoutEngine(
         Exercise.SQUAT -> PoseGeometry.standing(k)
     }
 
+    /**
+     * Throws away the climb in flight, for a fixed-movement engine whose athlete has just arrived
+     * in the movement's position again.
+     *
+     * A fixed-movement engine never arms its start gate: only moving on to the next movement does.
+     * So whoever moves the athlete between movements (the recogniser) says when they have arrived,
+     * and this makes the next rep start from a fresh bottom, so standing up off the floor or
+     * stepping onto the bar is not booked as the top of a rep.
+     *
+     * It is deliberately not the start gate. That gate waits for the engine's own posture test
+     * (`!upright` for push-ups, `standing()` and a still moment for squats), and on the Cindy clip
+     * it loses whole sets the athlete is already in: push-ups filmed head-on read upright two
+     * frames in three, and continuous squatting never gives the still moment. Whether the athlete
+     * has arrived is the caller's call; this only makes sure that arriving is not a rep.
+     *
+     * Nothing in the workout calls it, so counting is unchanged.
+     */
+    fun dropClimbOnArrival() {
+        if (exercise == Exercise.PULLUP) invalidatePullupCycle()
+        else counters.getValue(exercise).requireFreshDown()
+    }
+
     /** Advances to the next movement if the current one just hit its target. */
     private fun settle(): RepEvent {
         if (fixedExercise == null && reps >= exercise.target) return advance()
