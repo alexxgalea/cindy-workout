@@ -1,7 +1,7 @@
 """Port of app/src/main/java/com/cindy/tracker/Recogniser.kt.
 
-Works out the athlete's position on every analysed frame: on the bar, on the floor, standing, or
-none. The rules are the Kotlin's, line for line, and `recognition_parity_check.py` holds the two to
+Works out the athlete's position on every analysed frame (on the bar, on the floor, standing, or
+none) and, from the reps counted in it, the movement. The rules are the Kotlin's, line for line, and `recognition_parity_check.py` holds the two to
 one frame-by-frame trace. Every value the Kotlin keeps in a `Float` is rounded through `f32`, since
 the shin test is an exact comparison and a 64-bit port once diverged from the phone by one frame.
 
@@ -17,6 +17,7 @@ from typing import Sequence
 from . import pose_geometry as geometry
 from .keypoints import KP, Keypoint
 from .rep_counter import f32
+from .workout_engine import STANDARD_PROFILE, CindyProfile, Exercise, RepEvent, WorkoutEngine
 
 
 class Position(Enum):
@@ -36,11 +37,60 @@ class Position(Enum):
         return self.value[1]
 
 
+class Movement(Enum):
+    """What the athlete is doing, as recognition names it. Each movement starts from one position."""
+
+    PULL_UPS = ("pull_ups", Exercise.PULLUP, Position.ON_THE_BAR)
+    PUSH_UPS = ("push_ups", Exercise.PUSHUP, Position.ON_THE_FLOOR)
+    SQUATS = ("squats", Exercise.SQUAT, Position.STANDING)
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def exercise(self) -> Exercise:
+        return self.value[1]
+
+    @property
+    def position(self) -> Position:
+        return self.value[2]
+
+    @property
+    def label(self) -> str:
+        return self.exercise.label
+
+    @staticmethod
+    def at(position: Position) -> "Movement | None":
+        """The movement that starts from the position, or none for no position."""
+        for movement in Movement:
+            if movement.position is position:
+                return movement
+        return None
+
+
+#: The rep at which a movement is confirmed. One could be a stray gesture.
+CONFIRMING_REPS = 2
+
+
 @dataclass(frozen=True)
 class Recognition:
-    """What recognition makes of the frames so far."""
+    """What recognition makes of the frames so far.
+
+    ``movement`` is the movement recognised, or none; it stays until a different one is confirmed.
+    ``candidate`` and ``candidate_reps`` are a movement in its position that has counted some reps
+    but not yet CONFIRMING_REPS: nothing there is recognised. ``tally`` is the reps recognition has
+    seen per movement, confirming reps included; a candidate's reps are not in it until confirmed.
+    """
 
     position: Position
+    movement: Movement | None = None
+    candidate: Movement | None = None
+    candidate_reps: int = 0
+    tally: tuple[int, int, int] = (0, 0, 0)
+
+    def tally_of(self, movement: Movement) -> int:
+        return self.tally[list(Movement).index(movement)]
 
 
 #: How long the frames must keep pointing at a position before it is entered.
@@ -124,10 +174,21 @@ def _read(k: Sequence[Keypoint]) -> _Frame:
 
 
 class Recogniser:
-    def __init__(self) -> None:
+    """Mirror of Recogniser.kt. One fixed-movement engine per movement, built from the profile;
+    only the engine of the position that is entered is fed a frame."""
+
+    def __init__(self, profile: CindyProfile = STANDARD_PROFILE) -> None:
+        self._profile = profile
         self.reset()
 
     def reset(self) -> None:
+        self._engines = {
+            m: WorkoutEngine(fixed_exercise=m.exercise, profile=self._profile) for m in Movement
+        }
+        self._movement: Movement | None = None
+        self._candidate: Movement | None = None
+        self._candidate_reps = 0
+        self._tally = {m: 0 for m in Movement}
         self._position = Position.NONE
         #: The position the frames are currently pointing at, and since when, for the entry dwell.
         self._pointing_at = Position.NONE
@@ -136,11 +197,47 @@ class Recogniser:
         self._last_held = 0
 
     def on_frame(self, k: Sequence[Keypoint], now: int, identity_stable: bool = True) -> Recognition:
+        before = self._position
         frame = _read(k) if identity_stable else _NO_EVIDENCE
         self._keep(frame, now)
         self._point(frame.points_to, now)
         self._enter(now)
-        return Recognition(self._position)
+        if self._position is not before:
+            self._arrive()
+        self._count(k, now, identity_stable)
+        return Recognition(
+            self._position, self._movement, self._candidate, self._candidate_reps,
+            tuple(self._tally[m] for m in Movement),
+        )
+
+    def _arrive(self) -> None:
+        """The position has changed: the visit counting candidate reps is over, and the engine of
+        the position now entered must not book the climb that brought the athlete here."""
+        self._candidate = None
+        self._candidate_reps = 0
+        movement = Movement.at(self._position)
+        if movement is not None:
+            self._engines[movement].drop_climb_on_arrival()
+
+    def _count(self, k: Sequence[Keypoint], now: int, identity_stable: bool) -> None:
+        """Feeds this frame to the one engine whose position is entered, and books its rep."""
+        counting = Movement.at(self._position)
+        if counting is None:
+            return
+        if self._engines[counting].on_frame(k, now, identity_stable) is not RepEvent.REP:
+            return
+        if counting is self._movement:
+            self._tally[counting] += 1
+            return
+        self._candidate = counting
+        self._candidate_reps += 1
+        if self._candidate_reps < CONFIRMING_REPS:
+            return
+        # The confirming reps are the movement's first reps, not reps spent on finding it.
+        self._movement = counting
+        self._tally[counting] += self._candidate_reps
+        self._candidate = None
+        self._candidate_reps = 0
 
     def _keep(self, frame: _Frame, now: int) -> None:
         """Leaves the bar or standing once its own rule has not held for longer than KEEP_MS."""

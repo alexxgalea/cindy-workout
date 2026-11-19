@@ -75,6 +75,21 @@ def pushup(elbow_deg: float) -> list[Keypoint]:
     return k
 
 
+def knee_pushup(elbow_deg: float) -> list[Keypoint]:
+    """Mirror of PoseFixtures.kneePushup: knees on the floor, the shins raised behind."""
+    k = _blank()
+    sh_x = LIMB * math.sin(math.radians(elbow_deg))
+    sh_y = LIMB * math.cos(math.radians(elbow_deg))
+    floor_y = LIMB
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, floor_y)
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, sh_x, sh_y)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, sh_x - TORSO, sh_y)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, sh_x - TORSO - 40.0, floor_y)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, sh_x - TORSO - 40.0, floor_y - 60.0)
+    return k
+
+
 def pullup(elbow_deg: float) -> list[Keypoint]:
     """A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
 
@@ -209,7 +224,7 @@ def walking(dx: float) -> list[Keypoint]:
 
 
 BUILDERS = {
-    "squat": squat, "pushup": pushup, "pullup": pullup,
+    "squat": squat, "pushup": pushup, "pullup": pullup, "kneepushup": knee_pushup,
     "bandsetup": band_setup, "invertedrow": inverted_row,
     # The builders the recognition plan draws on. `empty` and `onthefloor` take an ignored angle.
     "empty": lambda _unused=0.0: empty(),

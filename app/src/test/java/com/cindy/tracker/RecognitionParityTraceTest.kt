@@ -11,7 +11,8 @@ import org.junit.Test
  * with the phone gives confident, wrong verdicts about a film.
  *
  * So this test replays tests/parity/recognition_plan.csv, synthetic sequences that cross from one
- * position to another, through [Recogniser] and writes every frame's position to
+ * position to another, through [Recogniser] and writes every frame's position, recognised movement,
+ * candidate and tally to
  * tests/parity/recognition_trace_jvm.csv. `recognition_parity_check.py` replays the same plan
  * through the twin and diffs the two row for row. It is separate from the counting engine's plan
  * and trace (EngineParityTraceTest), which recognition never touches.
@@ -30,13 +31,21 @@ class RecognitionParityTraceTest {
         val output = StringBuilder(HEADER).append('\n')
 
         rows.groupBy { it[TRACE_ID] }.forEach { (traceId, steps) ->
-            val recogniser = Recogniser()
+            // The profile is a column of the trace's first row, as in the counting plan.
+            val recogniser = Recogniser(
+                CindyProfile(
+                    pull = PullVariant.valueOf(steps.first()[PULL]),
+                    push = PushVariant.valueOf(steps.first()[PUSH]),
+                    squat = SquatVariant.valueOf(steps.first()[SQUAT])
+                )
+            )
             steps.forEach { step ->
                 val angle = step[ANGLE].toFloat()
                 val now = step[T_MS].toLong()
                 val keypoints = when (step[BUILDER]) {
                     "pullup" -> PoseFixtures.pullup(angle)
                     "pushup" -> PoseFixtures.pushup(angle)
+                    "kneepushup" -> PoseFixtures.kneePushup(angle)
                     "squat" -> PoseFixtures.squat(angle)
                     "empty" -> PoseFixtures.empty()
                     "onthefloor" -> PoseFixtures.onTheFloor()
@@ -59,7 +68,13 @@ class RecognitionParityTraceTest {
                         // Guards the fixture geometry itself, so a divergence in the synthetic
                         // body is distinguishable from a divergence in the position rules.
                         round(keypoints.sumOf { (it.x + it.y).toDouble() }),
-                        recognition.position.id
+                        recognition.position.id,
+                        recognition.movement?.id ?: "none",
+                        recognition.candidate?.id ?: "none",
+                        recognition.candidateReps.toString(),
+                        recognition.tally.getValue(Movement.PULL_UPS).toString(),
+                        recognition.tally.getValue(Movement.PUSH_UPS).toString(),
+                        recognition.tally.getValue(Movement.SQUATS).toString()
                     ).joinToString(",") { field -> "\"" + field.replace("\"", "\"\"") + "\"" }
                 ).append('\n')
             }
@@ -90,6 +105,10 @@ class RecognitionParityTraceTest {
         const val BUILDER = 3
         const val ANGLE = 4
         const val STABLE = 5
-        const val HEADER = "traceId,step,tMs,builder,angle,stable,kpSum,position"
+        const val PULL = 6
+        const val PUSH = 7
+        const val SQUAT = 8
+        const val HEADER = "traceId,step,tMs,builder,angle,stable,kpSum,position,movement," +
+            "candidate,candidateReps,tallyPullUps,tallyPushUps,tallySquats"
     }
 }
