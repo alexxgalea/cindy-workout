@@ -135,6 +135,19 @@ class RecogniserTest {
     }
 
     @Test
+    fun `a shin stands under its knee from half a thigh down, and not from a little less`() {
+        // The thigh in the squat fixture is 100 px at every angle; the ankle is dropped to a fixed
+        // distance under the knee on both sides.
+        fun ankleDrop(px: Float) = PoseFixtures.squat(175f)
+            .with(KP.LEFT_ANKLE, -10f, px)
+            .with(KP.RIGHT_ANKLE, 10f, px)
+
+        assertEquals(STANDING, hold(ankleDrop(52f)))
+        recogniser = Recogniser()
+        assertEquals(ON_THE_FLOOR, hold(ankleDrop(48f)))
+    }
+
+    @Test
     fun `a gap under a second keeps standing, and a longer one leaves it for none`() {
         hold(PoseFixtures.squat(175f))
         startLooking()
