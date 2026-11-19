@@ -106,6 +106,55 @@ object PoseFixtures {
     }
 
     /**
+     * The bottom of a squat as it is really done: [squat]'s legs, with the torso leaning 60 degrees
+     * forward over the knees instead of standing straight above the hips.
+     *
+     * The shoulders sit only half a torso above the hips, so the body is not upright. The shins
+     * are still a full shin's length under the knees, which is the only thing that says the athlete
+     * is on their feet.
+     */
+    fun leaningSquat(kneeDeg: Float): Array<Keypoint> {
+        val k = squat(kneeDeg)
+        val hipX = (LIMB * sin(rad(kneeDeg))).toFloat()
+        val hipY = (LIMB * cos(rad(kneeDeg))).toFloat()
+        val lean = rad(60f)
+        val shoulderX = hipX - (TORSO * sin(lean)).toFloat()
+        val shoulderY = hipY - (TORSO * cos(lean)).toFloat()
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shoulderX, shoulderY)
+        k.put(KP.NOSE, shoulderX - 20f, shoulderY - 25f)
+        return k
+    }
+
+    /**
+     * A plank filmed from in front, the way a phone propped on the floor sees push-ups: the
+     * foreshortened torso points up the picture, so the shoulders sit well above the hips.
+     *
+     * Knees are a long way below the hips and the ankles are up beside the knees, so today's
+     * posture test ([PoseGeometry.standing]) reads this as standing. No shin stands under a knee,
+     * and the hands are on the floor under the shoulders, which is what says it is not.
+     */
+    fun headOnPlank(): Array<Keypoint> {
+        val k = blank()
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, 0f)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, 0f, 80f)
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, 0f, 140f)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0f, 150f)
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0f, 70f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, 0f, 160f)
+        k.put(KP.NOSE, 0f, -30f)
+        return k
+    }
+
+    /** Standing and walking: [squat]'s straight-legged stand, [dx] pixels to the side of where it was. */
+    fun walking(dx: Float): Array<Keypoint> {
+        val k = squat(175f)
+        for (i in k.indices) {
+            if (k[i].score > 0f) k[i] = Keypoint(k[i].x + dx, k[i].y, k[i].score)
+        }
+        return k
+    }
+
+    /**
      * A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
      * Elbow at the origin, wrist straight above it on the bar, shoulder swung by [elbowDeg] —
      * so the shoulders rise past the hands at the top, exactly as they do on a real pull-up.
@@ -122,6 +171,43 @@ object PoseFixtures {
         // at a dead hang it is below the reset line. Keeping that distinction in the shared
         // fixture lets the production head gate be exercised without a camera.
         k.put(KP.NOSE, shX, shY - 120f)
+        return k
+    }
+
+    /**
+     * A body on the bar with its legs in frame: [pullup] plus knees and ankles hanging straight
+     * below the hips, a thigh and a shin of [LIMB] each.
+     *
+     * A hang is upright with straight legs, so everything that reads *standing* is true of it.
+     * The hands on the bar are the only thing that says otherwise, which is the whole reason a
+     * hang has to be read before standing is.
+     */
+    fun hangWithLegs(elbowDeg: Float): Array<Keypoint> {
+        val k = pullup(elbowDeg)
+        val hipX = (LIMB * sin(rad(elbowDeg))).toFloat()
+        val hipY = (-LIMB * cos(rad(elbowDeg))).toFloat() + TORSO
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, hipX, hipY + LIMB)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, hipX, hipY + 2f * LIMB)
+        return k
+    }
+
+    /**
+     * Kneeling up, torso upright and hips a thigh above the knees, with the ankles seen with full
+     * confidence [ankleBehind] pixels behind the knee and on the floor with it.
+     *
+     * What kneeling looks like to a pose model that is sure of itself: the shin lies along the
+     * floor, so the ankle sits level with the knee (a twentieth of a thigh below it, the worst the
+     * Cindy clip ever showed) instead of a shin's length under it. The torso is upright and the
+     * knees are far below the hips, so [PoseGeometry.standing] reads this as standing; only the
+     * shins say it is not.
+     */
+    fun kneelingUp(ankleBehind: Float): Array<Keypoint> {
+        val k = blank()
+        k.putPair(KP.LEFT_KNEE, KP.RIGHT_KNEE, 0f, 0f)
+        k.putPair(KP.LEFT_ANKLE, KP.RIGHT_ANKLE, -ankleBehind, 0.05f * LIMB)
+        k.putPair(KP.LEFT_HIP, KP.RIGHT_HIP, 0f, -LIMB)
+        k.putPair(KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0f, -LIMB - TORSO)
+        k.put(KP.NOSE, 0f, -LIMB - TORSO - 30f)
         return k
     }
 

@@ -61,6 +61,28 @@
      77300
     ]
    },
+   "positionWindows": [
+    {
+     "label": "kneeling rest",
+     "fromMs": 36500,
+     "toMs": 40500,
+     "never": [
+      "standing"
+     ]
+    },
+    {
+     "label": "push-ups after the rest",
+     "fromMs": 40500,
+     "toMs": 52000,
+     "always": "on_the_floor"
+    },
+    {
+     "label": "squats",
+     "fromMs": 58000,
+     "toMs": 78000,
+     "always": "standing"
+    }
+   ],
    "tags": [
     "youtube",
     "cindy",

@@ -138,7 +138,82 @@ def inverted_row(elbow_deg: float) -> list[Keypoint]:
     return k
 
 
+def hang_with_legs(elbow_deg: float) -> list[Keypoint]:
+    """A body on the bar with its legs in frame: ``pullup`` plus knees and ankles hanging straight
+    below the hips, a thigh and a shin of LIMB each.
+
+    A hang is upright with straight legs, so everything that reads standing is true of it; the hands
+    on the bar are the only thing that says otherwise.
+    """
+    k = pullup(elbow_deg)
+    hip_x = f32(LIMB * math.sin(math.radians(elbow_deg)))
+    hip_y = f32(f32(-LIMB * math.cos(math.radians(elbow_deg))) + TORSO)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, hip_x, f32(hip_y + LIMB))
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, hip_x, f32(hip_y + 2.0 * LIMB))
+    return k
+
+
+def kneeling_up(ankle_behind: float) -> list[Keypoint]:
+    """Kneeling up, torso upright and hips a thigh above the knees, with the ankles seen with full
+    confidence ``ankle_behind`` pixels behind the knee and on the floor with it (a twentieth of a
+    thigh below it, the worst the Cindy clip ever showed).
+
+    ``PoseGeometry.standing`` reads this as standing; only the shins say it is not.
+    """
+    k = _blank()
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, -ankle_behind, f32(f32(0.05) * LIMB))
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, 0.0, -LIMB)
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0.0, -LIMB - TORSO)
+    _put(k, KP.NOSE, 0.0, -LIMB - TORSO - 30.0)
+    return k
+
+
+def head_on_plank(_unused: float = 0.0) -> list[Keypoint]:
+    """A plank filmed from in front: the foreshortened torso points up the picture, so the
+    shoulders sit well above the hips. Knees a long way below the hips and ankles up beside the
+    knees, so today's posture test reads this as standing. Takes an ignored angle so it can be
+    driven from a plan like the other builders.
+    """
+    k = _blank()
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, 0.0, 80.0)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, 0.0, 140.0)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, 0.0, 150.0)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, 70.0)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, 160.0)
+    _put(k, KP.NOSE, 0.0, -30.0)
+    return k
+
+
+def leaning_squat(knee_deg: float) -> list[Keypoint]:
+    """The bottom of a squat as it is really done: ``squat``'s legs, with the torso leaning 60
+    degrees forward over the knees. The shoulders sit only half a torso above the hips, so the body
+    is not upright, but the shins are still a full shin's length under the knees.
+    """
+    k = squat(knee_deg)
+    hip_x = f32(LIMB * math.sin(math.radians(knee_deg)))
+    hip_y = f32(LIMB * math.cos(math.radians(knee_deg)))
+    lean = math.radians(60.0)
+    shoulder_x = f32(hip_x - f32(TORSO * math.sin(lean)))
+    shoulder_y = f32(hip_y - f32(TORSO * math.cos(lean)))
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, shoulder_x, shoulder_y)
+    _put(k, KP.NOSE, shoulder_x - 20.0, shoulder_y - 25.0)
+    return k
+
+
+def walking(dx: float) -> list[Keypoint]:
+    """Standing and walking: ``squat``'s straight-legged stand, ``dx`` pixels to the side."""
+    k = squat(175.0)
+    return [Keypoint(f32(p.x + dx), p.y, p.score) if p.score > 0.0 else p for p in k]
+
+
 BUILDERS = {
     "squat": squat, "pushup": pushup, "pullup": pullup,
     "bandsetup": band_setup, "invertedrow": inverted_row,
+    # The builders the recognition plan draws on. `empty` and `onthefloor` take an ignored angle.
+    "empty": lambda _unused=0.0: empty(),
+    "onthefloor": lambda _unused=0.0: on_the_floor(),
+    "hangwithlegs": hang_with_legs, "kneelingup": kneeling_up, "headonplank": head_on_plank,
+    "leaningsquat": leaning_squat, "walking": walking,
 }

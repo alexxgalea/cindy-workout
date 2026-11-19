@@ -130,10 +130,13 @@ tools/video_regression/
 │   ├── rep_counter.py      # from RepCounter.kt
 │   ├── bar_zone.py         # from BarZone.kt
 │   ├── workout_engine.py   # from WorkoutEngine.kt
+│   ├── recogniser.py       # from Recogniser.kt: the athlete's position
 │   └── pose_fixtures.py    # from the JVM test PoseFixtures.kt
 ├── build_scenarios.py      # dataset importers (InfiniteRep / RepCount)
 ├── parity_check.py         # proves the port still matches the Kotlin
+├── recognition_parity_check.py  # the same proof for the position recogniser
 ├── run_batch.py            # scores scenarios, same schema as the Android job
+├── run_recognition.py      # writes the position for every frame of a film, checks labelled windows
 ├── fetch_youtube.py        # re-provisions the third-party clip fixtures
 └── contact_sheet.py        # timestamped tiles, for counting reps by eye
 ```
@@ -166,7 +169,19 @@ localised to one frame rather than to "the totals disagree".
 .venv/bin/python tools/video_regression/parity_check.py
 ```
 
-Run this after touching either implementation. It currently passes on all 1639 frames.
+Run this after touching either implementation. It currently passes on all 1721 frames.
+
+The position recogniser (below) has its own plan, trace and check, so the two never disturb each
+other. `RecognitionParityTraceTest` replays `tests/parity/recognition_plan.csv`, synthetic
+sequences that cross from one position to another, through `Recogniser` and writes
+`tests/parity/recognition_trace_jvm.csv`; `recognition_parity_check.py` replays the plan through
+the twin and diffs every frame. The counting engine's trace must stay byte-identical when only
+recognition changes: `git diff --exit-code tests/parity/trace_jvm.csv` after the JVM tests.
+
+```sh
+./gradlew testDebugUnitTest --tests 'com.cindy.tracker.RecognitionParityTraceTest'
+.venv/bin/python tools/video_regression/recognition_parity_check.py
+```
 
 The pull-up gates themselves — occlusion tolerance, the derived dead-hang angle and bar
 re-establishment — are covered by the Kotlin unit tests and the parity trace above. `MAX_DROPOUT_FRAMES`
@@ -203,6 +218,38 @@ flag consistently everywhere is a bigger, separate change.
 ```
 
 Reports land in the ignored `tests/reports/`.
+
+## Where the athlete is
+
+`Recogniser` works out the athlete's position (on the bar, on the floor, standing, or none) on
+every analysed frame, and `run_recognition.py` runs its Python twin over a film and writes the
+position for every frame, so what the camera screen's debug line says at the gym can be tried on
+a film first. It counts nothing and never touches the counting engine.
+
+```sh
+# the labelled films: exits 1 when a window fails
+.venv/bin/python tools/video_regression/run_recognition.py --scenarios tests/scenarios/cindy.json
+
+# any clip, unchecked
+.venv/bin/python tools/video_regression/run_recognition.py --video clip.mp4
+```
+
+Each film's positions are written to the ignored `tests/reports/recognition/<id>.positions.csv`.
+A scenario labels where the athlete really was with `positionWindows`; unknown keys are ignored by
+every other runner:
+
+```json
+"positionWindows": [
+  {"label": "kneeling rest", "fromMs": 36500, "toMs": 40500, "never": ["standing"]},
+  {"label": "squats", "fromMs": 58000, "toMs": 78000, "always": "standing"}
+]
+```
+
+`always` names the one position every frame of the window must be in, `never` the positions no
+frame may be in. A window includes its `fromMs` frame and leaves out its `toMs` frame, and a window
+with no frames in it fails. The check itself is tested by
+`python3 tools/video_regression/test_run_recognition.py`. Like the counting port, the harness reads
+the identity flag one frame earlier than the app (see above), which the recogniser inherits.
 
 ## Diagnosing a miss
 
