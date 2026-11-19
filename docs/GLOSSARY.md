@@ -60,6 +60,20 @@ _Avoid_: mode, scaling option
 The short check before the clock starts that learns where the bar is and how far this athlete moves today. What it learns lasts for one session.
 _Avoid_: calibration (on its own), onboarding
 
+### Movements and recognition
+
+**Movement**:
+One of the things the athlete does reps of: a pull-up, a push-up or a squat, each in the athlete's chosen variation.
+_Avoid_: exercise
+
+**Position**:
+Where the athlete's body is: on the bar, on the floor, or standing. Each movement starts from one position. Standing means on the feet, with the shins under the knees, so kneeling is on the floor and never standing. A body not seen well enough is in no position, and is doing no movement.
+_Avoid_: posture, pose, stance
+
+**Recognition**:
+The app working out by itself which movement the athlete is doing. A movement is recognised only once reps have been counted in its position, and the reps that confirmed it are banked. It stays recognised through pauses until a different movement is. Recognition names movements only: transitions and rests are worked out afterwards from when the reps were banked.
+_Avoid_: detection, auto-detect, exercise detection
+
 ### The camera screen
 
 **Picture**:
