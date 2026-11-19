@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim import pose_fixtures
 from cindy_sim.recogniser import Position
-from run_recognition import Frame, check_windows, runs, track_positions
+from cindy_sim.recogniser import Movement
+from cindy_sim.workout_engine import CindyProfile, PullVariant
+from run_recognition import (Frame, check_movement_windows, check_windows, confirmations, real_rep, runs,
+                             track_positions, track_recognitions)
 
 
 def frames_of(pose, from_ms: int, to_ms: int, step_ms: int = 100, stable: bool = True) -> list[Frame]:
@@ -81,6 +84,94 @@ class CheckWindowsTest(unittest.TestCase):
     def test_a_window_that_asks_for_nothing_is_an_error(self):
         windows = [{"label": "empty", "fromMs": 0, "toMs": 100}]
         self.assertEqual(1, len(check_windows(self.TRACK, windows)))
+
+
+def squat_set(reps: int) -> list[Frame]:
+    """Standing, then `reps` squats at 100 ms a frame."""
+    frames = frames_of(pose_fixtures.squat(175.0), 0, 1000)
+    t = 1000
+    for _ in range(reps):
+        frames += frames_of(pose_fixtures.squat(80.0), t, t + 800)
+        frames += frames_of(pose_fixtures.squat(175.0), t + 800, t + 1600)
+        t += 1600
+    return frames
+
+
+class ConfirmationsTest(unittest.TestCase):
+    def test_a_movement_is_confirmed_once_at_its_second_rep(self):
+        track = track_recognitions(squat_set(4))
+        confirmed = confirmations(track)
+        self.assertEqual([Movement.SQUATS], [m for _, m in confirmed])
+        t = confirmed[0][0]
+        self.assertEqual(Movement.SQUATS, dict(track)[t].movement)
+        self.assertIsNone(dict(track)[t - 100].movement)
+        self.assertEqual(2, dict(track)[t].tally_of(Movement.SQUATS))
+
+    def test_one_rep_confirms_nothing(self):
+        self.assertEqual([], confirmations(track_recognitions(squat_set(1))))
+
+    def test_the_profile_reaches_the_recogniser(self):
+        def hang(profile):
+            frames = frames_of(pose_fixtures.hang_with_legs(120.0), 0, 4000)
+            t = 4000
+            for _ in range(4):
+                frames += frames_of(pose_fixtures.hang_with_legs(60.0), t, t + 800)
+                frames += frames_of(pose_fixtures.hang_with_legs(120.0), t + 800, t + 1600)
+                t += 1600
+            return confirmations(track_recognitions(frames, profile))
+
+        self.assertEqual([], hang(CindyProfile()))
+        self.assertEqual([Movement.PULL_UPS],
+                         [m for _, m in hang(CindyProfile(pull=PullVariant.BAND_ASSISTED_PULL_UP))])
+
+
+class RealRepTest(unittest.TestCase):
+    LABELS = [9000, 11000, 14300]
+
+    def test_counts_the_labelled_reps_done_by_then(self):
+        self.assertEqual(0, real_rep(self.LABELS, 8000))
+        self.assertEqual(2, real_rep(self.LABELS, 12000))
+        self.assertEqual(3, real_rep(self.LABELS, 20000))
+
+    def test_a_rep_labelled_a_moment_after_the_confirmation_counts_as_done(self):
+        # The label is good to a fraction of a second, not to the frame.
+        self.assertEqual(2, real_rep(self.LABELS, 10866))
+        self.assertEqual(1, real_rep(self.LABELS, 10700))
+
+
+class CheckMovementWindowsTest(unittest.TestCase):
+    WINDOWS = [
+        {"label": "push-ups", "fromMs": 0, "toMs": 5000, "movement": "pushup"},
+        {"label": "walk", "fromMs": 5000, "toMs": 8000, "movement": "none"},
+        {"label": "squats", "fromMs": 8000, "toMs": 20000, "movement": "squat"},
+    ]
+
+    def test_passes_when_each_movement_is_confirmed_in_its_own_window(self):
+        confirmed = [(3000, Movement.PUSH_UPS), (12000, Movement.SQUATS)]
+        self.assertEqual([], check_movement_windows(confirmed, self.WINDOWS))
+
+    def test_a_confirmation_in_another_movements_window_is_wrong(self):
+        confirmed = [(3000, Movement.SQUATS), (12000, Movement.SQUATS)]
+        failures = check_movement_windows(confirmed, self.WINDOWS)
+        self.assertTrue(any("wrong confirmation" in f and "push-ups" in f for f in failures))
+        self.assertTrue(any("never confirmed" in f and "push-ups" in f for f in failures))
+
+    def test_a_confirmation_while_doing_no_movement_is_wrong(self):
+        confirmed = [(3000, Movement.PUSH_UPS), (6000, Movement.SQUATS), (12000, Movement.SQUATS)]
+        failures = check_movement_windows(confirmed, self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("walk", failures[0])
+
+    def test_a_confirmation_in_no_window_is_wrong(self):
+        failures = check_movement_windows([(3000, Movement.PUSH_UPS), (12000, Movement.SQUATS),
+                                           (25000, Movement.PULL_UPS)], self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("no window", failures[0])
+
+    def test_a_movement_never_confirmed_in_its_window_fails(self):
+        failures = check_movement_windows([(3000, Movement.PUSH_UPS)], self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("squats", failures[0])
 
 
 if __name__ == "__main__":
