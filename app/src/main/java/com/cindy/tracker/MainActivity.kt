@@ -419,8 +419,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Debug builds only: says where the athlete is, from every frame the camera analyses, with or
-     * without a workout running. Made in [onCreate] inside `if (BuildConfig.DEBUG)`, so a release
+     * Debug builds only: says where the athlete is and which movement it recognises, from every
+     * frame the camera analyses, with or without a workout running. Made in [onCreate] inside `if (BuildConfig.DEBUG)`, so a release
      * build has none. It counts nothing and changes nothing the engine banks.
      */
     @Volatile private var recognitionLine: RecognitionLine? = null
@@ -594,6 +594,7 @@ class MainActivity : AppCompatActivity() {
         analysisExecutor = Executors.newSingleThreadExecutor()
         records = RecordStore(this)
         profile = Profile(this)
+        recognitionLine?.useProfile(profile.movements)
         music = MusicPlayer(this)
         video = VideoRecorder(this)
         speaker = Speaker(this).apply {
@@ -2245,6 +2246,7 @@ class MainActivity : AppCompatActivity() {
     private fun syncMovements() {
         if (inWorkout()) return
         val chosen = profile.movements
+        recognitionLine?.useProfile(chosen)
         val smart = profile.smartSquats
         val (current, currentSmart) = synchronized(engineLock) { engine.profile to engine.smartSquats }
         if (chosen == current && smart == currentSmart) return

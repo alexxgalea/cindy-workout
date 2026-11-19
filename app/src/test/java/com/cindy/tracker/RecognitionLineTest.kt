@@ -47,6 +47,53 @@ class RecognitionLineTest {
     }
 
     @Test
+    fun `it names the recognised movement and its reps after the position`() {
+        val tally = Recognition.NO_REPS + (Movement.PUSH_UPS to 3)
+        line.show(Recognition(Position.ON_THE_FLOOR, Movement.PUSH_UPS, tally = tally))
+        assertEquals("on the floor · PUSH-UPS · 3", text())
+        // A rest keeps the movement, and the line still says it.
+        line.show(Recognition(Position.STANDING, Movement.PUSH_UPS, tally = tally))
+        assertEquals("standing · PUSH-UPS · 3", text())
+        line.show(Recognition(Position.ON_THE_BAR, Movement.PULL_UPS, tally = Recognition.NO_REPS + (Movement.PULL_UPS to 12)))
+        assertEquals("on the bar · PULL-UPS · 12", text())
+    }
+
+    @Test
+    fun `a candidate is not shown, because nothing is recognised yet`() {
+        line.show(Recognition(Position.STANDING, candidate = Movement.SQUATS, candidateReps = 1))
+        assertEquals("standing", text())
+    }
+
+    @Test
+    fun `fed the reps of a push-up set it says the movement and the tally, and a profile change starts fresh`() {
+        var now = 0L
+        var last = Recognition(Position.NONE)
+        fun hold(pose: Array<Keypoint>, frames: Int = 10) = repeat(frames) {
+            last = line.feed(pose, now, identityStable = true)
+            now += 100
+        }
+        hold(PoseFixtures.pushup(175f))
+        repeat(3) {
+            hold(PoseFixtures.pushup(80f))
+            hold(PoseFixtures.pushup(175f))
+        }
+        line.show(last)
+        assertEquals("on the floor · PUSH-UPS · 3", text())
+
+        line.useProfile(CindyProfile(push = PushVariant.KNEE_PUSH_UP))
+        assertEquals("no position", text())
+        assertEquals(Recognition(Position.NONE), line.feed(PoseFixtures.pushup(175f), now, identityStable = true))
+    }
+
+    @Test
+    fun `the same profile again changes nothing`() {
+        val line = RecognitionLine(context)
+        line.show(Recognition(Position.STANDING))
+        line.useProfile(CindyProfile.STANDARD)
+        assertEquals("standing", line.view.text.toString())
+    }
+
+    @Test
     fun `fed the frames of a hang it says on the bar, and after a reset it says no position`() {
         var now = 0L
         var last = Recognition(Position.NONE)
