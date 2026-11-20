@@ -25,7 +25,13 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** The record board: the benchmark to chase, then every attempt logged on this phone. */
+/**
+ * The record board: the benchmark to chase, then every attempt logged on this phone.
+ *
+ * The trend, the peaks' scores and the leaderboard are the chosen workout's, because a score is
+ * only ever ranked against the same workout. The habit is everyone's: the streaks, the week, the
+ * calendar and the volume count every session, whatever it was, because they are work done.
+ */
 class RecordsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRecordsBinding
@@ -34,7 +40,9 @@ class RecordsActivity : AppCompatActivity() {
     private var shownMonth: YearMonth = YearMonth.now()
     private var metric = ProgressMetric.SCORE
     private var range = ProgressRange.ALL
-    /** The kind of Cindy the chart and the peaks are about; follows the latest until chosen. */
+    /** The workout whose scores are shown: the one chosen in the menu, read on every render. */
+    private var workout: Workout = Workouts.CINDY
+    /** The kind of [workout] the chart and the peaks are about; follows the latest until chosen. */
     private var category: Category? = null
     private var categoryChosen = false
     /** The board as it was last drawn, so [onResume] can tell whether it has changed since. */
@@ -66,7 +74,7 @@ class RecordsActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
-        if (store.all() != shownAttempts) render()
+        if (store.all() != shownAttempts || Profile(this).workout != workout) render()
     }
 
     /** Reopens a saved attempt on the results screen, as it looked the day it happened. */
@@ -81,8 +89,10 @@ class RecordsActivity : AppCompatActivity() {
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
         val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        if (!categoryChosen || category !in Progress.categories(attempts)) {
-            category = Progress.defaultCategory(attempts)
+        workout = Profile(this).workout
+        val own = Records.ofWorkout(attempts, workout.id)
+        if (!categoryChosen || category !in Progress.categories(own)) {
+            category = Progress.defaultCategory(own)
         }
 
         // How am I doing, first: the habit and the week in one card, then whether the score is
@@ -90,12 +100,12 @@ class RecordsActivity : AppCompatActivity() {
         hero(attempts, today, zone, firstDay)
         progressCard(attempts, today, zone, firstDay)
         if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
-        leaderboard(attempts)
+        leaderboard(own)
         if (attempts.isNotEmpty()) calendar(attempts, today, zone, firstDay)
     }
 
     /**
-     * The athlete's sessions as a ranking, with the benchmark standing among them.
+     * The sessions of [workout] as a ranking, with the benchmark standing among them on Cindy's.
      *
      * Each row is a place: its rank, the day it was done and its score. Only the top
      * [LEADERBOARD_ROWS] sessions show at first, so that a long history stays a ranking and does
@@ -116,14 +126,17 @@ class RecordsActivity : AppCompatActivity() {
     /** Rebuilds only the ranking, so showing more rows does not scroll the page to the top. */
     private fun renderLeaderboard(attempts: List<Attempt>) {
         leaderboardHolder.removeAllViews()
-        val standings = Records.standings(attempts)
+        // Tom Holland's score is a Cindy, so he is on Cindy's board and no other.
+        val benchmark = workout.id == Workouts.CINDY_ID
+        val standings = Records.standings(attempts, withBenchmark = benchmark)
         val ownRanked = standings.mapNotNull { it.attempt }
 
         if (ownRanked.isEmpty()) {
-            leaderboardHolder.addView(insetGroup { row(benchmarkRow(1)) })
+            if (benchmark) leaderboardHolder.addView(insetGroup { row(benchmarkRow(1)) })
             leaderboardHolder.addView(styledText(
                 R.style.Cindy_Footnote,
-                "No attempts yet. Finish a 20-minute Cindy and it lands here."
+                if (benchmark) "No attempts yet. Finish a 20-minute Cindy and it lands here."
+                else "No attempts yet. Finish a ${workout.name} and it lands here."
             ).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(28), 0, 0)
@@ -713,7 +726,9 @@ class RecordsActivity : AppCompatActivity() {
             ).apply { topMargin = dp(4) }
         })
 
-        val categories = Progress.categories(attempts)
+        // The chosen workout's kinds only: a chip for another workout would offer a trend that
+        // workout's board does not show.
+        val categories = Progress.categories(Records.ofWorkout(attempts, workout.id))
         if (categories.size > 1) {
             card.addView(HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled = false
