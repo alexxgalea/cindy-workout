@@ -35,7 +35,7 @@ class RecordsActivity : AppCompatActivity() {
     private var metric = ProgressMetric.SCORE
     private var range = ProgressRange.ALL
     /** The kind of Cindy the chart and the peaks are about; follows the latest until chosen. */
-    private var category: CindyProfile? = null
+    private var category: Category? = null
     private var categoryChosen = false
     /** The board as it was last drawn, so [onResume] can tell whether it has changed since. */
     private var shownAttempts: List<Attempt> = emptyList()
@@ -158,9 +158,10 @@ class RecordsActivity : AppCompatActivity() {
                         ).joinToString(" · "),
                         score = a.scoreLabel(),
                         mine = true,
-                        // "Best" means best at these movements. Across categories it would be
-                        // comparing a band-assisted Cindy with a strict one and calling one better.
-                        best = a == Records.bestIn(ownRanked, a.profile)
+                        // "Best" means best at this workout and these movements. Across categories
+                        // it would be comparing a band-assisted Cindy with a strict one and calling
+                        // one better.
+                        best = a == Records.bestIn(ownRanked, a.category)
                     ) { openSession(a.atMillis) })
                 }
             }
@@ -412,7 +413,8 @@ class RecordsActivity : AppCompatActivity() {
         })
         binding.rows.addView(styledText(
             R.style.Cindy_Footnote,
-            "Scores and rounds are compared only with sessions at the same movements. " +
+            "Scores and rounds are compared only with sessions of the same workout, at the " +
+                "same movements. " +
                 "Streaks and weeks count everything."
         ).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -720,7 +722,7 @@ class RecordsActivity : AppCompatActivity() {
                 )
                 addView(
                     chipRow(
-                        categories.map { it?.label() ?: "Movements not recognised" },
+                        categories.map { it.profile?.label() ?: "Movements not recognised" },
                         categories.indexOf(category)
                     ) {
                         category = categories[it]
@@ -748,7 +750,7 @@ class RecordsActivity : AppCompatActivity() {
     /** The line under the chart card: how the athlete has moved, or what the chart counts. */
     private fun progressNote(attempts: List<Attempt>): String = when (metric) {
         ProgressMetric.SCORE -> {
-            val past = attempts.filter { it.profile == category }.sortedBy { it.atMillis }
+            val past = attempts.filter { it.category == category }.sortedBy { it.atMillis }
             if (past.size < 2) {
                 "${past.size} attempt${if (past.size == 1) "" else "s"} at these movements"
             } else {

@@ -365,4 +365,61 @@ class RecordsTest {
         val short = "v8|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|"
         assertTrue(Records.decode(short).isEmpty())
     }
+
+    // ── records per workout ───────────────────────────────────────────────────
+
+    /** A session of a workout that is not Cindy, at Cindy's own movements. */
+    private fun other(rounds: Int, at: Long = 0L) =
+        attempt(rounds, at = at).copy(workoutId = "freestyle")
+
+    @Test
+    fun `a level is awarded only to a standard Cindy`() {
+        assertEquals(Level.of(27), attempt(27).level)
+        assertNull(other(27).level)
+        assertNull(attempt(27).copy(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP)).level)
+    }
+
+    @Test
+    fun `the sessions of one workout are only that workout's`() {
+        val cindy = attempt(10, at = 1L)
+        val free = other(12, at = 2L)
+        assertEquals(listOf(cindy), Records.ofWorkout(listOf(cindy, free), Workouts.CINDY_ID))
+        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "freestyle"))
+    }
+
+    @Test
+    fun `a bigger session of another workout is not the record a Cindy was chasing`() {
+        val earlierCindy = attempt(10, at = 1L)
+        val bigOther = other(30, at = 2L)
+        val today = attempt(12, at = 3L)
+        val all = listOf(earlierCindy, bigOther, today)
+        assertEquals(earlierCindy, Records.personalRecord(all, today))
+        assertTrue(Records.isPersonalRecord(all, today))
+        // And the other workout is ranked against its own sessions only.
+        assertNull(Records.personalRecord(all, bigOther))
+    }
+
+    @Test
+    fun `the same movements in another workout are another category`() {
+        assertFalse(other(10).category == attempt(10).category)
+        assertEquals(Category.STANDARD_CINDY, attempt(10).category)
+    }
+
+    @Test
+    fun `only a Cindy can beat the benchmark`() {
+        assertTrue(Records.beatsBenchmark(attempt(28)))
+        assertFalse(Records.beatsBenchmark(other(28)))
+    }
+
+    @Test
+    fun `another workout's board is a plain ranking, with no benchmark on it`() {
+        val board = Records.standings(listOf(other(20, at = 1L), other(28, at = 2L)), withBenchmark = false)
+        assertEquals(listOf(1 to 840, 2 to 600), board.map { it.rank to it.attempt?.totalReps })
+    }
+
+    @Test
+    fun `another workout is captioned by its name, never by a rung`() {
+        assertEquals("Workout not recognised", other(27).caption)
+        assertEquals(Level.of(27)?.title, attempt(27).caption)
+    }
 }

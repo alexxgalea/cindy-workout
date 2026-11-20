@@ -86,7 +86,7 @@ object Reminder {
             )
         }
         // Rule 6.
-        val best = Records.bestIn(attempts, latest.profile) ?: latest
+        val best = Records.bestIn(attempts, latest.category) ?: latest
         return Message(
             "Cindy's ready when you are",
             "Your best is ${best.scoreLabel()}. Twenty minutes to chase it."

@@ -2,7 +2,7 @@ package com.cindy.tracker
 
 /**
  * What a session is measured against on the results screen: the best earlier attempt at the
- * same movements, or the last one.
+ * same workout and movements, or the last one.
  *
  * Pure, like [Records] and [Progress]: no Android types and no clock of its own, so the
  * selection can be tested without a phone. "Earlier" is strict — [Attempt.atMillis] before the
@@ -12,9 +12,12 @@ package com.cindy.tracker
  */
 object Comparisons {
 
-    /** Attempts [of] could honestly be measured against: the same movements, strictly before it. */
+    /**
+     * Attempts [of] could honestly be measured against: the same workout at the same movements
+     * ([Attempt.category]), strictly before it.
+     */
     fun earlier(attempts: List<Attempt>, of: Attempt): List<Attempt> =
-        attempts.filter { it.profile == of.profile && it.atMillis < of.atMillis }
+        attempts.filter { it.category == of.category && it.atMillis < of.atMillis }
 
     /** The best of [earlier] — the record [of] was actually chasing. */
     fun best(attempts: List<Attempt>, of: Attempt): Attempt? = Records.best(earlier(attempts, of))
