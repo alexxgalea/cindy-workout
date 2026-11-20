@@ -40,7 +40,7 @@ internal class RecognitionLine(context: Context, private var profile: CindyProfi
         maxLines = 1
         // A debug aid for the person holding the phone, not something TalkBack should read out.
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        text = say(Recognition(Position.NONE))
+        text = say(Recognition.NONE)
     }
 
     /**
@@ -77,7 +77,7 @@ internal class RecognitionLine(context: Context, private var profile: CindyProfi
             profile = movements
             recogniser = Recogniser(movements)
         }
-        show(Recognition(Position.NONE))
+        show(Recognition.NONE)
     }
 
     /**
@@ -86,7 +86,7 @@ internal class RecognitionLine(context: Context, private var profile: CindyProfi
      */
     fun reset() {
         synchronized(lock) { recogniser.reset() }
-        show(Recognition(Position.NONE))
+        show(Recognition.NONE)
     }
 
     /** Main thread: says what [recognition] says, redrawing only when it changed. */

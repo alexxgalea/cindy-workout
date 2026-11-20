@@ -47,6 +47,9 @@ data class Recognition(
 ) {
     companion object {
         val NO_REPS: Map<Movement, Int> = Movement.entries.associateWith { 0 }
+
+        /** Nothing seen yet: no position, no movement, no reps. */
+        val NONE = Recognition(Position.NONE)
     }
 }
 
