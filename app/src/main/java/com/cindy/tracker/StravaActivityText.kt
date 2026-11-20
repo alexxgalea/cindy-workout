@@ -26,11 +26,16 @@ object StravaActivityText {
      */
     private const val WORKOUT_MS = 20 * 60 * 1000L
 
-    /** "Cindy — 17 + 12", "Adaptive Cindy — 9", "Cindy — at least 14 + 3". */
+    /**
+     * "Cindy — 17 + 12", "Adaptive Cindy — 9", "Cindy — at least 14 + 3": the activity takes the
+     * workout's name. Only a Cindy says Adaptive Cindy, because that mode is Cindy's; any other
+     * workout is called by its own name, and one this build does not know is called a workout.
+     */
     fun name(a: Attempt): String {
-        val mode = a.profile?.mode?.label ?: "Cindy"
+        val title = if (a.isCindy) a.profile?.mode?.label ?: Workouts.CINDY.name
+        else a.workout?.name ?: "Workout"
         val prefix = if (a.scoreIsLowerBound) "at least " else ""
-        return "$mode — $prefix${a.scoreLabel()}"
+        return "$title — $prefix${a.scoreLabel()}"
     }
 
     /**
@@ -47,7 +52,9 @@ object StravaActivityText {
 
         val roundsPart =
             if (a.reps == 0) count(a.rounds, "round") else "${count(a.rounds, "round")} + ${count(a.reps, "rep")}"
-        val stoppedSuffix = if (a.durationMs < WORKOUT_MS) " — stopped early" else ""
+        // Early against the workout's own clock; a workout with no cap cannot stop early.
+        val cap = if (a.isCindy) WORKOUT_MS else a.workout?.timeCapMs
+        val stoppedSuffix = if (cap != null && a.durationMs < cap) " — stopped early" else ""
         lines += "$roundsPart · ${count(a.totalReps, "rep")} in ${formatDuration(a.durationMs)}$stoppedSuffix"
 
         val profile = a.profile
