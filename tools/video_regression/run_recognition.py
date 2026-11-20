@@ -30,8 +30,9 @@ three metrics, from its `movementWindows` (a `none` window is a walk, a rest or 
 
 The run fails (exit 1) on any wrong confirmation, any idle recognition, a set confirmed after its 3rd
 real rep, and a set never confirmed. A window with a `knownGap` reason (a sentence saying why) is
-reported as KNOWN GAP when it is late or never confirmed, and does not fail the run; it says so
-loudly, and when the gap has closed it reports the set as ok. Each film also prints a timeline of
+reported as KNOWN GAP when it is never confirmed, and does not fail the run; it says so loudly, and
+when the gap has closed it reports the set as ok. A known gap never excuses a late confirmation, and
+the closing line counts the known-gap sets apart from the films that held. Each film also prints a timeline of
 window starts, positions and confirmations, so a miss can be found by its time.
 
     python3 tools/video_regression/run_recognition.py --scenarios tests/scenarios/cindy.json
@@ -53,6 +54,18 @@ from cindy_sim.workout_engine import STANDARD_PROFILE, CindyProfile, PullVariant
 
 #: The labels' names for the movements, as `labelledBottomsMs` and `movementWindows` spell them.
 MOVEMENT_KEYS = {"pullup": Movement.PULL_UPS, "pushup": Movement.PUSH_UPS, "squat": Movement.SQUATS}
+
+
+def key_of(movement: Movement) -> str:
+    """The scenario key ("pullup", "pushup", "squat") of a movement."""
+    return next(k for k, m in MOVEMENT_KEYS.items() if m is movement)
+
+
+def movement_label(window: dict) -> str:
+    """A movement window's label, or its movement when it has none."""
+    return window.get("label", window["movement"])
+
+
 #: A labelled rep this much after a confirmation counts as done by it: labels are not to the frame.
 REP_SLACK_MS = 250
 
@@ -113,7 +126,7 @@ class SetResult:
     movement: str
     confirmed_ms: int | None
     real_rep: int | None
-    #: ok, late (after the 3rd real rep), never, or known_gap (late or never, but marked a known gap)
+    #: ok, late (after the 3rd real rep), never, or known_gap (never confirmed, but marked a known gap)
     status: str
     reason: str = ""
 
@@ -125,6 +138,10 @@ class FilmScore:
     wrong: list[str]
     idle: list[str]
     sets: list[SetResult]
+
+    @property
+    def known_gaps(self) -> int:
+        return sum(1 for s in self.sets if s.status == "known_gap")
 
     @property
     def failed(self) -> bool:
@@ -149,13 +166,13 @@ def score_film(
     A confirmation inside a window of another movement or inside no window is wrong; inside a `none`
     window it is an idle recognition. A set is a window of a movement: it is confirmed by the first
     confirmation of that movement inside it. A set `knownGap`-marked with a reason is reported but
-    does not fail the run when it is late or never confirmed.
+    does not fail the run when it is never confirmed; a late confirmation still fails.
     """
     wrong: list[str] = []
     idle: list[str] = []
     for t, movement in confirmed:
         inside = [w for w in windows if w["fromMs"] <= t < w["toMs"]]
-        names = ", ".join(w.get("label", w["movement"]) for w in inside)
+        names = ", ".join(movement_label(w) for w in inside)
         if not inside:
             wrong.append(f"wrong confirmation: {movement.label} at {t} ms, inside no window")
         elif any(MOVEMENT_KEYS.get(w["movement"]) is movement for w in inside):
@@ -169,7 +186,7 @@ def score_film(
         wanted = MOVEMENT_KEYS.get(window["movement"])
         if wanted is None:
             continue
-        label = window.get("label", window["movement"])
+        label = movement_label(window)
         reason = window.get("knownGap") or ""
         hits = [t for t, m in confirmed if m is wanted and window["fromMs"] <= t < window["toMs"]]
         if not hits:
@@ -177,7 +194,7 @@ def score_film(
             continue
         reps = [t for t in (labelled.get(window["movement"]) or []) if window["fromMs"] <= t < window["toMs"]]
         rep = real_rep(reps, hits[0])
-        status = "ok" if rep <= LATEST_CONFIRMING_REP else ("known_gap" if reason else "late")
+        status = "ok" if rep <= LATEST_CONFIRMING_REP else "late"
         sets.append(SetResult(label, window["movement"], hits[0], rep, status, reason))
     return FilmScore(wrong, idle, sets)
 
@@ -198,12 +215,12 @@ def timeline_lines(
     """Window starts, position runs and confirmations in time order, so a miss can be found by its time."""
     events: list[tuple[int, int, str]] = []
     for w in windows:
-        events.append((w["fromMs"], 0, f"[window] {w.get('label', w['movement'])}: {w['movement']}, "
+        events.append((w["fromMs"], 0, f"[window] {movement_label(w)}: {w['movement']}, "
                                        f"{w['fromMs'] / 1000:.2f}s to {w['toMs'] / 1000:.2f}s"))
     for start, end, position in positions:
         events.append((start, 1, f"position {position.label}, until {end / 1000:.2f}s"))
     for t, movement in confirmed:
-        key = next(k for k, m in MOVEMENT_KEYS.items() if m is movement)
+        key = key_of(movement)
         windows_of = [w for w in windows if w["movement"] == key and w["fromMs"] <= t < w["toMs"]]
         reps = [x for x in (labelled.get(key) or []) if not windows_of
                 or windows_of[0]["fromMs"] <= x < windows_of[0]["toMs"]]
@@ -287,18 +304,19 @@ def profile_of(pull: str | None) -> CindyProfile:
     return CindyProfile(pull=PullVariant[pull.upper()])
 
 
-def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> bool:
+def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> tuple[bool, int]:
+    """Run one film; whether it passed, and how many of its sets are known gaps."""
     video = Path(scenario["video"])
     if not video.is_absolute():
         video = ROOT / video
     print(f"\nScenario: {scenario['id']}")
     if not video.is_file():
         print(f"  missing fixture: {video}")
-        return False
+        return False, 0
     frames = infer(video, scenario)
     if isinstance(frames, str):
         print(f"  {frames}")
-        return False
+        return False, 0
 
     recognitions = track_recognitions(frames, profile_of(pull))
     track = [(t, r.position) for t, r in recognitions]
@@ -318,7 +336,7 @@ def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> bool
     labelled = scenario.get("labelledBottomsMs") or {}
     print(f"  Confirmations ({pull or 'standard profile'}):")
     for t, movement in confirmed:
-        key = next(k for k, m in MOVEMENT_KEYS.items() if m is movement)
+        key = key_of(movement)
         times = labelled.get(key) or []
         rep = f"at real rep {real_rep(times, t)} of {len(times)}" if times else "(no labelled reps)"
         print(f"    {t / 1000:7.2f}s  {movement.label}  {rep}")
@@ -326,6 +344,7 @@ def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> bool
         print("    none")
     movement_windows = scenario.get("movementWindows") or []
     passed = not failures
+    known_gaps = 0
     if movement_windows:
         score = score_film(confirmed, movement_windows, labelled)
         print(f"  Metrics: wrong confirmations {len(score.wrong)}, idle recognitions {len(score.idle)}")
@@ -338,7 +357,16 @@ def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> bool
         for line in timeline_lines(runs(track), confirmed, movement_windows, labelled):
             print("    " + line)
         passed = passed and not score.failed
-    return passed
+        known_gaps = score.known_gaps
+    return passed, known_gaps
+
+
+def summary_line(held: int, films: int, known_gaps: int) -> str:
+    """The closing line: how many films held, and how many sets are known gaps rather than confirmed."""
+    line = f"{held} of {films} films held every window and confirmed every movement"
+    if known_gaps:
+        line += f"; {known_gaps} known gap {'set' if known_gaps == 1 else 'sets'}"
+    return line
 
 
 def describe_set(s: SetResult) -> str:
@@ -378,8 +406,8 @@ def main() -> int:
 
     results = [run_scenario(scenario, args.out, args.pull) for scenario in scenarios]
     print("\n" + "=" * 62)
-    print(f"{sum(results)} of {len(results)} scenarios held every window and confirmed every movement")
-    return 0 if all(results) else 1
+    print(summary_line(sum(1 for passed, _ in results if passed), len(results), sum(gaps for _, gaps in results)))
+    return 0 if all(passed for passed, _ in results) else 1
 
 
 if __name__ == "__main__":

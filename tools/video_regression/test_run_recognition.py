@@ -19,7 +19,7 @@ from cindy_sim.recogniser import Position
 from cindy_sim.recogniser import Movement
 from cindy_sim.workout_engine import CindyProfile, PullVariant
 from run_recognition import (Frame, check_movement_windows, check_windows, confirmations, real_rep, runs,
-                             score_film, timeline_lines, track_positions, track_recognitions)
+                             score_film, summary_line, timeline_lines, track_positions, track_recognitions)
 
 
 def frames_of(pose, from_ms: int, to_ms: int, step_ms: int = 100, stable: bool = True) -> list[Frame]:
@@ -249,10 +249,33 @@ class ScoreFilmTest(unittest.TestCase):
         self.assertEqual("ok", score.sets[1].status)
         self.assertFalse(score.failed)
 
+    def test_a_known_gap_confirmed_late_still_fails(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "pushup" else w for w in self.WINDOWS]
+        score = self.score([(8500, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows)
+        self.assertEqual(("late", 4), (score.sets[0].status, score.sets[0].real_rep))
+        self.assertTrue(score.failed)
+
+    def test_counts_the_known_gap_sets(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        self.assertEqual(1, self.score([(5000, Movement.PUSH_UPS)], windows).known_gaps)
+        self.assertEqual(0, self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows).known_gaps)
+
+
     def test_a_window_shifted_off_its_film_fails_the_run(self):
         # The deliberate failure: the same confirmations, every window moved 20 s later.
         shifted = [dict(w, fromMs=w["fromMs"] + 20000, toMs=w["toMs"] + 20000) for w in self.WINDOWS]
         self.assertTrue(self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], shifted).failed)
+
+
+class SummaryLineTest(unittest.TestCase):
+    def test_says_nothing_about_known_gaps_when_there_are_none(self):
+        self.assertEqual("2 of 3 films held every window and confirmed every movement",
+                         summary_line(2, 3, 0))
+
+    def test_counts_known_gap_sets_separately(self):
+        self.assertEqual("2 of 3 films held every window and confirmed every movement; 1 known gap set",
+                         summary_line(2, 3, 1))
+        self.assertIn("2 known gap sets", summary_line(2, 3, 2))
 
 
 class TimelineTest(unittest.TestCase):
