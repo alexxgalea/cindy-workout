@@ -103,6 +103,10 @@ SHIN_UNDER_KNEE_THIGHS = 0.5
 MIN_THIGH_PX = 1.0
 #: A torso shorter than this is shoulders and hips on top of each other, not a torso.
 MIN_TORSO_PX = 1.0
+#: How far above the shoulders the hands must be, in torsos, to enter the bar. Measured on the
+#: owner's gym films and the Cindy clip: hands behind the head in a squat never went past about
+#: 0.35 of a torso, a hang reached 0.8 to 1.2, and 0.4 to 0.6 scored the same.
+HANDS_OVERHEAD_TORSOS = 0.5
 
 _LEGS = (
     (KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE),
@@ -112,6 +116,7 @@ _LEGS = (
 
 @dataclass(frozen=True)
 class _Frame:
+    hands_overhead: bool
     hands_above_shoulders: bool
     shins_under_knees: bool
     upright: bool
@@ -120,7 +125,7 @@ class _Frame:
     @property
     def points_to(self) -> Position:
         """The position this frame alone points at, or none."""
-        if self.hands_above_shoulders:
+        if self.hands_overhead:
             return Position.ON_THE_BAR
         if self.upright and self.shins_under_knees:
             return Position.STANDING
@@ -129,7 +134,7 @@ class _Frame:
         return Position.NONE
 
 
-_NO_EVIDENCE = _Frame(False, False, False, False)
+_NO_EVIDENCE = _Frame(False, False, False, False, False)
 
 
 def _hands_above_shoulders(k: Sequence[Keypoint]) -> bool:
@@ -140,6 +145,20 @@ def _hands_above_shoulders(k: Sequence[Keypoint]) -> bool:
     if shoulders is None:
         return False
     return hands.y < shoulders.y
+
+
+def _hands_overhead(k: Sequence[Keypoint], torso: float | None) -> bool:
+    """The hands are above the shoulders by HANDS_OVERHEAD_TORSOS, as they are on a bar and are
+    not behind the head. Without a torso to measure by, the hands are not overhead."""
+    if torso is None or torso < MIN_TORSO_PX:
+        return False
+    hands = geometry.midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST)
+    if hands is None:
+        return False
+    shoulders = geometry.midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER)
+    if shoulders is None:
+        return False
+    return f32(shoulders.y - hands.y) >= f32(HANDS_OVERHEAD_TORSOS * torso)
 
 
 def _shins_under_knees(k: Sequence[Keypoint]) -> bool:
@@ -166,6 +185,7 @@ def _shins_under_knees(k: Sequence[Keypoint]) -> bool:
 def _read(k: Sequence[Keypoint]) -> _Frame:
     torso = geometry.torso_length(k)
     return _Frame(
+        hands_overhead=_hands_overhead(k, torso),
         hands_above_shoulders=_hands_above_shoulders(k),
         shins_under_knees=_shins_under_knees(k),
         upright=geometry.upright(k),

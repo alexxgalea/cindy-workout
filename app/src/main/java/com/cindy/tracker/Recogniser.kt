@@ -60,9 +60,11 @@ data class Recognition(
  * entered once the frames have kept pointing at it for [ENTRY_MS], and then kept by a rule of its
  * own that is looser than the rule that entered it:
  *
- * - **On the bar**: entered when the hands are above the shoulders. It wins over standing, because
- *   a hang is also upright with straight legs. Kept while the hands stay above the shoulders, and
- *   through up to [KEEP_MS] without them.
+ * - **On the bar**: entered when the hands are overhead, at least [HANDS_OVERHEAD_TORSOS] of a
+ *   torso above the shoulders, so hands behind the head in a squat do not enter it. It wins over
+ *   standing, because a hang is also upright with straight legs. Kept while the hands stay above
+ *   the shoulders at all, as they do at the top of a pull-up, and through up to [KEEP_MS] without
+ *   them.
  * - **Standing**: entered when the torso is upright and every shin that is seen stands under its
  *   knee. Kept by the shins alone, so the forward lean at the bottom of a squat stays standing,
  *   and through up to [KEEP_MS] without them.
@@ -218,6 +220,7 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
     }
 
     private class Frame(
+        val handsOverhead: Boolean,
         val handsAboveShoulders: Boolean,
         val shinsUnderKnees: Boolean,
         val upright: Boolean,
@@ -226,24 +229,39 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
         /** The position this frame alone points at, or none. */
         val pointsTo: Position
             get() = when {
-                handsAboveShoulders -> Position.ON_THE_BAR
+                handsOverhead -> Position.ON_THE_BAR
                 upright && shinsUnderKnees -> Position.STANDING
                 torsoSeen -> Position.ON_THE_FLOOR
                 else -> Position.NONE
             }
     }
 
-    private fun read(k: Array<Keypoint>) = Frame(
-        handsAboveShoulders = handsAboveShoulders(k),
-        shinsUnderKnees = shinsUnderKnees(k),
-        upright = PoseGeometry.upright(k),
-        torsoSeen = (PoseGeometry.torsoLength(k) ?: 0f) >= MIN_TORSO_PX
-    )
+    private fun read(k: Array<Keypoint>): Frame {
+        val torso = PoseGeometry.torsoLength(k)
+        return Frame(
+            handsOverhead = handsOverhead(k, torso),
+            handsAboveShoulders = handsAboveShoulders(k),
+            shinsUnderKnees = shinsUnderKnees(k),
+            upright = PoseGeometry.upright(k),
+            torsoSeen = (torso ?: 0f) >= MIN_TORSO_PX
+        )
+    }
 
     private fun handsAboveShoulders(k: Array<Keypoint>): Boolean {
         val hands = PoseGeometry.midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
         val shoulders = PoseGeometry.midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
         return hands.y < shoulders.y
+    }
+
+    /**
+     * The hands are above the shoulders by [HANDS_OVERHEAD_TORSOS] of a torso, as they are on a bar
+     * and are not behind the head. Without a torso to measure by, the hands are not overhead.
+     */
+    private fun handsOverhead(k: Array<Keypoint>, torso: Float?): Boolean {
+        if (torso == null || torso < MIN_TORSO_PX) return false
+        val hands = PoseGeometry.midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
+        val shoulders = PoseGeometry.midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
+        return shoulders.y - hands.y >= HANDS_OVERHEAD_TORSOS * torso
     }
 
     /**
@@ -291,6 +309,13 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
         /** A torso shorter than this is shoulders and hips on top of each other, not a torso. */
         private const val MIN_TORSO_PX = 1f
 
+        /**
+         * How far above the shoulders the hands must be, in torsos, to enter the bar. Measured on
+         * the owner's gym films and the Cindy clip: hands behind the head in a squat never went
+         * past about 0.35 of a torso, a hang reached 0.8 to 1.2, and 0.4 to 0.6 scored the same.
+         */
+        private const val HANDS_OVERHEAD_TORSOS = 0.5f
+
         /** Each leg's hip, knee and ankle. */
         private val LEGS = listOf(
             Triple(KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE),
@@ -298,6 +323,7 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
         )
 
         private val NO_EVIDENCE = Frame(
+            handsOverhead = false,
             handsAboveShoulders = false,
             shinsUnderKnees = false,
             upright = false,
