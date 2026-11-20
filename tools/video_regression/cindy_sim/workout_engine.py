@@ -219,6 +219,12 @@ class WorkoutEngine:
     START_SETTLE_DEGREES = 3.0
     #: Smoothing on the settling signal, so raw jitter does not read as still rising.
     START_SETTLE_SMOOTHING = 0.4
+    #: How long a squat's start must be seen at the top, knees straight, to be taken up: two
+    #: frames, not a still half second, because an athlete who squats straight away passes the
+    #: top once a rep and never stops there.
+    SQUAT_TOP_MS = 100
+    #: The knee angle a squat's top is read at: the air squat counter's own top.
+    SQUAT_TOP_DEGREES = 158.0
     #: The least a heels-flat squat has to close the knee, in degrees, to be a rep. Heels flat on
     #: the floor stop the knees travelling forward, so the knee closes less than it does up on the
     #: toes. A quarter squat from chest height travels 30 to 35, so this is the line between them,
@@ -266,6 +272,8 @@ class WorkoutEngine:
         #: Smoothed signal while taking up a position, and the value the dwell was measured from.
         self._start_smoothed = NAN
         self._start_reference = NAN
+        #: When the athlete was first seen standing at the top of a squat, or 0 if not there.
+        self._squat_top_since = 0
 
         self._moving_since = 0
         self._bar = BarZone()
@@ -423,6 +431,7 @@ class WorkoutEngine:
         self._start_position_since = 0
         self._start_smoothed = NAN
         self._start_reference = NAN
+        self._squat_top_since = 0
         self.blocked = False
         self.reps_at_last_event = 0
         self._banked_this_round.clear()
@@ -556,12 +565,17 @@ class WorkoutEngine:
         Two things have to be true together, and neither is sufficient alone. The posture has to
         be right -- standing for squats, down for push-ups -- which rules out arriving while
         still on the floor. And the joint that scores the movement has to have stopped opening,
-        which rules out arriving halfway up.
+        which rules out arriving halfway up. Squats have a second way in: standing at the top,
+        knees straight, for SQUAT_TOP_MS, since an athlete who squats straight away never stops.
         """
         if not self._in_start_position(k):
             self._start_position_since = 0
             self._start_smoothed = NAN
             self._start_reference = NAN
+            self._squat_top_since = 0
+            return
+        if self._at_squat_top(s, now):
+            self._open_start_gate(counter)
             return
         if math.isnan(self._start_smoothed):
             self._start_smoothed = s
@@ -578,6 +592,21 @@ class WorkoutEngine:
             return
         if now - self._start_position_since < self.START_POSITION_MS:
             return
+        self._open_start_gate(counter)
+
+    def _at_squat_top(self, s: float, now: int) -> bool:
+        """Standing with the knees straight for SQUAT_TOP_MS: the top of a squat, which an athlete
+        squatting straight away passes once a rep without ever holding still there. Mirror of
+        WorkoutEngine.atSquatTop."""
+        if self.exercise is not Exercise.SQUAT or s < self.SQUAT_TOP_DEGREES:
+            self._squat_top_since = 0
+            return False
+        if self._squat_top_since == 0:
+            self._squat_top_since = now
+            return False
+        return now - self._squat_top_since >= self.SQUAT_TOP_MS
+
+    def _open_start_gate(self, counter: RepCounter) -> None:
         self.awaiting_start = False
         self.blocked = False
         # Arriving is not the top of a rep. Throwing away the climb that got here is the whole
@@ -627,6 +656,7 @@ class WorkoutEngine:
         self._start_position_since = 0
         self._start_smoothed = NAN
         self._start_reference = NAN
+        self._squat_top_since = 0
         if was_last:
             self.rounds += 1
             self._banked_rounds.append(dict(self._banked_this_round))
