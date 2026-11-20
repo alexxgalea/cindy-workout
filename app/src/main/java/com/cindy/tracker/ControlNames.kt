@@ -22,11 +22,17 @@ data class ControlNames(
         /**
          * The names for [state], from the controls [panel] says are enabled: a dimmed or absent
          * control has no name. A finished workout sits behind the session page and is drawn as
-         * idle, so it reads the same.
+         * idle, so it reads the same. [workout] is the one the shutter will start, named in the
+         * idle line; null leaves the line without a name.
          */
-        fun of(state: WorkoutState, panel: CameraControlPanel): ControlNames = when (state) {
+        fun of(
+            state: WorkoutState,
+            panel: CameraControlPanel,
+            workout: Workout? = null
+        ): ControlNames = when (state) {
             WorkoutState.RUNNING -> ControlNames(null, null, null, null)
-            WorkoutState.IDLE, WorkoutState.FINISHED -> ControlNames(null, null, null, CameraControls.IDLE_LINE)
+            WorkoutState.IDLE, WorkoutState.FINISHED ->
+                ControlNames(null, null, null, CameraControls.idleLine(workout))
             WorkoutState.SETUP, WorkoutState.PAUSED -> ControlNames(
                 end = "END".takeIf { panel[CameraControl.END].enabled },
                 shutter = "RESUME".takeIf { state == WorkoutState.PAUSED && panel[CameraControl.SHUTTER].enabled },

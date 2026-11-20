@@ -425,7 +425,10 @@ class CameraBandsTest {
     /** The HUD in [state], drawn the way the activity draws it, with the coaching line blank. */
     private fun at(state: WorkoutState, statusBlank: Boolean = true): ActivityMainBinding {
         val hud = hud()
-        BottomBand.apply(hud, state, CameraControls.of(state, filming = false), statusBlank)
+        BottomBand.apply(
+            hud, state, CameraControls.of(state, filming = false), statusBlank,
+            workout = Workouts.CINDY
+        )
         layout(hud)
         show(hud, "3", "/5")
         return hud
@@ -587,7 +590,9 @@ class CameraBandsTest {
         val hud = at(WorkoutState.IDLE)
         assertEquals(0, named(hud).size)
         assertEquals(View.VISIBLE, hud.idleLine.visibility)
-        assertEquals("Press the shutter to start the setup check", hud.idleLine.text.toString())
+        assertEquals(
+            "Cindy · Press the shutter to start the setup check", hud.idleLine.text.toString()
+        )
         val line = boxIn(hud.root, hud.idleLine)
         val shutter = boxIn(hud.root, hud.btnStart)
         assertEquals(screenW / 2f, line.centerX(), 0.5f)

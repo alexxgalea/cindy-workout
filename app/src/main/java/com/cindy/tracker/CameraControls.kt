@@ -76,6 +76,14 @@ object CameraControls {
      */
     const val IDLE_LINE = "Press the shutter to start the setup check"
 
+    /**
+     * The idle line with the chosen workout's name in front of it, "Cindy · Press the shutter to
+     * start the setup check", so the athlete reads what the shutter will start before pressing it.
+     * Written as text in the line the screen already has, not as a chip on the HUD.
+     */
+    fun idleLine(workout: Workout?): String =
+        if (workout == null) IDLE_LINE else "${workout.name} · $IDLE_LINE"
+
     fun of(state: WorkoutState, filming: Boolean): CameraControlPanel {
         val live = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
         return CameraControlPanel(

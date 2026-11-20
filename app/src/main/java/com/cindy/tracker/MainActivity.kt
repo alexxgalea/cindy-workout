@@ -1764,7 +1764,7 @@ class MainActivity : AppCompatActivity() {
         // The bottom band, for the distance the athlete is at: the scoreboard while the clock
         // runs, the controls forward and named in idle, setup and a pause. It also draws the
         // controls from the table above, and decides whether the coaching pill is there.
-        BottomBand.apply(binding, state, panel, status.text.isBlank(), coachShowing)
+        BottomBand.apply(binding, state, panel, status.text.isBlank(), coachShowing, workout)
     }
 
     /**
@@ -2244,7 +2244,11 @@ class MainActivity : AppCompatActivity() {
      */
     private fun syncWorkout() {
         if (inWorkout()) return
-        workout = profile.workout
+        val chosen = profile.workout
+        if (chosen == workout) return
+        workout = chosen
+        // The idle line names it.
+        renderControls()
     }
 
     /**

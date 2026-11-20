@@ -88,4 +88,18 @@ class ControlNamesTest {
     fun `an error written while idle still gets the pill, because nothing else would say it`() {
         assertTrue(ControlNames.pillShown(WorkoutState.IDLE, statusBlank = false))
     }
+
+    @Test
+    fun `idle names the chosen workout in front of its line`() {
+        val idle = ControlNames.of(
+            WorkoutState.IDLE, CameraControls.of(WorkoutState.IDLE, filming = false), Workouts.CINDY
+        )
+        assertEquals("Cindy · Press the shutter to start the setup check", idle.idleLine)
+        // Only idle has a line to name it in.
+        val running = ControlNames.of(
+            WorkoutState.RUNNING, CameraControls.of(WorkoutState.RUNNING, filming = false),
+            Workouts.CINDY
+        )
+        assertNull(running.idleLine)
+    }
 }
