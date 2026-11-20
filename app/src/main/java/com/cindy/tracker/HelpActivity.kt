@@ -121,7 +121,8 @@ class HelpActivity : AppCompatActivity() {
 
         heading("WHAT A GOOD SCORE IS")
         paragraph("CrossFit's tiers, in rounds:")
-        val history = RecordStore(this).all()
+        // Cindy's sessions only: these are Cindy's tiers, and no other workout is scored in them.
+        val history = Records.ofWorkout(RecordStore(this).all(), Workouts.CINDY_ID)
         // These tiers describe the prescribed movements, so only a standard Cindy is measured
         // against them. Ticking "Rx'd" off the back of a session run with knee push-ups would be
         // exactly the claim the note below has always refused to make -- the difference now is

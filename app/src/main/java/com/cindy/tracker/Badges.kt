@@ -214,7 +214,18 @@ object Badges {
 
     /** A score is only ever credited to a standard Cindy the camera could stand behind. */
     private fun standardAndExact(a: Attempt): Boolean =
-        a.profile?.isStandard == true && !a.scoreIsLowerBound
+        a.category == Category.STANDARD_CINDY && !a.scoreIsLowerBound
+
+    /**
+     * The sessions a badge can be earned by: Cindy's.
+     *
+     * The catalogue is Cindy's — its first session, its rungs, its paces, its twenty minutes —
+     * and badges stay per workout like records and levels do, so a session of another workout
+     * neither earns one nor moves one along. Its days still count on the calendar and in the
+     * streaks the progress page shows; they are only not counted here.
+     */
+    private fun cindyOnly(attempts: List<Attempt>): List<Attempt> =
+        Records.ofWorkout(attempts, Workouts.CINDY_ID)
 
     /**
      * Every badge earned, in catalogue order, each stamped with the session that first earned it.
@@ -234,7 +245,7 @@ object Badges {
         val days = HashSet<LocalDate>()
         val weeks = HashSet<LocalDate>()
 
-        for (a in attempts.sortedBy { it.atMillis }) {
+        for (a in cindyOnly(attempts).sortedBy { it.atMillis }) {
             sessions++
             reps += a.totalReps
             val day = Progress.localDate(a, zone)
@@ -281,13 +292,14 @@ object Badges {
      */
     fun progress(
         badge: Badge,
-        attempts: List<Attempt>,
+        sessions: List<Attempt>,
         today: LocalDate,
         zone: ZoneId,
         firstDayOfWeek: DayOfWeek
     ): BadgeProgress? {
         val target = badge.target
         if (target <= 1) return null
+        val attempts = cindyOnly(sessions)
         return when (badge.rule) {
             BadgeRule.SESSIONS ->
                 BadgeProgress(min(attempts.size, target), target, "sessions")

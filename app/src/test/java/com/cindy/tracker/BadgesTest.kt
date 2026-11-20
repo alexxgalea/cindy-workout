@@ -830,4 +830,20 @@ class BadgesTest {
         val three = listOf(attempt(start.plusDays(9)), attempt(start), attempt(start.plusDays(4)))
         assertEquals("Training since 2 Mar 2026 · 3 sessions", Badges.trainingLine(three, zone))
     }
+
+    // ── workouts ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a session of another workout earns no badge`() {
+        val free = attempt(rounds = 25).copy(workoutId = "freestyle")
+        assertTrue(earned(listOf(free)).isEmpty())
+    }
+
+    @Test
+    fun `a session of another workout does not move a badge along`() {
+        val sessions = spaced(3) +
+            spaced(4).map { it.copy(atMillis = it.atMillis + 1, workoutId = "freestyle") }
+        assertEquals(3, progress(Badge.SESSIONS_10, sessions)?.current)
+        assertTrue(Badge.FIRST_CINDY in earned(sessions))
+    }
 }
