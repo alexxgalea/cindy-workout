@@ -19,7 +19,7 @@ from cindy_sim.recogniser import Position
 from cindy_sim.recogniser import Movement
 from cindy_sim.workout_engine import CindyProfile, PullVariant
 from run_recognition import (Frame, check_movement_windows, check_windows, confirmations, real_rep, runs,
-                             track_positions, track_recognitions)
+                             score_film, timeline_lines, track_positions, track_recognitions)
 
 
 def frames_of(pose, from_ms: int, to_ms: int, step_ms: int = 100, stable: bool = True) -> list[Frame]:
@@ -172,6 +172,100 @@ class CheckMovementWindowsTest(unittest.TestCase):
         failures = check_movement_windows([(3000, Movement.PUSH_UPS)], self.WINDOWS)
         self.assertEqual(1, len(failures))
         self.assertIn("squats", failures[0])
+
+
+class ScoreFilmTest(unittest.TestCase):
+    """The three metrics of #181 and the thresholds that fail a run."""
+
+    WINDOWS = [
+        {"label": "push-ups", "fromMs": 0, "toMs": 20000, "movement": "pushup"},
+        {"label": "walk", "fromMs": 20000, "toMs": 25000, "movement": "none"},
+        {"label": "squats", "fromMs": 25000, "toMs": 50000, "movement": "squat"},
+    ]
+    LABELS = {"pushup": [2000, 4000, 6000, 8000, 10000], "squat": [27000, 29000, 31000, 33000]}
+
+    def score(self, confirmed, windows=None):
+        return score_film(confirmed, windows or self.WINDOWS, self.LABELS)
+
+    def test_a_clean_film_has_no_wrong_no_idle_and_each_set_confirmed_by_its_third_rep(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)])
+        self.assertEqual(([], []), (score.wrong, score.idle))
+        self.assertEqual([("pushup", 5000, 2, "ok"), ("squat", 30000, 2, "ok")],
+                         [(s.movement, s.confirmed_ms, s.real_rep, s.status) for s in score.sets])
+        self.assertFalse(score.failed)
+
+    def test_a_confirmation_in_another_movements_window_is_wrong_not_idle(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (6000, Movement.SQUATS), (30000, Movement.SQUATS)])
+        self.assertEqual(1, len(score.wrong))
+        self.assertIn("6000", score.wrong[0])
+        self.assertEqual([], score.idle)
+        self.assertTrue(score.failed)
+
+    def test_a_confirmation_inside_a_none_window_is_idle_not_wrong(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (22000, Movement.SQUATS), (30000, Movement.SQUATS)])
+        self.assertEqual([], score.wrong)
+        self.assertEqual(1, len(score.idle))
+        self.assertIn("walk", score.idle[0])
+        self.assertTrue(score.failed)
+
+    def test_a_confirmation_in_no_window_is_wrong(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS), (60000, Movement.PULL_UPS)])
+        self.assertEqual(1, len(score.wrong))
+        self.assertIn("no window", score.wrong[0])
+
+    def test_a_set_confirmed_at_its_third_real_rep_passes_and_at_its_fourth_fails(self):
+        self.assertFalse(self.score([(6000, Movement.PUSH_UPS), (30000, Movement.SQUATS)]).failed)
+        late = self.score([(8500, Movement.PUSH_UPS), (30000, Movement.SQUATS)])
+        self.assertEqual(("late", 4), (late.sets[0].status, late.sets[0].real_rep))
+        self.assertTrue(late.failed)
+
+    def test_the_real_rep_counts_only_reps_labelled_inside_the_sets_own_window(self):
+        labels = {"pushup": [2000, 4000], "squat": [27000, 29000, 31000, 33000]}
+        score = score_film([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], self.WINDOWS, labels)
+        self.assertEqual([2, 2], [s.real_rep for s in score.sets])
+
+    def test_a_set_never_confirmed_is_reported_and_fails(self):
+        score = self.score([(5000, Movement.PUSH_UPS)])
+        self.assertEqual(("squat", None, None, "never"),
+                         (score.sets[1].movement, score.sets[1].confirmed_ms, score.sets[1].real_rep,
+                          score.sets[1].status))
+        self.assertTrue(score.failed)
+
+    def test_a_known_gap_never_confirmed_is_reported_loudly_and_does_not_fail(self):
+        windows = [dict(w, knownGap="the engine counts 1 of 5") if w["movement"] == "squat" else w
+                   for w in self.WINDOWS]
+        score = self.score([(5000, Movement.PUSH_UPS)], windows)
+        self.assertEqual("known_gap", score.sets[1].status)
+        self.assertEqual("the engine counts 1 of 5", score.sets[1].reason)
+        self.assertFalse(score.failed)
+
+    def test_a_known_gap_does_not_excuse_a_wrong_confirmation(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        self.assertTrue(self.score([(5000, Movement.PUSH_UPS), (22000, Movement.SQUATS)], windows).failed)
+
+    def test_a_known_gap_confirmed_in_time_is_a_pass_that_says_the_gap_is_closed(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows)
+        self.assertEqual("ok", score.sets[1].status)
+        self.assertFalse(score.failed)
+
+    def test_a_window_shifted_off_its_film_fails_the_run(self):
+        # The deliberate failure: the same confirmations, every window moved 20 s later.
+        shifted = [dict(w, fromMs=w["fromMs"] + 20000, toMs=w["toMs"] + 20000) for w in self.WINDOWS]
+        self.assertTrue(self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], shifted).failed)
+
+
+class TimelineTest(unittest.TestCase):
+    def test_lists_window_starts_positions_and_confirmations_in_time_order(self):
+        windows = [{"label": "walk", "fromMs": 0, "toMs": 4000, "movement": "none"},
+                   {"label": "squats", "fromMs": 4000, "toMs": 9000, "movement": "squat"}]
+        positions = [(0, 4000, Position.NONE), (4000, 9000, Position.STANDING)]
+        lines = timeline_lines(positions, [(6500, Movement.SQUATS)], windows, {"squat": [5000, 6000, 7000]})
+        text = "\n".join(lines)
+        self.assertLess(text.index("walk"), text.index("squats"))
+        self.assertLess(text.index("standing"), text.index("CONFIRMED"))
+        self.assertIn("6.50s", text)
+        self.assertIn("real rep 2 of 3", text)
 
 
 if __name__ == "__main__":

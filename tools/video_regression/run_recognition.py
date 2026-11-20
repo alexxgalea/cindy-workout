@@ -93,27 +93,114 @@ def real_rep(labelled_ms: Sequence[int], at_ms: int) -> int:
     return sum(1 for t in labelled_ms if t <= at_ms + REP_SLACK_MS)
 
 
-def check_movement_windows(
-    confirmed: Sequence[tuple[int, Movement]], windows: Sequence[dict]
-) -> list[str]:
-    """One message per wrong confirmation and per movement window never confirmed."""
-    failures: list[str] = []
+#: A set must be confirmed by the end of this real rep (the issue's threshold: not after the 3rd).
+LATEST_CONFIRMING_REP = 3
+
+
+@dataclass
+class SetResult:
+    """How recognition did on one labelled set: when it confirmed the movement, and at which real rep."""
+
+    label: str
+    movement: str
+    confirmed_ms: int | None
+    real_rep: int | None
+    #: ok, late (after the 3rd real rep), never, or known_gap (late or never, but marked a known gap)
+    status: str
+    reason: str = ""
+
+
+@dataclass
+class FilmScore:
+    """The three metrics of one film. Wrong confirmations and idle recognitions are messages, one each."""
+
+    wrong: list[str]
+    idle: list[str]
+    sets: list[SetResult]
+
+    @property
+    def failed(self) -> bool:
+        return bool(self.wrong or self.idle or any(s.status in ("late", "never") for s in self.sets))
+
+    def failures(self) -> list[str]:
+        out = list(self.wrong) + list(self.idle)
+        for s in self.sets:
+            if s.status == "never":
+                out.append(f"{s.label}: {s.movement} was never confirmed")
+            elif s.status == "late":
+                out.append(f"{s.label}: confirmed at {s.confirmed_ms} ms, at real rep {s.real_rep} "
+                           f"(the latest allowed is {LATEST_CONFIRMING_REP})")
+        return out
+
+
+def score_film(
+    confirmed: Sequence[tuple[int, Movement]], windows: Sequence[dict], labelled: dict[str, Sequence[int]]
+) -> FilmScore:
+    """The film's metrics: wrong confirmations, idle recognitions, and the real rep each set was confirmed at.
+
+    A confirmation inside a window of another movement or inside no window is wrong; inside a `none`
+    window it is an idle recognition. A set is a window of a movement: it is confirmed by the first
+    confirmation of that movement inside it. A set `knownGap`-marked with a reason is reported but
+    does not fail the run when it is late or never confirmed.
+    """
+    wrong: list[str] = []
+    idle: list[str] = []
     for t, movement in confirmed:
         inside = [w for w in windows if w["fromMs"] <= t < w["toMs"]]
-        label = ", ".join(w.get("label", w["movement"]) for w in inside)
+        names = ", ".join(w.get("label", w["movement"]) for w in inside)
         if not inside:
-            failures.append(f"wrong confirmation: {movement.label} at {t} ms, inside no window")
-        elif all(MOVEMENT_KEYS.get(w["movement"]) is not movement for w in inside):
-            failures.append(f"wrong confirmation: {movement.label} at {t} ms, in the window '{label}'")
+            wrong.append(f"wrong confirmation: {movement.label} at {t} ms, inside no window")
+        elif any(MOVEMENT_KEYS.get(w["movement"]) is movement for w in inside):
+            continue
+        elif all(w["movement"] == "none" for w in inside):
+            idle.append(f"idle recognition: {movement.label} at {t} ms, in the none window '{names}'")
+        else:
+            wrong.append(f"wrong confirmation: {movement.label} at {t} ms, in the window '{names}'")
+    sets: list[SetResult] = []
     for window in windows:
         wanted = MOVEMENT_KEYS.get(window["movement"])
         if wanted is None:
             continue
         label = window.get("label", window["movement"])
-        if not any(m is wanted and window["fromMs"] <= t < window["toMs"] for t, m in confirmed):
-            failures.append(f"{label}: {wanted.label} was never confirmed between "
-                            f"{window['fromMs']} and {window['toMs']} ms")
-    return failures
+        reason = window.get("knownGap") or ""
+        hits = [t for t, m in confirmed if m is wanted and window["fromMs"] <= t < window["toMs"]]
+        if not hits:
+            sets.append(SetResult(label, window["movement"], None, None, "known_gap" if reason else "never", reason))
+            continue
+        reps = [t for t in (labelled.get(window["movement"]) or []) if window["fromMs"] <= t < window["toMs"]]
+        rep = real_rep(reps, hits[0])
+        status = "ok" if rep <= LATEST_CONFIRMING_REP else ("known_gap" if reason else "late")
+        sets.append(SetResult(label, window["movement"], hits[0], rep, status, reason))
+    return FilmScore(wrong, idle, sets)
+
+
+def check_movement_windows(
+    confirmed: Sequence[tuple[int, Movement]], windows: Sequence[dict]
+) -> list[str]:
+    """One message per wrong confirmation, idle recognition and movement window never confirmed."""
+    return score_film(confirmed, windows, {}).failures()
+
+
+def timeline_lines(
+    positions: Sequence[tuple[int, int, Position]],
+    confirmed: Sequence[tuple[int, Movement]],
+    windows: Sequence[dict],
+    labelled: dict[str, Sequence[int]],
+) -> list[str]:
+    """Window starts, position runs and confirmations in time order, so a miss can be found by its time."""
+    events: list[tuple[int, int, str]] = []
+    for w in windows:
+        events.append((w["fromMs"], 0, f"[window] {w.get('label', w['movement'])}: {w['movement']}, "
+                                       f"{w['fromMs'] / 1000:.2f}s to {w['toMs'] / 1000:.2f}s"))
+    for start, end, position in positions:
+        events.append((start, 1, f"position {position.label}, until {end / 1000:.2f}s"))
+    for t, movement in confirmed:
+        key = next(k for k, m in MOVEMENT_KEYS.items() if m is movement)
+        windows_of = [w for w in windows if w["movement"] == key and w["fromMs"] <= t < w["toMs"]]
+        reps = [x for x in (labelled.get(key) or []) if not windows_of
+                or windows_of[0]["fromMs"] <= x < windows_of[0]["toMs"]]
+        events.append((t, 2, f"CONFIRMED {movement.label}, at real rep {real_rep(reps, t)} of {len(reps)}"))
+    return [f"{t / 1000:7.2f}s  {text}" for t, _, text in sorted(events)]
 
 
 def runs(track: Sequence[tuple[int, Position]]) -> list[tuple[int, int, Position]]:
@@ -230,12 +317,32 @@ def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> bool
     if not confirmed:
         print("    none")
     movement_windows = scenario.get("movementWindows") or []
-    move_failures = check_movement_windows(confirmed, movement_windows) if movement_windows else []
+    passed = not failures
     if movement_windows:
-        print(f"  Movement windows: {len(movement_windows)} labelled, {len(move_failures)} failure(s)")
-    for failure in move_failures:
-        print(f"    - {failure}")
-    return not failures and not move_failures
+        score = score_film(confirmed, movement_windows, labelled)
+        print(f"  Metrics: wrong confirmations {len(score.wrong)}, idle recognitions {len(score.idle)}")
+        for message in score.wrong + score.idle:
+            print(f"    - {message}")
+        print(f"  Sets (the latest confirming real rep is {LATEST_CONFIRMING_REP}):")
+        for s in score.sets:
+            print("    " + describe_set(s))
+        print("  Timeline:")
+        for line in timeline_lines(runs(track), confirmed, movement_windows, labelled):
+            print("    " + line)
+        passed = passed and not score.failed
+    return passed
+
+
+def describe_set(s: SetResult) -> str:
+    """One line for a set: ok, LATE, NEVER CONFIRMED or KNOWN GAP, with the real rep it was confirmed at."""
+    when = "" if s.confirmed_ms is None else f"confirmed {s.confirmed_ms / 1000:.2f}s at real rep {s.real_rep}"
+    if s.status == "ok":
+        return f"ok          {s.label} ({s.movement}): {when}"
+    if s.status == "late":
+        return f"LATE        {s.label} ({s.movement}): {when}"
+    if s.status == "never":
+        return f"NEVER CONFIRMED  {s.label} ({s.movement})"
+    return f"KNOWN GAP   {s.label} ({s.movement}): {when or 'never confirmed'}; {s.reason}"
 
 
 def main() -> int:
