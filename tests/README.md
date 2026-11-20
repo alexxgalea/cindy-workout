@@ -244,6 +244,10 @@ touches the workout's counting.
 .venv/bin/python tools/video_regression/run_recognition.py --video clip.mp4
 ```
 
+The owner's own films are scored by `tests/scenarios/recognition/owner_films.json`; the films stay out
+of git, at the ignored `tests/fixtures/owner/` (`rec-a.mp4`, `rec-b.mp4`: copy or link the gym recordings
+there). A scenario with no film on this machine reports `missing fixture` and fails the run.
+
 Each film's positions and movements are written to the ignored
 `tests/reports/recognition/<id>.positions.csv`. The run prints every confirmation with its time and
 the real rep it came at (how many of the scenario's `labelledBottomsMs` were done by then, a rep
@@ -259,9 +263,15 @@ every other runner:
 ```
 
 A scenario labels what the athlete was really doing with `movementWindows`
-(`pullup`, `pushup`, `squat` or `none`). The run fails on a confirmation inside a window of another
-movement, inside a `none` window or inside no window, and on a movement window in which that
-movement was never confirmed:
+(`pullup`, `pushup`, `squat` or `none`; a `none` window is a walk, a rest or a walk-in). Each film
+is scored on three metrics: wrong confirmations (a movement confirmed in another movement's window
+or in no window), idle recognitions (a confirmation inside a `none` window) and the real rep each
+set was confirmed at (the scenario's `labelledBottomsMs` inside the window). The run exits 1 on any
+wrong confirmation, any idle recognition, a set confirmed after its 3rd real rep, and a set never
+confirmed. A window with a `knownGap` reason is reported as KNOWN GAP when it is late or never
+confirmed and does not fail the run (the Cindy clip's pull-ups, where counting finds 1 of 5). The
+run prints each film's timeline of windows, positions and confirmations. Reps and windows come from
+a per-frame joint signal (nose height, wrists against shoulders), never from contact sheets:
 
 ```json
 "movementWindows": [

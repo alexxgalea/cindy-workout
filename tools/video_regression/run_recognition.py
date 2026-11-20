@@ -19,12 +19,20 @@ A scenario may also carry `movementWindows`, labels for what the athlete was rea
     {"label": "push-ups", "fromMs": 29000, "toMs": 52500, "movement": "pushup"}
     {"label": "the walk to the mat", "fromMs": 24000, "toMs": 28500, "movement": "none"}
 
-A movement is confirmed at one moment, when recognition first names it. The run prints each
-confirmation with its time and the real rep it came at, counted from the scenario's
-`labelledBottomsMs` (the labels are good to a fraction of a second, so a rep labelled up to
-REP_SLACK_MS after the confirmation counts as already done). It fails on a confirmation inside a
-window of another movement, inside a `none` window or inside no window, and on a movement window in
-which that movement was never confirmed.
+A movement is confirmed at one moment, when recognition first names it. Each film is scored on
+three metrics, from its `movementWindows` (a `none` window is a walk, a rest or a walk-in):
+
+- wrong confirmations: a movement confirmed inside the window of another movement, or inside no window;
+- idle recognitions: a movement confirmed inside a `none` window;
+- the real rep each set (each window of a movement) was confirmed at, counted from the scenario's
+  `labelledBottomsMs` inside that window (the labels are good to a fraction of a second, so a rep
+  labelled up to REP_SLACK_MS after the confirmation counts as already done).
+
+The run fails (exit 1) on any wrong confirmation, any idle recognition, a set confirmed after its 3rd
+real rep, and a set never confirmed. A window with a `knownGap` reason (a sentence saying why) is
+reported as KNOWN GAP when it is late or never confirmed, and does not fail the run; it says so
+loudly, and when the gap has closed it reports the set as ok. Each film also prints a timeline of
+window starts, positions and confirmations, so a miss can be found by its time.
 
     python3 tools/video_regression/run_recognition.py --scenarios tests/scenarios/cindy.json
     python3 tools/video_regression/run_recognition.py --video clip.mp4
@@ -361,7 +369,8 @@ def main() -> int:
     else:
         import run_batch
 
-        paths = args.scenarios or sorted((ROOT / "tests/scenarios").glob("*.json"))
+        catalogues = ROOT / "tests/scenarios"
+        paths = args.scenarios or sorted(catalogues.glob("*.json")) + sorted(catalogues.glob("recognition/*.json"))
         scenarios = [s for s in run_batch.load_catalogues(paths) if s.get("positionWindows") or s.get("movementWindows")]
     if not scenarios:
         print("No scenarios with positionWindows or movementWindows to run.", file=sys.stderr)
