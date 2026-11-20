@@ -53,6 +53,25 @@ class RecordStoreTest {
         assertEquals(listOf(1000L, 3000L), store.all().map { it.atMillis })
     }
 
+    /**
+     * Sessions recorded before workouts existed become Cindy sessions by being read as one, not
+     * by a migration that rewrites the board. Reading must leave the stored lines as they were.
+     */
+    @Test
+    fun `a board written before workouts reads as Cindy and is not rewritten by reading it`() {
+        store()
+        val prefs = ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getSharedPreferences("cindy", android.content.Context.MODE_PRIVATE)
+        val old = "v7|12|7|1000|1200000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|\n" +
+            "v6|9|3|2000|1200000|0||STRICT_PULL_UP|KNEE_PUSH_UP|AIR_SQUAT|0|273|0"
+        prefs.edit().putString("attempts", old).commit()
+
+        val read = RecordStore(ApplicationProvider.getApplicationContext()).all()
+
+        assertEquals(listOf("cindy", "cindy"), read.map { it.workoutId })
+        assertEquals(old, prefs.getString("attempts", null))
+    }
+
     @Test
     fun `removing a time nothing was saved at changes nothing and says so`() {
         val store = store()

@@ -217,6 +217,14 @@ class MenuActivity : AppCompatActivity() {
         ).apply { bottomMargin = dp(12) })
 
         binding.rows.addView(insetGroup {
+            row(navRow("Workout", profile.workout.name) {
+                if (workoutLive) {
+                    toast("Reset the workout first to choose another")
+                } else {
+                    // Saved on every tap, like Movements; the row reads it back on onRestart.
+                    startActivity(WorkoutsActivity.intent(this@MenuActivity))
+                }
+            })
             row(navRow("Movements", movementsSubtitle(movements)) {
                 if (workoutLive) {
                     toast("Reset the workout first to change movements")
@@ -266,8 +274,8 @@ class MenuActivity : AppCompatActivity() {
             binding.rows.addView(
                 styledText(
                     R.style.Cindy_Footnote,
-                    "Movements can only be changed between workouts — they have to mean one " +
-                        "thing for the whole score."
+                    "The workout and its movements can only be changed between workouts — " +
+                        "they have to mean one thing for the whole score."
                 ).apply { setPadding(dp(4), dp(14), dp(4), 0) }
             )
         }

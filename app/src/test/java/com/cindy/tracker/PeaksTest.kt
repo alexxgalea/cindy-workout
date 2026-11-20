@@ -33,8 +33,8 @@ class PeaksTest {
     }
 
     private fun peaks(
-        attempts: List<Attempt>, category: CindyProfile? = CindyProfile.STANDARD
-    ) = Peaks.of(attempts, category, today, zone, monday)
+        attempts: List<Attempt>, movements: CindyProfile? = CindyProfile.STANDARD
+    ) = Peaks.of(attempts, Category(Workouts.CINDY_ID, movements), today, zone, monday)
 
     private fun List<Peak>.titled(title: String) = firstOrNull { it.title == title }
 

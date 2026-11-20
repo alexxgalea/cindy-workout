@@ -30,14 +30,16 @@ object BottomBand {
      * Draws the band for [state]. [panel] says which controls are there and which answer, and
      * [statusBlank] whether the coaching line has anything to say (only idle cares: see
      * [ControlNames.pillShown]). [coachCovers] keeps the pill out of the way of the
-     * start-position card, which hangs from its bottom edge.
+     * start-position card, which hangs from its bottom edge. [workout] is named in the idle
+     * line, so the athlete reads what the shutter will start.
      */
     fun apply(
         hud: ActivityMainBinding,
         state: WorkoutState,
         panel: CameraControlPanel,
         statusBlank: Boolean,
-        coachCovers: Boolean = false
+        coachCovers: Boolean = false,
+        workout: Workout? = null
     ) {
         val bar = atTheBar(state)
         val context = hud.root.context
@@ -82,7 +84,7 @@ object BottomBand {
             ColorStateList.valueOf(context.getColor(if (bar) R.color.label else R.color.on_primary))
 
         // ── the names ──
-        val names = ControlNames.of(state, panel)
+        val names = ControlNames.of(state, panel, workout)
         hud.controlNames.visibility = if (bar) View.GONE else View.VISIBLE
         hud.nameEnd.name(names.end)
         hud.nameShutter.name(names.shutter)

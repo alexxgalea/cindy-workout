@@ -210,7 +210,7 @@ class HeelsFlatSquatTest {
             Attempt(rounds = 12, reps = 0, atMillis = 1L, profile = CindyProfile.STANDARD),
             Attempt(rounds = 9, reps = 0, atMillis = 2L, profile = flat)
         )
-        assertEquals(9, Records.bestIn(history, flat)?.rounds)
-        assertEquals(12, Records.bestIn(history, CindyProfile.STANDARD)?.rounds)
+        assertEquals(9, Records.bestIn(history, Category(Workouts.CINDY_ID, flat))?.rounds)
+        assertEquals(12, Records.bestIn(history, Category.STANDARD_CINDY)?.rounds)
     }
 }

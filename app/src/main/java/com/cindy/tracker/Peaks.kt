@@ -13,19 +13,21 @@ data class Peak(val title: String, val value: String, val detail: String, val ra
  * The personal-best board, built only from what is already recorded.
  *
  * Pure: no clock, no zone of its own. Scores, rounds and paces are compared within one category
- * and never from a lower-bound attempt, which only says "at least". Streaks and weekly volume
- * are work done rather than a comparison, so they look at every attempt.
+ * (one workout, at the same movements) and never from a lower-bound attempt, which only says "at
+ * least". Streaks and weekly volume are work done rather than a comparison, so they look at
+ * every attempt, whatever the workout.
  */
 object Peaks {
     private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
 
     /** Every trophy, in display order. Empty when there are no attempts. */
     fun of(
-        attempts: List<Attempt>, category: CindyProfile?, today: LocalDate, zone: ZoneId,
+        attempts: List<Attempt>, category: Category?, today: LocalDate, zone: ZoneId,
         firstDayOfWeek: DayOfWeek
     ): List<Peak> {
         val out = ArrayList<Peak>()
-        val clean = attempts.filter { it.profile == category && !it.scoreIsLowerBound }
+        val clean = attempts.filter { it.category == category && !it.scoreIsLowerBound }
+        val movements = category?.profile
         fun date(a: Attempt) = dateFormat.format(Progress.localDate(a, zone))
 
         val titles = listOf("Best score", "2nd best", "3rd best")
@@ -62,14 +64,14 @@ object Peaks {
             }
 
         // The fastest set of each movement, only where the camera saw every rep: a tapped or
-        // skipped set is not a time the app can stand behind. There is no set peak without a
-        // category, because the title names the movement being timed.
-        if (category != null) {
+        // skipped set is not a time the app can stand behind. There is no set peak without known
+        // movements, because the title names the movement being timed.
+        if (movements != null) {
             for (movement in Exercise.entries) {
                 val plural = when (movement) {
-                    Exercise.PULLUP -> category.pull.plural
-                    Exercise.PUSHUP -> category.push.plural
-                    Exercise.SQUAT -> category.squat.plural
+                    Exercise.PULLUP -> movements.pull.plural
+                    Exercise.PUSHUP -> movements.push.plural
+                    Exercise.SQUAT -> movements.squat.plural
                 }
                 // Newest first and a strict comparison, so a tie keeps the more recent set.
                 var best: Pair<Attempt, Long>? = null

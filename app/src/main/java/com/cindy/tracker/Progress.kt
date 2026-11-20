@@ -61,8 +61,9 @@ data class WeekSummary(val thisWeek: Period, val lastWeek: Period, val thisMonth
 /**
  * The numbers behind the progress chart and the "this week" card.
  *
- * Pure: no clock, no zone of its own. Scores are only ever compared within one category, and a
- * lower-bound attempt is plotted but never claims a record, as in [Records].
+ * Pure: no clock, no zone of its own. Scores are only ever compared within one category (one
+ * workout, at the same movements), and a lower-bound attempt is plotted but never claims a
+ * record, as in [Records].
  */
 object Progress {
     /**
@@ -77,21 +78,21 @@ object Progress {
         Instant.ofEpochMilli(a.atMillis).atZone(zone).toLocalDate()
 
     /** Every category trained, most recently used first. */
-    fun categories(attempts: List<Attempt>): List<CindyProfile?> =
-        attempts.sortedByDescending { it.atMillis }.map { it.profile }.distinct()
+    fun categories(attempts: List<Attempt>): List<Category> =
+        attempts.sortedByDescending { it.atMillis }.map { it.category }.distinct()
 
     /** The category of the latest attempt — what the athlete is training now. */
-    fun defaultCategory(attempts: List<Attempt>): CindyProfile? =
-        attempts.maxByOrNull { it.atMillis }?.profile
+    fun defaultCategory(attempts: List<Attempt>): Category? =
+        attempts.maxByOrNull { it.atMillis }?.category
 
     /**
      * Reps per attempt in one category. A lower-bound score does raise the bar, because the
      * true score was at least that, exactly as [Records.personalRecord] treats it.
      */
     fun scoreSeries(
-        attempts: List<Attempt>, category: CindyProfile?, from: LocalDate?, zone: ZoneId
+        attempts: List<Attempt>, category: Category?, from: LocalDate?, zone: ZoneId
     ): Series {
-        val own = attempts.filter { it.profile == category }.sortedBy { it.atMillis }
+        val own = attempts.filter { it.category == category }.sortedBy { it.atMillis }
         var best = Int.MIN_VALUE
         val points = ArrayList<ProgressPoint>()
         val bests = ArrayList<Double>()
@@ -115,10 +116,10 @@ object Progress {
      * displayed best so the line stays finite.
      */
     fun paceSeries(
-        attempts: List<Attempt>, category: CindyProfile?, from: LocalDate?, zone: ZoneId
+        attempts: List<Attempt>, category: Category?, from: LocalDate?, zone: ZoneId
     ): Series {
         val own = attempts
-            .filter { it.profile == category && isFullSession(it) && it.avgRoundMs != null }
+            .filter { it.category == category && isFullSession(it) && it.avgRoundMs != null }
             .sortedBy { it.atMillis }
         var best = Double.MAX_VALUE
         val points = ArrayList<ProgressPoint>()
@@ -145,8 +146,8 @@ object Progress {
     }
 
     /**
-     * Reps per week, across all categories — volume is work done, not a comparison. Weeks with
-     * no session are kept so that a week off shows as a gap.
+     * Reps per week, across all categories and workouts — volume is work done, not a comparison.
+     * Weeks with no session are kept so that a week off shows as a gap.
      */
     fun weeklyVolume(
         attempts: List<Attempt>, from: LocalDate?, today: LocalDate, zone: ZoneId,

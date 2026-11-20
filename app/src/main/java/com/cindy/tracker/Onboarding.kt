@@ -38,6 +38,9 @@ object Onboarding {
      */
     const val KEY_WATCH_OFFER_SEEN = "watch_offer_silenced"
 
+    /** The workouts shown on the Workouts page so far, by id ([FirstRun.workoutsSeen]). */
+    const val KEY_WORKOUTS_SEEN = "workouts_seen"
+
     /**
      * Whether the offer to pair a watch has already been made to this athlete.
      *
@@ -69,4 +72,16 @@ object Onboarding {
         placementDismissed: Boolean,
         cameraGranted: Boolean
     ): Boolean = !seen && !hasHistory && !placementDismissed && !cameraGranted
+
+    /**
+     * Whether the Workouts page opens by itself: at first launch, and when an update brings a
+     * workout the athlete has not seen, but only once the catalog holds more than one.
+     *
+     * A catalog of one is no choice, so a page about it would be a screen in the way. That is
+     * what keeps a first run of a Cindy-only build exactly as it was. [catalog] is the ids this
+     * build knows, and [seen] the ids already shown: a first launch has seen none, so any catalog
+     * of two or more opens it, and an update opens it again only for an id it has not shown.
+     */
+    fun shouldShowWorkouts(catalog: List<String>, seen: Set<String>): Boolean =
+        catalog.size > 1 && catalog.any { it !in seen }
 }

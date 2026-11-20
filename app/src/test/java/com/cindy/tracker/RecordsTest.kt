@@ -234,8 +234,8 @@ class RecordsTest {
     }
 
     @Test
-    fun `encode writes the v7 format`() {
-        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v7|"))
+    fun `encode writes the v8 format`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
     }
 
     @Test
@@ -293,5 +293,133 @@ class RecordsTest {
         val knees = attempt(30, 0, 1L).copy(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP))
         assertEquals(listOf(1 to null, 2 to 900), Records.standings(listOf(knees))
             .map { it.rank to it.attempt?.totalReps })
+    }
+
+    // ── the workout (record format v8) ────────────────────────────────────────
+
+    @Test
+    fun `an attempt is a Cindy unless it says otherwise`() {
+        assertEquals("cindy", attempt(12, 7).workoutId)
+        assertEquals(Workouts.CINDY, attempt(12, 7).workout)
+    }
+
+    @Test
+    fun `the workout survives the round-trip`() {
+        val a = attempt(12, 7, 1000L).copy(countedReps = 367, workoutId = "cindy")
+        val back = Records.decode(Records.encode(listOf(a))).single()
+        assertEquals(a, back)
+        assertEquals("cindy", back.workoutId)
+    }
+
+    @Test
+    fun `a v7 line, written before workouts existed, reads as a Cindy`() {
+        val v7 = "v7|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|"
+        val back = Records.decode(v7).single()
+        assertEquals("cindy", back.workoutId)
+        assertEquals(Workouts.CINDY, back.workout)
+        // Nothing else about it moved to make room.
+        assertEquals(12, back.rounds)
+        assertEquals(367, back.countedReps)
+    }
+
+    @Test
+    fun `every older line reads as a Cindy too`() {
+        val lines = listOf(
+            "12,7,1000",
+            "v3|12|7|100|1000|0|",
+            "v4|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0",
+            "v5|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367",
+            "v6|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0",
+            "v7|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|"
+        )
+        val back = Records.decode(lines.joinToString("\n"))
+        assertEquals(lines.size, back.size)
+        back.forEach { assertEquals("cindy", it.workoutId) }
+    }
+
+    @Test
+    fun `a v8 line carries its workout's id last`() {
+        val line = Records.encode(listOf(attempt(12, 7)))
+        assertEquals(15, line.split("|").size)
+        assertTrue(line, line.endsWith("|cindy"))
+    }
+
+    /**
+     * A session from a build that knew a workout this one does not is kept, under its own id,
+     * rather than relabelled a Cindy: that would rank it against scores it has nothing in common
+     * with. It is the same line an unknown movement already draws.
+     */
+    @Test
+    fun `a workout this build does not know is kept as it was, not relabelled`() {
+        val v8 = "v8|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0||murph"
+        val back = Records.decode(v8).single()
+        assertEquals("murph", back.workoutId)
+        assertNull(back.workout)
+        assertEquals(12, back.rounds)
+        // And written back out the same way, so a save does not lose it either.
+        assertEquals(v8, Records.encode(listOf(back)))
+    }
+
+    @Test
+    fun `a v8 line with a field missing is refused, not misread`() {
+        val short = "v8|12|7|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|367|0|"
+        assertTrue(Records.decode(short).isEmpty())
+    }
+
+    // ── records per workout ───────────────────────────────────────────────────
+
+    /** A session of a workout that is not Cindy, at Cindy's own movements. */
+    private fun other(rounds: Int, at: Long = 0L) =
+        attempt(rounds, at = at).copy(workoutId = "freestyle")
+
+    @Test
+    fun `a level is awarded only to a standard Cindy`() {
+        assertEquals(Level.of(27), attempt(27).level)
+        assertNull(other(27).level)
+        assertNull(attempt(27).copy(profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP)).level)
+    }
+
+    @Test
+    fun `the sessions of one workout are only that workout's`() {
+        val cindy = attempt(10, at = 1L)
+        val free = other(12, at = 2L)
+        assertEquals(listOf(cindy), Records.ofWorkout(listOf(cindy, free), Workouts.CINDY_ID))
+        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "freestyle"))
+    }
+
+    @Test
+    fun `a bigger session of another workout is not the record a Cindy was chasing`() {
+        val earlierCindy = attempt(10, at = 1L)
+        val bigOther = other(30, at = 2L)
+        val today = attempt(12, at = 3L)
+        val all = listOf(earlierCindy, bigOther, today)
+        assertEquals(earlierCindy, Records.personalRecord(all, today))
+        assertTrue(Records.isPersonalRecord(all, today))
+        // And the other workout is ranked against its own sessions only.
+        assertNull(Records.personalRecord(all, bigOther))
+    }
+
+    @Test
+    fun `the same movements in another workout are another category`() {
+        assertFalse(other(10).category == attempt(10).category)
+        assertEquals(Category.STANDARD_CINDY, attempt(10).category)
+    }
+
+    @Test
+    fun `only a Cindy can beat the benchmark`() {
+        assertTrue(Records.beatsBenchmark(attempt(28)))
+        assertFalse(Records.beatsBenchmark(other(28)))
+    }
+
+    @Test
+    fun `another workout's board is a plain ranking, with no benchmark on it`() {
+        val board = Records.standings(listOf(other(20, at = 1L), other(28, at = 2L)), withBenchmark = false)
+        assertEquals(listOf(1 to 840, 2 to 600), board.map { it.rank to it.attempt?.totalReps })
+    }
+
+    @Test
+    fun `another workout is captioned by its name, never by a rung`() {
+        assertEquals("Workout not recognised", other(27).caption)
+        assertEquals(Level.of(27)?.title, attempt(27).caption)
     }
 }

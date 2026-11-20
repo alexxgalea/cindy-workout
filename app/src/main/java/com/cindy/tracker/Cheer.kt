@@ -60,9 +60,9 @@ object Cheer {
             val diff = s.thisWeek.sessions - s.lastWeek.sessions
             return "${plural(s.thisWeek.sessions, "session")} this week, $diff more than last week."
         }
-        val own = Records.inCategory(attempts, latest.profile)
+        val own = Records.inCategory(attempts, latest.category)
         val first = own.minByOrNull { it.atMillis } ?: latest
-        val best = Records.bestIn(attempts, latest.profile) ?: latest
+        val best = Records.bestIn(attempts, latest.category) ?: latest
         val delta = best.totalReps - first.totalReps
         if (delta > 0) {
             return "Your best is $delta reps above your first " +

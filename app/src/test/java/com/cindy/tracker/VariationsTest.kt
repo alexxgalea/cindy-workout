@@ -95,8 +95,8 @@ class VariationsTest {
             attempt(20, at = 2L, profile = adaptive)
         )
 
-        assertEquals(8, Records.bestIn(history, CindyProfile.STANDARD)?.rounds)
-        assertEquals(20, Records.bestIn(history, adaptive)?.rounds)
+        assertEquals(8, Records.bestIn(history, Category.STANDARD_CINDY)?.rounds)
+        assertEquals(20, Records.bestIn(history, Category(Workouts.CINDY_ID, adaptive))?.rounds)
     }
 
     /**
@@ -109,9 +109,9 @@ class VariationsTest {
         val box = CindyProfile(squat = SquatVariant.BOX_SQUAT)
         val history = listOf(attempt(9, at = 1L, profile = knees), attempt(14, at = 2L, profile = box))
 
-        assertEquals(9, Records.bestIn(history, knees)?.rounds)
-        assertEquals(14, Records.bestIn(history, box)?.rounds)
-        assertNull(Records.bestIn(history, CindyProfile.STANDARD))
+        assertEquals(9, Records.bestIn(history, Category(Workouts.CINDY_ID, knees))?.rounds)
+        assertEquals(14, Records.bestIn(history, Category(Workouts.CINDY_ID, box))?.rounds)
+        assertNull(Records.bestIn(history, Category.STANDARD_CINDY))
     }
 
     @Test

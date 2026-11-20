@@ -50,6 +50,20 @@ class FirstRun(context: Context) {
         }
 
     /**
+     * The ids of the workouts the athlete has been shown on the Workouts page. Empty until the
+     * page has been opened, whichever way it was opened.
+     */
+    var workoutsSeen: Set<String>
+        get() = prefs.getStringSet(Onboarding.KEY_WORKOUTS_SEEN, null)?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(Onboarding.KEY_WORKOUTS_SEEN, value.toSet()).apply()
+        }
+
+    /** Whether to open the Workouts page by itself now: see [Onboarding.shouldShowWorkouts]. */
+    fun shouldShowWorkouts(): Boolean =
+        Onboarding.shouldShowWorkouts(Workouts.catalog.map { it.id }, workoutsSeen)
+
+    /**
      * Whether to show the pages now. [hasHistory] is whether any session is on record, and
      * [cameraGranted] whether the camera's permission is already held.
      */

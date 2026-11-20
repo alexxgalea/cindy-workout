@@ -121,12 +121,13 @@ class HelpActivity : AppCompatActivity() {
 
         heading("WHAT A GOOD SCORE IS")
         paragraph("CrossFit's tiers, in rounds:")
-        val history = RecordStore(this).all()
+        // Cindy's sessions only: these are Cindy's tiers, and no other workout is scored in them.
+        val history = Records.ofWorkout(RecordStore(this).all(), Workouts.CINDY_ID)
         // These tiers describe the prescribed movements, so only a standard Cindy is measured
         // against them. Ticking "Rx'd" off the back of a session run with knee push-ups would be
         // exactly the claim the note below has always refused to make -- the difference now is
         // that the app records which movements were used and can tell.
-        val best = Records.bestIn(history, CindyProfile.STANDARD)
+        val best = Records.bestIn(history, Category.STANDARD_CINDY)
         // The scaled tier is deliberately never ticked: this app counts the prescribed rep
         // scheme, so it has no idea whether the work was scaled, and a tick there would be a
         // claim it cannot make.

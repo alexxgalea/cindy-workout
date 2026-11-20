@@ -1,8 +1,18 @@
 # Cindy
 
-A camera-based counter and logbook for the Cindy benchmark: 20 minutes of rounds of 5 pull-ups, 10 push-ups and 15 squats, done in that order. It counts what the athlete does and coaches them while they do it; it is not a referee.
+A camera-based counter and logbook for the Cindy benchmark: 20 minutes of rounds of 5 pull-ups, 10 push-ups and 15 squats, done in that order. It counts what the athlete does and coaches them while they do it; it is not a referee. Cindy is the first workout in a catalog of them, and the app keeps its name.
 
 ## Language
+
+### Workouts
+
+**Workout**:
+A named plan the athlete chooses before the clock starts: its movements, its structure (AMRAP, EMOM, For time or Free), its time cap and how it is scored. Cindy is one. Every session is filed under the workout it was, and every session recorded before workouts existed is a Cindy. Records, levels, badges and the leaderboard are kept per workout; streaks and weekly volume count every session.
+_Avoid_: mode, program, routine, WOD
+
+**Category**:
+What a score may be ranked against: the same workout, done with the same variations. A standard Cindy and an Adaptive Cindy are two categories of one workout.
+_Avoid_: division, class
 
 ### Reps
 
@@ -109,7 +119,7 @@ What the scoreboard shows over the figure and its line for about 1.5 s when the 
 _Avoid_: takeover, banner, interstitial
 
 **Control row**:
-END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names. The names are labels only; what a screen reader says is still the control's own name.
+END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names, and leads with the chosen workout's name. The names are labels only; what a screen reader says is still the control's own name.
 _Avoid_: action row, button bar
 
 **Skeleton lag**:
@@ -135,12 +145,16 @@ The most recent session by when it was filed, not the best one. The menu's first
 _Avoid_: latest result, best session
 
 **Progress**:
-The page of every session over time. It leads with how the athlete is doing (the streaks and the week), then the trend, the bests, the leaderboard (the athlete's sessions ranked, with the benchmark among them) and the calendar of trained days.
+The page of every session over time. It leads with how the athlete is doing (the streaks and the week), then the chosen workout's trend, bests and leaderboard (its sessions ranked, with the benchmark among them on Cindy's) and the calendar of trained days.
 _Avoid_: records, history (a record is a personal best, not a page)
 
 **Movements**:
 The page where the athlete picks a variation for each of pull, push and squat. A tap gives the row its check and is saved at once; there is no SAVE.
 _Avoid_: movement picker, Make Cindy yours (the sheet it replaced)
+
+**Workouts page**:
+The page that lists the catalog of workouts, each with its format and one line, where the athlete picks the one the next session will be. A tap is saved at once. It opens from the menu's Workout row, whose subtitle names the choice, and by itself at first launch and when an update brings a workout the athlete has not seen, but only once the catalog holds more than one.
+_Avoid_: workout picker, library
 
 **Top bar**:
 The strip at the top of a navigation page: a Back control at the leading edge and the page's title in the middle. It, and the system back gesture, are how a page is closed.

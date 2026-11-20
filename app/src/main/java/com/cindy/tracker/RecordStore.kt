@@ -4,7 +4,21 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.util.Locale
 
-/** One finished attempt at Cindy. */
+/**
+ * What a score may honestly be ranked against: the same workout, done with the same movements.
+ *
+ * Both halves matter. A band-assisted Cindy and a strict one are different prescriptions, which
+ * is why the movements were always part of it; and a shorter or freer workout made of the same
+ * movements is a different workout, so a partial day can never move a Cindy record.
+ */
+data class Category(val workoutId: String, val profile: CindyProfile?) {
+    companion object {
+        /** Cindy as prescribed: what the ladder, the benchmark and the tiers describe. */
+        val STANDARD_CINDY = Category(Workouts.CINDY_ID, CindyProfile.STANDARD)
+    }
+}
+
+/** One finished session of a [Workout]. */
 data class Attempt(
     val rounds: Int,
     val reps: Int,
@@ -59,8 +73,26 @@ data class Attempt(
      * rather than that nothing happened. Kept beside the round splits because a round is three
      * very different efforts, and only the sets can say which one the time went on.
      */
-    val setSplits: List<SetSplit> = emptyList()
+    val setSplits: List<SetSplit> = emptyList(),
+    /**
+     * The [Workout] this session was, by its id.
+     *
+     * Every attempt written before workouts existed was a Cindy, so that is what one reads as,
+     * without its line being rewritten. An id this build does not know is kept exactly as it was
+     * rather than relabelled: [workout] is null for it, and it is only ever ranked against
+     * sessions filed under the same id.
+     */
+    val workoutId: String = Workouts.CINDY_ID
 ) {
+    /** What [workoutId] names, or null for a workout from a build that knew one this does not. */
+    val workout: Workout? get() = Workouts.byId(workoutId)
+
+    /** Which scores this one may be ranked against. */
+    val category: Category get() = Category(workoutId, profile)
+
+    /** True for a session of Cindy, which the ladder, the benchmark and the badges describe. */
+    val isCindy: Boolean get() = workoutId == Workouts.CINDY_ID
+
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
@@ -81,8 +113,9 @@ data class Attempt(
      * so awarding "Legend" for twenty-seven rounds of knee push-ups would be telling the athlete
      * something untrue about a benchmark they did not attempt. An adaptive session is a
      * different prescription, not a lower score, and it is ranked against its own kind instead.
+     * So is any other workout, however many rounds it has: the rungs are counted in Cindy's.
      */
-    val level: Level? get() = if (profile?.isStandard == true) Level.of(rounds) else null
+    val level: Level? get() = if (category == Category.STANDARD_CINDY) Level.of(rounds) else null
 
     /** Wall time from first rep to last, including everything spent paused. */
     val realTimeMs: Long get() = durationMs + pausedMs
@@ -91,10 +124,19 @@ data class Attempt(
      * What to print beside the score.
      *
      * A standard Cindy earns a rung on the ladder. Anything else says what it actually was,
-     * because the rung would be a claim about a workout the athlete did not attempt.
+     * because the rung would be a claim about a workout the athlete did not attempt. Another
+     * workout is named, with whatever movements were changed: the movement labels name Cindy,
+     * and saying "Adaptive Cindy" of a session that was not a Cindy would be untrue twice over.
      */
     val caption: String
-        get() = level?.title ?: profile?.label() ?: "Movements not recognised"
+        get() {
+            if (!isCindy) {
+                val name = workout?.name ?: "Workout not recognised"
+                val changed = profile?.takeIf { !it.isStandard }?.changedMovements()
+                return if (changed == null) name else "$name · $changed"
+            }
+            return level?.title ?: profile?.label() ?: "Movements not recognised"
+        }
 
     /** "27 + 12" — the way an AMRAP score is normally written. */
     fun scoreLabel(): String = if (reps == 0) "$rounds" else "$rounds + $reps"
@@ -130,13 +172,17 @@ object Records {
 
     /** The score that started this whole thing. */
     const val BENCHMARK_NAME = "Tom Holland"
-    val BENCHMARK = Attempt(rounds = 27, reps = 0, atMillis = 0L, durationMs = 20 * 60 * 1000L)
+    val BENCHMARK = Attempt(
+        rounds = 27, reps = 0, atMillis = 0L, durationMs = Workouts.CINDY_TIME_CAP_MS,
+        workoutId = Workouts.CINDY_ID
+    )
 
     private const val V3 = "v3"
     private const val V4 = "v4"
     private const val V5 = "v5"
     private const val V6 = "v6"
     private const val V7 = "v7"
+    private const val V8 = "v8"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -151,7 +197,7 @@ object Records {
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
         listOf(
-            V7,
+            V8,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -168,7 +214,8 @@ object Records {
             a.untrackedMs.toString(),
             a.setSplits.joinToString(",") {
                 "${it.movement.name}:${it.ms}:${it.reps}:${it.manualReps}"
-            }
+            },
+            a.workoutId
         ).joinToString("|")
     }
 
@@ -176,6 +223,9 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V8|") -> decodeV8(line)
+                // Everything below was written before workouts existed, when every session was a
+                // Cindy, so each decodes as one by the field's default rather than by a rewrite.
                 line.startsWith("$V7|") -> decodeV7(line)
                 line.startsWith("$V6|") -> decodeV6(line)
                 line.startsWith("$V5|") -> decodeV5(line)
@@ -189,16 +239,33 @@ object Records {
         }.toList()
     }
 
+    /**
+     * V7 plus the workout the session was.
+     *
+     * The id is kept as written, known to this build or not: a session of a workout this build
+     * has never heard of is still the athlete's, and calling it a Cindy would rank it against
+     * scores it has nothing in common with.
+     */
+    private fun decodeV8(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 15) return null
+        return decodeV7Fields(p)?.copy(workoutId = p[14])
+    }
+
     /** V6 plus the time each set took. */
     private fun decodeV7(line: String): Attempt? {
         val p = line.split("|")
         if (p.size != 14) return null
-        return decodeCommon(p)?.copy(
+        return decodeV7Fields(p)
+    }
+
+    /** The fourteen fields V7 and V8 share, in the same places. */
+    private fun decodeV7Fields(p: List<String>): Attempt? =
+        decodeCommon(p)?.copy(
             countedReps = p[11].toIntOrNull(),
             untrackedMs = p[12].toLongOrNull() ?: 0L,
             setSplits = decodeSets(p[13])
         )
-    }
 
     /** One bad entry costs only itself: the attempt and its other sets are still the athlete's. */
     private fun decodeSets(raw: String): List<SetSplit> =
@@ -294,8 +361,12 @@ object Records {
      * other session, best first. A session of other movements never passes it however many reps
      * it holds, for the reason [beatsBenchmark] gives, so the order is a partition and not a
      * plain sort by score. Ranks count from 1 and have no gaps.
+     *
+     * The benchmark is a Cindy, so it stands only on a Cindy board: [withBenchmark] is false for
+     * any other workout's, which is then a plain ranking.
      */
-    fun standings(attempts: List<Attempt>): List<Standing> {
+    fun standings(attempts: List<Attempt>, withBenchmark: Boolean = true): List<Standing> {
+        if (!withBenchmark) return ranked(attempts).mapIndexed { i, a -> Standing(i + 1, a) }
         val (above, below) = ranked(attempts).partition { beatsBenchmark(it) }
         val order: List<Attempt?> = above + listOf(null) + below
         return order.mapIndexed { i, a -> Standing(i + 1, a) }
@@ -306,30 +377,37 @@ object Records {
      *
      * Only a standard Cindy can: the benchmark is a strict score, so comparing an adaptive one
      * against it would be scoring two different workouts on one scale in whichever direction
-     * happened to flatter.
+     * happened to flatter. Comparing another workout against it would be exactly that, too.
      */
     fun beatsBenchmark(a: Attempt): Boolean =
-        a.profile?.isStandard == true && !a.scoreIsLowerBound && a.totalReps > BENCHMARK.totalReps
+        a.category == Category.STANDARD_CINDY && !a.scoreIsLowerBound &&
+            a.totalReps > BENCHMARK.totalReps
+
+    /** The sessions of one workout, whatever their movements. */
+    fun ofWorkout(attempts: List<Attempt>, workoutId: String): List<Attempt> =
+        attempts.filter { it.workoutId == workoutId }
 
     /**
-     * The attempts a given score may honestly be ranked against: the same movements, exactly.
+     * The attempts a given score may honestly be ranked against: the same workout, at the same
+     * movements, exactly.
      *
      * Not "standard versus everything else" — a band-assisted Cindy and a knee-push-up Cindy are
-     * no more comparable to each other than either is to the strict one.
+     * no more comparable to each other than either is to the strict one, and no other workout is
+     * comparable to a Cindy at all.
      */
-    fun inCategory(attempts: List<Attempt>, profile: CindyProfile?): List<Attempt> =
-        attempts.filter { it.profile == profile }
+    fun inCategory(attempts: List<Attempt>, category: Category): List<Attempt> =
+        attempts.filter { it.category == category }
 
-    /** The best score recorded under [profile], or null if there is none. */
-    fun bestIn(attempts: List<Attempt>, profile: CindyProfile?): Attempt? =
-        best(inCategory(attempts, profile))
+    /** The best score recorded under [category], or null if there is none. */
+    fun bestIn(attempts: List<Attempt>, category: Category): Attempt? =
+        best(inCategory(attempts, category))
 
-    /** The record [of] was actually chasing: the best previous attempt at the same movements. */
+    /** The record [of] was actually chasing: the best previous attempt in its own category. */
     fun personalRecord(attempts: List<Attempt>, of: Attempt): Attempt? =
-        bestIn(attempts.filter { it.atMillis != of.atMillis }, of.profile)
+        bestIn(attempts.filter { it.atMillis != of.atMillis }, of.category)
 
     /**
-     * True when [of] is the best score yet recorded for its own movements.
+     * True when [of] is the best score yet recorded for its own workout and movements.
      *
      * A score the camera could not stand behind is never one, however large. It is still kept,
      * still shown and still ranked — the athlete did at least that much — but "a new record" is

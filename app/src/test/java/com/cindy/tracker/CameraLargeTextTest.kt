@@ -60,7 +60,7 @@ class CameraLargeTextTest {
         hud.reps.text = Scoreboard.figure("12", "/15", 0xFF000001.toInt(), 0xFF000002.toInt())
         val panel = CameraControls.of(state, filming = false)
         BottomBand.show(hud.btnFlip, panel[CameraControl.SWITCH_CAMERA])
-        BottomBand.apply(hud, state, panel, statusBlank = false)
+        BottomBand.apply(hud, state, panel, statusBlank = false, workout = Workouts.CINDY)
         hud.root.measure(
             View.MeasureSpec.makeMeasureSpec(px(screenW), View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(px(screenH), View.MeasureSpec.EXACTLY)

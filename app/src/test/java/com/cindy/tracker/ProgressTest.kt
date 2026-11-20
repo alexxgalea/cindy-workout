@@ -54,7 +54,10 @@ class ProgressTest {
             scored("2026-08-01", 400), scored("2026-08-05", 300, knee),
             scored("2026-08-10", 410)
         )
-        assertEquals(listOf<CindyProfile?>(CindyProfile.STANDARD, knee), Progress.categories(list))
+        assertEquals(
+            listOf(Category.STANDARD_CINDY, Category(Workouts.CINDY_ID, knee)),
+            Progress.categories(list)
+        )
     }
 
     @Test
@@ -62,7 +65,7 @@ class ProgressTest {
         val list = listOf(400, 380, 420, 420, 450).mapIndexed { i, s ->
             scored("2026-08-0${i + 1}", s)
         }
-        val s = Progress.scoreSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.scoreSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(true, false, true, false, true), s.points.map { it.record })
         assertEquals(listOf(400.0, 400.0, 420.0, 420.0, 450.0), s.best)
     }
@@ -73,7 +76,7 @@ class ProgressTest {
             scored("2026-08-01", 400), scored("2026-08-02", 450, untrackedMs = 60_000L),
             scored("2026-08-03", 440)
         )
-        val s = Progress.scoreSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.scoreSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(true, false, false), s.points.map { it.record })
         assertEquals(listOf(false, true, false), s.points.map { it.lowerBound })
         assertEquals(listOf(400.0, 450.0, 450.0), s.best)
@@ -82,7 +85,7 @@ class ProgressTest {
     @Test
     fun `other categories stay off the line`() {
         val list = listOf(scored("2026-08-01", 400), scored("2026-08-02", 300, knee))
-        val s = Progress.scoreSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.scoreSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(400.0), s.points.map { it.value })
     }
 
@@ -92,7 +95,7 @@ class ProgressTest {
             scored("2026-05-01", 500), scored("2026-09-01", 480), scored("2026-09-05", 490)
         )
         val from = ProgressRange.MONTH.start(today)
-        val s = Progress.scoreSeries(list, CindyProfile.STANDARD, from, zone)
+        val s = Progress.scoreSeries(list, Category.STANDARD_CINDY, from, zone)
         assertEquals(listOf(480.0, 490.0), s.points.map { it.value })
         assertEquals(listOf(false, false), s.points.map { it.record })
         assertEquals(listOf(500.0, 500.0), s.best)
@@ -104,7 +107,7 @@ class ProgressTest {
             paced("2026-08-01", 70), paced("2026-08-02", 65), paced("2026-08-03", 68),
             paced("2026-08-04", 50, durationMs = 10 * 60_000L)
         )
-        val s = Progress.paceSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.paceSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(70.0, 65.0, 68.0), s.points.map { it.value })
         assertEquals(listOf(true, true, false), s.points.map { it.record })
         assertEquals(listOf(70.0, 65.0, 65.0), s.best)
@@ -117,7 +120,7 @@ class ProgressTest {
             paced("2026-08-01", 70), paced("2026-08-02", 60, untrackedMs = 60_000L),
             paced("2026-08-03", 65)
         )
-        val s = Progress.paceSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.paceSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(true, false, true), s.points.map { it.record })
         assertEquals(listOf(70.0, 70.0, 65.0), s.best)
         assertTrue(s.points[1].lowerBound)
@@ -128,7 +131,7 @@ class ProgressTest {
         val list = listOf(
             paced("2026-08-01", 60, untrackedMs = 60_000L), paced("2026-08-02", 70)
         )
-        val s = Progress.paceSeries(list, CindyProfile.STANDARD, null, zone)
+        val s = Progress.paceSeries(list, Category.STANDARD_CINDY, null, zone)
         assertEquals(listOf(false, true), s.points.map { it.record })
         assertEquals(60.0, s.best[0], 0.0)
         assertEquals(70.0, s.best[1], 0.0)
@@ -211,7 +214,7 @@ class ProgressTest {
     }
 
     private fun scorePoints(vararg a: Attempt) =
-        Progress.scoreSeries(a.toList(), CindyProfile.STANDARD, null, zone).points
+        Progress.scoreSeries(a.toList(), Category.STANDARD_CINDY, null, zone).points
 
     private fun describeScore(points: List<ProgressPoint>, i: Int) =
         Progress.describe(ProgressMetric.SCORE, points, i, zone)
@@ -260,7 +263,7 @@ class ProgressTest {
     fun `describe pace says how much faster`() {
         val points = Progress.paceSeries(
             listOf(paced("2026-09-01", 70), paced("2026-09-03", 66)),
-            CindyProfile.STANDARD, null, zone
+            Category.STANDARD_CINDY, null, zone
         ).points
         val (head, detail) = Progress.describe(ProgressMetric.PACE, points, 1, zone)
         assertEquals("3 Sep · 1:06 a round", head)
@@ -271,7 +274,7 @@ class ProgressTest {
     fun `describe pace says how much slower and has no record flag`() {
         val points = Progress.paceSeries(
             listOf(paced("2026-09-01", 60), paced("2026-09-03", 63)),
-            CindyProfile.STANDARD, null, zone
+            Category.STANDARD_CINDY, null, zone
         ).points
         assertEquals(
             "3s slower than the session before",
@@ -283,7 +286,7 @@ class ProgressTest {
     fun `describe pace can be the same or the first`() {
         val points = Progress.paceSeries(
             listOf(paced("2026-09-01", 60), paced("2026-09-03", 60)),
-            CindyProfile.STANDARD, null, zone
+            Category.STANDARD_CINDY, null, zone
         ).points
         assertEquals(
             "fastest yet · first in this range",
@@ -341,7 +344,7 @@ class ProgressTest {
     fun `overview of pace names the fastest round`() {
         val points = Progress.paceSeries(
             listOf(paced("2026-09-01", 70), paced("2026-09-03", 66), paced("2026-09-05", 68)),
-            CindyProfile.STANDARD, null, zone
+            Category.STANDARD_CINDY, null, zone
         ).points
         assertEquals(
             "Best 1:06 a round" to "3 full sessions in this range",
@@ -363,5 +366,27 @@ class ProgressTest {
             "1,300 reps" to "2 sessions in this range",
             Progress.overview(ProgressMetric.VOLUME, bars)
         )
+    }
+
+    // ── workouts ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `another workout's scores stay off Cindy's line`() {
+        val list = listOf(
+            scored("2026-08-01", 400), scored("2026-08-02", 900).copy(workoutId = "freestyle")
+        )
+        val s = Progress.scoreSeries(list, Category.STANDARD_CINDY, null, zone)
+        assertEquals(listOf(400.0), s.points.map { it.value })
+    }
+
+    @Test
+    fun `streaks and weekly volume count every workout, because they are work done`() {
+        val list = listOf(
+            scored("2026-09-07", 300), scored("2026-09-08", 120).copy(workoutId = "freestyle"),
+            scored("2026-09-09", 300)
+        )
+        assertEquals(3, Streak.current(Streak.daysTrained(list, zone), today))
+        val week = Progress.weeklyVolume(list, null, today, zone, monday)
+        assertEquals(720.0, week.last().value, 0.0)
     }
 }
