@@ -217,6 +217,20 @@ def leaning_squat(knee_deg: float) -> list[Keypoint]:
     return k
 
 
+def squat_hands_behind_head(knee_deg: float, hands_torsos: float = 0.3) -> list[Keypoint]:
+    """``squat`` with the hands behind the head, the way the owner squats in the gym: the wrists sit
+    ``hands_torsos`` of a torso above the shoulders and the elbows stand out beside the ears.
+    Filmed, the wrists never went past about 0.35 of a torso, so the default is a third.
+    """
+    k = squat(knee_deg)
+    hip_x = f32(LIMB * math.sin(math.radians(knee_deg)))
+    hip_y = f32(LIMB * math.cos(math.radians(knee_deg)))
+    shoulder_y = f32(hip_y - TORSO)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, hip_x, f32(shoulder_y - 10.0))
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, hip_x, f32(shoulder_y - f32(f32(hands_torsos) * TORSO)))
+    return k
+
+
 def walking(dx: float) -> list[Keypoint]:
     """Standing and walking: ``squat``'s straight-legged stand, ``dx`` pixels to the side."""
     k = squat(175.0)
@@ -231,4 +245,5 @@ BUILDERS = {
     "onthefloor": lambda _unused=0.0: on_the_floor(),
     "hangwithlegs": hang_with_legs, "kneelingup": kneeling_up, "headonplank": head_on_plank,
     "leaningsquat": leaning_squat, "walking": walking,
+    "squathandsbehindhead": squat_hands_behind_head,
 }

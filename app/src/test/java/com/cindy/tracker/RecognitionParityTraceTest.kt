@@ -54,6 +54,7 @@ class RecognitionParityTraceTest {
                     "headonplank" -> PoseFixtures.headOnPlank()
                     "leaningsquat" -> PoseFixtures.leaningSquat(angle)
                     "walking" -> PoseFixtures.walking(angle)
+                    "squathandsbehindhead" -> PoseFixtures.squatHandsBehindHead(angle)
                     else -> error("Unknown builder in $traceId")
                 }
                 val recognition = recogniser.onFrame(keypoints, now, step[STABLE] == "true")
