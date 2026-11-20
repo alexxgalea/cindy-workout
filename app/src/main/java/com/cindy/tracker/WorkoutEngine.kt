@@ -725,7 +725,7 @@ class WorkoutEngine(
      * and this makes the next rep start from a fresh bottom, so standing up off the floor or
      * stepping onto the bar is not booked as the top of a rep.
      *
-     * It is deliberately not the start gate. That gate waits for the engine's own posture test
+     * It is deliberately not the start gate. That gate waits for the engine's own start test
      * (`!upright` for push-ups, `standing()` and a still moment for squats), and on the Cindy clip
      * it loses whole sets the athlete is already in: push-ups filmed head-on read upright two
      * frames in three, and continuous squatting never gives the still moment. Whether the athlete

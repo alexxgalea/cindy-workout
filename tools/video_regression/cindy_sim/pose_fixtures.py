@@ -187,7 +187,7 @@ def kneeling_up(ankle_behind: float) -> list[Keypoint]:
 def head_on_plank(_unused: float = 0.0) -> list[Keypoint]:
     """A plank filmed from in front: the foreshortened torso points up the picture, so the
     shoulders sit well above the hips. Knees a long way below the hips and ankles up beside the
-    knees, so today's posture test reads this as standing. Takes an ignored angle so it can be
+    knees, so today's start test reads this as standing. Takes an ignored angle so it can be
     driven from a plan like the other builders.
     """
     k = _blank()

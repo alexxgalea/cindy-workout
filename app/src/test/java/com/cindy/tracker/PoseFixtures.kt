@@ -130,7 +130,7 @@ object PoseFixtures {
      * foreshortened torso points up the picture, so the shoulders sit well above the hips.
      *
      * Knees are a long way below the hips and the ankles are up beside the knees, so today's
-     * posture test ([PoseGeometry.standing]) reads this as standing. No shin stands under a knee,
+     * start test ([PoseGeometry.standing]) reads this as standing. No shin stands under a knee,
      * and the hands are on the floor under the shoulders, which is what says it is not.
      */
     fun headOnPlank(): Array<Keypoint> {

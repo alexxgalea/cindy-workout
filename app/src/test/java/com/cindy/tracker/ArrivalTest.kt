@@ -8,7 +8,7 @@ import org.junit.Test
  *
  * A fixed-movement engine never arms its start gate, so something that moves the athlete between
  * movements has to tell it when they have arrived again. [WorkoutEngine.dropClimbOnArrival] does
- * that and nothing more: it throws away the climb in flight, with no posture gate. A posture gate
+ * that and nothing more: it throws away the climb in flight, with no start gate. A start gate
  * loses whole sets on a head-on camera (the squat gate needs a still moment that continuous
  * squatting never gives), and the position rules of the recogniser already decide that the athlete
  * has arrived.

@@ -57,7 +57,7 @@ class RecogniserTest {
     // ---- The fixtures that matter are the ones today's tests get wrong ----
 
     @Test
-    fun `kneeling up and a head-on plank both read as standing to today's posture test`() {
+    fun `kneeling up and a head-on plank both read as standing to today's start test`() {
         // The premise of the whole module: if these did not read as standing there would be
         // nothing to protect, and a pass below would prove nothing.
         assertTrue(PoseGeometry.standing(PoseFixtures.kneelingUp(ankleBehind = 100f)))

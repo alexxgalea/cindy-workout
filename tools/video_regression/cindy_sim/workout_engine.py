@@ -597,7 +597,7 @@ class WorkoutEngine:
         """Throws away the climb in flight when the athlete arrives in the position again.
 
         Mirror of WorkoutEngine.dropClimbOnArrival. Deliberately not the start gate: that gate
-        waits for the engine's own posture test and loses whole sets the athlete is already in
+        waits for the engine's own start test and loses whole sets the athlete is already in
         (head-on push-ups read upright two frames in three; continuous squatting never gives the
         still moment). The caller decides the athlete has arrived; this only makes sure that
         arriving is not booked as the top of a rep. Nothing in the workout calls it.

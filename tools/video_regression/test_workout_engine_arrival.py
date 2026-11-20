@@ -42,7 +42,7 @@ class ArrivalTest(unittest.TestCase):
         d.hold(fx.squat(80.0))
         self.assertEqual(1, d.hold(fx.squat(175.0)))
 
-    def test_a_squat_rep_after_arriving_counts_with_no_posture_gate(self):
+    def test_a_squat_rep_after_arriving_counts_with_no_start_gate(self):
         d = Driver(WorkoutEngine(fixed_exercise=Exercise.SQUAT))
         d.hold(fx.squat(80.0))
         d.engine.drop_climb_on_arrival()
