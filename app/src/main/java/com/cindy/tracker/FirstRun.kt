@@ -59,6 +59,10 @@ class FirstRun(context: Context) {
             prefs.edit().putStringSet(Onboarding.KEY_WORKOUTS_SEEN, value.toSet()).apply()
         }
 
+    /** Whether to open the Workouts page by itself now: see [Onboarding.shouldShowWorkouts]. */
+    fun shouldShowWorkouts(): Boolean =
+        Onboarding.shouldShowWorkouts(Workouts.catalog.map { it.id }, workoutsSeen)
+
     /**
      * Whether to show the pages now. [hasHistory] is whether any session is on record, and
      * [cameraGranted] whether the camera's permission is already held.

@@ -70,4 +70,25 @@ class OnboardingTest {
             ).size
         )
     }
+
+    // ── the Workouts page ─────────────────────────────────────────────────────
+
+    @Test
+    fun `a catalog of one never opens the Workouts page, so a first run stays as it was`() {
+        assertFalse(Onboarding.shouldShowWorkouts(listOf("cindy"), emptySet()))
+        assertFalse(Onboarding.shouldShowWorkouts(listOf("cindy"), setOf("cindy")))
+    }
+
+    @Test
+    fun `a first launch with two workouts opens it`() {
+        assertTrue(Onboarding.shouldShowWorkouts(listOf("cindy", "freestyle"), emptySet()))
+    }
+
+    @Test
+    fun `an update that brings an unseen workout opens it again, and only then`() {
+        assertTrue(Onboarding.shouldShowWorkouts(listOf("cindy", "freestyle"), setOf("cindy")))
+        assertFalse(
+            Onboarding.shouldShowWorkouts(listOf("cindy", "freestyle"), setOf("cindy", "freestyle"))
+        )
+    }
 }

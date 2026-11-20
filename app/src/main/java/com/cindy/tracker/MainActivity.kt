@@ -748,12 +748,28 @@ class MainActivity : AppCompatActivity() {
      */
     private fun maybeStartTour() {
         if (tourShowing || !cameraAnswered || state != WorkoutState.IDLE) return
+        // The Workouts page comes first when it is due, and the tour waits for the way back.
+        if (maybeOfferWorkouts()) return
         if (!firstRun.hudTourPending) return
         tourShowing = true
         tourBack.isEnabled = true
         binding.root.doOnLayout {
             binding.spotlight.start(HudTour.steps(binding)) { endTour() }
         }
+    }
+
+    /**
+     * Opens the Workouts page by itself when [FirstRun.shouldShowWorkouts] says it is due: at
+     * first launch after the pages, and after an update that brings a workout not yet seen, but
+     * never while the catalog holds only one. Reached only through [maybeStartTour], so only in
+     * idle and once the camera has been answered. The catalog is marked seen before the page
+     * opens, so however many of that function's callers fire, it opens once.
+     */
+    private fun maybeOfferWorkouts(): Boolean {
+        if (!firstRun.tutorialSeen || !firstRun.shouldShowWorkouts()) return false
+        firstRun.workoutsSeen = Workouts.catalog.map { it.id }.toSet()
+        startActivity(WorkoutsActivity.intent(this))
+        return true
     }
 
     /** Done or skipped: it is taken, and does not come back until Help asks for it. */

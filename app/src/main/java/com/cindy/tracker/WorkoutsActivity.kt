@@ -15,8 +15,10 @@ import com.cindy.tracker.databinding.ActivityWorkoutsBinding
  * is saved there and then, as on [MovementsActivity]: there is no SAVE, and the page is left from
  * its top bar or with back.
  *
- * Opened from the menu's Workout row. Opening it is seeing the whole catalog, so it marks every
- * workout seen.
+ * Opened from the menu's Workout row, and by itself from the camera screen at first launch and
+ * when an update brings a workout the athlete has not seen, once the catalog has more than one
+ * ([Onboarding.shouldShowWorkouts]). Opening it, by either way, is seeing the whole catalog, so it
+ * marks every workout seen.
  *
  * The menu refuses to open this while a workout is live, and the camera screen takes the choice up
  * when it resumes, so the page itself holds no rule about either.
