@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "source": "owner",
+  "comment": "Films from the owner's own phone, scored by tools/video_regression/run_recognition.py only (counting is not scored here). The films are local, never committed.",
+  "scenarios": [
+    {
+      "id": "owner_cindy_round_gym",
+      "video": "tests/fixtures/owner/rec-a.mp4",
+      "exercise": "cindy",
+      "labelledBottomsMs": {
+        "pullup": [
+          17466,
+          19333,
+          21300,
+          23033,
+          24600,
+          26166,
+          27966
+        ],
+        "pushup": [
+          31966,
+          33166,
+          34466,
+          35433,
+          36500,
+          37533,
+          38600,
+          39766,
+          40900,
+          42066
+        ],
+        "squat": [
+          45466,
+          47033,
+          48166,
+          49333,
+          50466,
+          51666,
+          52833,
+          54033,
+          55233,
+          56466,
+          57700,
+          59033,
+          60600,
+          61900,
+          63200,
+          64633
+        ]
+      },
+      "movementWindows": [
+        {
+          "label": "walking to the bar and jumping up",
+          "fromMs": 0,
+          "toMs": 13000,
+          "movement": "none"
+        },
+        {
+          "label": "pull-ups: two calibration reps, then five",
+          "fromMs": 14000,
+          "toMs": 30000,
+          "movement": "pullup"
+        },
+        {
+          "label": "push-ups",
+          "fromMs": 30500,
+          "toMs": 43500,
+          "movement": "pushup"
+        },
+        {
+          "label": "squats with the hands behind the head",
+          "fromMs": 44500,
+          "toMs": 66000,
+          "movement": "squat"
+        },
+        {
+          "label": "walking back to the bar",
+          "fromMs": 67500,
+          "toMs": 72000,
+          "movement": "none"
+        }
+      ],
+      "tags": [
+        "owner",
+        "cindy",
+        "local-only"
+      ],
+      "notes": "The owner's own recording of one Cindy round at the gym, the camera's HUD burned in, 77.7 s, 720x1280. The film stays out of git: keep it at tests/fixtures/owner/rec-a.mp4 (ignored). Windows and reps are read off the per-frame joint signal, never off contact sheets: pull-up tops are the peaks of the nose height (7 reps, the first two being the app's calibration reps), push-up and squat bottoms are the troughs of the nose height (10 push-ups, 16 squats), walks and the walk-in are the stretches with no set. The squats are done with the hands behind the head, so the wrists stay above the shoulders; the HUD counted 14 of 15 at 64.7 s, the signal shows 16 troughs."
+    },
+    {
+      "id": "owner_pullups_calibration_gym",
+      "video": "tests/fixtures/owner/rec-b.mp4",
+      "exercise": "cindy",
+      "labelledBottomsMs": {
+        "pullup": [
+          19266,
+          21000,
+          23333,
+          26033,
+          28533
+        ]
+      },
+      "movementWindows": [
+        {
+          "label": "setting the phone down and walking in",
+          "fromMs": 0,
+          "toMs": 14500,
+          "movement": "none"
+        },
+        {
+          "label": "five pull-ups: two calibration reps, then three",
+          "fromMs": 16000,
+          "toMs": 30500,
+          "movement": "pullup"
+        },
+        {
+          "label": "dropping off the bar and picking the phone up",
+          "fromMs": 31500,
+          "toMs": 37500,
+          "movement": "none"
+        }
+      ],
+      "tags": [
+        "owner",
+        "cindy",
+        "local-only"
+      ],
+      "notes": "The owner's own recording of the start of a Cindy round at the gym, the HUD burned in, 37.8 s, 720x1280: a finger over the lens, the walk in, five pull-ups (the HUD reads 1 of 2 and then 3 of 5, so the first two are calibration reps), then the athlete drops off the bar and the clip ends. Local only, at tests/fixtures/owner/rec-b.mp4 (ignored). The five rep times are the peaks of the nose height; a sixth peak at 17.6 s is the dead hang after the jump up, not a rep."
+    }
+  ]
+}
