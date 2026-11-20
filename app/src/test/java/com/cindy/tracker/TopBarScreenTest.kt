@@ -69,6 +69,9 @@ class TopBarScreenTest {
         Page("Movements", "Movements") {
             Robolectric.buildActivity(MovementsActivity::class.java).setup().get()
         },
+        Page("Workouts", "Workouts") {
+            Robolectric.buildActivity(WorkoutsActivity::class.java).setup().get()
+        },
         Page("Help", "Cindy") {
             Robolectric.buildActivity(HelpActivity::class.java).setup().get()
         },

@@ -38,6 +38,9 @@ object Onboarding {
      */
     const val KEY_WATCH_OFFER_SEEN = "watch_offer_silenced"
 
+    /** The workouts shown on the Workouts page so far, by id ([FirstRun.workoutsSeen]). */
+    const val KEY_WORKOUTS_SEEN = "workouts_seen"
+
     /**
      * Whether the offer to pair a watch has already been made to this athlete.
      *
