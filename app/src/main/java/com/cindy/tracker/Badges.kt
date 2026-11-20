@@ -131,44 +131,44 @@ enum class Badge(
     ),
 
     STREAK_3(
-        "3 days in a row", "3d", "Train 3 days in a row.",
+        "3 days in a row", "3d", "Do Cindy 3 days in a row.",
         BadgeFamily.STREAKS, BadgeRule.DAYS, 3
     ),
     STREAK_7(
-        "7 days in a row", "7d", "Train 7 days in a row.",
+        "7 days in a row", "7d", "Do Cindy 7 days in a row.",
         BadgeFamily.STREAKS, BadgeRule.DAYS, 7
     ),
     STREAK_14(
-        "14 days in a row", "14d", "Train 14 days in a row.",
+        "14 days in a row", "14d", "Do Cindy 14 days in a row.",
         BadgeFamily.STREAKS, BadgeRule.DAYS, 14
     ),
     STREAK_30(
-        "30 days in a row", "30d", "Train 30 days in a row.",
+        "30 days in a row", "30d", "Do Cindy 30 days in a row.",
         BadgeFamily.STREAKS, BadgeRule.DAYS, 30
     ),
     WEEKS_4(
-        "4 weeks in a row", "4w", "Train in 4 weeks in a row.",
+        "4 weeks in a row", "4w", "Do Cindy in 4 weeks in a row.",
         BadgeFamily.STREAKS, BadgeRule.WEEKS, 4
     ),
     WEEKS_12(
-        "12 weeks in a row", "12w", "Train in 12 weeks in a row.",
+        "12 weeks in a row", "12w", "Do Cindy in 12 weeks in a row.",
         BadgeFamily.STREAKS, BadgeRule.WEEKS, 12
     ),
     WEEKS_26(
-        "26 weeks in a row", "26w", "Train in 26 weeks in a row.",
+        "26 weeks in a row", "26w", "Do Cindy in 26 weeks in a row.",
         BadgeFamily.STREAKS, BadgeRule.WEEKS, 26
     ),
 
     REPS_1000(
-        "1,000 reps", "1k", "1,000 reps across all sessions.",
+        "1,000 reps", "1k", "1,000 reps across all Cindy sessions.",
         BadgeFamily.VOLUME, BadgeRule.REPS, 1_000
     ),
     REPS_5000(
-        "5,000 reps", "5k", "5,000 reps across all sessions.",
+        "5,000 reps", "5k", "5,000 reps across all Cindy sessions.",
         BadgeFamily.VOLUME, BadgeRule.REPS, 5_000
     ),
     REPS_10000(
-        "10,000 reps", "10k", "10,000 reps across all sessions.",
+        "10,000 reps", "10k", "10,000 reps across all Cindy sessions.",
         BadgeFamily.VOLUME, BadgeRule.REPS, 10_000
     ),
 

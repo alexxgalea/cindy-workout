@@ -428,7 +428,7 @@ class RecordsActivity : AppCompatActivity() {
             R.style.Cindy_Footnote,
             "Scores and rounds are compared only with sessions of the same workout, at the " +
                 "same movements. " +
-                "Streaks and weeks count everything."
+                "Streaks and weeks count every workout; badges count Cindy's sessions."
         ).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
