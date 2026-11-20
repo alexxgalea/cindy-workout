@@ -75,6 +75,21 @@ def pushup(elbow_deg: float) -> list[Keypoint]:
     return k
 
 
+def knee_pushup(elbow_deg: float) -> list[Keypoint]:
+    """Mirror of PoseFixtures.kneePushup: knees on the floor, the shins raised behind."""
+    k = _blank()
+    sh_x = LIMB * math.sin(math.radians(elbow_deg))
+    sh_y = LIMB * math.cos(math.radians(elbow_deg))
+    floor_y = LIMB
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, 0.0, 0.0)
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, 0.0, floor_y)
+    _put_pair(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER, sh_x, sh_y)
+    _put_pair(k, KP.LEFT_HIP, KP.RIGHT_HIP, sh_x - TORSO, sh_y)
+    _put_pair(k, KP.LEFT_KNEE, KP.RIGHT_KNEE, sh_x - TORSO - 40.0, floor_y)
+    _put_pair(k, KP.LEFT_ANKLE, KP.RIGHT_ANKLE, sh_x - TORSO - 40.0, floor_y - 60.0)
+    return k
+
+
 def pullup(elbow_deg: float) -> list[Keypoint]:
     """A body on the bar with the given elbow angle. 170 is a dead hang, 60 is chin over the bar.
 
@@ -172,7 +187,7 @@ def kneeling_up(ankle_behind: float) -> list[Keypoint]:
 def head_on_plank(_unused: float = 0.0) -> list[Keypoint]:
     """A plank filmed from in front: the foreshortened torso points up the picture, so the
     shoulders sit well above the hips. Knees a long way below the hips and ankles up beside the
-    knees, so today's posture test reads this as standing. Takes an ignored angle so it can be
+    knees, so today's start test reads this as standing. Takes an ignored angle so it can be
     driven from a plan like the other builders.
     """
     k = _blank()
@@ -202,6 +217,20 @@ def leaning_squat(knee_deg: float) -> list[Keypoint]:
     return k
 
 
+def squat_hands_behind_head(knee_deg: float, hands_torsos: float = 0.3) -> list[Keypoint]:
+    """``squat`` with the hands behind the head, the way the owner squats in the gym: the wrists sit
+    ``hands_torsos`` of a torso above the shoulders and the elbows stand out beside the ears.
+    Filmed, the wrists never went past about 0.35 of a torso, so the default is a third.
+    """
+    k = squat(knee_deg)
+    hip_x = f32(LIMB * math.sin(math.radians(knee_deg)))
+    hip_y = f32(LIMB * math.cos(math.radians(knee_deg)))
+    shoulder_y = f32(hip_y - TORSO)
+    _put_pair(k, KP.LEFT_ELBOW, KP.RIGHT_ELBOW, hip_x, f32(shoulder_y - 10.0))
+    _put_pair(k, KP.LEFT_WRIST, KP.RIGHT_WRIST, hip_x, f32(shoulder_y - f32(f32(hands_torsos) * TORSO)))
+    return k
+
+
 def walking(dx: float) -> list[Keypoint]:
     """Standing and walking: ``squat``'s straight-legged stand, ``dx`` pixels to the side."""
     k = squat(175.0)
@@ -209,11 +238,12 @@ def walking(dx: float) -> list[Keypoint]:
 
 
 BUILDERS = {
-    "squat": squat, "pushup": pushup, "pullup": pullup,
+    "squat": squat, "pushup": pushup, "pullup": pullup, "kneepushup": knee_pushup,
     "bandsetup": band_setup, "invertedrow": inverted_row,
     # The builders the recognition plan draws on. `empty` and `onthefloor` take an ignored angle.
     "empty": lambda _unused=0.0: empty(),
     "onthefloor": lambda _unused=0.0: on_the_floor(),
     "hangwithlegs": hang_with_legs, "kneelingup": kneeling_up, "headonplank": head_on_plank,
     "leaningsquat": leaning_squat, "walking": walking,
+    "squathandsbehindhead": squat_hands_behind_head,
 }

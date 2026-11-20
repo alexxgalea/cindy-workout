@@ -82,3 +82,6 @@ ios/Config/Info.plist
 # code-review-graph database and superpowers workspaces (local, rebuilt per session)
 .code-review-graph/
 .superpowers/
+
+# Films from the owner own phone, scored by run_recognition.py; tests/scenarios/recognition/ names them.
+/tests/fixtures/owner/**

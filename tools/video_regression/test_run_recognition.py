@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim import pose_fixtures
 from cindy_sim.recogniser import Position
-from run_recognition import Frame, check_windows, runs, track_positions
+from cindy_sim.recogniser import Movement
+from cindy_sim.workout_engine import CindyProfile, PullVariant
+from run_recognition import (Frame, check_movement_windows, check_windows, confirmations, real_rep, runs,
+                             score_film, summary_line, timeline_lines, track_positions, track_recognitions)
 
 
 def frames_of(pose, from_ms: int, to_ms: int, step_ms: int = 100, stable: bool = True) -> list[Frame]:
@@ -81,6 +84,211 @@ class CheckWindowsTest(unittest.TestCase):
     def test_a_window_that_asks_for_nothing_is_an_error(self):
         windows = [{"label": "empty", "fromMs": 0, "toMs": 100}]
         self.assertEqual(1, len(check_windows(self.TRACK, windows)))
+
+
+def squat_set(reps: int) -> list[Frame]:
+    """Standing, then `reps` squats at 100 ms a frame."""
+    frames = frames_of(pose_fixtures.squat(175.0), 0, 1000)
+    t = 1000
+    for _ in range(reps):
+        frames += frames_of(pose_fixtures.squat(80.0), t, t + 800)
+        frames += frames_of(pose_fixtures.squat(175.0), t + 800, t + 1600)
+        t += 1600
+    return frames
+
+
+class ConfirmationsTest(unittest.TestCase):
+    def test_a_movement_is_confirmed_once_at_its_second_rep(self):
+        track = track_recognitions(squat_set(4))
+        confirmed = confirmations(track)
+        self.assertEqual([Movement.SQUATS], [m for _, m in confirmed])
+        t = confirmed[0][0]
+        self.assertEqual(Movement.SQUATS, dict(track)[t].movement)
+        self.assertIsNone(dict(track)[t - 100].movement)
+        self.assertEqual(2, dict(track)[t].tally_of(Movement.SQUATS))
+
+    def test_one_rep_confirms_nothing(self):
+        self.assertEqual([], confirmations(track_recognitions(squat_set(1))))
+
+    def test_the_profile_reaches_the_recogniser(self):
+        def hang(profile):
+            frames = frames_of(pose_fixtures.hang_with_legs(120.0), 0, 4000)
+            t = 4000
+            for _ in range(4):
+                frames += frames_of(pose_fixtures.hang_with_legs(60.0), t, t + 800)
+                frames += frames_of(pose_fixtures.hang_with_legs(120.0), t + 800, t + 1600)
+                t += 1600
+            return confirmations(track_recognitions(frames, profile))
+
+        self.assertEqual([], hang(CindyProfile()))
+        self.assertEqual([Movement.PULL_UPS],
+                         [m for _, m in hang(CindyProfile(pull=PullVariant.BAND_ASSISTED_PULL_UP))])
+
+
+class RealRepTest(unittest.TestCase):
+    LABELS = [9000, 11000, 14300]
+
+    def test_counts_the_labelled_reps_done_by_then(self):
+        self.assertEqual(0, real_rep(self.LABELS, 8000))
+        self.assertEqual(2, real_rep(self.LABELS, 12000))
+        self.assertEqual(3, real_rep(self.LABELS, 20000))
+
+    def test_a_rep_labelled_a_moment_after_the_confirmation_counts_as_done(self):
+        # The label is good to a fraction of a second, not to the frame.
+        self.assertEqual(2, real_rep(self.LABELS, 10866))
+        self.assertEqual(1, real_rep(self.LABELS, 10700))
+
+
+class CheckMovementWindowsTest(unittest.TestCase):
+    WINDOWS = [
+        {"label": "push-ups", "fromMs": 0, "toMs": 5000, "movement": "pushup"},
+        {"label": "walk", "fromMs": 5000, "toMs": 8000, "movement": "none"},
+        {"label": "squats", "fromMs": 8000, "toMs": 20000, "movement": "squat"},
+    ]
+
+    def test_passes_when_each_movement_is_confirmed_in_its_own_window(self):
+        confirmed = [(3000, Movement.PUSH_UPS), (12000, Movement.SQUATS)]
+        self.assertEqual([], check_movement_windows(confirmed, self.WINDOWS))
+
+    def test_a_confirmation_in_another_movements_window_is_wrong(self):
+        confirmed = [(3000, Movement.SQUATS), (12000, Movement.SQUATS)]
+        failures = check_movement_windows(confirmed, self.WINDOWS)
+        self.assertTrue(any("wrong confirmation" in f and "push-ups" in f for f in failures))
+        self.assertTrue(any("never confirmed" in f and "push-ups" in f for f in failures))
+
+    def test_a_confirmation_while_doing_no_movement_is_wrong(self):
+        confirmed = [(3000, Movement.PUSH_UPS), (6000, Movement.SQUATS), (12000, Movement.SQUATS)]
+        failures = check_movement_windows(confirmed, self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("walk", failures[0])
+
+    def test_a_confirmation_in_no_window_is_wrong(self):
+        failures = check_movement_windows([(3000, Movement.PUSH_UPS), (12000, Movement.SQUATS),
+                                           (25000, Movement.PULL_UPS)], self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("no window", failures[0])
+
+    def test_a_movement_never_confirmed_in_its_window_fails(self):
+        failures = check_movement_windows([(3000, Movement.PUSH_UPS)], self.WINDOWS)
+        self.assertEqual(1, len(failures))
+        self.assertIn("squats", failures[0])
+
+
+class ScoreFilmTest(unittest.TestCase):
+    """The three metrics of #181 and the thresholds that fail a run."""
+
+    WINDOWS = [
+        {"label": "push-ups", "fromMs": 0, "toMs": 20000, "movement": "pushup"},
+        {"label": "walk", "fromMs": 20000, "toMs": 25000, "movement": "none"},
+        {"label": "squats", "fromMs": 25000, "toMs": 50000, "movement": "squat"},
+    ]
+    LABELS = {"pushup": [2000, 4000, 6000, 8000, 10000], "squat": [27000, 29000, 31000, 33000]}
+
+    def score(self, confirmed, windows=None):
+        return score_film(confirmed, windows or self.WINDOWS, self.LABELS)
+
+    def test_a_clean_film_has_no_wrong_no_idle_and_each_set_confirmed_by_its_third_rep(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)])
+        self.assertEqual(([], []), (score.wrong, score.idle))
+        self.assertEqual([("pushup", 5000, 2, "ok"), ("squat", 30000, 2, "ok")],
+                         [(s.movement, s.confirmed_ms, s.real_rep, s.status) for s in score.sets])
+        self.assertFalse(score.failed)
+
+    def test_a_confirmation_in_another_movements_window_is_wrong_not_idle(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (6000, Movement.SQUATS), (30000, Movement.SQUATS)])
+        self.assertEqual(1, len(score.wrong))
+        self.assertIn("6000", score.wrong[0])
+        self.assertEqual([], score.idle)
+        self.assertTrue(score.failed)
+
+    def test_a_confirmation_inside_a_none_window_is_idle_not_wrong(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (22000, Movement.SQUATS), (30000, Movement.SQUATS)])
+        self.assertEqual([], score.wrong)
+        self.assertEqual(1, len(score.idle))
+        self.assertIn("walk", score.idle[0])
+        self.assertTrue(score.failed)
+
+    def test_a_confirmation_in_no_window_is_wrong(self):
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS), (60000, Movement.PULL_UPS)])
+        self.assertEqual(1, len(score.wrong))
+        self.assertIn("no window", score.wrong[0])
+
+    def test_a_set_confirmed_at_its_third_real_rep_passes_and_at_its_fourth_fails(self):
+        self.assertFalse(self.score([(6000, Movement.PUSH_UPS), (30000, Movement.SQUATS)]).failed)
+        late = self.score([(8500, Movement.PUSH_UPS), (30000, Movement.SQUATS)])
+        self.assertEqual(("late", 4), (late.sets[0].status, late.sets[0].real_rep))
+        self.assertTrue(late.failed)
+
+    def test_the_real_rep_counts_only_reps_labelled_inside_the_sets_own_window(self):
+        labels = {"pushup": [2000, 4000], "squat": [27000, 29000, 31000, 33000]}
+        score = score_film([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], self.WINDOWS, labels)
+        self.assertEqual([2, 2], [s.real_rep for s in score.sets])
+
+    def test_a_set_never_confirmed_is_reported_and_fails(self):
+        score = self.score([(5000, Movement.PUSH_UPS)])
+        self.assertEqual(("squat", None, None, "never"),
+                         (score.sets[1].movement, score.sets[1].confirmed_ms, score.sets[1].real_rep,
+                          score.sets[1].status))
+        self.assertTrue(score.failed)
+
+    def test_a_known_gap_never_confirmed_is_reported_loudly_and_does_not_fail(self):
+        windows = [dict(w, knownGap="the engine counts 1 of 5") if w["movement"] == "squat" else w
+                   for w in self.WINDOWS]
+        score = self.score([(5000, Movement.PUSH_UPS)], windows)
+        self.assertEqual("known_gap", score.sets[1].status)
+        self.assertEqual("the engine counts 1 of 5", score.sets[1].reason)
+        self.assertFalse(score.failed)
+
+    def test_a_known_gap_does_not_excuse_a_wrong_confirmation(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        self.assertTrue(self.score([(5000, Movement.PUSH_UPS), (22000, Movement.SQUATS)], windows).failed)
+
+    def test_a_known_gap_confirmed_in_time_is_a_pass_that_says_the_gap_is_closed(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        score = self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows)
+        self.assertEqual("ok", score.sets[1].status)
+        self.assertFalse(score.failed)
+
+    def test_a_known_gap_confirmed_late_still_fails(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "pushup" else w for w in self.WINDOWS]
+        score = self.score([(8500, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows)
+        self.assertEqual(("late", 4), (score.sets[0].status, score.sets[0].real_rep))
+        self.assertTrue(score.failed)
+
+    def test_counts_the_known_gap_sets(self):
+        windows = [dict(w, knownGap="x") if w["movement"] == "squat" else w for w in self.WINDOWS]
+        self.assertEqual(1, self.score([(5000, Movement.PUSH_UPS)], windows).known_gaps)
+        self.assertEqual(0, self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], windows).known_gaps)
+
+
+    def test_a_window_shifted_off_its_film_fails_the_run(self):
+        # The deliberate failure: the same confirmations, every window moved 20 s later.
+        shifted = [dict(w, fromMs=w["fromMs"] + 20000, toMs=w["toMs"] + 20000) for w in self.WINDOWS]
+        self.assertTrue(self.score([(5000, Movement.PUSH_UPS), (30000, Movement.SQUATS)], shifted).failed)
+
+
+class SummaryLineTest(unittest.TestCase):
+    def test_says_nothing_about_known_gaps_when_there_are_none(self):
+        self.assertEqual("2 of 3 films held every window and confirmed every movement",
+                         summary_line(2, 3, 0))
+
+    def test_counts_known_gap_sets_separately(self):
+        self.assertEqual("2 of 3 films held every window and confirmed every movement; 1 known gap set",
+                         summary_line(2, 3, 1))
+        self.assertIn("2 known gap sets", summary_line(2, 3, 2))
+
+
+class TimelineTest(unittest.TestCase):
+    def test_lists_window_starts_positions_and_confirmations_in_time_order(self):
+        windows = [{"label": "walk", "fromMs": 0, "toMs": 4000, "movement": "none"},
+                   {"label": "squats", "fromMs": 4000, "toMs": 9000, "movement": "squat"}]
+        positions = [(0, 4000, Position.NONE), (4000, 9000, Position.STANDING)]
+        lines = timeline_lines(positions, [(6500, Movement.SQUATS)], windows, {"squat": [5000, 6000, 7000]})
+        text = "\n".join(lines)
+        self.assertLess(text.index("walk"), text.index("squats"))
+        self.assertLess(text.index("standing"), text.index("CONFIRMED"))
+        self.assertIn("6.50s", text)
+        self.assertIn("real rep 2 of 3", text)
 
 
 if __name__ == "__main__":

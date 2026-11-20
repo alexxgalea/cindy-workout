@@ -57,7 +57,7 @@ class RecogniserTest {
     // ---- The fixtures that matter are the ones today's tests get wrong ----
 
     @Test
-    fun `kneeling up and a head-on plank both read as standing to today's posture test`() {
+    fun `kneeling up and a head-on plank both read as standing to today's start test`() {
         // The premise of the whole module: if these did not read as standing there would be
         // nothing to protect, and a pass below would prove nothing.
         assertTrue(PoseGeometry.standing(PoseFixtures.kneelingUp(ankleBehind = 100f)))
@@ -93,6 +93,39 @@ class RecogniserTest {
         hold(PoseFixtures.hangWithLegs(170f))
         startLooking()
         assertEquals(ON_THE_BAR, hold(PoseFixtures.hangWithLegs(170f).without(*wrists), forMs = 900))
+        assertEquals(listOf(ON_THE_BAR), runs())
+    }
+
+    @Test
+    fun `squats with the hands behind the head are standing, never on the bar`() {
+        assertEquals(STANDING, hold(PoseFixtures.squatHandsBehindHead(175f)))
+        for (rep in 1..3) {
+            hold(PoseFixtures.squatHandsBehindHead(100f), forMs = 600)
+            hold(PoseFixtures.squatHandsBehindHead(175f), forMs = 600)
+        }
+        assertEquals(listOf(NONE, STANDING), runs())
+    }
+
+    @Test
+    fun `the bar is entered from half a torso of hands above the shoulders, and not from a little less`() {
+        assertEquals(ON_THE_BAR, hold(PoseFixtures.squatHandsBehindHead(180f, handsTorsos = 0.5f)))
+        recogniser = Recogniser()
+        startLooking()
+        assertEquals(STANDING, hold(PoseFixtures.squatHandsBehindHead(180f, handsTorsos = 0.45f)))
+    }
+
+    @Test
+    fun `hands only just above the shoulders keep a bar they could not enter`() {
+        val hang = PoseFixtures.hangWithLegs(170f)
+        val shoulderY = hang[KP.LEFT_SHOULDER].y
+        val justAbove = hang
+            .with(KP.LEFT_WRIST, hang[KP.LEFT_WRIST].x, shoulderY - 0.3f * PoseFixtures.TORSO)
+            .with(KP.RIGHT_WRIST, hang[KP.RIGHT_WRIST].x, shoulderY - 0.3f * PoseFixtures.TORSO)
+        assertEquals(STANDING, hold(justAbove))
+        recogniser = Recogniser()
+        hold(hang)
+        startLooking()
+        assertEquals(ON_THE_BAR, hold(justAbove, forMs = 3_000))
         assertEquals(listOf(ON_THE_BAR), runs())
     }
 

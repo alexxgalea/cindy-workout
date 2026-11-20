@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Diffs the Python recogniser in cindy_sim against the production Kotlin one, frame by frame.
 
-The harness runs the position rules over films in Python so what the phone makes of an athlete can
-be tried on a desktop. Two implementations of the same rules drift, and a harness that has quietly
+The harness runs the recognition rules (position, then movement) over films in Python so what the
+phone makes of an athlete can be tried on a desktop. Two implementations of the same rules drift, and a harness that has quietly
 stopped agreeing with the phone gives confident, wrong verdicts about a film, so this is the gate
 that keeps it honest. It is separate from parity_check.py, which holds the counting engine to its
 own plan and trace.
@@ -26,9 +26,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cindy_sim import pose_fixtures
 from cindy_sim.rep_counter import f32
-from cindy_sim.recogniser import Recogniser
+from cindy_sim.recogniser import Movement, Recogniser
+from cindy_sim.workout_engine import CindyProfile, PullVariant, PushVariant, SquatVariant
 
-HEADER = ["traceId", "step", "tMs", "builder", "angle", "stable", "kpSum", "position"]
+HEADER = [
+    "traceId", "step", "tMs", "builder", "angle", "stable", "kpSum", "position", "movement",
+    "candidate", "candidateReps", "tallyPullUps", "tallyPushUps", "tallySquats",
+]
 
 
 def rounded(value: float) -> str:
@@ -42,8 +46,14 @@ def run_plan(plan_path: Path) -> list[list[str]]:
 
     out: list[list[str]] = []
     for trace_id in dict.fromkeys(row["traceId"] for row in rows):
-        recogniser = Recogniser()
-        for step in (row for row in rows if row["traceId"] == trace_id):
+        steps = [row for row in rows if row["traceId"] == trace_id]
+        # The profile is a column of the trace's first row, as in the counting plan.
+        recogniser = Recogniser(CindyProfile(
+            pull=PullVariant[steps[0]["pull"]],
+            push=PushVariant[steps[0]["push"]],
+            squat=SquatVariant[steps[0]["squat"]],
+        ))
+        for step in steps:
             # The Kotlin reads the angle as a Float, so the twin rounds it to one too.
             angle = f32(float(step["angle"]))
             now = int(step["tMs"])
@@ -61,6 +71,10 @@ def run_plan(plan_path: Path) -> list[list[str]]:
                 # The Kotlin adds x and y as Floats and the sum as a Double, and so does this.
                 rounded(sum(f32(p.x + p.y) for p in keypoints)),
                 recognition.position.id,
+                recognition.movement.id if recognition.movement else "none",
+                recognition.candidate.id if recognition.candidate else "none",
+                str(recognition.candidate_reps),
+                *(str(recognition.tally_of(m)) for m in Movement),
             ])
     return out
 

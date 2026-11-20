@@ -83,6 +83,39 @@
      "always": "standing"
     }
    ],
+   "movementWindows": [
+    {
+     "label": "five kipping pull-ups",
+     "fromMs": 7500,
+     "toMs": 23000,
+     "movement": "pullup",
+     "knownGap": "the production engine counts 1 of the 5 pull-ups on this camera angle, so no 2nd rep is ever counted to confirm the set (counting is not tuned here)"
+    },
+    {
+     "label": "the walk to the mat",
+     "fromMs": 24000,
+     "toMs": 28500,
+     "movement": "none"
+    },
+    {
+     "label": "push-ups, with the kneeling rest inside them",
+     "fromMs": 29000,
+     "toMs": 52500,
+     "movement": "pushup"
+    },
+    {
+     "label": "getting up and standing ready",
+     "fromMs": 53000,
+     "toMs": 56500,
+     "movement": "none"
+    },
+    {
+     "label": "fifteen air squats",
+     "fromMs": 57000,
+     "toMs": 78500,
+     "movement": "squat"
+    }
+   ],
    "tags": [
     "youtube",
     "cindy",

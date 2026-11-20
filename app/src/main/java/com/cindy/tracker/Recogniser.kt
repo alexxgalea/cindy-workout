@@ -10,8 +10,48 @@ enum class Position(val id: String, val label: String) {
     STANDING("standing", "standing")
 }
 
-/** What recognition makes of the frames so far. */
-data class Recognition(val position: Position)
+/**
+ * What the athlete is doing, as recognition names it. Each movement starts from one [position].
+ * The enum [Exercise] stays the engine's own word for the same three; a movement is what
+ * recognition reports.
+ */
+enum class Movement(val id: String, val exercise: Exercise, val position: Position) {
+    PULL_UPS("pull_ups", Exercise.PULLUP, Position.ON_THE_BAR),
+    PUSH_UPS("push_ups", Exercise.PUSHUP, Position.ON_THE_FLOOR),
+    SQUATS("squats", Exercise.SQUAT, Position.STANDING);
+
+    val label: String get() = exercise.label
+
+    companion object {
+        /** The movement that starts from [position], or none for no position. */
+        fun at(position: Position): Movement? = entries.firstOrNull { it.position == position }
+    }
+}
+
+/**
+ * What recognition makes of the frames so far.
+ *
+ * - [movement] is the movement recognised, or none. It stays until a different movement is
+ *   confirmed.
+ * - [candidate] is a movement whose position is entered and that has counted some reps but not
+ *   yet [Recogniser.CONFIRMING_REPS]; [candidateReps] says how many. Nothing here is recognised.
+ * - [tally] is the reps recognition has seen per movement, confirming reps included. A candidate's
+ *   reps are not in it until the movement is confirmed.
+ */
+data class Recognition(
+    val position: Position,
+    val movement: Movement? = null,
+    val candidate: Movement? = null,
+    val candidateReps: Int = 0,
+    val tally: Map<Movement, Int> = NO_REPS
+) {
+    companion object {
+        val NO_REPS: Map<Movement, Int> = Movement.entries.associateWith { 0 }
+
+        /** Nothing seen yet: no position, no movement, no reps. */
+        val NONE = Recognition(Position.NONE)
+    }
+}
 
 /**
  * Works out the athlete's [Position] on every analysed frame.
@@ -20,9 +60,11 @@ data class Recognition(val position: Position)
  * entered once the frames have kept pointing at it for [ENTRY_MS], and then kept by a rule of its
  * own that is looser than the rule that entered it:
  *
- * - **On the bar**: entered when the hands are above the shoulders. It wins over standing, because
- *   a hang is also upright with straight legs. Kept while the hands stay above the shoulders, and
- *   through up to [KEEP_MS] without them.
+ * - **On the bar**: entered when the hands are overhead, at least [HANDS_OVERHEAD_TORSOS] of a
+ *   torso above the shoulders, so hands behind the head in a squat do not enter it. It wins over
+ *   standing, because a hang is also upright with straight legs. Kept while the hands stay above
+ *   the shoulders at all, as they do at the top of a pull-up, and through up to [KEEP_MS] without
+ *   them.
  * - **Standing**: entered when the torso is upright and every shin that is seen stands under its
  *   knee. Kept by the shins alone, so the forward lean at the bottom of a squat stays standing,
  *   and through up to [KEEP_MS] without them.
@@ -39,10 +81,42 @@ data class Recognition(val position: Position)
  * A frame whose identity is not stable is no evidence for any test: it enters nothing, and it
  * counts towards leaving a position.
  *
+ * ### Movements
+ *
+ * The entered position picks the one counter that runs: pull-ups on the bar, push-ups on the
+ * floor, squats standing. The recogniser owns one fixed-movement [WorkoutEngine] per movement,
+ * built from the athlete's [profile] so a knee push-up or a band-assisted pull-up is counted as
+ * the athlete chose, and only the engine of the position that is entered is fed a frame. These
+ * engines are its own: nothing here touches the workout's counting. It reads no setup check; the
+ * pull-up engine learns the bar from a still hang as it does mid-workout. The smart-squats switch
+ * stays Cindy's alone, so squats are always counted by the plain counter.
+ *
+ * Arriving in a position drops the climb in flight in that movement's engine
+ * ([WorkoutEngine.dropClimbOnArrival]), so standing up off the floor is not booked as a squat.
+ * That is deliberately not the engine's own start gate, which loses whole sets the athlete is
+ * already in.
+ *
+ * A movement is confirmed at the [CONFIRMING_REPS]th rep its engine counts in one visit to its
+ * position, and those reps are part of its tally. A visit ends when the position changes. Before
+ * confirmation nothing is recognised, and a single rep that is left behind is forgotten, because
+ * being late is better than being wrong. A confirmed movement stays recognised until a different
+ * one is confirmed, and returning to its position counts again at once.
+ *
  * Time is the frame clock in milliseconds, never a frame count: the phone analyses between 8 and
  * 30 frames a second and the same rules have to hold at every rate.
  */
-class Recogniser {
+class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
+
+    private var engines = buildEngines()
+
+    private var movement: Movement? = null
+    private var candidate: Movement? = null
+    private var candidateReps = 0
+    private val tally = Movement.entries.associateWithTo(mutableMapOf()) { 0 }
+
+    private fun buildEngines(): Map<Movement, WorkoutEngine> = Movement.entries.associateWith {
+        WorkoutEngine(fixedExercise = it.exercise, profile = profile)
+    }
 
     private var position = Position.NONE
 
@@ -54,11 +128,14 @@ class Recogniser {
     private var lastHeld = 0L
 
     fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): Recognition {
+        val before = position
         val frame = if (identityStable) read(k) else NO_EVIDENCE
         keep(frame, now)
         point(frame.pointsTo, now)
         enter(now)
-        return Recognition(position)
+        if (position != before) arrive()
+        count(k, now, identityStable)
+        return Recognition(position, movement, candidate, candidateReps, tally.toMap())
     }
 
     fun reset() {
@@ -66,6 +143,40 @@ class Recogniser {
         pointingAt = Position.NONE
         pointingSince = 0L
         lastHeld = 0L
+        engines = buildEngines()
+        movement = null
+        candidate = null
+        candidateReps = 0
+        tally.keys.forEach { tally[it] = 0 }
+    }
+
+    /**
+     * The position has changed, so the visit that was counting candidate reps is over, and the
+     * engine of the position now entered must not book the climb that brought the athlete here.
+     */
+    private fun arrive() {
+        candidate = null
+        candidateReps = 0
+        Movement.at(position)?.let { engines.getValue(it).dropClimbOnArrival() }
+    }
+
+    /** Feeds this frame to the one engine whose position is entered, and books the rep it counts. */
+    private fun count(k: Array<Keypoint>, now: Long, identityStable: Boolean) {
+        val counting = Movement.at(position) ?: return
+        val event = engines.getValue(counting).onFrame(k, now, identityStable)
+        if (event != RepEvent.REP) return
+        if (counting == movement) {
+            tally[counting] = tally.getValue(counting) + 1
+            return
+        }
+        candidate = counting
+        candidateReps++
+        if (candidateReps < CONFIRMING_REPS) return
+        // The confirming reps are the movement's first reps, not reps recognition spent on finding it.
+        movement = counting
+        tally[counting] = tally.getValue(counting) + candidateReps
+        candidate = null
+        candidateReps = 0
     }
 
     /** Leaves the bar or standing once its own rule has not held for longer than [KEEP_MS]. */
@@ -109,6 +220,7 @@ class Recogniser {
     }
 
     private class Frame(
+        val handsOverhead: Boolean,
         val handsAboveShoulders: Boolean,
         val shinsUnderKnees: Boolean,
         val upright: Boolean,
@@ -117,24 +229,39 @@ class Recogniser {
         /** The position this frame alone points at, or none. */
         val pointsTo: Position
             get() = when {
-                handsAboveShoulders -> Position.ON_THE_BAR
+                handsOverhead -> Position.ON_THE_BAR
                 upright && shinsUnderKnees -> Position.STANDING
                 torsoSeen -> Position.ON_THE_FLOOR
                 else -> Position.NONE
             }
     }
 
-    private fun read(k: Array<Keypoint>) = Frame(
-        handsAboveShoulders = handsAboveShoulders(k),
-        shinsUnderKnees = shinsUnderKnees(k),
-        upright = PoseGeometry.upright(k),
-        torsoSeen = (PoseGeometry.torsoLength(k) ?: 0f) >= MIN_TORSO_PX
-    )
+    private fun read(k: Array<Keypoint>): Frame {
+        val torso = PoseGeometry.torsoLength(k)
+        return Frame(
+            handsOverhead = handsOverhead(k, torso),
+            handsAboveShoulders = handsAboveShoulders(k),
+            shinsUnderKnees = shinsUnderKnees(k),
+            upright = PoseGeometry.upright(k),
+            torsoSeen = (torso ?: 0f) >= MIN_TORSO_PX
+        )
+    }
 
     private fun handsAboveShoulders(k: Array<Keypoint>): Boolean {
         val hands = PoseGeometry.midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
         val shoulders = PoseGeometry.midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
         return hands.y < shoulders.y
+    }
+
+    /**
+     * The hands are above the shoulders by [HANDS_OVERHEAD_TORSOS] of a torso, as they are on a bar
+     * and are not behind the head. Without a torso to measure by, the hands are not overhead.
+     */
+    private fun handsOverhead(k: Array<Keypoint>, torso: Float?): Boolean {
+        if (torso == null || torso < MIN_TORSO_PX) return false
+        val hands = PoseGeometry.midpoint(k, KP.LEFT_WRIST, KP.RIGHT_WRIST) ?: return false
+        val shoulders = PoseGeometry.midpoint(k, KP.LEFT_SHOULDER, KP.RIGHT_SHOULDER) ?: return false
+        return shoulders.y - hands.y >= HANDS_OVERHEAD_TORSOS * torso
     }
 
     /**
@@ -159,33 +286,44 @@ class Recogniser {
         return seen > 0
     }
 
-    private companion object {
+    companion object {
+        /** The rep at which a movement is confirmed. One could be a stray gesture. */
+        const val CONFIRMING_REPS = 2
+
         /** How long the frames must keep pointing at a position before it is entered, as the start gate waits. */
-        const val ENTRY_MS = 500L
+        private const val ENTRY_MS = 500L
 
         /** How long the bar or standing is kept without its own rule holding. */
-        const val KEEP_MS = 1_000L
+        private const val KEEP_MS = 1_000L
 
         /**
          * How far under its knee a seen ankle must be, in thighs, for the shin to stand. Measured on
          * the Cindy clip with MoveNet Thunder: kneeling never put an ankle more than 0.05 thighs
          * below the knee, standing and squatting never put one less than about 0.6.
          */
-        const val SHIN_UNDER_KNEE_THIGHS = 0.5f
+        private const val SHIN_UNDER_KNEE_THIGHS = 0.5f
 
         /** A thigh shorter than this cannot be measured against. */
-        const val MIN_THIGH_PX = 1f
+        private const val MIN_THIGH_PX = 1f
 
         /** A torso shorter than this is shoulders and hips on top of each other, not a torso. */
-        const val MIN_TORSO_PX = 1f
+        private const val MIN_TORSO_PX = 1f
+
+        /**
+         * How far above the shoulders the hands must be, in torsos, to enter the bar. Measured on
+         * the owner's gym films and the Cindy clip: hands behind the head in a squat never went
+         * past about 0.35 of a torso, a hang reached 0.8 to 1.2, and 0.4 to 0.6 scored the same.
+         */
+        private const val HANDS_OVERHEAD_TORSOS = 0.5f
 
         /** Each leg's hip, knee and ankle. */
-        val LEGS = listOf(
+        private val LEGS = listOf(
             Triple(KP.LEFT_HIP, KP.LEFT_KNEE, KP.LEFT_ANKLE),
             Triple(KP.RIGHT_HIP, KP.RIGHT_KNEE, KP.RIGHT_ANKLE)
         )
 
-        val NO_EVIDENCE = Frame(
+        private val NO_EVIDENCE = Frame(
+            handsOverhead = false,
             handsAboveShoulders = false,
             shinsUnderKnees = false,
             upright = false,

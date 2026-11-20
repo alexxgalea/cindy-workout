@@ -126,11 +126,26 @@ object PoseFixtures {
     }
 
     /**
+     * [squat] with the hands behind the head, the way the owner squats in the gym: the wrists sit
+     * [handsTorsos] of a torso above the shoulders and the elbows stand out beside the ears.
+     * Filmed, the wrists never went past about 0.35 of a torso, so the default is a third.
+     */
+    fun squatHandsBehindHead(kneeDeg: Float, handsTorsos: Float = 0.3f): Array<Keypoint> {
+        val k = squat(kneeDeg)
+        val hipX = (LIMB * sin(rad(kneeDeg))).toFloat()
+        val hipY = (LIMB * cos(rad(kneeDeg))).toFloat()
+        val shoulderY = hipY - TORSO
+        k.putPair(KP.LEFT_ELBOW, KP.RIGHT_ELBOW, hipX, shoulderY - 10f)
+        k.putPair(KP.LEFT_WRIST, KP.RIGHT_WRIST, hipX, shoulderY - handsTorsos * TORSO)
+        return k
+    }
+
+    /**
      * A plank filmed from in front, the way a phone propped on the floor sees push-ups: the
      * foreshortened torso points up the picture, so the shoulders sit well above the hips.
      *
      * Knees are a long way below the hips and the ankles are up beside the knees, so today's
-     * posture test ([PoseGeometry.standing]) reads this as standing. No shin stands under a knee,
+     * start test ([PoseGeometry.standing]) reads this as standing. No shin stands under a knee,
      * and the hands are on the floor under the shoulders, which is what says it is not.
      */
     fun headOnPlank(): Array<Keypoint> {
