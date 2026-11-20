@@ -219,6 +219,19 @@ class WorkoutEngine(
         const val START_SETTLE_DEGREES = 3f
         /** Smoothing on the settling signal, so raw jitter does not read as still rising. */
         const val START_SETTLE_SMOOTHING = 0.4f
+        /**
+         * How long a squat's start must be seen at the top, standing with the knees straight, to
+         * be taken up: two frames, not a still half second.
+         *
+         * An athlete who stands up from the push-ups and squats straight away passes the top once
+         * a rep and never stops there, so the still half second never came and a Cindy on the P40
+         * lost its first 3 squats behind "Stand up to start" (#186). This is a second way in, not
+         * a replacement: where a phone on the floor foreshortens the legs so that full extension
+         * never reads [SQUAT_TOP_DEGREES], the still half second still opens the gate.
+         */
+        const val SQUAT_TOP_MS = 100L
+        /** The knee angle a squat's top is read at: the air squat counter's own top. */
+        const val SQUAT_TOP_DEGREES = 158f
 
         /**
          * The least a heels-flat squat has to close the knee, in degrees, to be a rep.
@@ -425,6 +438,8 @@ class WorkoutEngine(
     /** Smoothed signal while taking up a position, and the value the dwell was measured from. */
     private var startSmoothed = Float.NaN
     private var startReference = Float.NaN
+    /** When the athlete was first seen standing at the top of a squat, or 0 while not there. */
+    private var squatTopSince = 0L
 
     /**
      * True when this frame was refused for a reason the athlete could fix by moving.
@@ -509,6 +524,7 @@ class WorkoutEngine(
         startPositionSince = 0L
         startSmoothed = Float.NaN
         startReference = Float.NaN
+        squatTopSince = 0L
         blocked = false
         manualReps = 0
         lastRepSource = Tracking.AUTO
@@ -678,12 +694,20 @@ class WorkoutEngine(
      * still on the floor. And the joint that scores the movement has to have stopped opening,
      * which is what rules out arriving halfway up. Getting off the floor satisfies the first for
      * most of a second before it satisfies the second.
+     *
+     * Squats have a second way in: standing at the top, knees straight, for [SQUAT_TOP_MS]
+     * ([atSquatTop]). An athlete who squats straight away never stops opening for half a second.
      */
     private fun takeUpPosition(k: Array<Keypoint>, s: Float, now: Long, counter: RepCounting) {
         if (!inStartPosition(k)) {
             startPositionSince = 0L
             startSmoothed = Float.NaN
             startReference = Float.NaN
+            squatTopSince = 0L
+            return
+        }
+        if (atSquatTop(s, now)) {
+            openStartGate(counter)
             return
         }
         startSmoothed =
@@ -696,6 +720,27 @@ class WorkoutEngine(
             return
         }
         if (now - startPositionSince < START_POSITION_MS) return
+        openStartGate(counter)
+    }
+
+    /**
+     * Standing with the knees straight for [SQUAT_TOP_MS]: the top of a squat, which an athlete
+     * squatting straight away passes once a rep without ever holding still there. Getting up off
+     * the floor reaches it only at the end of the climb, and that climb is thrown away.
+     */
+    private fun atSquatTop(s: Float, now: Long): Boolean {
+        if (exercise != Exercise.SQUAT || s < SQUAT_TOP_DEGREES) {
+            squatTopSince = 0L
+            return false
+        }
+        if (squatTopSince == 0L) {
+            squatTopSince = now
+            return false
+        }
+        return now - squatTopSince >= SQUAT_TOP_MS
+    }
+
+    private fun openStartGate(counter: RepCounting) {
         awaitingStart = false
         blocked = false
         // Arriving is not the top of a rep. Throwing away the climb that got here is the whole
@@ -759,6 +804,7 @@ class WorkoutEngine(
         startPositionSince = 0L
         startSmoothed = Float.NaN
         startReference = Float.NaN
+        squatTopSince = 0L
         return if (wasLast) {
             rounds++
             bankedRounds += bankedThisRound.toMap()

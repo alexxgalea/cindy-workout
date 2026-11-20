@@ -108,6 +108,37 @@ class StartPositionTest {
         assertEquals(3, e.reps)
     }
 
+    /**
+     * The athlete in #186: up off the floor and straight into squats, passing the top for a fifth
+     * of a second a rep and never holding still there. The still half second never comes, so the
+     * gate has to open at the top itself.
+     */
+    @Test
+    fun `squatting straight away after getting up counts every squat`() {
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.onTheFloor(), frames = 8)
+        e.hold(PoseFixtures.squat(70f), frames = 3)
+        for (knee in listOf(90f, 110f, 130f, 150f)) e.hold(PoseFixtures.squat(knee), frames = 1)
+        e.hold(PoseFixtures.squat(175f), frames = 2)
+        assertEquals("getting up is still not a rep", 0, e.reps)
+
+        repeat(5) {
+            e.hold(PoseFixtures.squat(80f), frames = 3)
+            e.hold(PoseFixtures.squat(175f), frames = 2)
+        }
+        assertEquals(5, e.reps)
+    }
+
+    @Test
+    fun `one frame at the top does not open the gate`() {
+        val e = engineOnSquats()
+        e.hold(PoseFixtures.onTheFloor(), frames = 8)
+        e.hold(PoseFixtures.squat(80f), frames = 3)
+        e.hold(PoseFixtures.squat(175f), frames = 1)
+        e.hold(PoseFixtures.squat(80f), frames = 3)
+        assertTrue("a single frame could be one bad reading", e.awaitingStart)
+    }
+
     @Test
     fun `the athlete is told what to do and it is worth saying out loud`() {
         val e = engineOnSquats()
