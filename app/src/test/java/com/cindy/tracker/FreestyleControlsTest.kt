@@ -97,4 +97,17 @@ class FreestyleControlsTest {
         assertEquals("Freestyle · Press the shutter to start", CameraControls.idleLine(freestyle))
         assertEquals("Cindy · Press the shutter to start the setup check", CameraControls.idleLine(Workouts.CINDY))
     }
+
+    @Test
+    fun `the rep editors are dimmed until a movement is recognised, and only then`() {
+        val running = panel(RUNNING)
+        assertEquals(ENABLED, running[CameraControl.PLUS].availability)
+        val waiting = running.withEditors(recognised = false)
+        for (editor in listOf(CameraControl.MINUS, CameraControl.PLUS)) {
+            assertEquals(Availability.DIMMED, waiting[editor].availability)
+            assertEquals(running[editor].name, waiting[editor].name)
+        }
+        assertEquals(ENABLED, waiting[SHUTTER].availability)
+        assertEquals(running, running.withEditors(recognised = true))
+    }
 }

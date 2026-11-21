@@ -37,6 +37,23 @@ class CameraControlPanel internal constructor(
 ) {
     operator fun get(control: CameraControl): ControlState = controls.getValue(control)
 
+    /**
+     * This panel with − and + dimmed while [recognised] is false: Freestyle has no movement to
+     * act on until recognition confirms one, so they keep their place and do not answer. The same
+     * panel, not a copy, once there is one.
+     */
+    fun withEditors(recognised: Boolean): CameraControlPanel {
+        if (recognised) return this
+        val dimmed = controls.mapValues { (control, state) ->
+            if (control == CameraControl.MINUS || control == CameraControl.PLUS) {
+                state.copy(availability = Availability.DIMMED)
+            } else {
+                state
+            }
+        }
+        return CameraControlPanel(dimmed, afterSessionPage, switchAsksFirst)
+    }
+
     override fun equals(other: Any?): Boolean =
         other is CameraControlPanel && controls == other.controls && afterSessionPage == other.afterSessionPage &&
             switchAsksFirst == other.switchAsksFirst

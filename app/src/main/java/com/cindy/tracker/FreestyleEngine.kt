@@ -126,6 +126,10 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
     @Synchronized
     fun current(): FreestyleReadout = readout()
 
+    /** Every rep banked so far, of every movement. Zero means STOP would file nothing. */
+    @Synchronized
+    fun totalReps(): Int = banked.values.sum()
+
     @Synchronized
     fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): FreestyleFrame {
         if (!counting()) return FreestyleFrame(readout())
