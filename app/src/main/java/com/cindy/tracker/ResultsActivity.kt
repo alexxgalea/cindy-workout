@@ -202,7 +202,7 @@ class ResultsActivity : AppCompatActivity() {
         // The date and time of the session, whether it has just ended or is reopened: the time
         // figure under it is the clock, and the eyebrow must not read as a second one.
         val when_ = reviewHeadline(a, zone)
-        val free = a.workoutId == Workouts.FREESTYLE_ID
+        val free = a.isFreestyle
         val headline = if (free) "$when_ · Count up" else when_
         binding.headline.text = if (stopped) "STOPPED · $headline" else headline
         if (free) {

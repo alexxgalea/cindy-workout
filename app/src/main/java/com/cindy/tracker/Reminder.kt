@@ -87,7 +87,7 @@ object Reminder {
         }
         // Rule 6.
         // A Freestyle has no score to chase: the best is the latest scored session's.
-        val scored = attempts.filter { !it.isFreestyle }.maxByOrNull { it.atMillis }
+        val scored = Records.latestScored(attempts)
             ?: return Message(
                 "Cindy's ready when you are", "Twenty minutes, as many rounds as you can."
             )

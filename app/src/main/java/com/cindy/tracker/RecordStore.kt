@@ -422,12 +422,18 @@ object Records {
         return Attempt(rounds, reps, at)
     }
 
+    /** The attempts that have a score: everything but a Freestyle. */
+    fun scored(attempts: List<Attempt>): List<Attempt> = attempts.filter { !it.isFreestyle }
+
+    /** The most recent scored attempt, or null when there is none. */
+    fun latestScored(attempts: List<Attempt>): Attempt? = scored(attempts).maxByOrNull { it.atMillis }
+
     /**
      * Best score first; ties broken by the more recent attempt. A Freestyle has no score and is
      * left out: a total of reps is not a result to rank.
      */
     fun ranked(attempts: List<Attempt>): List<Attempt> =
-        attempts.filter { !it.isFreestyle }.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
+        scored(attempts).sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 

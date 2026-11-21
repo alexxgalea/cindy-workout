@@ -33,7 +33,7 @@ object StravaActivityText {
      */
     fun name(a: Attempt): String {
         // A Freestyle has no score to put after its name: the description carries what was done.
-        if (a.workoutId == Workouts.FREESTYLE_ID) return Workouts.FREESTYLE.name
+        if (a.isFreestyle) return Workouts.FREESTYLE.name
         val title = if (a.isCindy) a.profile?.mode?.label ?: Workouts.CINDY.name
         else a.workout?.name ?: "Workout"
         val prefix = if (a.scoreIsLowerBound) "at least " else ""
@@ -50,7 +50,7 @@ object StravaActivityText {
      * coverage than there was.
      */
     fun description(a: Attempt, calorieBasis: CalorieBasis, heartRateMs: Long? = null): String {
-        if (a.workoutId == Workouts.FREESTYLE_ID) return freestyleDescription(a, calorieBasis, heartRateMs)
+        if (a.isFreestyle) return freestyleDescription(a, calorieBasis, heartRateMs)
         val lines = mutableListOf<String>()
 
         val roundsPart =

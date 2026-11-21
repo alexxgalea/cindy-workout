@@ -516,4 +516,14 @@ class RecordsTest {
         assertFalse(Records.isPersonalRecord(listOf(free), free))
         assertNull(Records.bestIn(listOf(free), free.category))
     }
+
+    @Test
+    fun `the latest scored session is the latest one that is not a Freestyle`() {
+        val older = attempt(10, at = 100L)
+        val newer = attempt(12, at = 200L)
+        val freestyle = Attempt(rounds = 0, reps = 0, atMillis = 300L, workoutId = Workouts.FREESTYLE_ID)
+        assertEquals(newer, Records.latestScored(listOf(older, freestyle, newer)))
+        assertNull(Records.latestScored(listOf(freestyle)))
+        assertNull(Records.latestScored(emptyList()))
+    }
 }

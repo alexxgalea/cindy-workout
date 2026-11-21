@@ -26,7 +26,7 @@ object StravaSets {
      * line the rest of the app holds for every rep it reports.
      */
     fun from(a: Attempt): List<WorkoutSet>? {
-        if (a.workoutId == Workouts.FREESTYLE_ID) return freestyle(a)
+        if (a.isFreestyle) return freestyle(a)
         // Null means this attempt predates a counted total (pre-V5) and totalReps falls back to
         // rounds * 30 + reps — an inferred tally, not a bank. Strava never sees one.
         val counted = a.countedReps ?: return null

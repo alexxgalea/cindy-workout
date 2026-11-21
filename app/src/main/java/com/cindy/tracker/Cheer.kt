@@ -61,7 +61,7 @@ object Cheer {
             return "${plural(s.thisWeek.sessions, "session")} this week, $diff more than last week."
         }
         // A Freestyle has no score, so a best is only ever said of the latest scored session.
-        val scored = attempts.filter { !it.isFreestyle }.maxByOrNull { it.atMillis }
+        val scored = Records.latestScored(attempts)
             ?: return "Your first Cindy starts everything."
         val own = Records.inCategory(attempts, scored.category)
         val first = own.minByOrNull { it.atMillis } ?: scored
