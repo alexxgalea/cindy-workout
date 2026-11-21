@@ -86,6 +86,16 @@ class RecordedHudTest {
     }
 
     @Test
+    fun `a Freestyle film shows the figure alone, with no round and no target`() {
+        val hud = RecordedHud()
+        hud.freestyle(reps = 7)
+        val text = hud.forWorkout(now = 0L, clock = "03:21", label = "PUSH-UPS")
+        assertEquals("FREESTYLE", text.round)
+        assertEquals("7", text.count)
+        assertEquals("PUSH-UPS", text.label)
+    }
+
+    @Test
     fun `before any workout score arrives the film defaults the same way the screen does`() {
         val text = RecordedHud().forWorkout(now = 0L, clock = "20:00", label = "PULL-UPS")
         assertEquals("ROUND 1", text.round)

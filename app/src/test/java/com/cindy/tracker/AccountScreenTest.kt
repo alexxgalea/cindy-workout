@@ -425,24 +425,24 @@ class AccountScreenTest {
     }
 
     @Test
-    fun `the menu deals in every card on one running count, the profile card first`() {
+    fun `the menu deals in every card on one running count, from the top of the page`() {
         val activity = openMenu()
         val root = content(activity)
+        val firstRow = findByDescriptionPrefix(root, "Workout, ")!!
         val profileRow = findByDescriptionPrefix(root, "You, ")!!
-        val firstSetting = findByDescriptionPrefix(root, "Movements, ")!!
         val lastSetting = findByDescriptionPrefix(root, "Help, ")!!
 
-        // Each row waits for the ones before it, across both cards. Dealing only the first card
-        // would leave every setting with no delay at all. The delay is what is checked, not the
+        // Each row waits for the ones before it, across every card. Dealing only the first card
+        // would leave every later row with no delay at all. The delay is what is checked, not the
         // animation itself: Robolectric does not play a start delay the way a phone does.
-        val delays = listOf(profileRow, firstSetting, lastSetting).map { it.animate().startDelay }
-        assertEquals("the profile card arrives first", 0L, delays[0])
-        assertTrue("the settings follow the profile card: $delays", delays[1] > delays[0])
+        val delays = listOf(firstRow, profileRow, lastSetting).map { it.animate().startDelay }
+        assertEquals("the top row arrives first", 0L, delays[0])
+        assertTrue("the profile card follows Training: $delays", delays[1] > delays[0])
         assertTrue("and each row follows the one before: $delays", delays[2] > delays[1])
 
         // However they arrive, none is left hidden.
         ShadowLooper.idleMainLooper(3, TimeUnit.SECONDS)
-        for (row in listOf(profileRow, firstSetting, lastSetting)) {
+        for (row in listOf(firstRow, profileRow, lastSetting)) {
             assertEquals("a row never arrived", 1f, row.alpha, 0f)
         }
         activity.finish()

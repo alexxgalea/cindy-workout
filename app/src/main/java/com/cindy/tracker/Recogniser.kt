@@ -120,6 +120,16 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
 
     private var position = Position.NONE
 
+    /**
+     * The movement whose engine was fed the last frame and whether it could read every joint it
+     * scores from; null while no position is entered. State for [FreestyleEngine]'s tracking
+     * health, never an input to counting.
+     */
+    var countingMovement: Movement? = null
+        private set
+    var countingLegible = false
+        private set
+
     /** The position the frames are currently pointing at, and since when, for the entry dwell. */
     private var pointingAt = Position.NONE
     private var pointingSince = 0L
@@ -148,6 +158,17 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
         candidate = null
         candidateReps = 0
         tally.keys.forEach { tally[it] = 0 }
+        countingMovement = null
+        countingLegible = false
+    }
+
+    /**
+     * The camera or the athlete has moved: every engine forgets what it learned in the old framing
+     * (the band, the bar), as Cindy's engine does ([WorkoutEngine.recalibrate]). The position, the
+     * movement and the tally stay: what was seen is still what was seen.
+     */
+    fun recalibrate() {
+        engines.values.forEach { it.recalibrate() }
     }
 
     /**
@@ -162,8 +183,11 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
 
     /** Feeds this frame to the one engine whose position is entered, and books the rep it counts. */
     private fun count(k: Array<Keypoint>, now: Long, identityStable: Boolean) {
-        val counting = Movement.at(position) ?: return
+        val counting = Movement.at(position)
+        countingMovement = counting
+        if (counting == null) return
         val event = engines.getValue(counting).onFrame(k, now, identityStable)
+        countingLegible = engines.getValue(counting).diagnostics.poseLegible
         if (event != RepEvent.REP) return
         if (counting == movement) {
             tally[counting] = tally.getValue(counting) + 1

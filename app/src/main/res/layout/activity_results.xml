@@ -184,6 +184,7 @@
 
             <!-- ── the rung, and what the next one costs ── -->
             <LinearLayout
+                android:id="@+id/levelCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_6"

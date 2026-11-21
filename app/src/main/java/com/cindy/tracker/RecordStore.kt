@@ -82,7 +82,18 @@ data class Attempt(
      * rather than relabelled: [workout] is null for it, and it is only ever ranked against
      * sessions filed under the same id.
      */
-    val workoutId: String = Workouts.CINDY_ID
+    val workoutId: String = Workouts.CINDY_ID,
+    /**
+     * The reps of each movement, for a session that has no rounds to say it (Freestyle). Empty
+     * for Cindy, whose sets say it, and for every attempt written before this existed.
+     */
+    val movementTotals: Map<Exercise, Int> = emptyMap(),
+    /**
+     * A Freestyle's sets, Rests and Transitions as worked out at STOP ([FreestyleSets]), in order.
+     * They live and die with the attempt, so DISCARD takes them. Empty for Cindy and for every
+     * attempt written before this existed. The gaps are not stored: they follow from the sets.
+     */
+    val freestyleSets: List<FreestyleSet> = emptyList()
 ) {
     /** What [workoutId] names, or null for a workout from a build that knew one this does not. */
     val workout: Workout? get() = Workouts.byId(workoutId)
@@ -92,6 +103,16 @@ data class Attempt(
 
     /** True for a session of Cindy, which the ladder, the benchmark and the badges describe. */
     val isCindy: Boolean get() = workoutId == Workouts.CINDY_ID
+
+    /**
+     * True for a Freestyle, which has no score: it is counted in reps per movement and ranked
+     * against nothing. Its days are work done, so streaks, the calendar and weekly volume count
+     * it; the trend, bests, leaderboard, levels, badges and records never do.
+     */
+    val isFreestyle: Boolean get() = workoutId == Workouts.FREESTYLE_ID
+
+    /** The reps of a Freestyle: its movements' totals added up, whatever else is recorded. */
+    val freestyleReps: Int get() = movementTotals.values.sum().takeIf { it > 0 } ?: totalReps
 
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
@@ -183,6 +204,8 @@ object Records {
     private const val V6 = "v6"
     private const val V7 = "v7"
     private const val V8 = "v8"
+    private const val V9 = "v9"
+    private const val V10 = "v10"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -196,8 +219,15 @@ object Records {
     const val UNTRACKED_TOLERANCE_MS = 30_000L
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
+        // V9 only for an attempt that has totals to carry, V10 only one that has sets too, so
+        // every other line is written as it always was, and an older build reads everything but
+        // a Freestyle.
         listOf(
-            V8,
+            when {
+                a.freestyleSets.isNotEmpty() -> V10
+                a.movementTotals.isEmpty() -> V8
+                else -> V9
+            },
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -216,13 +246,27 @@ object Records {
                 "${it.movement.name}:${it.ms}:${it.reps}:${it.manualReps}"
             },
             a.workoutId
-        ).joinToString("|")
+        ).let { fields ->
+            val totals = a.movementTotals.entries.joinToString(",") { "${it.key.name}:${it.value}" }
+            when {
+                a.freestyleSets.isNotEmpty() -> fields + totals + a.freestyleSets.joinToString(",") {
+                    // A fifth field, ":1", only on a set the athlete gave another movement; an
+                    // unchanged set is written exactly as before.
+                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}" +
+                        if (it.changedByAthlete) ":1" else ""
+                }
+                a.movementTotals.isEmpty() -> fields
+                else -> fields + totals
+            }
+        }.joinToString("|")
     }
 
     fun decode(raw: String?): List<Attempt> {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V10|") -> decodeV10(line)
+                line.startsWith("$V9|") -> decodeV9(line)
                 line.startsWith("$V8|") -> decodeV8(line)
                 // Everything below was written before workouts existed, when every session was a
                 // Cindy, so each decodes as one by the field's default rather than by a rewrite.
@@ -237,6 +281,39 @@ object Records {
                 else -> decodeV1(line)
             }
         }.toList()
+    }
+
+    /** V9 plus the sets a Freestyle was worked out into. */
+    private fun decodeV10(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 17) return null
+        val sets = p[16].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val f = entry.split(":")
+            if (f.size != 4 && f.size != 5) return@mapNotNull null
+            val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
+            val reps = f[1].toIntOrNull() ?: return@mapNotNull null
+            val start = f[2].toLongOrNull() ?: return@mapNotNull null
+            val end = f[3].toLongOrNull() ?: return@mapNotNull null
+            FreestyleSet(movement, reps, start, end, changedByAthlete = f.getOrNull(4) == "1")
+        }
+        return decodeV9(p)?.copy(freestyleSets = sets)
+    }
+
+    /** V8 plus the reps of each movement. */
+    private fun decodeV9(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 16) return null
+        return decodeV9(p)
+    }
+
+    private fun decodeV9(p: List<String>): Attempt? {
+        val totals = p[15].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val f = entry.split(":")
+            if (f.size != 2) return@mapNotNull null
+            val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
+            movement to (f[1].toIntOrNull() ?: return@mapNotNull null)
+        }.toMap()
+        return decodeV7Fields(p)?.copy(workoutId = p[14], movementTotals = totals)
     }
 
     /**
@@ -345,9 +422,18 @@ object Records {
         return Attempt(rounds, reps, at)
     }
 
-    /** Best score first; ties broken by the more recent attempt. */
+    /** The attempts that have a score: everything but a Freestyle. */
+    fun scored(attempts: List<Attempt>): List<Attempt> = attempts.filter { !it.isFreestyle }
+
+    /** The most recent scored attempt, or null when there is none. */
+    fun latestScored(attempts: List<Attempt>): Attempt? = scored(attempts).maxByOrNull { it.atMillis }
+
+    /**
+     * Best score first; ties broken by the more recent attempt. A Freestyle has no score and is
+     * left out: a total of reps is not a result to rank.
+     */
     fun ranked(attempts: List<Attempt>): List<Attempt> =
-        attempts.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
+        scored(attempts).sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 
@@ -416,7 +502,7 @@ object Records {
      * movements: rank it honestly rather than withhold it.
      */
     fun isPersonalRecord(attempts: List<Attempt>, of: Attempt): Boolean {
-        if (of.scoreIsLowerBound) return false
+        if (of.scoreIsLowerBound || of.isFreestyle) return false
         val previous = personalRecord(attempts, of) ?: return of.totalReps > 0
         return of.totalReps > previous.totalReps
     }
@@ -444,6 +530,18 @@ class RecordStore(context: Context) {
     fun add(attempt: Attempt): Boolean {
         if (attempt.totalReps == 0) return false
         prefs.edit().putString(KEY, Records.encode(all() + attempt)).apply()
+        return true
+    }
+
+    /**
+     * Rewrites the filed session that has [attempt]'s time with [attempt], and says whether there
+     * was one. Its place on the board does not change; nothing else is touched.
+     */
+    fun replace(attempt: Attempt): Boolean {
+        val before = all()
+        if (before.none { it.atMillis == attempt.atMillis }) return false
+        val after = before.map { if (it.atMillis == attempt.atMillis) attempt else it }
+        prefs.edit().putString(KEY, Records.encode(after)).apply()
         return true
     }
 

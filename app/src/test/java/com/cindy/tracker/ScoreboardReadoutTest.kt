@@ -413,6 +413,19 @@ class ScoreboardReadoutTest {
         assertEquals("0/10", figure())
     }
 
+    @Test
+    fun `a Freestyle figure has no target and no slash, over the movement's line, with no next set`() {
+        readout.freestyle(figure = 0, line = FREESTYLE_IDLE_LINE, motion = FigureMotion.NONE)
+        assertEquals("0", figure())
+        assertEquals("Freestyle · Count up", line())
+
+        readout.freestyle(figure = 2, line = "PUSH-UPS · 2 total", motion = FigureMotion.BANKED)
+        assertEquals("2", figure())
+        assertEquals("PUSH-UPS · 2 total", line())
+        assertEquals(null, nextSet())
+        assertEquals("2 reps, push-ups", hud.reps.contentDescription.toString())
+    }
+
     private companion object {
         const val FRAME_MS = 16L
     }

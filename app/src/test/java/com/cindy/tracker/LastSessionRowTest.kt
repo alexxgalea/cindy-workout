@@ -51,4 +51,42 @@ class LastSessionRowTest {
         val whole = row(listOf(attempt(rounds = 1, reps = 0, at = noon7Nov2026)))!!
         assertEquals("Last session, 7 Nov 2026, score 1 round", whole.spokenName)
     }
+
+    // ── Freestyle: no score, so the row says what was done ────────────────────
+
+    private val fri21Nov2025 =
+        java.time.LocalDate.of(2025, 11, 21).atTime(9, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+
+    private fun freestyle(at: Long = fri21Nov2025) = Attempt(
+        rounds = 0, reps = 0, atMillis = at, durationMs = (18 * 60 + 40) * 1000L,
+        countedReps = 119, workoutId = Workouts.FREESTYLE_ID,
+        movementTotals = mapOf(Exercise.entries[0] to 40, Exercise.entries[1] to 39, Exercise.entries[2] to 40)
+    )
+
+    @Test
+    fun `a Freestyle row shows the day, the total reps and the time`() {
+        val r = row(listOf(freestyle()))!!
+        assertEquals("Fri 21 Nov · 119 reps · 18:40", r.value)
+    }
+
+    @Test
+    fun `a Freestyle's spoken name says its total and its time in words, not a score`() {
+        val r = row(listOf(freestyle()))!!
+        assertEquals("Last session, Fri 21 Nov, Freestyle, 119 reps in 18 minutes 40 seconds", r.spokenName)
+    }
+
+    @Test
+    fun `one rep is singular`() {
+        val one = freestyle().copy(durationMs = 61_000L, countedReps = 1,
+            movementTotals = mapOf(Exercise.entries[0] to 1))
+        val r = row(listOf(one))!!
+        assertEquals("Fri 21 Nov · 1 rep · 1:01", r.value)
+        assertEquals("Last session, Fri 21 Nov, Freestyle, 1 rep in 1 minute 1 second", r.spokenName)
+    }
+
+    @Test
+    fun `a Freestyle after a Cindy is the last session`() {
+        val cindy = attempt(rounds = 5, reps = 3, at = fri21Nov2025 - day)
+        assertEquals(fri21Nov2025, row(listOf(cindy, freestyle()))!!.atMillis)
+    }
 }

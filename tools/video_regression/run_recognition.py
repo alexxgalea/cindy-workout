@@ -35,6 +35,18 @@ when the gap has closed it reports the set as ok. A known gap never excuses a la
 the closing line counts the known-gap sets apart from the films that held. Each film also prints a timeline of
 window starts, positions and confirmations, so a miss can be found by its time.
 
+A film is also run as a Freestyle (the Python twin of FreestyleEngine, `cindy_sim/freestyle.py`):
+the reps recognition counts are banked and the sets derived. Two more thresholds hold it to numbers:
+
+- per-movement totals equal to the labelled reps (`labelledBottomsMs`) on every film that labels them.
+  A movement with a `knownGap` window may differ: it is reported as KNOWN GAP and does not fail, and
+  when the totals match again it says the gap has closed. Kipping pull-ups (#184) are the known gap.
+- derived set boundaries within SET_TOLERANCE_MS of the labels, when a scenario carries `labelledSets`
+  (the owner's labels, #198): one entry per set in order, as the first and last rep of the set
+  `{"movement": "pullup", "startMs": 17466, "endMs": 27966}`, with an optional `setToleranceMs`. The
+  derived set count and movements must match too. A film with no `labelledSets` has its derived sets
+  printed and nothing enforced.
+
     python3 tools/video_regression/run_recognition.py --scenarios tests/scenarios/cindy.json
     python3 tools/video_regression/run_recognition.py --video clip.mp4
 """
@@ -49,6 +61,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from cindy_sim.freestyle import FiledSession, FreestyleEngine, FreestyleSet
 from cindy_sim.recogniser import Movement, Position, Recognition, Recogniser
 from cindy_sim.workout_engine import STANDARD_PROFILE, CindyProfile, PullVariant
 
@@ -358,7 +371,134 @@ def run_scenario(scenario: dict, out_dir: Path, pull: str | None = None) -> tupl
             print("    " + line)
         passed = passed and not score.failed
         known_gaps = score.known_gaps
+    if movement_windows or scenario.get("labelledSets"):
+        passed, known_gaps = score_freestyle(scenario, frames, labelled, movement_windows, passed, known_gaps)
     return passed, known_gaps
+
+
+def score_freestyle(scenario, frames, labelled, windows, passed, known_gaps) -> tuple[bool, int]:
+    """Runs the film as a Freestyle and holds it to its totals and, when labelled, its set boundaries."""
+    filed = freestyle_session(frames)
+    print("  Freestyle (banks what recognition counts):")
+    totals = {k: filed.totals.get(m.exercise, 0) for k, m in MOVEMENT_KEYS.items()} if filed else {}
+    results = score_totals(totals, labelled, windows)
+    print("    Totals (equal to the labelled reps):")
+    for r in results:
+        print("      " + describe_total(r))
+    if any(r.fails for r in results):
+        passed = False
+    known_gaps += sum(1 for r in results if r.status == "known_gap")
+    print("    Derived sets:")
+    for line in describe_derived(filed):
+        print("      " + line)
+    labelled_sets = scenario.get("labelledSets")
+    if not labelled_sets:
+        print("    Set boundaries: no labelledSets on this film, nothing enforced")
+        return passed, known_gaps
+    tolerance = scenario.get("setToleranceMs", SET_TOLERANCE_MS)
+    failures = score_set_boundaries(filed.sets if filed else [], labelled_sets, tolerance)
+    print(f"    Set boundaries (within {tolerance} ms of the labels): "
+          f"{'held' if not failures else str(len(failures)) + ' failure(s)'}")
+    for message in failures:
+        print(f"      - {message}")
+    return passed and not failures, known_gaps
+
+
+#: How far a derived set's first or last rep may be from the label. PROVISIONAL, with the rest
+#: threshold (#198): a Freestyle banks the two confirming reps together at the 2nd, so a set's derived
+#: start is up to a rep late, and a label is a rep's bottom while the engine marks it when counted.
+#: On the three films today a derived first rep lands 1.5 to 3.2 s after its labelled bottom (the
+#: 3.2 s is the clip's push-ups, which lose a rep entering the floor) and a last rep within 0.5 s.
+SET_TOLERANCE_MS = 3_500
+
+
+def freestyle_session(frames: Sequence[Frame], profile: CindyProfile = STANDARD_PROFILE) -> FiledSession | None:
+    """The film run as a Freestyle from its first frame to its last: what STOP would have filed, or none."""
+    if not frames:
+        return None
+    engine = FreestyleEngine(profile)
+    engine.start(frames[0].timestamp_ms)
+    for frame in frames:
+        engine.on_frame(frame.keypoints, frame.timestamp_ms, frame.tracking_stable)
+    return engine.stop(frames[-1].timestamp_ms)
+
+
+@dataclass
+class TotalResult:
+    """One movement's banked reps against the labelled ones."""
+
+    movement: str
+    banked: int
+    labelled: int
+    #: ok, wrong, known_gap (differs, but marked a known gap) or gap_closed (marked, and now equal)
+    status: str
+    reason: str = ""
+
+    @property
+    def fails(self) -> bool:
+        return self.status == "wrong"
+
+
+def score_totals(
+    totals: dict[str, int], labelled: dict[str, Sequence[int]], windows: Sequence[dict]
+) -> list[TotalResult]:
+    """Each labelled movement's banked total against its labelled reps; `totals` is keyed by scenario key."""
+    results: list[TotalResult] = []
+    for key in MOVEMENT_KEYS:
+        reps = labelled.get(key)
+        if not reps:
+            continue
+        banked = totals.get(key, 0)
+        reason = next((w["knownGap"] for w in windows if w["movement"] == key and w.get("knownGap")), "")
+        if banked == len(reps):
+            status = "gap_closed" if reason else "ok"
+        else:
+            status = "known_gap" if reason else "wrong"
+        results.append(TotalResult(key, banked, len(reps), status, reason))
+    return results
+
+
+def score_set_boundaries(
+    derived: Sequence[FreestyleSet], labelled_sets: Sequence[dict], tolerance_ms: int = SET_TOLERANCE_MS
+) -> list[str]:
+    """One message per way the derived sets differ from the labelled ones; an empty list is a pass."""
+    if len(derived) != len(labelled_sets):
+        return [f"{len(labelled_sets)} labelled sets, {len(derived)} derived"]
+    failures: list[str] = []
+    for i, (got, want) in enumerate(zip(derived, labelled_sets), start=1):
+        if got.movement.name.lower() != want["movement"]:
+            failures.append(f"set {i}: labelled {want['movement']}, derived {got.movement.name.lower()}")
+            continue
+        for edge, derived_ms, labelled_ms in (("starts", got.start_ms, want["startMs"]),
+                                              ("ends", got.end_ms, want["endMs"])):
+            if abs(derived_ms - labelled_ms) > tolerance_ms:
+                failures.append(f"set {i} ({want['movement']}) {edge} at {derived_ms} ms, labelled {labelled_ms} ms "
+                                f"(more than {tolerance_ms} ms apart)")
+    return failures
+
+
+def describe_total(r: TotalResult) -> str:
+    counts = f"banked {r.banked} of {r.labelled} labelled"
+    if r.status == "ok":
+        return f"ok          {r.movement}: {counts}"
+    if r.status == "wrong":
+        return f"WRONG TOTAL {r.movement}: {counts}"
+    if r.status == "gap_closed":
+        return f"ok          {r.movement}: {counts} (the known gap has closed; drop its knownGap)"
+    return f"KNOWN GAP   {r.movement}: {counts}; {r.reason}"
+
+
+def describe_derived(filed: FiledSession | None) -> list[str]:
+    """The derived sets and the gaps between them, as the session page would list them."""
+    if filed is None:
+        return ["nothing banked: STOP files nothing"]
+    lines = []
+    for i, s in enumerate(filed.sets):
+        lines.append(f"set {i + 1}: {s.movement.name.lower()} x{s.reps}, {s.start_ms / 1000:.2f}s to {s.end_ms / 1000:.2f}s")
+        if i < len(filed.gaps):
+            g = filed.gaps[i]
+            lines.append(f"  {g.kind.value} {(g.end_ms - g.start_ms) / 1000:.1f}s")
+    return lines
 
 
 def summary_line(held: int, films: int, known_gaps: int) -> str:

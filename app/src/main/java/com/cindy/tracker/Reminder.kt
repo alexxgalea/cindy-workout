@@ -86,7 +86,12 @@ object Reminder {
             )
         }
         // Rule 6.
-        val best = Records.bestIn(attempts, latest.category) ?: latest
+        // A Freestyle has no score to chase: the best is the latest scored session's.
+        val scored = Records.latestScored(attempts)
+            ?: return Message(
+                "Cindy's ready when you are", "Twenty minutes, as many rounds as you can."
+            )
+        val best = Records.bestIn(attempts, scored.category) ?: scored
         return Message(
             "Cindy's ready when you are",
             "Your best is ${best.scoreLabel()}. Twenty minutes to chase it."

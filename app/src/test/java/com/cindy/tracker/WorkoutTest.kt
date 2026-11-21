@@ -18,8 +18,28 @@ class WorkoutTest {
     private val cindy = Workouts.CINDY
 
     @Test
-    fun `the catalog holds Cindy and nothing else yet`() {
-        assertEquals(listOf(cindy), Workouts.catalog)
+    fun `a release build's catalog holds Cindy and nothing else`() {
+        assertEquals(listOf(cindy), Workouts.catalogFor(debug = false))
+    }
+
+    @Test
+    fun `a debug build's catalog adds Freestyle after Cindy`() {
+        assertEquals(listOf(cindy, Workouts.FREESTYLE), Workouts.catalogFor(debug = true))
+        assertEquals(Workouts.catalogFor(debug = BuildConfig.DEBUG), Workouts.catalog)
+    }
+
+    @Test
+    fun `Freestyle counts up with no cap, no target and no records`() {
+        val f = Workouts.FREESTYLE
+        assertEquals("freestyle", f.id)
+        assertEquals("Freestyle", f.name)
+        assertEquals(Structure.FREE, f.structure)
+        assertEquals("Count up", f.format)
+        assertEquals("Pull-ups, push-ups and squats, in any order.", f.description)
+        assertNull(f.timeCapMs)
+        assertEquals(Scoring.TOTALS, f.scoring)
+        assertTrue(f.movements.all { it.reps == null })
+        assertSame(f, Workouts.byId("freestyle").takeIf { BuildConfig.DEBUG } ?: f)
     }
 
     @Test
@@ -76,7 +96,7 @@ class WorkoutTest {
         assertEquals("10-minute EMOM", workout(Structure.EMOM, 10 * 60_000L).format)
         assertEquals("For time, 15-minute cap", workout(Structure.FOR_TIME, 15 * 60_000L).format)
         assertEquals("For time", workout(Structure.FOR_TIME, null).format)
-        assertEquals("Free", workout(Structure.FREE, null).format)
+        assertEquals("Count up", workout(Structure.FREE, null).format)
     }
 
     /**

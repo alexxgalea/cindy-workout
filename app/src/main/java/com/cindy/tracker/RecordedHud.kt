@@ -41,6 +41,12 @@ class RecordedHud {
         workoutCount = "$reps / $target"
     }
 
+    /** The same, for a Freestyle: the figure alone, since there is no round and no target. */
+    fun freestyle(reps: Int) {
+        workoutRound = "FREESTYLE"
+        workoutCount = "$reps"
+    }
+
     /** Starts the three-second "calibrated" banner. Called once, where the setup check succeeds. */
     fun calibrated(now: Long) {
         bannerText = "CALIBRATED · $CALIBRATION_REPS REPS"

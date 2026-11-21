@@ -101,7 +101,8 @@
      "label": "push-ups, with the kneeling rest inside them",
      "fromMs": 29000,
      "toMs": 52500,
-     "movement": "pushup"
+     "movement": "pushup",
+     "knownGap": "a Freestyle banks 9 of the 10 push-ups on this clip: the first push-up is done while recognition is still entering the floor position, so the set is confirmed with 3 reps done and 2 banked (counting is not tuned here)"
     },
     {
      "label": "getting up and standing ready",

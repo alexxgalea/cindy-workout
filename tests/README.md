@@ -135,6 +135,7 @@ tools/video_regression/
 ├── build_scenarios.py      # dataset importers (InfiniteRep / RepCount)
 ├── parity_check.py         # proves the port still matches the Kotlin
 ├── recognition_parity_check.py  # the same proof for the recogniser
+├── freestyle_parity_check.py    # the same proof for the Freestyle twin (banking and derived sets)
 ├── run_batch.py            # scores scenarios, same schema as the Android job
 ├── run_recognition.py      # writes position and movement for every frame of a film, checks labelled windows
 ├── fetch_youtube.py        # re-provisions the third-party clip fixtures
@@ -247,6 +248,26 @@ touches the workout's counting.
 The owner's own films are scored by `tests/scenarios/recognition/owner_films.json`; the films stay out
 of git, at the ignored `tests/fixtures/owner/` (`rec-a.mp4`, `rec-b.mp4`: copy or link the gym recordings
 there). A scenario with no film on this machine reports `missing fixture` and fails the run.
+
+### Freestyle (spec #188)
+
+`cindy_sim/freestyle.py` is the Python twin of `FreestyleEngine.kt` and `FreestyleSets.kt`, and
+`run_recognition.py` runs every labelled film through it as a Freestyle. Beside the three recognition
+thresholds it enforces **per-movement totals equal to `labelledBottomsMs`** (a movement with a
+`knownGap` window is reported as KNOWN GAP and does not fail; kipping pull-ups, #184, are one) and, on a
+film with `labelledSets`, **derived set boundaries within `SET_TOLERANCE_MS`** (3.5 s, provisional) of
+the labels. `labelledSets` is one entry per set in order, the first and last rep of the set:
+`{"movement": "pullup", "startMs": 17466, "endMs": 27966}`, with an optional `setToleranceMs`. No
+film carries them yet (the owner adds them in #198, with the rest threshold `REST_THRESHOLD_MS`, one
+constant in `freestyle.py` and one in `FreestyleSets.kt`); a film without them prints its derived sets
+and enforces nothing about them.
+
+`freestyle_parity_check.py` holds the twin to the Kotlin `FreestyleParityTraceTest` on
+`tests/parity/freestyle_trace_jvm.csv` and `freestyle_sets_jvm.csv` (committed; sessions are the
+recognition plan and `freestyle_plan.csv`). For the films, `--dump-films` writes their keypoints to the
+ignored `tests/parity/films/`, the Kotlin test replays them (`./gradlew testDebugUnitTest --rerun-tasks
+--tests 'com.cindy.tracker.FreestyleParityTraceTest'`) and the check compares the film traces too. With
+no dumps it says the films were not compared.
 
 Each film's positions and movements are written to the ignored
 `tests/reports/recognition/<id>.positions.csv`. The run prints every confirmation with its time and

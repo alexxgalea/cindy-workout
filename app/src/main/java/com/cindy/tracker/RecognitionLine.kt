@@ -28,6 +28,7 @@ internal class RecognitionLine(context: Context, private var profile: CindyProfi
 
     /** What the line is saying now, so a frame that restates it does not redraw it. Main thread only. */
     private var shown: String? = null
+    private var shownRecognition: Recognition? = null
 
     val view = TextView(context).apply {
         typeface = Typeface.MONOSPACE
@@ -91,6 +92,9 @@ internal class RecognitionLine(context: Context, private var profile: CindyProfi
 
     /** Main thread: says what [recognition] says, redrawing only when it changed. */
     fun show(recognition: Recognition) {
+        // Most frames restate the last verdict; do not build its string to find that out.
+        if (recognition == shownRecognition) return
+        shownRecognition = recognition
         val line = say(recognition)
         if (line == shown) return
         shown = line

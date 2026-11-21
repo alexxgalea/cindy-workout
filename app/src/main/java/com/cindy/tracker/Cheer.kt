@@ -60,13 +60,16 @@ object Cheer {
             val diff = s.thisWeek.sessions - s.lastWeek.sessions
             return "${plural(s.thisWeek.sessions, "session")} this week, $diff more than last week."
         }
-        val own = Records.inCategory(attempts, latest.category)
-        val first = own.minByOrNull { it.atMillis } ?: latest
-        val best = Records.bestIn(attempts, latest.category) ?: latest
+        // A Freestyle has no score, so a best is only ever said of the latest scored session.
+        val scored = Records.latestScored(attempts)
+            ?: return "Your first Cindy starts everything."
+        val own = Records.inCategory(attempts, scored.category)
+        val first = own.minByOrNull { it.atMillis } ?: scored
+        val best = Records.bestIn(attempts, scored.category) ?: scored
         val delta = best.totalReps - first.totalReps
         if (delta > 0) {
             return "Your best is $delta reps above your first " +
-                "${latest.profile?.mode?.label ?: "session"}."
+                "${scored.profile?.mode?.label ?: "session"}."
         }
         return "Your best is ${best.scoreLabel()}."
     }
@@ -100,7 +103,8 @@ object Cheer {
         if (attempts.none { it.atMillis == attempt.atMillis }) return emptyList()
         val before = attempts.filter { it.atMillis != attempt.atMillis }
         val day = Progress.localDate(attempt, zone)
-        if (before.isEmpty()) {
+        // The first Cindy, not the first session: a Freestyle neither is one nor spoils one.
+        if (!attempt.isFreestyle && before.none { !it.isFreestyle }) {
             return listOf(Celebration(Celebration.Kind.FIRST, "First Cindy on the board."))
         }
         val out = ArrayList<Celebration>()

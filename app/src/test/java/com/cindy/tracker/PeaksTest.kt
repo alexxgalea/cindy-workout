@@ -291,4 +291,14 @@ class PeaksTest {
         val reversed = peaks(listOf(newer, older)).titled("Fastest 5 strict pull-ups")!!
         assertEquals("10 Aug 2026", reversed.detail)
     }
+
+    @Test
+    fun `a Freestyle gives no peak, under its own category either`() {
+        val at = LocalDate.parse("2026-09-01").atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        val f = Attempt(rounds = 0, reps = 0, atMillis = at, durationMs = 600_000L, countedReps = 500,
+            workoutId = Workouts.FREESTYLE_ID, profile = CindyProfile.STANDARD,
+            movementTotals = mapOf(Exercise.entries[0] to 500))
+        assertTrue(Peaks.of(listOf(f), f.category, today, zone, monday).none { it.title.contains("best", ignoreCase = true) })
+        assertTrue(Peaks.of(listOf(f), f.category, today, zone, monday).none { it.title == "Fastest round" })
+    }
 }

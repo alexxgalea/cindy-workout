@@ -192,30 +192,12 @@ class MenuActivity : AppCompatActivity() {
                 }.apply { describeAsButton(last.spokenName) })
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(12) })
+            ))
         }
 
-        // The athlete comes next: who the scores belong to, and what they have earned so far.
-        val name = profile.displayName
-        val photo = AvatarStore.load(this)
-        val earned = Badges.earned(
-            all, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        )
-        binding.rows.addView(insetGroup {
-            row(avatarRow(
-                photo = photo,
-                name = name,
-                title = name ?: "You",
-                value = Badges.headline(earned) ?: if (name == null && photo == null) {
-                    "Add your name and photo"
-                } else {
-                    "Finish a session to earn your first badge"
-                }
-            ) { startActivity(Intent(this@MenuActivity, AccountActivity::class.java)) })
-        }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(12) })
-
+        // Training first: what the next session will be, which movements it counts, and how the
+        // sessions so far have gone. Last session stands above it, alone.
+        binding.rows.addView(sectionTitle("TRAINING"))
         binding.rows.addView(insetGroup {
             row(navRow("Workout", profile.workout.name) {
                 if (workoutLive) {
@@ -242,6 +224,34 @@ class MenuActivity : AppCompatActivity() {
                     else -> "$sessions sessions"
                 } + if (streak >= 1) " · $streak-day streak" else ""
             ) { startActivity(Intent(this@MenuActivity, RecordsActivity::class.java)) })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+
+        // The athlete next: who the scores belong to, and what they have earned so far.
+        binding.rows.addView(sectionTitle("YOU"))
+        val name = profile.displayName
+        val photo = AvatarStore.load(this)
+        val earned = Badges.earned(
+            all, ZoneId.systemDefault(), WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        )
+        binding.rows.addView(insetGroup {
+            row(avatarRow(
+                photo = photo,
+                name = name,
+                title = name ?: "You",
+                value = Badges.headline(earned) ?: if (name == null && photo == null) {
+                    "Add your name and photo"
+                } else {
+                    "Finish a session to earn your first badge"
+                }
+            ) { startActivity(Intent(this@MenuActivity, AccountActivity::class.java)) })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(12) })
+
+        binding.rows.addView(sectionTitle("SETTINGS"))
+        binding.rows.addView(insetGroup {
             row(navRow("Daily reminder", reminderSubtitle()) { chooseReminder() })
             row(navRow(
                 "Body weight",
@@ -262,6 +272,12 @@ class MenuActivity : AppCompatActivity() {
             }
             row(navRow("Voice", voiceSubtitle()) { chooseVoice() })
             row(navRow("Music", musicSubtitle()) { chooseMusic() })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+
+        binding.rows.addView(sectionTitle("HELP"))
+        binding.rows.addView(insetGroup {
             row(navRow(
                 "Help",
                 "What Cindy is, how it is scored, and where to stand"
@@ -279,6 +295,11 @@ class MenuActivity : AppCompatActivity() {
                 ).apply { setPadding(dp(4), dp(14), dp(4), 0) }
             )
         }
+    }
+
+    /** A section's name over its card, in the design system's eyebrow. */
+    private fun sectionTitle(title: String) = eyebrow(title).apply {
+        setPadding(dp(4), dp(12), 0, dp(10))
     }
 
     /**

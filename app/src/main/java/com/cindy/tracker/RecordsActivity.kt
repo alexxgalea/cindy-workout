@@ -45,6 +45,8 @@ class RecordsActivity : AppCompatActivity() {
     /** The kind of [workout] the chart and the peaks are about; follows the latest until chosen. */
     private var category: Category? = null
     private var categoryChosen = false
+    /** The metric the athlete had on Cindy's chart while Freestyle holds the chart to volume. */
+    private var metricBeforeFreestyle: ProgressMetric? = null
     /** The board as it was last drawn, so [onResume] can tell whether it has changed since. */
     private var shownAttempts: List<Attempt> = emptyList()
     private lateinit var progressHolder: LinearLayout
@@ -98,10 +100,45 @@ class RecordsActivity : AppCompatActivity() {
         // How am I doing, first: the habit and the week in one card, then whether the score is
         // moving. What is only reference (the bests, the ranking, the calendar) follows.
         hero(attempts, today, zone, firstDay)
-        progressCard(attempts, today, zone, firstDay)
-        if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
-        leaderboard(own)
+        if (freestyleChosen) {
+            // A Freestyle has no score: nothing to trend, no bests, nobody to rank. What it has is
+            // what was done, so the page says that, and the volume bars (work done) stay.
+            if (metric != ProgressMetric.VOLUME) {
+                metricBeforeFreestyle = metric
+                metric = ProgressMetric.VOLUME
+            }
+            freestyleTotals(attempts, zone)
+            progressCard(attempts, today, zone, firstDay)
+        } else {
+            metricBeforeFreestyle?.let { metric = it }
+            metricBeforeFreestyle = null
+            progressCard(attempts, today, zone, firstDay)
+            if (attempts.isNotEmpty()) peaks(attempts, today, zone, firstDay)
+            leaderboard(own)
+        }
         if (attempts.isNotEmpty()) calendar(attempts, today, zone, firstDay)
+    }
+
+    private val freestyleChosen: Boolean get() = workout.id == Workouts.FREESTYLE_ID
+
+    /** The latest Freestyle sessions as the reps of each movement, newest first. */
+    private fun freestyleTotals(attempts: List<Attempt>, zone: ZoneId) {
+        binding.rows.addView(section("RECENT TOTALS"))
+        val recent = Progress.recentTotals(attempts, FREESTYLE_ROWS, zone)
+        if (recent.isEmpty()) {
+            binding.rows.addView(styledText(
+                R.style.Cindy_Footnote, "No Freestyle yet. Finish one and its totals land here."
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(12), 0, dp(20))
+            })
+            return
+        }
+        binding.rows.addView(insetGroup {
+            recent.forEach { t ->
+                row(navRow("${t.date} \u00b7 ${t.reps} reps", t.line) { openSession(t.atMillis) })
+            }
+        })
     }
 
     /**
@@ -626,14 +663,17 @@ class RecordsActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        card.addView(chipRow(ProgressMetric.values().map { it.label }, metric.ordinal) {
-            metric = ProgressMetric.values()[it]
-            renderProgress(attempts, today, zone, firstDay)
-        }.apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        })
+        // Volume is the only chart a Freestyle has, so there is nothing to choose between.
+        if (!freestyleChosen) card.addView(
+            chipRow(ProgressMetric.values().map { it.label }, metric.ordinal) {
+                metric = ProgressMetric.values()[it]
+                renderProgress(attempts, today, zone, firstDay)
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+        )
 
         val headline = styledText(R.style.Cindy_Headline, overview.first).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -729,7 +769,7 @@ class RecordsActivity : AppCompatActivity() {
         // The chosen workout's kinds only: a chip for another workout would offer a trend that
         // workout's board does not show.
         val categories = Progress.categories(Records.ofWorkout(attempts, workout.id))
-        if (categories.size > 1) {
+        if (categories.size > 1 && !freestyleChosen) {
             card.addView(HorizontalScrollView(this).apply {
                 isHorizontalScrollBarEnabled = false
                 layoutParams = LinearLayout.LayoutParams(
@@ -784,5 +824,8 @@ class RecordsActivity : AppCompatActivity() {
     private companion object {
         /** How many of the athlete's own sessions the ranking shows until asked for the rest. */
         const val LEADERBOARD_ROWS = 5
+
+        /** How many Freestyle sessions the recent totals list. */
+        const val FREESTYLE_ROWS = 5
     }
 }

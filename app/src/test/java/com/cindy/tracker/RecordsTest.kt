@@ -370,7 +370,7 @@ class RecordsTest {
 
     /** A session of a workout that is not Cindy, at Cindy's own movements. */
     private fun other(rounds: Int, at: Long = 0L) =
-        attempt(rounds, at = at).copy(workoutId = "freestyle")
+        attempt(rounds, at = at).copy(workoutId = "chelsea")
 
     @Test
     fun `a level is awarded only to a standard Cindy`() {
@@ -384,7 +384,7 @@ class RecordsTest {
         val cindy = attempt(10, at = 1L)
         val free = other(12, at = 2L)
         assertEquals(listOf(cindy), Records.ofWorkout(listOf(cindy, free), Workouts.CINDY_ID))
-        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "freestyle"))
+        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "chelsea"))
     }
 
     @Test
@@ -421,5 +421,109 @@ class RecordsTest {
     fun `another workout is captioned by its name, never by a rung`() {
         assertEquals("Workout not recognised", other(27).caption)
         assertEquals(Level.of(27)?.title, attempt(27).caption)
+    }
+
+    // ── per-movement totals (record format v9), for a session with no rounds ──
+
+    @Test
+    fun `an attempt with movement totals round-trips as v9`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PULLUP to 5, Exercise.SQUAT to 7)
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v9|"))
+        assertTrue(line.endsWith("|freestyle|PULLUP:5,SQUAT:7"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
+    fun `an attempt with no movement totals is still written as v8, byte for byte`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
+    }
+
+    @Test
+    fun `a v9 line with a bad total costs only that entry`() {
+        val line = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9,SQUAT:x"
+        assertEquals(mapOf(Exercise.PUSHUP to 9), Records.decode(line).single().movementTotals)
+    }
+
+    // ── a Freestyle's derived sets (record format v10) ──
+
+    private val derived = listOf(
+        FreestyleSet(Exercise.SQUAT, 7, 10_000L, 40_000L),
+        FreestyleSet(Exercise.PUSHUP, 5, 55_000L, 70_000L)
+    )
+
+    @Test
+    fun `an attempt with derived sets round-trips as v10`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PUSHUP to 5, Exercise.SQUAT to 7), freestyleSets = derived
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v10|"))
+        assertTrue(line.endsWith("|freestyle|PUSHUP:5,SQUAT:7|SQUAT:7:10000:40000,PUSHUP:5:55000:70000"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
+    fun `a v9 line reads with no sets, and a v10 line with a bad set costs only that set`() {
+        val v9 = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9"
+        assertEquals(emptyList<FreestyleSet>(), Records.decode(v9).single().freestyleSets)
+        val v10 = "v10|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9|PUSHUP:9:0:5000,SQUAT:x:1:2"
+        assertEquals(listOf(FreestyleSet(Exercise.PUSHUP, 9, 0L, 5_000L)), Records.decode(v10).single().freestyleSets)
+    }
+
+    @Test
+    fun `a set changed by the athlete is written with a trailing 1, and an unchanged set with no extra field`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PUSHUP to 5, Exercise.SQUAT to 7),
+            freestyleSets = listOf(derived[0], derived[1].copy(changedByAthlete = true))
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v10|"))
+        assertTrue(line.endsWith("|SQUAT:7:10000:40000,PUSHUP:5:55000:70000:1"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
+    fun `sets are never written for a Cindy, so its line stays v8`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
+    }
+
+    // ── a Freestyle has no score, so it is never ranked ───────────────────────
+
+    private fun freestyleOf(reps: Int, at: Long = 0L) = Attempt(
+        rounds = 0, reps = 0, atMillis = at, countedReps = reps, workoutId = Workouts.FREESTYLE_ID,
+        movementTotals = mapOf(Exercise.entries[0] to reps)
+    )
+
+    @Test
+    fun `a Freestyle is never ranked, however many reps it holds`() {
+        val cindy = attempt(5, 0, at = 1)
+        val free = freestyleOf(900, at = 2)
+        assertEquals(listOf(cindy), Records.ranked(listOf(free, cindy)))
+        assertEquals(cindy, Records.best(listOf(free, cindy)))
+        assertNull(Records.best(listOf(free)))
+        assertEquals(listOf(cindy), Records.standings(listOf(free, cindy), withBenchmark = false).mapNotNull { it.attempt })
+    }
+
+    @Test
+    fun `a Freestyle is never a personal record, not even the first`() {
+        val free = freestyleOf(50, at = 1)
+        assertFalse(Records.isPersonalRecord(listOf(free), free))
+        assertNull(Records.bestIn(listOf(free), free.category))
+    }
+
+    @Test
+    fun `the latest scored session is the latest one that is not a Freestyle`() {
+        val older = attempt(10, at = 100L)
+        val newer = attempt(12, at = 200L)
+        val freestyle = Attempt(rounds = 0, reps = 0, atMillis = 300L, workoutId = Workouts.FREESTYLE_ID)
+        assertEquals(newer, Records.latestScored(listOf(older, freestyle, newer)))
+        assertNull(Records.latestScored(listOf(freestyle)))
+        assertNull(Records.latestScored(emptyList()))
     }
 }

@@ -298,6 +298,18 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile private var state = WorkoutState.IDLE
 
+    /**
+     * The Freestyle engine of the session that is running, rebuilt at START from the movements
+     * the athlete chose. Used only while [freestyleMode] is true; Cindy's [engine] is not touched.
+     */
+    @Volatile private var freestyle = FreestyleEngine()
+
+    /** When a Freestyle has gone 10 minutes without a rep, the app asks whether to stop. */
+    private val idleWatch = FreestyleIdleWatch()
+
+    /** Whether the workout chosen is counted by recognition, Freestyle. A live session never changes it. */
+    private val freestyleMode: Boolean get() = CameraControls.isFreestyle(workout)
+
     /** The session page is up over this screen, so what closing it leads to is owed on return. */
     private var sessionPageOpen = false
     private var remainingMs = WORKOUT_MS
@@ -395,9 +407,13 @@ class MainActivity : AppCompatActivity() {
      */
     private fun onCameraMoved() {
         if (state != WorkoutState.RUNNING && state != WorkoutState.SETUP) return
-        synchronized(engineLock) { engine.recalibrate() }
+        if (freestyleMode) {
+            freestyle.recalibrate()
+        } else {
+            synchronized(engineLock) { engine.recalibrate() }
+            traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
+        }
         railTracker.reset()
-        traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         tracking.reframe()
         detector?.resetRoi()
         binding.overlay.clear()
@@ -450,7 +466,9 @@ class MainActivity : AppCompatActivity() {
         val mirrored: Boolean,
         val readyNanos: Long,
         /** What recognition made of this frame, in debug builds. State: the next frame restates it. */
-        val recognition: Recognition?
+        val recognition: Recognition?,
+        /** A Freestyle's frame: its banked reps and voice are events, never dropped. Null for Cindy. */
+        val freestyle: FreestyleFrame? = null
     )
 
     /** Stale state is dropped, events never are. The reasoning lives in [FrameHandoff]. */
@@ -461,6 +479,12 @@ class MainActivity : AppCompatActivity() {
     private fun render(frame: UiFrame) {
         latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
         if (frame.snap != null && state == WorkoutState.RUNNING) apply(frame.snap)
+        // A banked rep is an event, never dropped: a PAUSE tapped between the camera thread
+        // banking it and this render must still get its voice, buzz and idle-watch note. Only a
+        // session that has ended (STOP has filed it and said so) has nothing left to hear it.
+        if (frame.freestyle != null && (state == WorkoutState.RUNNING || state == WorkoutState.PAUSED)) {
+            applyFreestyle(frame.freestyle)
+        }
         if (frame.setup != null && state == WorkoutState.SETUP) applySetup(frame.setup)
         frame.recognition?.let { recognitionLine?.show(it) }
         // Feed the burned-in overlay what the film shows right now -- apart from the score while
@@ -486,6 +510,15 @@ class MainActivity : AppCompatActivity() {
             if (state != WorkoutState.RUNNING) return
             val now = SystemClock.elapsedRealtime()
             val step = now - lastTickAt
+            if (freestyleMode) {
+                // Counts up from START with no cap, and says no progress: there is no target to report.
+                elapsedMs += step
+                lastTickAt = now
+                renderClock()
+                if (idleWatch.shouldAsk(now)) askToStopIdleFreestyle()
+                ui.postDelayed(this, 200L)
+                return
+            }
             remainingMs -= step
             elapsedMs += step
             lastTickAt = now
@@ -685,6 +718,7 @@ class MainActivity : AppCompatActivity() {
             engine = WorkoutEngine(profile = profile.movements, smartSquats = profile.smartSquats)
         }
         apply(runEngine { RepEvent.NONE })
+        if (freestyleMode) showFreestyleIdle()
         renderChips()
         renderControls()
 
@@ -1139,8 +1173,20 @@ class MainActivity : AppCompatActivity() {
             val now = SystemClock.elapsedRealtime()
             // Every analysed frame, in every state, in order: its timers need them all, and the
             // hand-off below keeps only the newest.
-            val recognition = recognise(keypoints, now, det.tracking)
-            val snap = if (state == WorkoutState.RUNNING) {
+            val freestyleFrame = if (state == WorkoutState.RUNNING && freestyleMode) {
+                freestyle.onFrame(keypoints, now, det.tracking, det.softGain)
+            } else {
+                null
+            }
+            // A running Freestyle already recognises every frame, so the debug line shows the
+            // engine's own verdict rather than a second recogniser's, which costs the same again
+            // and could name a movement the engine did not bank. Cindy's path is unchanged.
+            val recognition = if (freestyleFrame != null) {
+                freestyle.recognition().takeIf { recognitionLine != null }
+            } else {
+                recognise(keypoints, now, det.tracking)
+            }
+            val snap = if (state == WorkoutState.RUNNING && !freestyleMode) {
                 val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }
                 // Touched only from this thread, so it needs no lock of its own; the legibility
                 // it reads was captured under the engine's.
@@ -1201,8 +1247,9 @@ class MainActivity : AppCompatActivity() {
             // finished — the round's split is appended when it is rendered — so those are never
             // allowed to be the frame that gets dropped.
             val outcome = handoff.submit(
-                UiFrame(snap, setup, keypoints, frameW, frameH, mirrored, System.nanoTime(), recognition),
-                isEvent = snap != null && snap.event != RepEvent.NONE
+                UiFrame(snap, setup, keypoints, frameW, frameH, mirrored, System.nanoTime(), recognition, freestyleFrame),
+                isEvent = (snap != null && snap.event != RepEvent.NONE) ||
+                    (freestyleFrame != null && (freestyleFrame.events.isNotEmpty() || freestyleFrame.voice.isNotEmpty()))
             )
             latency.posted(replacedUnrendered = outcome == FrameHandoff.Outcome.REPLACED_PENDING)
             if (outcome == FrameHandoff.Outcome.SCHEDULE) ui.post(renderPending)
@@ -1578,6 +1625,122 @@ class MainActivity : AppCompatActivity() {
 
     // ── workout control ───────────────────────────────────────────────────────
 
+    /** START in Freestyle: the clock starts at once, with no check, and recognition names what is done. */
+    private fun beginFreestyle() {
+        recognitionLine?.reset()
+        val now = SystemClock.elapsedRealtime()
+        freestyle = FreestyleEngine(profile.movements).also { it.start(now) }
+        idleWatch.start(now)
+        editorsLive = false
+        state = WorkoutState.RUNNING
+        LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
+        lastTickAt = now
+        elapsedMs = 0L
+        pausedMs = 0L
+        tracking.reset()
+        detector?.resetRoi()
+        heartRate.start(now, System.currentTimeMillis())
+        warnIfHeartRateSilent(now)
+        primary(R.drawable.ic_pause)
+        statusDot(neutral)
+        status.text = "Counting…"
+        showFreestyleIdle()
+        renderClock()
+        renderControls()
+        if (profile.musicOn) music.play()
+        ui.post(ticker)
+    }
+
+    /** The scoreboard before any movement is recognised: a quiet 0 over "Freestyle · Count up". */
+    private fun showFreestyleIdle() = drawFreestyle(freestyle.current(), FigureMotion.NONE)
+
+    private fun drawFreestyle(readout: FreestyleReadout, motion: FigureMotion) {
+        filmMovement = readout.movement?.label ?: "FREESTYLE"
+        scoreboard.freestyle(readout.figure, readout.line, motion)
+        recordedHud.freestyle(readout.figure)
+        // − and + come alive when recognition confirms the first movement.
+        if (readout.adjustable != editorsLive) {
+            editorsLive = readout.adjustable
+            renderControls()
+        }
+    }
+
+    /** Whether the Freestyle editors were last drawn as answering, so they are redrawn when that changes. */
+    private var editorsLive = false
+
+    /**
+     * One Freestyle frame. The scoreboard is drawn from the engine as it stands now, so a frame
+     * that reached the screen late cannot draw an older figure over a newer one; what the frame
+     * carries is its events, which are all delivered: the pulse, the buzz and the voice.
+     */
+    private fun applyFreestyle(frame: FreestyleFrame) {
+        val motion = when {
+            frame.events.any { it is FreestyleEvent.TakenBack } -> FigureMotion.TAKEN_BACK
+            frame.events.any { it is FreestyleEvent.Banked } -> FigureMotion.BANKED
+            else -> FigureMotion.NONE
+        }
+        drawFreestyle(freestyle.current(), motion)
+        for (event in frame.events) {
+            buzz(if (event is FreestyleEvent.Banked) 35 else 20)
+            if (event is FreestyleEvent.Banked) idleWatch.repBanked(SystemClock.elapsedRealtime())
+        }
+        for (say in frame.voice) {
+            when (say) {
+                is FreestyleVoice.Confirmed -> {
+                    // The name, then the count, as one: "Push-ups. Two."
+                    speaker.say(VoiceLine.Movement(say.movement.exercise))
+                    speaker.queue(VoiceLine.Count(say.count))
+                }
+                is FreestyleVoice.Count -> sayCount(say.count)
+            }
+        }
+    }
+
+    /**
+     * STOP in Freestyle, after what finishing has in common with Cindy: files the session, if any
+     * rep was banked, and opens its page. Nothing banked files nothing, and the screen goes
+     * straight back to idle.
+     */
+    private fun finishFreestyle(now: Long, stoppedEarly: Boolean) {
+        val filed = freestyle.stop(now)
+        val trace = heartRate.finish(now)
+        if (filed == null) {
+            toast("Nothing counted, so nothing saved")
+            resetWorkout()
+            renderControls()
+            return
+        }
+        val attempt = Attempt(
+            rounds = 0,
+            reps = 0,
+            atMillis = System.currentTimeMillis(),
+            durationMs = filed.durationMs,
+            pausedMs = filed.pausedMs,
+            profile = profile.movements,
+            manualReps = filed.manualReps,
+            countedReps = filed.totalReps,
+            // What the camera could not read is part of the result, as in Cindy's.
+            untrackedMs = filed.untrackedMs,
+            workoutId = workout.id,
+            movementTotals = filed.totals,
+            freestyleSets = filed.sets
+        )
+        val saved = records.add(attempt)
+        if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
+        if (saved) RepTimesStore(this).save(attempt.atMillis, filed.marks)
+        if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis, StravaUploads.uploadDelayMs(attempt))
+
+        primary(R.drawable.ic_play)
+        renderControls()
+        reps.colour(alert)
+        statusDot(neutral)
+        status.text = "${filed.totalReps} reps · ${attempt.caption}"
+        speaker.say(VoiceLine.Finished(early = stoppedEarly))
+
+        sessionPageOpen = true
+        startActivity(ResultsActivity.intent(this, attempt, stoppedEarly, false))
+    }
+
     /** Starts the clock. [calibrated] only changes what is announced. */
     private fun beginWorkout(calibrated: Boolean) {
         synchronized(engineLock) { engine.finishSetup() }
@@ -1703,7 +1866,12 @@ class MainActivity : AppCompatActivity() {
         // Whether the shutter answers is [CameraControls]' to say, not this block's.
         if (!controlPanel()[CameraControl.SHUTTER].enabled) return
         when (state) {
-            WorkoutState.IDLE -> askAboutWatch { showPlacementGuide { enterSetup() } }
+            // Freestyle has no setup check and no placement guide: START starts the clock.
+            WorkoutState.IDLE -> if (freestyleMode) {
+                askAboutWatch { beginFreestyle() }
+            } else {
+                askAboutWatch { showPlacementGuide { enterSetup() } }
+            }
             // Unreachable, since the guard above has already refused: named rather than left to
             // `else` so the state machine stays readable from this one when-block.
             WorkoutState.SETUP -> Unit
@@ -1719,11 +1887,19 @@ class MainActivity : AppCompatActivity() {
                 primary(R.drawable.ic_pause)
                 // The phone or the athlete may have moved while the clock was stopped, so the
                 // band learned before the pause no longer describes what the camera is seeing.
-                synchronized(engineLock) { engine.recalibrate() }
-                traceControl(EngineTrace.Control.RECALIBRATE_RESUMED)
+                if (freestyleMode) {
+                    freestyle.resume(now)
+                    freestyle.recalibrate()
+                    idleWatch.resume(now)
+                } else {
+                    synchronized(engineLock) { engine.recalibrate() }
+                    traceControl(EngineTrace.Control.RECALIBRATE_RESUMED)
+                }
                 tracking.reframe()
                 detector?.resetRoi()
-                status.text = "Recalibrating…"
+                // Freestyle has no calibration to wait for and nothing that rewrites the pill
+                // while it counts, so it says what it said at START.
+                status.text = if (freestyleMode) "Counting…" else "Recalibrating…"
                 if (profile.musicOn) music.play()
                 speaker.say(VoiceLine.Resume)
                 ui.post(ticker)
@@ -1735,6 +1911,10 @@ class MainActivity : AppCompatActivity() {
                 coach.interrupted()
                 val now = SystemClock.elapsedRealtime()
                 pauseStartedAt = now
+                if (freestyleMode) {
+                    freestyle.pause(now)
+                    idleWatch.pause(now)
+                }
                 heartRate.pause(now)
                 primary(R.drawable.ic_play)
                 status.text = "Paused"
@@ -1790,7 +1970,10 @@ class MainActivity : AppCompatActivity() {
     private fun renderPill() = BottomBand.pill(binding, state, status.text.isBlank(), coachShowing)
 
     /** What the camera screen's controls are, for the state it is in and whether it is filming. */
-    private fun controlPanel() = CameraControls.of(state, video.isRecording)
+    private fun controlPanel() = CameraControls.of(state, video.isRecording, workout).let {
+        // Freestyle's editors have no movement to act on until recognition confirms one.
+        if (freestyleMode && inWorkout()) it.withEditors(freestyle.current().movement != null) else it
+    }
 
     /**
      * SKIP means the same thing everywhere — leave this movement — but leaving it during the
@@ -1827,15 +2010,39 @@ class MainActivity : AppCompatActivity() {
     /** A workout is live once the clock has started, whether or not it is ticking right now. */
     private fun inWorkout(): Boolean = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
 
+    /**
+     * Ten minutes of a Freestyle without a banked rep: asks, and never stops by itself. STOP files
+     * as the STOP button does; KEEP GOING waits another 10 minutes. The clock keeps running behind it.
+     */
+    private fun askToStopIdleFreestyle() {
+        CindySheet(
+            this,
+            title = "Still there?",
+            subtitle = "No rep has been counted for 10 minutes. Stop the workout?"
+        ).actions(
+            primary = "STOP",
+            onPrimary = { finishWorkout(stoppedEarly = true) },
+            secondary = "KEEP GOING"
+        ).onDismiss {
+            // Any way out but STOP is "keep going", the back gesture and a tap outside included.
+            if (inWorkout()) idleWatch.keepGoing(SystemClock.elapsedRealtime())
+        }.show()
+    }
+
     private fun confirmStop() {
         val wasRunning = state == WorkoutState.RUNNING
         if (wasRunning) toggleRun() // park the clock while the dialog is up
+        val stopping = freestyleMode
         CindySheet(
             this,
-            title = "End the workout?",
-            subtitle = "Your score so far will be saved."
+            title = if (stopping) "Stop the workout?" else "End the workout?",
+            subtitle = when {
+                !stopping -> "Your score so far will be saved."
+                freestyle.totalReps() == 0 -> "Nothing has been counted, so nothing will be saved."
+                else -> "Your reps so far will be saved."
+            }
         ).actions(
-            primary = "END",
+            primary = if (stopping) "STOP" else "END",
             onPrimary = { finishWorkout(stoppedEarly = true) },
             secondary = "KEEP GOING",
             onSecondary = { if (wasRunning) toggleRun() }
@@ -1866,6 +2073,8 @@ class MainActivity : AppCompatActivity() {
         pausedMs = 0L
         pauseStartedAt = 0L
         synchronized(engineLock) { engine.reset() }
+        freestyle = FreestyleEngine()
+        editorsLive = false
         heelsFlatAnnounced = false
         heartRate.reset()
         tracking.reset()
@@ -1878,13 +2087,17 @@ class MainActivity : AppCompatActivity() {
         reps.colour(label)
         music.stop()
         renderClock()
-        apply(runEngine { RepEvent.NONE })
+        if (freestyleMode) showFreestyleIdle() else apply(runEngine { RepEvent.NONE })
         // A tour that was put off for a live workout is owed now that the clock is idle again.
         maybeStartTour()
     }
 
     private fun onManualRep() {
         if (!controlPanel()[CameraControl.PLUS].enabled) return
+        if (freestyleMode) {
+            freestyle.plus(SystemClock.elapsedRealtime())?.let(::applyFreestyle)
+            return
+        }
         apply(runEngine { engine.manualRep() })
         traceControl(EngineTrace.Control.MANUAL_REP)
     }
@@ -1892,6 +2105,10 @@ class MainActivity : AppCompatActivity() {
     /** Takes back a rep the counter should not have scored. */
     private fun onUndoRep() {
         if (!controlPanel()[CameraControl.MINUS].enabled) return
+        if (freestyleMode) {
+            freestyle.minus(SystemClock.elapsedRealtime())?.let(::applyFreestyle)
+            return
+        }
         val before = synchronized(engineLock) { engine.rounds }
         val movementBefore = synchronized(engineLock) { engine.exercise }
         val snap = runEngine { engine.undoRep() }
@@ -1927,6 +2144,11 @@ class MainActivity : AppCompatActivity() {
             pauseStartedAt = 0L
         }
         video.stop()
+
+        if (freestyleMode) {
+            finishFreestyle(now, stoppedEarly)
+            return
+        }
 
         val snap = runEngine { RepEvent.NONE }
         // One last reconciliation against the engine's final totals: apply() may not have seen
@@ -2069,6 +2291,12 @@ class MainActivity : AppCompatActivity() {
     // ── rendering ─────────────────────────────────────────────────────────────
 
     private fun renderClock() {
+        if (freestyleMode) {
+            val seconds = elapsedMs / 1000L
+            clock.text = String.format(Locale.US, "%02d:%02d", seconds / 60, seconds % 60)
+            clock.spoken("${PhrasebookEn.duration(elapsedMs)} elapsed")
+            return
+        }
         val total = (remainingMs + 999L) / 1000L
         clock.text = String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
         // Screen-reader text is English like the rest of the screen; only the voice has languages.
@@ -2263,7 +2491,11 @@ class MainActivity : AppCompatActivity() {
         val chosen = profile.workout
         if (chosen == workout) return
         workout = chosen
-        // The idle line names it.
+        // The idle line names it, and the clock counts up in Freestyle and down in Cindy.
+        renderClock()
+        // Whichever workout it now is, its idle scoreboard is drawn over the other's, as at
+        // startup and after a reset; otherwise Freestyle's readout and film label would stay.
+        if (freestyleMode) showFreestyleIdle() else apply(runEngine { RepEvent.NONE })
         renderControls()
     }
 
