@@ -101,6 +101,23 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
     }
 
     /**
+     * One frame of a Freestyle: the figure on its own, with no target and no slash, over the
+     * engine's line ("PUSH-UPS · 42 total"). Never a next set: the confirmation of a movement is
+     * the ordinary banked-rep pulse. [motion] is the engine's say, a rep banked or taken back.
+     */
+    fun freestyle(figure: Int, line: String, motion: FigureMotion) {
+        release()
+        newest = Long.MIN_VALUE
+        this.line.text(line)
+        this.figure.show("$figure", "", motion)
+        this.figure.spoken("$figure reps" + (movementSpoken(line)?.let { ", $it" } ?: ""))
+        hud.repProgress.progress = 0
+    }
+
+    private fun movementSpoken(line: String): String? =
+        line.substringBefore(" · ").takeIf { it != "Freestyle" }?.lowercase()
+
+    /**
      * The clock has stopped, by a pause or the end: the athlete is at the phone, so a hold under
      * way ends at once and the band shows the set the engine is on.
      */
@@ -177,6 +194,14 @@ class ScoreboardReadout(private val hud: ActivityMainBinding) {
         private var spoken: String? = null
         var round: Int = 1
             private set
+
+        /** A line that is not "movement · Round n": drawn as it is, once. */
+        fun text(text: String) {
+            if (shown == text) return
+            shown = text
+            view.text = text
+            view.contentDescription = text
+        }
 
         fun show(movement: String, round: Int) {
             this.round = round
