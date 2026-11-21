@@ -479,7 +479,12 @@ class MainActivity : AppCompatActivity() {
     private fun render(frame: UiFrame) {
         latency.uiRan((System.nanoTime() - frame.readyNanos) / 1_000_000L)
         if (frame.snap != null && state == WorkoutState.RUNNING) apply(frame.snap)
-        if (frame.freestyle != null && state == WorkoutState.RUNNING) applyFreestyle(frame.freestyle)
+        // A banked rep is an event, never dropped: a PAUSE tapped between the camera thread
+        // banking it and this render must still get its voice, buzz and idle-watch note. Only a
+        // session that has ended (STOP has filed it and said so) has nothing left to hear it.
+        if (frame.freestyle != null && (state == WorkoutState.RUNNING || state == WorkoutState.PAUSED)) {
+            applyFreestyle(frame.freestyle)
+        }
         if (frame.setup != null && state == WorkoutState.SETUP) applySetup(frame.setup)
         frame.recognition?.let { recognitionLine?.show(it) }
         // Feed the burned-in overlay what the film shows right now -- apart from the score while
