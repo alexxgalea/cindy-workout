@@ -26,6 +26,7 @@ import argparse
 import csv
 import math
 import sys
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Sequence
 
@@ -49,7 +50,11 @@ JOINTS = 17
 
 
 def rounded(value: float) -> str:
-    return "nan" if math.isnan(value) else f"{value:.3f}"
+    """Three decimals, a tie rounded up as the JVM's String.format does (Python's f-string rounds a
+    tie to even: a film's key-point sum landed on 20308.0625 and the two spelled it differently)."""
+    if math.isnan(value):
+        return "nan"
+    return str(Decimal(repr(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
 
 
 def flag(value: bool) -> str:
