@@ -53,6 +53,9 @@ object StravaUploads {
     private const val PREFS_NAME = "strava"
     private const val KEY_PREFIX = "upload_"
 
+    /** How long a Freestyle's upload waits for its sets to be given the right movement. */
+    const val FREESTYLE_UPLOAD_DELAY_MS = 5 * 60_000L
+
     /** The unique [WorkManager] name for one attempt's upload — one worker per attempt, ever. */
     fun uniqueWorkName(atMillis: Long): String = "strava-upload-$atMillis"
 
@@ -70,7 +73,7 @@ object StravaUploads {
      * An upload id already on file is carried over. It means Strava accepted the file on an
      * earlier run, and the next run has to poll that id rather than send the file again.
      */
-    fun enqueue(context: Context, atMillis: Long) {
+    fun enqueue(context: Context, atMillis: Long, delayMs: Long = 0L) {
         val acceptedAs = status(context, atMillis)?.uploadId
         write(context, atMillis, StravaUploadStatus(StravaUploadState.QUEUED, uploadId = acceptedAs))
         val request = OneTimeWorkRequestBuilder<StravaUploadWorker>()
@@ -78,6 +81,7 @@ object StravaUploads {
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .apply { if (delayMs > 0L) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
             .setInputData(
                 Data.Builder().putLong(StravaUploadWorker.KEY_AT_MILLIS, atMillis).build()
             )
@@ -93,13 +97,27 @@ object StravaUploads {
      * upload is switched on — every reason an attempt might *not* upload on its own lives in
      * this one decision, so it is testable without a running activity, and [MainActivity] never
      * has to know any of them.
+     *
+     * [delayMs] holds the upload back; see [uploadDelayMs]. The worker reads the record when it
+     * runs, so whatever the record says by then is what Strava is sent.
      */
-    fun onAttemptSaved(context: Context, atMillis: Long) {
+    fun onAttemptSaved(context: Context, atMillis: Long, delayMs: Long = 0L) {
         if (!StravaConfig.available) return
         val tokens = StravaTokenStore(context)
         if (!tokens.connected || !tokens.autoUpload) return
-        enqueue(context, atMillis)
+        enqueue(context, atMillis, delayMs)
     }
+
+    /**
+     * How long to wait before uploading [attempt].
+     *
+     * A Freestyle's sets can be given another movement on the session page after STOP, and the
+     * worker sends the record as it stands when it runs. Waiting [FREESTYLE_UPLOAD_DELAY_MS] lets
+     * that relabelling reach Strava. A Cindy has nothing to correct, so it goes at once. An
+     * activity already on Strava is never re-sent (a second upload would be a second activity),
+     * so a relabel made after the delay stays only in the app.
+     */
+    fun uploadDelayMs(attempt: Attempt): Long = if (attempt.isFreestyle) FREESTYLE_UPLOAD_DELAY_MS else 0L
 
     /**
      * Re-schedules every attempt still waiting on a reconnect. Called once the athlete has

@@ -357,6 +357,10 @@ class ResultsActivity : AppCompatActivity() {
         }
         attempt = changed
         render(attempt, stoppedEarly)
+        // Not re-uploaded: a second upload would be a second activity on Strava.
+        if (StravaUploads.status(this, attempt.atMillis)?.reachedStrava == true) {
+            toast("Strava already has this session, so it keeps the old movement")
+        }
     }
 
     /** The SESSION rows: pauses, streak, hand-added reps, lost camera time, energy and Strava. */

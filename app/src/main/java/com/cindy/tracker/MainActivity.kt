@@ -1714,7 +1714,7 @@ class MainActivity : AppCompatActivity() {
         val saved = records.add(attempt)
         if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)
         if (saved) RepTimesStore(this).save(attempt.atMillis, filed.marks)
-        if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis)
+        if (saved) StravaUploads.onAttemptSaved(this, attempt.atMillis, StravaUploads.uploadDelayMs(attempt))
 
         primary(R.drawable.ic_play)
         renderControls()
