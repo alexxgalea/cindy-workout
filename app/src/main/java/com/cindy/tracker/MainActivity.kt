@@ -407,7 +407,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun onCameraMoved() {
         if (state != WorkoutState.RUNNING && state != WorkoutState.SETUP) return
-        if (!freestyleMode) {
+        if (freestyleMode) {
+            freestyle.recalibrate()
+        } else {
             synchronized(engineLock) { engine.recalibrate() }
             traceControl(EngineTrace.Control.RECALIBRATE_CAMERA_MOVED)
         }
@@ -1873,6 +1875,7 @@ class MainActivity : AppCompatActivity() {
                 // band learned before the pause no longer describes what the camera is seeing.
                 if (freestyleMode) {
                     freestyle.resume(now)
+                    freestyle.recalibrate()
                     idleWatch.resume(now)
                 } else {
                     synchronized(engineLock) { engine.recalibrate() }

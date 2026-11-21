@@ -125,6 +125,14 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
         pausedAt = null
     }
 
+    /**
+     * The phone or the athlete has moved, or the clock was stopped long enough for either to: the
+     * recogniser's bar, push-up and squat baselines are forgotten, as Cindy's are on the same
+     * occasions. What is banked, the figure and the movement shown are kept.
+     */
+    @Synchronized
+    fun recalibrate() = recogniser.recalibrate()
+
     @Synchronized
     fun current(): FreestyleReadout = readout()
 

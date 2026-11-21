@@ -180,4 +180,45 @@ class FreestyleEngineTest {
         engine.resume(clock)
         assertEquals(2, engine.current().figure)
     }
+
+    private fun Array<Keypoint>.moved(dx: Float, dy: Float): Array<Keypoint> =
+        Array(size) { k -> if (this[k].score <= 0f) this[k] else Keypoint(this[k].x + dx, this[k].y + dy, this[k].score) }
+
+    private fun pullupRep(dy: Float) {
+        hold(PoseFixtures.pullup(170f).moved(0f, dy))
+        hold(PoseFixtures.pullup(60f).moved(0f, dy))
+    }
+
+    @Test
+    fun `a moved camera is recalibrated, so the bar learned in the old framing stops refusing reps`() {
+        hold(PoseFixtures.pullup(170f))
+        repeat(3) { pullupRep(0f) }
+        val before = banked()
+        assertEquals(3, before)
+        // The whole scene shifts, as when the phone is knocked: the old bar is where nobody hangs.
+        engine.recalibrate()
+        hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        pullupRep(400f)
+        assertTrue("the new framing must count: banked ${banked()}", banked() > before)
+    }
+
+    @Test
+    fun `without recalibrating the old bar refuses the moved framing, which is what recalibrating cures`() {
+        hold(PoseFixtures.pullup(170f))
+        repeat(3) { pullupRep(0f) }
+        val before = banked()
+        hold(PoseFixtures.pullup(170f).moved(0f, 400f))
+        pullupRep(400f)
+        assertEquals(before, banked())
+    }
+
+    @Test
+    fun `recalibrating keeps what is banked and the movement shown`() {
+        hold(PoseFixtures.pushup(175f))
+        repeat(3) { pushupRep() }
+        engine.recalibrate()
+        assertEquals(3, engine.current().figure)
+        assertEquals(Movement.PUSH_UPS, engine.current().movement)
+        assertEquals(3, engine.totalReps())
+    }
 }

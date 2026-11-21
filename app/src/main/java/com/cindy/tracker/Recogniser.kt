@@ -151,6 +151,15 @@ class Recogniser(private val profile: CindyProfile = CindyProfile.STANDARD) {
     }
 
     /**
+     * The camera or the athlete has moved: every engine forgets what it learned in the old framing
+     * (the band, the bar), as Cindy's engine does ([WorkoutEngine.recalibrate]). The position, the
+     * movement and the tally stay: what was seen is still what was seen.
+     */
+    fun recalibrate() {
+        engines.values.forEach { it.recalibrate() }
+    }
+
+    /**
      * The position has changed, so the visit that was counting candidate reps is over, and the
      * engine of the position now entered must not book the climb that brought the athlete here.
      */
