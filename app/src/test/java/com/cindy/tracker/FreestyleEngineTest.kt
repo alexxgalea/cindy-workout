@@ -242,4 +242,22 @@ class FreestyleEngineTest {
         repeat(5) { pushupRep() }
         assertEquals(0L, engine.stop(clock)!!.untrackedMs)
     }
+
+    @Test
+    fun `the engine says what recognition it banked from, so a debug line never shows another verdict`() {
+        assertEquals(Recognition.NONE, engine.recognition())
+        hold(PoseFixtures.pushup(175f))
+        repeat(2) { pushupRep() }
+        val r = engine.recognition()
+        assertEquals(Movement.PUSH_UPS, r.movement)
+        assertEquals(2, r.tally.getValue(Movement.PUSH_UPS))
+    }
+
+    @Test
+    fun `the scoreboard line follows the movement and its total`() {
+        assertEquals("Freestyle · Count up", engine.current().line)
+        hold(PoseFixtures.pushup(175f))
+        repeat(2) { pushupRep() }
+        assertEquals("PUSH-UPS · 2 total", engine.current().line)
+    }
 }

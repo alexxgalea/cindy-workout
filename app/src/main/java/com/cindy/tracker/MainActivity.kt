@@ -1168,11 +1168,18 @@ class MainActivity : AppCompatActivity() {
             val now = SystemClock.elapsedRealtime()
             // Every analysed frame, in every state, in order: its timers need them all, and the
             // hand-off below keeps only the newest.
-            val recognition = recognise(keypoints, now, det.tracking)
             val freestyleFrame = if (state == WorkoutState.RUNNING && freestyleMode) {
                 freestyle.onFrame(keypoints, now, det.tracking, det.softGain)
             } else {
                 null
+            }
+            // A running Freestyle already recognises every frame, so the debug line shows the
+            // engine's own verdict rather than a second recogniser's, which costs the same again
+            // and could name a movement the engine did not bank. Cindy's path is unchanged.
+            val recognition = if (freestyleFrame != null) {
+                freestyle.recognition().takeIf { recognitionLine != null }
+            } else {
+                recognise(keypoints, now, det.tracking)
             }
             val snap = if (state == WorkoutState.RUNNING && !freestyleMode) {
                 val scored = runEngine { engine.onFrame(keypoints, now, det.tracking) }

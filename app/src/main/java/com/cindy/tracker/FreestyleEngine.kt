@@ -15,9 +15,11 @@ data class FreestyleReadout(
     val figure: Int,
     val movement: Movement?,
     val movementTotal: Int,
-    val line: String,
     val adjustable: Boolean
-)
+) {
+    /** Built on read, so a frame whose readout is never drawn builds no string. */
+    val line: String get() = if (movement == null) FREESTYLE_IDLE_LINE else "${movement.label} · $movementTotal total"
+}
 
 /** A change to what is banked. Banked is banked: the figure, the totals and the session record follow these. */
 sealed interface FreestyleEvent {
@@ -108,10 +110,13 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
      */
     private var health = TrackingHealthMonitor()
 
+    private var lastRecognition = Recognition.NONE
+
     @Synchronized
     fun start(now: Long) {
         recogniser = Recogniser(profile)
         health = TrackingHealthMonitor()
+        lastRecognition = Recognition.NONE
         started = true
         startedAt = now
         pausedMs = 0L
@@ -147,6 +152,13 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
         health.reframe()
     }
 
+    /**
+     * What recognition made of the last counted frame: the verdict the engine banked from, for the
+     * debug line to show instead of running a second recogniser that could disagree with it.
+     */
+    @Synchronized
+    fun recognition(): Recognition = lastRecognition
+
     @Synchronized
     fun current(): FreestyleReadout = readout()
 
@@ -163,6 +175,7 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
     ): FreestyleFrame {
         if (!counting()) return FreestyleFrame(readout())
         val recognition = recogniser.onFrame(k, now, identityStable)
+        lastRecognition = recognition
         recogniser.countingMovement?.let { health.update(it.exercise, recogniser.countingLegible, softGain, now) }
         val events = mutableListOf<FreestyleEvent>()
         val voice = mutableListOf<FreestyleVoice>()
@@ -246,7 +259,6 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
             figure = figure,
             movement = movement,
             movementTotal = total,
-            line = if (movement == null) FREESTYLE_IDLE_LINE else "${movement.label} · $total total",
             adjustable = movement != null && counting()
         )
     }
