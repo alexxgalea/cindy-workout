@@ -223,30 +223,31 @@ class CameraBandsTest {
     }
 
     @Test
-    fun `the figure zone runs from 8 dp at the start edge to 8 dp before the capsule, 280 dp on the P40`() {
+    fun `the figure zone is centred on the screen, 72 dp in from each edge, 216 dp on the P40`() {
         val hud = hud()
         val figure = boxIn(hud.root, hud.reps)
         val capsule = boxIn(hud.root, hud.stepper)
-        assertEquals(8f, figure.left, 0.5f)
-        assertEquals(280f, figure.width(), 0.5f)
+        assertEquals(72f, figure.left, 0.5f)
+        assertEquals(216f, figure.width(), 0.5f)
+        assertEquals("the zone's centre is the screen's", dp(hud.root.width) / 2f, figure.centerX(), 0.5f)
         assertEquals("8 dp between the zone and the capsule", capsule.left - 8f, figure.right, 0.5f)
     }
 
     @Test
-    fun `in every state the line shares the figure's centre, 148 dp on the P40, and is no wider than the zone`() {
+    fun `in every state the line shares the figure's centre, which is the screen's, and is no wider than the zone`() {
         for (state in WorkoutState.entries) {
             val hud = at(state)
             val figure = boxIn(hud.root, hud.reps)
             val line = boxIn(hud.root, hud.movementLine)
-            assertEquals("$state: the figure's centre", 148f, figure.centerX(), 0.5f)
+            assertEquals("$state: the figure's centre is the screen's", dp(hud.root.width) / 2f, figure.centerX(), 0.5f)
             assertEquals("$state: the line's centre is the figure's", figure.centerX(), line.centerX(), 0.5f)
-            assertTrue("$state: the line is ${line.width()} dp wide in a 280 dp zone", line.width() <= 280f + 0.5f)
-            assertTrue("$state: the line leaves the zone: $line", line.left >= 8f - 0.5f && line.right <= 288f + 0.5f)
+            assertTrue("$state: the line is ${line.width()} dp wide in a 216 dp zone", line.width() <= 216f + 0.5f)
+            assertTrue("$state: the line leaves the zone: $line", line.left >= 72f - 0.5f && line.right <= 288f + 0.5f)
         }
     }
 
     @Test
-    fun `the next set covers the figure zone and the line's row, in the same 280 dp, in every state the clock runs`() {
+    fun `the next set covers the figure zone and the line's row, in the same 216 dp, in every state the clock runs`() {
         val hud = at(WorkoutState.RUNNING)
         hud.nextSet.visibility = View.VISIBLE
         layout(hud)
@@ -263,7 +264,7 @@ class CameraBandsTest {
     }
 
     @Test
-    fun `the longest line is one row at 17 sp, whole, inside its 280 dp zone`() {
+    fun `the longest line is one row at 17 sp, whole, inside its 216 dp zone`() {
         for (state in WorkoutState.entries) {
             val hud = at(state)
             for (movement in Exercise.entries) {
@@ -302,13 +303,15 @@ class CameraBandsTest {
     }
 
     @Test
-    fun `12 over 15 fits at full size, whole, inside its zone`() {
+    fun `5 over 10 fits at full size and 12 over 15 shrinks to no less than 72 sp, whole, inside its zone`() {
         val hud = hud()
+        show(hud, "5", "/10")
+        assertEquals("it shrank", 96f * density, hud.reps.textSize, 0.5f)
         show(hud, "12", "/15")
-        assertEquals("it did not shrink", 96f * density, hud.reps.textSize, 0.5f)
+        assertTrue("it shrank below 72 sp: ${hud.reps.textSize / density}", hud.reps.textSize >= 72f * density - 0.5f)
         assertEquals(1, hud.reps.layout.lineCount)
         assertEquals("it is cut", 0, hud.reps.layout.getEllipsisCount(0))
-        assertTrue("it is ${dp(hud.reps.layout.getLineWidth(0).toInt())} dp wide in a 280 dp zone",
+        assertTrue("it is ${dp(hud.reps.layout.getLineWidth(0).toInt())} dp wide in a 216 dp zone",
             hud.reps.layout.getLineWidth(0) <= hud.reps.width)
         assertTrue("the zone grew to ${dp(hud.reps.height)} dp", dp(hud.reps.height) <= 96f + 0.5f)
     }

@@ -127,7 +127,7 @@ The count and its target as one piece of text, "3/5", on the scoreboard: one siz
 _Avoid_: rep count, reps label
 
 **Next set**:
-What the scoreboard shows over the figure and its line for about 1.5 s when the movement changes while the clock runs: the set's target over the movement's name in capitals, "10" over "PUSH-UPS", on two rows at 48 sp with no slash, so it cannot be read as a count. After a finished set it waits about 450 ms for the last rep's roll and pulse; after SKIP it comes at once. − and + and the control row stay and answer under it; any rep banked or taken back ends it at once, and so does a pause.
+What the scoreboard shows over the figure and its line for about 1.5 s when the movement changes while the clock runs: the set's target over the movement's name in capitals, "10" over "PUSH-UPS", on two rows at 40 sp with no slash, so it cannot be read as a count. After a finished set it waits about 450 ms for the last rep's roll and pulse; after SKIP it comes at once. − and + and the control row stay and answer under it; any rep banked or taken back ends it at once, and so does a pause.
 _Avoid_: takeover, banner, interstitial
 
 **Control row**:

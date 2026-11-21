@@ -58,7 +58,7 @@
     -->
     <style name="Cindy.NextSet" parent="">
         <item name="android:fontFamily">@font/inter_extrabold</item>
-        <item name="android:textSize">48sp</item>
+        <item name="android:textSize">40sp</item>
         <item name="android:letterSpacing">-0.02</item>
         <item name="android:fontFeatureSettings">tnum</item>
         <item name="android:includeFontPadding">false</item>
