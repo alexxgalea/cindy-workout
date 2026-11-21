@@ -104,6 +104,16 @@ data class Attempt(
     /** True for a session of Cindy, which the ladder, the benchmark and the badges describe. */
     val isCindy: Boolean get() = workoutId == Workouts.CINDY_ID
 
+    /**
+     * True for a Freestyle, which has no score: it is counted in reps per movement and ranked
+     * against nothing. Its days are work done, so streaks, the calendar and weekly volume count
+     * it; the trend, bests, leaderboard, levels, badges and records never do.
+     */
+    val isFreestyle: Boolean get() = workoutId == Workouts.FREESTYLE_ID
+
+    /** The reps of a Freestyle: its movements' totals added up, whatever else is recorded. */
+    val freestyleReps: Int get() = movementTotals.values.sum().takeIf { it > 0 } ?: totalReps
+
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
@@ -409,9 +419,12 @@ object Records {
         return Attempt(rounds, reps, at)
     }
 
-    /** Best score first; ties broken by the more recent attempt. */
+    /**
+     * Best score first; ties broken by the more recent attempt. A Freestyle has no score and is
+     * left out: a total of reps is not a result to rank.
+     */
     fun ranked(attempts: List<Attempt>): List<Attempt> =
-        attempts.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
+        attempts.filter { !it.isFreestyle }.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 
@@ -480,7 +493,7 @@ object Records {
      * movements: rank it honestly rather than withhold it.
      */
     fun isPersonalRecord(attempts: List<Attempt>, of: Attempt): Boolean {
-        if (of.scoreIsLowerBound) return false
+        if (of.scoreIsLowerBound || of.isFreestyle) return false
         val previous = personalRecord(attempts, of) ?: return of.totalReps > 0
         return of.totalReps > previous.totalReps
     }

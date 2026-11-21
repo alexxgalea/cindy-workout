@@ -228,4 +228,42 @@ class CheerTest {
         val stored = attempt("2026-09-08")
         assertTrue(forResult(listOf(stored), attempt("2026-09-09")).isEmpty())
     }
+
+    private fun freestyle(iso: String, reps: Int = 119): Attempt {
+        val at = LocalDate.parse(iso).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        return Attempt(
+            rounds = 0, reps = 0, atMillis = at, durationMs = 15 * 60_000L, countedReps = reps,
+            workoutId = Workouts.FREESTYLE_ID, profile = CindyProfile.STANDARD,
+            movementTotals = mapOf(Exercise.entries[0] to reps)
+        )
+    }
+
+    @Test
+    fun `a Freestyle today is no personal record`() {
+        val line = headline(attempt("2026-08-01", rounds = 15, reps = 0), freestyle("2026-09-09", 900))
+        assertTrue(line, "personal record" !in line)
+    }
+
+    @Test
+    fun `the closing line is about Cindy, never about a Freestyle's total`() {
+        // A Freestyle weeks ago, nothing this week or last, so no streak rule speaks.
+        val line = headline(attempt("2026-08-01", rounds = 15, reps = 0), freestyle("2026-08-20", 900))
+        assertEquals("Your best is 15.", line)
+    }
+
+    @Test
+    fun `with only Freestyle sessions the headline never claims a best`() {
+        val line = headline(freestyle("2026-09-01"))
+        assertTrue(line, "best" !in line.lowercase())
+    }
+
+    @Test
+    fun `a Freestyle is celebrated for its days, not as a record or a first Cindy`() {
+        val before = freestyle("2026-09-08")
+        val new = freestyle("2026-09-09", 900)
+        val kinds = forResult(listOf(before, new), new).map { it.kind }
+        assertTrue(kinds.toString(), Celebration.Kind.RECORD !in kinds && Celebration.Kind.FIRST !in kinds)
+        val first = freestyle("2026-09-09")
+        assertTrue(forResult(listOf(first), first).none { it.kind == Celebration.Kind.FIRST })
+    }
 }
