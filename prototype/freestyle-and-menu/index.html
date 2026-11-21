@@ -1,0 +1,677 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Branch prototype/freestyle-and-menu, never merged into main.
+  Question: what should the MENU page, Freestyle's camera screen and Freestyle's session page look like?
+  Three pages, variants switchable by ?page=menu|camera|session&v=A|B|C, and the floating bar (← →).
+  The phones are HTML recreations in dp (1 dp = 1 css px, 360 x 780, the P40), with the app's tokens.
+  No blur, Phosphor icons (x- icons are hand-drawn stand-ins), Inter.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Freestyle and Menu</title>
+<style>
+@font-face { font-family: "CindyInter"; font-weight: 400; src: url(fonts/inter-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "CindyInter"; font-weight: 500; src: url(fonts/inter-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "CindyInter"; font-weight: 600; src: url(fonts/inter-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "CindyInter"; font-weight: 700; src: url(fonts/inter-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "CindyInter"; font-weight: 800; src: url(fonts/inter-latin-800-normal.woff2) format("woff2"); }
+
+:root {
+  --bg: #000; --label: #fff;
+  --label-secondary: rgba(235,235,245,.62); --label-tertiary: rgba(235,235,245,.32); --label-quaternary: rgba(235,235,245,.18);
+  --ok: #30d158; --alert: #ff453a; --achievement: #fc4c02;
+  --glass: rgba(255,255,255,.055); --glass-raised: rgba(255,255,255,.09);
+  --specular: rgba(255,255,255,.24); --hairline: rgba(255,255,255,.12);
+  --band-top: rgba(0,0,0,.72); --band-bottom: rgba(0,0,0,.77);
+  --pull: #64d2ff; --push: #bf5af2; --squat: #ffd60a;
+  --chrome-bg: #111214; --chrome-fg: #e8e8ee; --chrome-dim: #8e8e98; --chrome-line: #26272b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--chrome-bg); color: var(--chrome-fg);
+  font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+/* bench */
+header.bench { background: #0b0b0d; border-bottom: 1px solid var(--chrome-line); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.bench h1 { font-size: 15px; margin: 0; font-weight: 700; }
+.bench h1 small { color: var(--chrome-dim); font-weight: 400; margin-left: 6px; }
+.seg { display: inline-flex; border: 1px solid #34363b; border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; color: var(--chrome-fg); border: 0; padding: 6px 11px; font: inherit; cursor: pointer; border-right: 1px solid #34363b; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: #e8e8ee; color: #000; font-weight: 600; }
+.lbl { color: var(--chrome-dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 4px; }
+main { display: flex; gap: 28px; padding: 18px 16px 90px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+aside.side { width: 340px; max-width: 100%; display: grid; gap: 12px; }
+aside h2 { font-size: 13px; margin: 0 0 4px; }
+aside p { margin: 0; color: var(--chrome-dim); font-size: 12.5px; }
+.box { border: 1px solid var(--chrome-line); border-radius: 10px; padding: 12px; }
+.box button.b { background: #1d1e22; color: var(--chrome-fg); border: 1px solid #34363b; border-radius: 7px; padding: 6px 10px; font: inherit; cursor: pointer; margin: 0 6px 6px 0; }
+.box button.b:hover { background: #26272c; }
+pre.state { margin: 0; font: 11.5px/1.45 ui-monospace, Menlo, monospace; color: #cfd0d6; white-space: pre-wrap; max-height: 340px; overflow: auto; }
+.voice { font: 600 13px/1.4 -apple-system, sans-serif; color: #64d2ff; min-height: 18px; }
+.log { font: 11.5px/1.5 ui-monospace, Menlo, monospace; color: var(--chrome-dim); max-height: 160px; overflow: auto; }
+.badge { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 5px; border: 1px solid #6a4306; color: #ff9f0a; }
+
+/* floating switcher: not part of the design */
+.switcher { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 99; display: flex; align-items: center; gap: 4px;
+  background: #ffe066; color: #000; border-radius: 999px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.5); font: 600 13px -apple-system, sans-serif; }
+.switcher button { border: 0; background: #000; color: #ffe066; width: 32px; height: 32px; border-radius: 50%; font-size: 16px; cursor: pointer; }
+.switcher span { padding: 0 12px; white-space: nowrap; }
+
+/* phone */
+.phone { position: relative; width: 360px; height: 780px; background: #000; overflow: hidden; border-radius: 26px; outline: 1px solid #2a2b30;
+  color: var(--label); font-family: "CindyInter", system-ui, sans-serif; user-select: none; flex: 0 0 auto; }
+.phone * { font-family: inherit; }
+.phone button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.phone svg { display: block; }
+.tnum { font-feature-settings: "tnum"; }
+.status { position: absolute; top: 0; left: 0; right: 0; height: 28px; z-index: 30; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 11px; color: var(--label-secondary); pointer-events: none; }
+.t-title2 { font-weight: 800; font-size: 25px; letter-spacing: -.024em; line-height: 1.18; }
+.t-headline { font-weight: 600; font-size: 16px; letter-spacing: -.0125em; line-height: 1.25; }
+.t-callout { font-weight: 400; font-size: 14px; line-height: 1.32; color: var(--label-secondary); }
+.t-foot { font-weight: 400; font-size: 12px; line-height: 1.4; color: var(--label-tertiary); }
+.t-eyebrow { font-weight: 700; font-size: 11px; letter-spacing: .145em; text-transform: uppercase; color: var(--label-tertiary); line-height: 1.2; }
+
+/* page chrome: top bar with Back and a centred title (ADR 0007) */
+.page { position: absolute; inset: 0; background: var(--bg); }
+.topbar { position: absolute; top: 28px; left: 0; right: 0; height: 52px; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; z-index: 5; background: var(--bg); }
+.topbar .back { width: 48px; height: 48px; margin-left: 4px; display: grid; place-items: center; }
+.topbar .ttl { text-align: center; font-weight: 600; font-size: 17px; }
+.scroll { position: absolute; top: 80px; bottom: 0; left: 0; right: 0; overflow-y: auto; padding: 8px 16px 32px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+.card { background: var(--glass); border-radius: 20px; box-shadow: inset 0 0 0 .5px var(--hairline), inset 0 1px 0 var(--specular); }
+.group { margin-bottom: 12px; overflow: hidden; }
+.sect { padding: 14px 6px 8px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; min-height: 60px; position: relative; cursor: pointer; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--hairline); }
+.row.ic + .row.ic::before { left: 56px; }
+.row .txt { flex: 1; min-width: 0; }
+.row .ttl { font-weight: 600; font-size: 16px; letter-spacing: -.0125em; }
+.row .sub { font-size: 13.5px; color: var(--label-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .chev { color: var(--label-tertiary); }
+.row .lead { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--glass-raised); flex: 0 0 auto; }
+.row:active { background: rgba(255,255,255,.04); }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: #2c2c30; display: grid; place-items: center; font-weight: 700; flex: 0 0 auto; }
+.orange { color: var(--achievement); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 16px; background: var(--glass-raised); box-shadow: inset 0 0 0 .5px var(--hairline); font-size: 13.5px; font-weight: 600; }
+.btn-white { height: 54px; border-radius: 27px; background: #fff !important; color: #000 !important; font-weight: 700; font-size: 17px; letter-spacing: .018em; width: 100%; }
+.footnote { padding: 10px 6px 0; }
+
+/* camera */
+.picture { position: absolute; inset: 0; background: radial-gradient(120% 70% at 50% 45%, #3a3d44 0%, #1d1f23 55%, #0d0e10 100%); }
+.picture .mocklbl { position: absolute; left: 12px; top: 536px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.35); }
+.band-top { position: absolute; left: 0; right: 0; top: 0; height: 91px; background: var(--band-top); }
+.band-top .row1 { position: absolute; top: 40px; left: 0; right: 0; height: 44px; display: flex; align-items: center; padding: 0 8px; gap: 4px; }
+.band-top .clock { flex: 1; text-align: center; font-weight: 700; font-size: 22px; letter-spacing: -.02em; }
+.iconbtn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 22px; }
+.iconbtn.dim { opacity: .35; }
+.coach { position: absolute; top: 101px; left: 50%; transform: translateX(-50%); max-width: 320px; padding: 8px 14px; border-radius: 18px;
+  background: rgba(0,0,0,.6); box-shadow: inset 0 0 0 .5px var(--hairline); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.band-bot { position: absolute; left: 0; right: 0; bottom: 0; height: 220px; background: var(--band-bottom); }
+.score { position: absolute; left: 0; right: 0; top: 14px; height: 120px; display: flex; flex-direction: column; align-items: center; }
+.fig { font-weight: 800; font-size: 96px; letter-spacing: -.048em; line-height: 1; font-feature-settings: "tnum"; transition: color .3s; }
+.fig.near { font-size: 56px; margin-top: 12px; }
+.fig.quiet { color: var(--label-tertiary); }
+.fig.pulse { color: var(--ok); }
+.mline { margin-top: 6px; font-size: 15px; font-weight: 600; color: var(--label-secondary); display: flex; gap: 6px; align-items: center; }
+.mline b { color: var(--label); font-weight: 700; letter-spacing: .02em; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.pm { position: absolute; right: 18px; top: 18px; width: 52px; height: 104px; border-radius: 26px; background: var(--glass-raised); box-shadow: inset 0 0 0 .5px var(--hairline); display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; }
+.pm button { display: grid; place-items: center; }
+.pm button + button { border-top: .5px solid var(--hairline); }
+.pm.off { opacity: .3; pointer-events: none; }
+.ctrl { position: absolute; left: 0; right: 0; bottom: 18px; height: 72px; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; justify-items: center; }
+.ctrl .c { width: 48px; height: 48px; border-radius: 24px; display: grid; place-items: center; background: var(--glass-raised); box-shadow: inset 0 0 0 .5px var(--hairline); }
+.ctrl .c.big { width: 56px; height: 56px; border-radius: 28px; }
+.ctrl .c.shutter { background: #fff; color: #000; }
+.ctrl .c.shutter.big { width: 72px; height: 72px; border-radius: 36px; }
+.ctrl .empty { width: 56px; height: 56px; }
+.names { position: absolute; left: 0; right: 0; bottom: 2px; display: grid; grid-template-columns: 1fr 1fr 1fr; justify-items: center; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--label-secondary); }
+.idleline { position: absolute; left: 16px; right: 16px; bottom: 0; text-align: center; font-size: 12.5px; color: var(--label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.takeover { position: absolute; left: 0; right: 0; top: 14px; height: 120px; display: none; flex-direction: column; align-items: center; justify-content: center; background: transparent; }
+.takeover.on { display: flex; }
+.takeover .nm { font-weight: 800; font-size: 48px; letter-spacing: -.02em; line-height: 1; }
+.takeover .sm { margin-top: 8px; font-size: 15px; font-weight: 600; color: var(--label-secondary); }
+.hidden { visibility: hidden; }
+.flash { animation: flash .3s ease-out; }
+@keyframes flash { from { color: var(--ok); } to { color: #fff; } }
+
+/* session page */
+.hero { padding: 6px 4px 14px; }
+.hero .big { font-weight: 800; font-size: 46px; letter-spacing: -.048em; line-height: 1; font-feature-settings: "tnum"; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.tile { padding: 12px; }
+.tile .v { font-weight: 800; font-size: 26px; letter-spacing: -.03em; font-feature-settings: "tnum"; line-height: 1.05; }
+.tile .k { font-size: 12px; color: var(--label-secondary); margin-top: 4px; }
+.gap { display: flex; align-items: center; gap: 8px; padding: 4px 16px 4px 22px; font-size: 12px; color: var(--label-tertiary); }
+.gap::before { content: ""; width: 2px; height: 18px; background: var(--label-quaternary); border-radius: 1px; }
+.strip { display: flex; height: 44px; border-radius: 10px; overflow: hidden; margin: 6px 0 4px; background: rgba(255,255,255,.03); }
+.strip div { height: 100%; cursor: pointer; }
+.strip div.g { background: transparent; cursor: default; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { height: 30px; padding: 0 10px; border-radius: 15px; background: var(--glass-raised); box-shadow: inset 0 0 0 .5px var(--hairline); display: inline-flex; align-items: center; font-weight: 700; font-size: 14px; cursor: pointer; font-feature-settings: "tnum"; }
+.chip.edited { box-shadow: inset 0 0 0 1.5px var(--label-secondary); }
+.mcard { padding: 14px 16px; margin-bottom: 10px; cursor: default; }
+.mcard .h { display: flex; align-items: baseline; gap: 8px; }
+.mcard .n { font-weight: 800; font-size: 34px; letter-spacing: -.04em; font-feature-settings: "tnum"; line-height: 1; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #1c1c1f; border-radius: 22px 22px 0 0; padding: 10px 16px 24px; z-index: 50; box-shadow: 0 -1px 0 var(--hairline); }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.5); z-index: 49; }
+.grab { width: 36px; height: 5px; border-radius: 3px; background: var(--label-quaternary); margin: 0 auto 12px; }
+.discard { color: var(--alert); font-weight: 600; text-align: center; padding: 18px 0 8px; width: 100%; }
+</style>
+</head>
+<body>
+<header class="bench">
+  <h1>Freestyle and Menu <small>throwaway prototype · HTML recreation, not the app</small></h1>
+  <div><span class="lbl">Page</span><span class="seg" id="pageSeg"></span></div>
+  <span class="badge">mock</span>
+</header>
+<main>
+  <div id="phoneWrap"></div>
+  <aside class="side" id="side"></aside>
+</main>
+<div class="switcher" id="switcher"><button id="prev" aria-label="Previous variant">←</button><span id="vlabel"></span><button id="next" aria-label="Next variant">→</button></div>
+
+<script src="icons.js"></script>
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const ic = (name, size = 22, color = "currentColor") =>
+  `<svg viewBox="0 0 256 256" width="${size}" height="${size}" style="color:${color}" fill="currentColor" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+const PAGES = {
+  menu:    { name: "MENU", variants: { A: "Grouped sections", B: "Up next, then settings", C: "Today's list, reordered" } },
+  camera:  { name: "Freestyle camera", variants: { A: "Confirm with a pulse", B: "Confirm with a takeover" } },
+  session: { name: "Freestyle session page", variants: { A: "Totals, then the sets in order", B: "A time strip", C: "Grouped by movement" } },
+};
+const MOV = {
+  pull: { name: "Pull-ups", cap: "PULL-UPS", word: "Pull-ups", color: "var(--pull)" },
+  push: { name: "Push-ups", cap: "PUSH-UPS", word: "Push-ups", color: "var(--push)" },
+  squat: { name: "Squats", cap: "SQUATS", word: "Squats", color: "var(--squat)" },
+};
+const NUM = ["Zero","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen","Twenty"];
+
+/* ---------------- URL state ---------------- */
+const params = new URLSearchParams(location.search);
+let page = PAGES[params.get("page")] ? params.get("page") : "menu";
+let variant = PAGES[page].variants[params.get("v")] ? params.get("v") : "A";
+function setUrl() {
+  const p = new URLSearchParams(location.search); p.set("page", page); p.set("v", variant);
+  history.replaceState(null, "", "?" + p.toString());
+}
+function cycle(d) {
+  const keys = Object.keys(PAGES[page].variants);
+  variant = keys[(keys.indexOf(variant) + d + keys.length) % keys.length];
+  setUrl(); render();
+}
+$("#prev").onclick = () => cycle(-1);
+$("#next").onclick = () => cycle(1);
+addEventListener("keydown", e => {
+  if (e.target.closest("input,textarea,[contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+function drawPageSeg() {
+  $("#pageSeg").innerHTML = Object.entries(PAGES).map(([k, p]) =>
+    `<button data-p="${k}" aria-pressed="${k === page}">${p.name}</button>`).join("");
+  $("#pageSeg").onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    page = b.dataset.p; if (!PAGES[page].variants[variant]) variant = "A"; setUrl(); render();
+  };
+}
+
+/* ---------------- shared data ---------------- */
+// One Freestyle session, as STOP would file it (derived sets, rests and transitions).
+const SESSION0 = {
+  workout: "freestyle", date: "Fri 21 Nov", started: "18:02", clock: 18 * 60 + 40, avgHr: 142, maxHr: 171, kcal: 214, film: true,
+  sets: [
+    { m: "squat", reps: 15, start: 12, end: 53 },
+    { m: "squat", reps: 15, start: 118, end: 160 },
+    { m: "pull",  reps: 8,  start: 208, end: 236 },
+    { m: "pull",  reps: 6,  start: 326, end: 350 },
+    { m: "push",  reps: 12, start: 402, end: 431 },
+    { m: "push",  reps: 10, start: 520, end: 548 },
+    { m: "squat", reps: 20, start: 610, end: 668 },
+    { m: "pull",  reps: 5,  start: 745, end: 768 },
+    { m: "push",  reps: 10, start: 840, end: 866 },
+    { m: "squat", reps: 18, start: 1010, end: 1060 },
+  ],
+};
+let session = JSON.parse(JSON.stringify(SESSION0));
+const totals = s => {
+  const t = { pull: { reps: 0, time: 0, sets: 0 }, push: { reps: 0, time: 0, sets: 0 }, squat: { reps: 0, time: 0, sets: 0 } };
+  for (const x of s.sets) { t[x.m].reps += x.reps; t[x.m].time += x.end - x.start; t[x.m].sets++; }
+  return t;
+};
+const allReps = s => s.sets.reduce((a, x) => a + x.reps, 0);
+const gapKind = (a, b) => a.m === b.m ? "Rest" : "Transition";
+
+/* ---------------- MENU ---------------- */
+const lastSessionText = () => `${session.date} · ${allReps(session)} reps · ${mmss(session.clock)}`;
+const menuState = { workout: "Freestyle", live: false, toast: "" };
+const row = (title, sub, opts = {}) => `
+  <div class="row ${opts.icon ? "ic" : ""}" data-act="${opts.act || ""}">
+    ${opts.icon ? `<div class="lead">${ic(opts.icon, 18, opts.iconColor)}</div>` : ""}
+    ${opts.avatar ? `<div class="avatar">A</div>` : ""}
+    <div class="txt"><div class="ttl">${title}</div>${sub ? `<div class="sub ${opts.subClass || ""}">${sub}</div>` : ""}</div>
+    <div class="chev">${ic("caret-right", 16)}</div>
+  </div>`;
+const SETTINGS = [
+  ["Daily reminder", "Off", "x-bell"], ["Body weight", "78 kg", "x-scale"], ["Heart rate", "fenix 7 · paired", "x-heart"],
+  ["Strava", "Connected as Alex", "link"], ["Voice", "Counts out loud", "speaker-high"], ["Music", "No track chosen", "music-notes"],
+];
+const youRow = (o = {}) => row("Alex", `<span class="orange">12-day streak</span> · 4 badges`, { avatar: true, act: "you", ...o });
+function menuPage(v) {
+  const top = `<div class="status"><span>18:24</span><span>100%</span></div>
+    <div class="topbar"><button class="back" aria-label="Back">${ic("caret-left", 22)}</button><div class="ttl">Menu</div><div></div></div>`;
+  let body = "";
+  const wSub = menuState.workout === "Freestyle" ? "Freestyle · Count up" : "Cindy · 20-minute AMRAP";
+  const mSub = "Strict pull-ups · Push-ups · Squats, heels flat";
+  if (v === "A") {
+    body = `
+      <div class="card group">${row("Last session", lastSessionText(), { act: "last" })}</div>
+      <div class="sect t-eyebrow">Training</div>
+      <div class="card group">
+        ${row("Workout", wSub, { act: "workout" })}
+        ${row("Movements", mSub, { act: "movements" })}
+        ${row("Progress", "38 sessions · 12-day streak", { act: "progress" })}
+      </div>
+      <div class="sect t-eyebrow">You</div>
+      <div class="card group">${youRow()}</div>
+      <div class="sect t-eyebrow">Settings</div>
+      <div class="card group">${SETTINGS.map(s => row(s[0], s[1])).join("")}</div>
+      <div class="card group">${row("Help", "What each workout is, how it is scored, where to stand")}</div>`;
+  } else if (v === "B") {
+    body = `
+      <div class="card" style="padding:16px 16px 14px;margin-bottom:12px">
+        <div class="t-eyebrow">Next session</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:6px">
+          <div class="t-title2">${menuState.workout}</div>
+          <div class="t-callout">${menuState.workout === "Freestyle" ? "Count up" : "20-min AMRAP"}</div>
+        </div>
+        <div class="t-callout" style="margin-top:4px">${menuState.workout === "Freestyle" ? "Pull-ups, push-ups and squats, in any order." : "5 pull-ups, 10 push-ups, 15 squats, for 20 minutes."}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="pill" data-act="workout">${ic("list-dashes", 16)} Change workout</button>
+          <button class="pill" data-act="movements">${ic("person-simple", 16)} Movements</button>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px;margin-bottom:12px;cursor:pointer" data-act="last">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="t-eyebrow">Last session · ${session.date}</div><div class="chev" style="color:var(--label-tertiary)">${ic("caret-right", 16)}</div>
+        </div>
+        <div style="display:flex;gap:18px;margin-top:8px;align-items:baseline">
+          <div><span style="font-weight:800;font-size:32px;letter-spacing:-.034em" class="tnum">${allReps(session)}</span> <span class="t-callout">reps</span></div>
+          <div><span style="font-weight:800;font-size:32px;letter-spacing:-.034em" class="tnum">${mmss(session.clock)}</span></div>
+        </div>
+        <div class="t-foot" style="margin-top:4px">Freestyle · ${Object.entries(totals(session)).map(([k, t]) => `${t.reps} ${MOV[k].word.toLowerCase()}`).join(" · ")}</div>
+      </div>
+      <div class="card group">${youRow()}${row("Progress", "38 sessions", { act: "progress" })}</div>
+      <div class="card group">${SETTINGS.map(s => row(s[0], s[1], { icon: s[2] })).join("")}
+        ${row("Help", "What each workout is, how it is scored", { icon: "x-question" })}</div>`;
+  } else {
+    body = `
+      <div class="card group">
+        ${row("Last session", lastSessionText(), { act: "last" })}
+        ${row("Workout", wSub, { act: "workout" })}
+        ${row("Movements", mSub, { act: "movements" })}
+      </div>
+      <div class="card group">${youRow()}</div>
+      <div class="card group">
+        ${row("Progress", "38 sessions · 12-day streak", { act: "progress" })}
+        ${SETTINGS.map(s => row(s[0], s[1])).join("")}
+        ${row("Help", "What each workout is, how it is scored, where to stand")}
+      </div>`;
+  }
+  const foot = menuState.live ? `<div class="t-foot footnote">The workout and its movements can only be changed between workouts — they have to mean one thing for the whole score.</div>` : "";
+  const toast = menuState.toast ? `<div style="position:absolute;left:50%;bottom:40px;transform:translateX(-50%);background:#2c2c30;padding:10px 16px;border-radius:20px;font-size:13.5px;white-space:nowrap;z-index:60">${menuState.toast}</div>` : "";
+  return `<div class="page">${top}<div class="scroll">${body}${foot}</div>${toast}</div>`;
+}
+function menuSide(v) {
+  return `
+  <div class="box"><h2>${PAGES.menu.variants[v]}</h2><p>${{
+    A: "Today's rows in three named sections. Workout climbs to the top of Training, under Last session.",
+    B: "A block for what the next session will be (workout, its line, two ways to change it), then the last session with its figures, then everything else with icons.",
+    C: "Today's three groups, reordered only: Last session, Workout and Movements together at the top.",
+  }[v]}</p></div>
+  <div class="box"><h2>Try</h2>
+    <button class="b" data-m="toggleW">Workout: ${menuState.workout}</button>
+    <button class="b" data-m="live">Workout running: ${menuState.live ? "yes" : "no"}</button>
+    <p style="margin-top:4px">Tap Workout or Movements while a workout is running to see the refusal.</p></div>
+  <div class="box"><h2>State</h2><pre class="state">${esc(JSON.stringify({ page, variant: v, ...menuState, lastSession: lastSessionText() }, null, 1))}</pre></div>`;
+}
+function wireMenu() {
+  $("#phoneWrap").onclick = e => {
+    const r = e.target.closest("[data-act]"); if (!r) return;
+    const a = r.dataset.act;
+    if ((a === "workout" || a === "movements") && menuState.live) {
+      menuState.toast = a === "workout" ? "Reset the workout first to choose another" : "Reset the workout first to change movements";
+    } else if (a === "workout") { menuState.workout = menuState.workout === "Freestyle" ? "Cindy" : "Freestyle"; menuState.toast = "Workouts page (not drawn): picked " + menuState.workout; }
+    else if (a === "last") { page = "session"; variant = "A"; setUrl(); render(); return; }
+    else menuState.toast = `Opens ${a} (not drawn)`;
+    render(); setTimeout(() => { menuState.toast = ""; if (page === "menu") render(); }, 1600);
+  };
+  $("#side").onclick = e => {
+    const b = e.target.closest("[data-m]"); if (!b) return;
+    if (b.dataset.m === "toggleW") menuState.workout = menuState.workout === "Freestyle" ? "Cindy" : "Freestyle";
+    if (b.dataset.m === "live") menuState.live = !menuState.live;
+    render();
+  };
+}
+
+/* ---------------- CAMERA (simulation) ---------------- */
+// A scripted Freestyle: squats, a rest, squats again, a walk, pull-ups, push-ups. Times in seconds of clock.
+function script() {
+  const ev = []; let t = 4;
+  const set = (m, n, every) => { for (let i = 0; i < n; i++) { ev.push({ t, m }); t += every; } };
+  set("squat", 12, 2.2); t += 22;          // rest inside one movement
+  set("squat", 8, 2.2); t += 14;           // walk to the bar
+  set("pull", 7, 3.2); t += 16;            // transition to the floor
+  set("push", 10, 2.0); t += 9;            // short gap, same movement
+  set("push", 5, 2.0);
+  return ev;
+}
+const cam = {
+  st: "idle", clock: 0, speed: 4, playing: false, events: script(), i: 0,
+  rec: null,          // recognised movement
+  cand: null,         // candidate movement and its count, before confirmation
+  set: 0, lastRepAt: null, tot: { pull: 0, push: 0, squat: 0 },
+  takeover: 0, pulse: false, voice: "", log: [], gapRule: "movement", gapN: 15, stops: 0,
+};
+function camReset() {
+  Object.assign(cam, { st: "idle", clock: 0, playing: false, events: script(), i: 0, rec: null, cand: null, set: 0, lastRepAt: null,
+    tot: { pull: 0, push: 0, squat: 0 }, takeover: 0, pulse: false, voice: "", log: [] });
+}
+function say(s) { cam.voice = "🔊 “" + s + "”"; cam.log.unshift(`${mmss(cam.clock)}  voice: ${s}`); }
+function note(s) { cam.log.unshift(`${mmss(cam.clock)}  ${s}`); }
+function rep(m, manual = false) {
+  // recognition: a movement is confirmed at its 2nd counted rep in its position; both reps are banked then.
+  if (!manual && cam.rec !== m) {
+    if (!cam.cand || cam.cand.m !== m) { cam.cand = { m, n: 1 }; note(`candidate rep: ${MOV[m].name} (nothing shown, nothing said)`); return; }
+    cam.cand.n++;
+    cam.rec = m; cam.cand = null; cam.set = 2; cam.tot[m] += 2; cam.lastRepAt = cam.clock;
+    note(`confirmed ${MOV[m].name} at its 2nd rep; 2 banked`);
+    say(`${MOV[m].word}. Two.`);
+    confirmMoment(); return;
+  }
+  // same movement: does a long gap start a new set on the screen?
+  if (!manual && cam.gapRule === "gap" && cam.lastRepAt != null && cam.clock - cam.lastRepAt > cam.gapN) {
+    cam.set = 0; note(`gap over ${cam.gapN} s: new set on the screen`);
+  }
+  cam.set++; cam.tot[m]++; cam.lastRepAt = cam.clock;
+  say(NUM[cam.set] || String(cam.set));
+  pulse();
+}
+function pulse() { cam.pulse = true; setTimeout(() => { cam.pulse = false; if (page === "camera") drawCamPhone(); }, 300); }
+function confirmMoment() {
+  if (variant === "B") { cam.takeover = 1; setTimeout(() => { cam.takeover = 0; if (page === "camera") drawCamPhone(); }, 1500 / Math.max(1, cam.speed / 2)); }
+  pulse();
+}
+let lastTick = null;
+function tick(ts) {
+  if (lastTick == null) lastTick = ts;
+  const dt = (ts - lastTick) / 1000; lastTick = ts;
+  if (page === "camera" && cam.st === "running" && cam.playing) {
+    cam.clock += dt * cam.speed;
+    while (cam.i < cam.events.length && cam.events[cam.i].t <= cam.clock) { rep(cam.events[cam.i].m); cam.i++; drawCam(); }
+    if (cam.i >= cam.events.length) { cam.playing = false; note("script done: press STOP"); drawCam(); }
+    drawClock();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+function drawClock() { const c = $("#clk"); if (c) c.textContent = mmss(cam.clock); }
+
+function coachLine() {
+  if (cam.st === "idle") return "";
+  if (cam.st === "paused") return "Paused";
+  if (!cam.rec && !cam.cand) return "Start with any of the three";
+  return "";
+}
+function camPhone() {
+  const run = cam.st === "running", near = !run;
+  const m = cam.rec ? MOV[cam.rec] : null;
+  const figTxt = cam.st === "idle" ? "0" : String(m ? cam.set : 0);
+  const quiet = !m && cam.st !== "idle";
+  const line = m
+    ? `<span class="dot" style="background:${m.color}"></span><b>${m.cap}</b><span>· ${cam.tot[cam.rec]} total</span>`
+    : `<b>FREESTYLE</b><span>· Count up</span>`;
+  const coach = coachLine();
+  const stopNear = near && cam.st !== "idle";
+  return `
+  <div class="picture"><span class="mocklbl">picture (drawn placeholder)</span>${figure()}</div>
+  <div class="status" style="color:rgba(255,255,255,.7)"><span>18:02</span><span>100%</span></div>
+  <div class="band-top"><div class="row1">
+    <button class="iconbtn ${run ? "dim" : ""}" aria-label="Switch camera">${ic("camera-rotate", 22)}</button>
+    <div style="width:44px;display:grid;place-items:center;color:var(--alert);font-size:11px;font-weight:800">● REC</div>
+    <div class="clock tnum" id="clk">${mmss(cam.clock)}</div>
+    <div style="width:44px"></div>
+    <button class="iconbtn" aria-label="Menu" data-c="menu">${ic("list-dashes", 22)}</button>
+  </div></div>
+  ${coach ? `<div class="coach">${coach}</div>` : ""}
+  <div class="band-bot">
+    <div class="score ${cam.takeover ? "hidden" : ""}">
+      <div class="fig ${near ? "near" : ""} ${quiet ? "quiet" : ""} ${cam.pulse && run ? "pulse" : ""}">${figTxt}</div>
+      <div class="mline">${line}</div>
+    </div>
+    <div class="takeover ${cam.takeover ? "on" : ""}">${m ? `<div class="nm">${m.cap}</div><div class="sm">2 banked</div>` : ""}</div>
+    <div class="pm ${m && cam.st !== "idle" ? "" : "off"}" style="${near ? "top:10px" : ""}">
+      <button data-c="plus" aria-label="Add a rep">${ic("plus", 22)}</button>
+      <button data-c="minus" aria-label="Take back a rep">${ic("minus", 22)}</button>
+    </div>
+    <div class="ctrl" style="${near ? "" : "bottom:14px"}">
+      ${cam.st === "idle" ? `<div class="empty"></div>` :
+        `<button class="c ${near ? "big" : ""}" data-c="stop" aria-label="Stop" style="${run ? "opacity:.75" : ""}">${ic("stop-fill", near ? 22 : 18, "var(--alert)")}</button>`}
+      <button class="c shutter ${near ? "big" : ""}" data-c="shutter" aria-label="${cam.st === "running" ? "Pause" : "Start"}">${ic(cam.st === "running" ? "pause-fill" : "play-fill", near ? 30 : 20, "#000")}</button>
+      <div class="empty" title="SKIP's place, empty in Freestyle"></div>
+    </div>
+    ${cam.st === "idle" ? `<div class="idleline">Freestyle · count up · squats: heels flat</div>` :
+      stopNear ? `<div class="names"><span>STOP</span><span>RESUME</span><span></span></div>` : ""}
+  </div>`;
+}
+function figure() {
+  // a stick figure, posed by the movement, so the picture is not empty
+  const p = cam.rec || (cam.cand && cam.cand.m) || "stand";
+  const poses = {
+    stand: "M180 300 L180 420 M180 330 L150 390 M180 330 L210 390 M180 420 L160 520 M180 420 L200 520",
+    squat: "M180 340 L175 440 M180 360 L130 380 M180 360 L230 380 M175 440 L130 470 L140 530 M175 440 L220 470 L215 530",
+    pull: "M140 140 L220 140 M180 230 L180 350 M180 250 L150 150 M180 250 L210 150 M180 350 L170 450 M180 350 L190 450",
+    push: "M90 470 L250 430 M230 435 L235 500 M110 466 L110 510 M250 430 L280 420",
+  };
+  const head = { stand: [180, 285], squat: [180, 325], pull: [180, 212], push: [270, 410] }[p];
+  return `<svg width="360" height="780" style="position:absolute;inset:0;opacity:.55"><path d="${poses[p]}" stroke="#9aa0aa" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <circle cx="${head[0]}" cy="${head[1]}" r="16" fill="#9aa0aa"/>${p === "pull" ? "" : ""}</svg>`;
+}
+function camSide(v) {
+  return `
+  <div class="box"><h2>${PAGES.camera.variants[v]}</h2><p>${{
+    A: "At confirmation the movement line changes and the figure arrives at 2 with the green pulse every banked rep has. Nothing covers the scoreboard.",
+    B: "At confirmation the movement's name covers the figure and its line for about 1.5 s, like Next set but with no target, then the figure is at 2.",
+  }[v]}</p></div>
+  <div class="box"><h2>Drive it</h2>
+    <button class="b" data-k="play">${cam.st === "idle" ? "START and play" : cam.playing ? "Hold the script" : "Play the script"}</button>
+    <button class="b" data-k="step">Next rep</button>
+    <button class="b" data-k="speed">Speed ×${cam.speed}</button>
+    <button class="b" data-k="reset">Reset</button><br>
+    <span class="lbl">One rep by hand</span><br>
+    <button class="b" data-k="r-pull">pull-up</button><button class="b" data-k="r-push">push-up</button><button class="b" data-k="r-squat">squat</button>
+    <p style="margin-top:6px">The shutter starts, pauses and resumes. STOP opens the session page. − and + work only on a recognised movement.</p>
+  </div>
+  <div class="box"><h2>Open question: when does the figure go back to 1?</h2>
+    <p>The figure is "this set", but sets are worked out after STOP. Live, the screen needs its own rule.</p>
+    <div style="margin-top:8px" class="seg" id="gapSeg">
+      <button data-g="movement" aria-pressed="${cam.gapRule === "movement"}">Only on a new movement</button>
+      <button data-g="gap" aria-pressed="${cam.gapRule === "gap"}">Also after a ${cam.gapN} s gap</button>
+    </div>
+    <p style="margin-top:6px">The script rests 22 s between two squat sets and 9 s between two push-up sets.</p>
+  </div>
+  <div class="box"><h2>Voice</h2><div class="voice" id="voice">${cam.voice}</div><div class="log">${cam.log.slice(0, 14).map(esc).join("<br>")}</div></div>
+  <div class="box"><h2>State</h2><pre class="state">${esc(JSON.stringify({ state: cam.st, clock: mmss(cam.clock), recognised: cam.rec, candidate: cam.cand, figure: cam.set, totals: cam.tot, setRule: cam.gapRule }, null, 1))}</pre></div>`;
+}
+function drawCamPhone() { const p = $("#phoneWrap .phone"); if (p) p.innerHTML = camPhone(); }
+function drawCam() { drawCamPhone(); $("#side").innerHTML = camSide(variant); }
+function wireCam() {
+  $("#phoneWrap").onclick = e => {
+    const b = e.target.closest("[data-c]"); if (!b) return;
+    const c = b.dataset.c;
+    if (c === "shutter") {
+      if (cam.st === "idle") { cam.st = "running"; cam.playing = true; note("START: the clock counts up"); }
+      else if (cam.st === "running") { cam.st = "paused"; cam.playing = false; note("paused"); }
+      else { cam.st = "running"; cam.playing = true; note("resumed"); }
+    } else if (c === "stop") { stopToSession(); return; }
+    else if (c === "plus" && cam.rec) { cam.set++; cam.tot[cam.rec]++; note(`+ on ${MOV[cam.rec].name}: banked`); pulse(); }
+    else if (c === "minus" && cam.rec && cam.set > 0) { cam.set--; cam.tot[cam.rec]--; note(`− on ${MOV[cam.rec].name}: taken back`); }
+    else if (c === "menu") { page = "menu"; setUrl(); render(); return; }
+    drawCam();
+  };
+  $("#side").onclick = e => {
+    const g = e.target.closest("[data-g]"); if (g) { cam.gapRule = g.dataset.g; drawCam(); return; }
+    const b = e.target.closest("[data-k]"); if (!b) return;
+    const k = b.dataset.k;
+    if (k === "play") {
+      if (cam.st === "idle") { cam.st = "running"; cam.playing = true; note("START: the clock counts up"); }
+      else if (cam.st === "paused") { cam.st = "running"; cam.playing = true; note("resumed"); }
+      else cam.playing = !cam.playing;
+    }
+    if (k === "step") { if (cam.st === "idle") cam.st = "running"; if (cam.i < cam.events.length) { cam.clock = cam.events[cam.i].t; rep(cam.events[cam.i].m); cam.i++; } }
+    if (k === "speed") cam.speed = cam.speed === 1 ? 4 : cam.speed === 4 ? 10 : 1;
+    if (k === "reset") camReset();
+    if (k.startsWith("r-")) { if (cam.st === "idle") cam.st = "running"; rep(k.slice(2)); }
+    drawCam();
+  };
+}
+function stopToSession() {
+  // STOP files what was banked; sets are worked out from the rep times (here: from the script's sets).
+  const n = cam.tot.pull + cam.tot.push + cam.tot.squat;
+  if (n === 0) { note("STOP with zero reps: nothing is saved"); camReset(); drawCam(); return; }
+  session = JSON.parse(JSON.stringify(SESSION0));
+  page = "session"; variant = "A"; setUrl(); render();
+}
+
+/* ---------------- SESSION PAGE ---------------- */
+const sessUi = { editing: null };
+function sessHead() {
+  return `<div class="status"><span>18:24</span><span>100%</span></div>
+    <div class="topbar"><button class="back" aria-label="Back" data-s="back">${ic("caret-left", 22)}</button><div class="ttl">Freestyle</div><div></div></div>`;
+}
+function setRow(x, i) {
+  const m = MOV[x.m];
+  return `<div class="row ic" data-set="${i}">
+    <div class="lead" style="background:transparent"><span class="dot" style="background:${m.color};width:10px;height:10px"></span></div>
+    <div class="txt"><div class="ttl"><span class="tnum">${x.reps}</span> ${m.name.toLowerCase()}${x.edited ? ` <span class="t-foot">· changed by you</span>` : ""}</div>
+    <div class="sub tnum">${mmss(x.start)}–${mmss(x.end)} · ${mmss(x.end - x.start)}</div></div>
+    <div class="chev">${ic("caret-right", 16)}</div></div>`;
+}
+function extras() {
+  return `<div class="tiles">
+    <div class="card tile"><div class="v">${session.avgHr}</div><div class="k">avg bpm · max ${session.maxHr}</div></div>
+    <div class="card tile"><div class="v">${session.kcal}</div><div class="k">kcal</div></div>
+    <div class="card tile" style="display:grid;place-items:center;cursor:pointer">${ic("x-film", 26)}<div class="k">Film</div></div>
+  </div>`;
+}
+function sessionPage(v) {
+  const t = totals(session);
+  const order = ["pull", "push", "squat"];
+  let body = `<div class="hero">
+      <div class="t-callout">${session.date} · ${session.started} · Count up</div>
+      <div style="display:flex;gap:16px;align-items:baseline;margin-top:8px">
+        <div><span class="big">${allReps(session)}</span> <span class="t-callout">reps</span></div>
+        <div><span class="big">${mmss(session.clock)}</span></div>
+      </div></div>`;
+  if (v === "A") {
+    body += `<div class="tiles">${order.map(k => `<div class="card tile"><div class="v" style="color:${MOV[k].color}">${t[k].reps}</div>
+      <div class="k">${MOV[k].name.toLowerCase()}<br>${mmss(t[k].time)} in ${t[k].sets} sets</div></div>`).join("")}</div>`;
+    body += extras();
+    body += `<div class="sect t-eyebrow">Sets, in order</div><div class="card group" style="padding:4px 0">`;
+    session.sets.forEach((x, i) => {
+      if (i) { const p = session.sets[i - 1]; body += `<div class="gap">${gapKind(p, x)} ${mmss(x.start - p.end)}</div>`; }
+      body += setRow(x, i);
+    });
+    body += `</div><div class="t-foot footnote">Tap a set to give it another movement. Freestyle keeps no records.</div>`;
+  } else if (v === "B") {
+    const T = session.clock;
+    body += `<div class="card" style="padding:14px 14px 10px;margin-bottom:12px">
+      <div class="t-eyebrow">The session in time</div>
+      <div class="strip">${(() => {
+        let h = "", last = 0;
+        session.sets.forEach((x, i) => {
+          h += `<div class="g" style="width:${(x.start - last) / T * 100}%"></div>`;
+          h += `<div data-set="${i}" title="${x.reps} ${MOV[x.m].name}" style="width:${Math.max(.8, (x.end - x.start) / T * 100)}%;background:${MOV[x.m].color};${x.edited ? "outline:2px solid #fff;outline-offset:-2px" : ""}"></div>`;
+          last = x.end;
+        });
+        return h + `<div class="g" style="flex:1"></div>`;
+      })()}</div>
+      <div style="display:flex;justify-content:space-between" class="t-foot tnum"><span>0:00</span><span>${mmss(T / 2)}</span><span>${mmss(T)}</span></div>
+      <div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap">${order.map(k => `<div style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:${MOV[k].color}"></span><b class="tnum">${t[k].reps}</b><span class="t-callout">${MOV[k].name.toLowerCase()}</span></div>`).join("")}</div>
+    </div>`;
+    body += extras();
+    body += `<div class="t-foot footnote">Each block is a set; the empty space is rests and transitions. Tap a block to give it another movement.</div>`;
+  } else {
+    order.forEach(k => {
+      const sets = session.sets.map((x, i) => ({ ...x, i })).filter(x => x.m === k);
+      body += `<div class="card mcard"><div class="h"><span class="dot" style="background:${MOV[k].color}"></span><span class="t-headline">${MOV[k].name}</span></div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px"><span class="n">${t[k].reps}</span><span class="t-callout">${mmss(t[k].time)} in ${t[k].sets} sets</span></div>
+        <div class="chips">${sets.map(x => `<span class="chip ${x.edited ? "edited" : ""}" data-set="${x.i}">${x.reps}</span>`).join("")}</div></div>`;
+    });
+    body += extras();
+    body += `<div class="t-foot footnote">Each chip is a set, in the order done. Tap one to give it another movement.</div>`;
+  }
+  body += `<button class="discard" data-s="discard">Discard session</button>`;
+  let sheet = "";
+  if (sessUi.editing != null) {
+    const x = session.sets[sessUi.editing];
+    sheet = `<div class="scrim" data-s="close"></div><div class="sheet"><div class="grab"></div>
+      <div class="t-headline" style="text-align:center">Set ${sessUi.editing + 1} · ${x.reps} reps · ${mmss(x.start)}</div>
+      <div class="t-callout" style="text-align:center;margin:4px 0 12px">What was this set? Its reps move with it.</div>
+      <div class="card group">${order.map(k => `<div class="row" data-pick="${k}"><span class="dot" style="background:${MOV[k].color}"></span><div class="txt"><div class="ttl">${MOV[k].name}</div></div>${x.m === k ? ic("check", 18) : ""}</div>`).join("")}</div>
+    </div>`;
+  }
+  return `<div class="page">${sessHead()}<div class="scroll">${body}</div>${sheet}</div>`;
+}
+function sessSide(v) {
+  const t = totals(session);
+  return `
+  <div class="box"><h2>${PAGES.session.variants[v]}</h2><p>${{
+    A: "The decision as worded (Q13 A): totals per movement and the time, the tiles Cindy's page already has, then every set in order with its rest or transition between.",
+    B: "The same facts as one strip across the session's time: a block per set, the empty space is rest. Dense, and the shape of the session reads at a glance.",
+    C: "One card per movement: its total, its time and its sets as chips in the order done. Answers 'how much of each' first; the order of the session is lost.",
+  }[v]}</p></div>
+  <div class="box"><h2>Try</h2><p>Tap a set to give it another movement (Q15). The totals and the Last session row follow.</p>
+    <button class="b" data-s2="reset" style="margin-top:8px">Undo every change</button></div>
+  <div class="box"><h2>State</h2><pre class="state">${esc(JSON.stringify({ totals: Object.fromEntries(Object.entries(t).map(([k, x]) => [k, x.reps])), reps: allReps(session), lastSessionRow: lastSessionText(), edited: session.sets.filter(x => x.edited).length }, null, 1))}</pre></div>`;
+}
+function wireSession() {
+  $("#phoneWrap").onclick = e => {
+    const pick = e.target.closest("[data-pick]");
+    if (pick) { const x = session.sets[sessUi.editing]; if (x.m !== pick.dataset.pick) { x.m = pick.dataset.pick; x.edited = true; } sessUi.editing = null; render(); return; }
+    const s = e.target.closest("[data-set]"); if (s) { sessUi.editing = +s.dataset.set; render(); return; }
+    const a = e.target.closest("[data-s]"); if (!a) return;
+    if (a.dataset.s === "close") sessUi.editing = null;
+    if (a.dataset.s === "back") { page = "menu"; setUrl(); }
+    render();
+  };
+  $("#side").onclick = e => { if (e.target.closest("[data-s2]")) { session = JSON.parse(JSON.stringify(SESSION0)); render(); } };
+}
+
+/* ---------------- render ---------------- */
+function render() {
+  drawPageSeg();
+  $("#vlabel").textContent = `${page} · ${variant} (${PAGES[page].variants[variant]})`;
+  const wrap = $("#phoneWrap");
+  if (page === "menu") { wrap.innerHTML = `<div class="phone">${menuPage(variant)}</div>`; $("#side").innerHTML = menuSide(variant); wireMenu(); }
+  if (page === "camera") { wrap.innerHTML = `<div class="phone"></div>`; drawCam(); wireCam(); }
+  if (page === "session") { wrap.innerHTML = `<div class="phone">${sessionPage(variant)}</div>`; $("#side").innerHTML = sessSide(variant); wireSession(); }
+}
+// ?steps=N plays the first N reps of the script at once (for a still); ?paused=1 then pauses.
+if (page === "camera" && +params.get("steps") > 0) {
+  cam.st = "running";
+  for (let n = 0; n < +params.get("steps") && cam.i < cam.events.length; n++) { cam.clock = cam.events[cam.i].t; rep(cam.events[cam.i].m); cam.i++; }
+  cam.pulse = false; cam.takeover = 0;
+  if (params.get("paused")) cam.st = "paused";
+}
+setUrl(); render();
+</script>
+</body>
+</html>
