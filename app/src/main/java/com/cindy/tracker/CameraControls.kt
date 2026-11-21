@@ -81,10 +81,29 @@ object CameraControls {
      * start the setup check", so the athlete reads what the shutter will start before pressing it.
      * Written as text in the line the screen already has, not as a chip on the HUD.
      */
-    fun idleLine(workout: Workout?): String =
-        if (workout == null) IDLE_LINE else "${workout.name} · $IDLE_LINE"
+    fun idleLine(workout: Workout?): String = when {
+        workout == null -> IDLE_LINE
+        isFreestyle(workout) -> "${workout.name} · $IDLE_LINE_FREESTYLE"
+        else -> "${workout.name} · $IDLE_LINE"
+    }
 
-    fun of(state: WorkoutState, filming: Boolean): CameraControlPanel {
+    /** Freestyle's idle line: its shutter starts the clock at once, so there is no check to name. */
+    const val IDLE_LINE_FREESTYLE = "Press the shutter to start"
+
+    /** Whether [workout] is counted by recognition with no setup check: the free structure. */
+    fun isFreestyle(workout: Workout?): Boolean = workout?.structure == Structure.FREE
+
+    /** The state START leads to: Freestyle goes straight to running, Cindy to the setup check. */
+    fun stateAfterStart(workout: Workout?): WorkoutState =
+        if (isFreestyle(workout)) WorkoutState.RUNNING else WorkoutState.SETUP
+
+    /**
+     * The controls for [state], for the [workout] the shutter will start. Null, or Cindy, gives
+     * the panels the camera screen always had. In Freestyle STOP stands in END's place and
+     * SKIP is absent in every state, so its place stays empty and the shutter stays centred.
+     */
+    fun of(state: WorkoutState, filming: Boolean, workout: Workout? = null): CameraControlPanel {
+        val freestyle = isFreestyle(workout)
         val live = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
         return CameraControlPanel(
             controls = mapOf(
@@ -98,7 +117,7 @@ object CameraControls {
                 ),
                 CameraControl.END to ControlState(
                     if (live) Availability.ENABLED else Availability.ABSENT,
-                    "End the workout"
+                    if (freestyle) "Stop the workout" else "End the workout"
                 ),
                 CameraControl.SHUTTER to ControlState(
                     // Inert during the check, and dimmed so that it reads as unavailable rather
@@ -116,7 +135,11 @@ object CameraControls {
                     "Add a rep"
                 ),
                 CameraControl.SKIP to ControlState(
-                    if (state == WorkoutState.SETUP || live) Availability.ENABLED else Availability.DIMMED,
+                    when {
+                        freestyle -> Availability.ABSENT
+                        state == WorkoutState.SETUP || live -> Availability.ENABLED
+                        else -> Availability.DIMMED
+                    },
                     if (state == WorkoutState.SETUP) "Skip the setup check" else "Skip to the next movement"
                 )
             ),
