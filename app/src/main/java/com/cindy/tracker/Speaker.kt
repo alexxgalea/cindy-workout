@@ -48,13 +48,13 @@ class Speaker(
     /** True from the moment a question is handed to the background thread until it has been answered. */
     private val asking = AtomicBoolean(false)
 
-    /** Kept rep numbers, by count, for the voice of [clipsEpoch]. */
-    private val clips = ConcurrentHashMap<Int, CountClip>()
+    /** Kept rep numbers and movement names, by line, for the voice of [clipsEpoch]. */
+    private val clips = ConcurrentHashMap<VoiceLine, CountClip>()
     @Volatile private var clipsEpoch = -1
     private val clipIds = AtomicInteger(0)
 
     /** A number whose audio is arriving: which, for which voice, and the audio so far. */
-    private class Capture(val reps: Int, val epoch: Int, val silent: Boolean) {
+    private class Capture(val line: VoiceLine, val epoch: Int, val silent: Boolean) {
         val audio = ByteArrayOutputStream()
         var sampleRate = 0
     }
@@ -161,7 +161,7 @@ class Speaker(
      */
     fun say(line: VoiceLine): String? {
         if (!enabled || !director.ready) return null
-        val clip = (line as? VoiceLine.Count)?.let { clipFor(it.reps) }
+        val clip = if (line.isKept) clipFor(line) else null
         if (clip != null) {
             cancelHeld()
             engine.stop()
@@ -170,7 +170,7 @@ class Speaker(
         // Kept as it is spoken, so the next time this number comes round it is ready.
         val epoch = director.epoch
         return speak(line, SpeakQueue.REPLACE) { id ->
-            if (line is VoiceLine.Count) captures[id] = Capture(line.reps, epoch, silent = false)
+            if (line.isKept) captures[id] = Capture(line, epoch, silent = false)
         }
     }
 
@@ -218,11 +218,15 @@ class Speaker(
     // ── kept numbers ──────────────────────────────────────────────────────────
 
     /** How many rep numbers are ready to play in the voice in use. */
-    val countsPrepared: Int get() = if (clipsEpoch == director.epoch) clips.size else 0
+    val countsPrepared: Int
+        get() = if (clipsEpoch == director.epoch) clips.keys.count { it is VoiceLine.Count } else 0
 
-    /** The kept [reps], if it was captured in the voice in use. */
-    private fun clipFor(reps: Int): CountClip? =
-        if (clipsEpoch == director.epoch) clips[reps] else null
+    /** What is kept as sound: the rep numbers and the movements' names. */
+    private val VoiceLine.isKept: Boolean get() = this is VoiceLine.Count || this is VoiceLine.Movement
+
+    /** The kept [line], if it was captured in the voice in use. */
+    private fun clipFor(line: VoiceLine): CountClip? =
+        if (clipsEpoch == director.epoch) clips[line] else null
 
     private fun clipStarted(clip: CountClip): String {
         val id = "clip-${clipIds.incrementAndGet()}"
@@ -260,7 +264,7 @@ class Speaker(
             CountClip.fromPcm16(capture.sampleRate, capture.audio.toByteArray())
         }.trimmed()
         if (clip.samples.isEmpty()) return
-        if (clipsEpoch == capture.epoch) clips[capture.reps] = clip
+        if (clipsEpoch == capture.epoch) clips[capture.line] = clip
     }
 
     /**
@@ -284,12 +288,14 @@ class Speaker(
             main.postAtTime({ prepareCounts() }, preparing, SystemClock.uptimeMillis() + PREPARE_RETRY_MS)
             return
         }
-        for (n in 1..PREPARED_COUNTS) {
-            if (clips.containsKey(n)) continue
+        val wanted = (1..PREPARED_COUNTS).map { VoiceLine.Count(it) } +
+            Exercise.entries.map { VoiceLine.Movement(it) }
+        for (line in wanted) {
+            if (clips.containsKey(line)) continue
             var registered: String? = null
-            val id = director.capture(VoiceLine.Count(n)) {
+            val id = director.capture(line) {
                 registered = it
-                captures[it] = Capture(n, epoch, silent = true)
+                captures[it] = Capture(line, epoch, silent = true)
             }
             if (id == null) {
                 registered?.let { captures.remove(it) }

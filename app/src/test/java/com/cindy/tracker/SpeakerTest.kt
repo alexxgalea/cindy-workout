@@ -364,7 +364,7 @@ class SpeakerTest {
     @Test
     fun `numbers are captured once the engine is ready, and played rather than spoken`() {
         val speaker = capturingSpeaker()
-        assertEquals((1..30).map { "$it" }, engine.captured)
+        assertEquals((1..30).map { "$it" }, engine.captured.take(30))
         assertEquals(30, speaker.countsPrepared)
 
         val id = speaker.say(VoiceLine.Count(12))
@@ -373,6 +373,16 @@ class SpeakerTest {
         // "12" is two loud samples; the 300 silent ones before it are gone but for the margin.
         assertEquals(15 + 2, clip.samples.size)
         assertTrue(id!!.startsWith("clip-"))
+    }
+
+    @Test
+    fun `a movement's name is captured too, and played rather than spoken`() {
+        val speaker = capturingSpeaker()
+        assertEquals(listOf("pull ups", "push ups", "squats"), engine.captured.drop(30))
+
+        speaker.say(VoiceLine.Movement(Exercise.PUSHUP))
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+        assertEquals(1, player.played.size)
     }
 
     @Test
@@ -532,7 +542,7 @@ class SpeakerTest {
         engine.likeGoogle()
         val speaker = capturingSpeaker()
         speaker.language = "es"
-        assertEquals(60, engine.captured.size)
+        assertEquals(66, engine.captured.size)
         speaker.say(VoiceLine.Count(2))
         assertEquals(1, player.played.size)
     }
