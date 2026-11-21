@@ -98,6 +98,16 @@ data class Attempt(
     /** True for a session of Cindy, which the ladder, the benchmark and the badges describe. */
     val isCindy: Boolean get() = workoutId == Workouts.CINDY_ID
 
+    /**
+     * True for a Freestyle, which has no score: it is counted in reps per movement and ranked
+     * against nothing. Its days are work done, so streaks, the calendar and weekly volume count
+     * it; the trend, bests, leaderboard, levels, badges and records never do.
+     */
+    val isFreestyle: Boolean get() = workoutId == Workouts.FREESTYLE_ID
+
+    /** The reps of a Freestyle: its movements' totals added up, whatever else is recorded. */
+    val freestyleReps: Int get() = movementTotals.values.sum().takeIf { it > 0 } ?: totalReps
+
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
