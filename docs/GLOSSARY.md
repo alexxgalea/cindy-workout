@@ -10,6 +10,10 @@ A camera-based counter and logbook for the Cindy benchmark: 20 minutes of rounds
 A named plan the athlete chooses before the clock starts: its movements, its structure (AMRAP, EMOM, For time or Free), its time cap and how it is scored. Cindy is one. Every session is filed under the workout it was, and every session recorded before workouts existed is a Cindy. Records, levels, badges and the leaderboard are kept per workout; streaks and weekly volume count every session.
 _Avoid_: mode, program, routine, WOD
 
+**Freestyle**:
+The second workout: pull-ups, push-ups and squats in any order and any amount, chosen by the athlete as they go and named by recognition. The clock counts up from START with no cap, and STOP ends it; there is no setup check, no target and no round. It is scored by each movement's reps and the time, and keeps no records, levels or badges. A movement outside the three is not refused: it is counted as whichever of the three shares its position.
+_Avoid_: free mode, open workout, à la carte
+
 **Category**:
 What a score may be ranked against: the same workout, done with the same variations. A standard Cindy and an Adaptive Cindy are two categories of one workout.
 _Avoid_: division, class
@@ -41,8 +45,16 @@ A camera frame the counter did not use, with the reason it was refused (for exam
 _Avoid_: rejected rep
 
 **Set**:
-One movement's reps within one round, such as the 10 push-ups of round 3.
+One movement's reps within one round, such as the 10 push-ups of round 3. In Freestyle, which has no rounds, a set is a run of one movement's reps, ended by a rest or a transition; it is worked out after STOP from when the reps were banked, and the athlete may give a set another movement on the session page.
 _Avoid_: block, bout
+
+**Rest**:
+In Freestyle, a gap long enough to end a set between two sets of the same movement.
+_Avoid_: break, pause (a pause is the athlete stopping the clock)
+
+**Transition**:
+In Freestyle, the gap between two sets of different movements.
+_Avoid_: changeover, switch
 
 **Weak rep**:
 A banked rep that fell well short of the session baseline's range, at the bottom or at the lockout. It is marked, never refused.
@@ -107,11 +119,11 @@ The one line of coaching on the camera screen, a glass pill on the picture 8 dp 
 _Avoid_: status line, status chip
 
 **Scoreboard**:
-The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line, − and + beside the figure, and the control row. In idle, setup and a pause the athlete is at the phone, not at the bar, and the band is drawn for that distance instead (see Control row); the band is the same height in both. A finished workout sits behind the session page and is drawn as idle.
+The bottom band of the camera screen, drawn to be read from the bar while the clock runs: the figure, the movement and round on one line (in Freestyle the movement and its session total, and the workout's name until a movement is recognised), − and + beside the figure, and the control row. In idle, setup and a pause the athlete is at the phone, not at the bar, and the band is drawn for that distance instead (see Control row); the band is the same height in both. A finished workout sits behind the session page and is drawn as idle.
 _Avoid_: rep panel, counter
 
 **Figure**:
-The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter. It is 96 sp while the clock runs and 56 sp at the phone.
+The count and its target as one piece of text, "3/5", on the scoreboard: one size and one weight, only the target's colour is quieter. It is 96 sp while the clock runs and 56 sp at the phone. In Freestyle there is no target: the figure is the reps since recognition last confirmed a movement, "7", and the movement's total for the session sits small on the movement's line. A rest inside one movement does not reset it, so one figure may hold what the session page later shows as two sets. Before recognition confirms a new movement the figure stays on the last one, and the new movement's figure arrives already at 2.
 _Avoid_: rep count, reps label
 
 **Next set**:
@@ -119,7 +131,7 @@ What the scoreboard shows over the figure and its line for about 1.5 s when the 
 _Avoid_: takeover, banner, interstitial
 
 **Control row**:
-END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names, and leads with the chosen workout's name. The names are labels only; what a screen reader says is still the control's own name.
+END, the shutter and SKIP along the foot of the bottom band. While the clock runs it is quiet: three 48 dp targets with their icons. At the phone it comes forward: a 72 dp shutter in the centre, END and SKIP at 56 dp, and under each enabled control its name (END, RESUME, SKIP) in a row of labels. In Freestyle STOP stands where END is and SKIP's place stays empty, so each control keeps its place. A dimmed control has no name. In idle the one line of text, the idle line, sits under the shutter in place of the names, and leads with the chosen workout's name. The names are labels only; what a screen reader says is still the control's own name.
 _Avoid_: action row, button bar
 
 **Skeleton lag**:
@@ -141,11 +153,11 @@ The page for one session, shown when a workout ends and when a past session is r
 _Avoid_: results, results screen, summary
 
 **Last session**:
-The most recent session by when it was filed, not the best one. The menu's first row shows its date and score and opens its session page; with no sessions the row is absent.
+The most recent session by when it was filed, not the best one. The menu's first row shows its date and score (for a Freestyle, which has no score, its total reps and its time) and opens its session page; with no sessions the row is absent.
 _Avoid_: latest result, best session
 
 **Progress**:
-The page of every session over time. It leads with how the athlete is doing (the streaks and the week), then the chosen workout's trend, bests and leaderboard (its sessions ranked, with the benchmark among them on Cindy's) and the calendar of trained days.
+The page of every session over time. It leads with how the athlete is doing (the streaks and the week), then the chosen workout's trend, bests and leaderboard (its sessions ranked, with the benchmark among them on Cindy's) and the calendar of trained days. Freestyle keeps no records, so with Freestyle chosen the page shows its recent totals per movement in their place.
 _Avoid_: records, history (a record is a personal best, not a page)
 
 **Movements**:
