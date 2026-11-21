@@ -1880,7 +1880,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 tracking.reframe()
                 detector?.resetRoi()
-                status.text = "Recalibrating…"
+                // Freestyle has no calibration to wait for and nothing that rewrites the pill
+                // while it counts, so it says what it said at START.
+                status.text = if (freestyleMode) "Counting…" else "Recalibrating…"
                 if (profile.musicOn) music.play()
                 speaker.say(VoiceLine.Resume)
                 ui.post(ticker)
