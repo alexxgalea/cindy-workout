@@ -39,9 +39,9 @@ class StravaActivityTextTest {
     fun `another workout is named after itself, never Cindy or Adaptive Cindy`() {
         val known = Attempt(
             rounds = 9, reps = 0, atMillis = 0L,
-            profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP), workoutId = "freestyle"
+            profile = CindyProfile(push = PushVariant.KNEE_PUSH_UP), workoutId = "chelsea"
         )
-        // No build knows "freestyle" yet, so it is called a workout rather than given a name.
+        // No build knows "chelsea", so it is called a workout rather than given a name.
         assertEquals("Workout — 9", StravaActivityText.name(known))
         val cindy = known.copy(workoutId = Workouts.CINDY_ID, profile = CindyProfile.STANDARD)
         assertEquals("${Workouts.CINDY.name} — 9", StravaActivityText.name(cindy))
@@ -51,7 +51,7 @@ class StravaActivityTextTest {
     fun `a workout this build does not know cannot have stopped early`() {
         val a = Attempt(
             rounds = 3, reps = 0, atMillis = 0L, durationMs = 5 * 60_000L,
-            profile = CindyProfile.STANDARD, workoutId = "freestyle"
+            profile = CindyProfile.STANDARD, workoutId = "chelsea"
         )
         assertFalse(StravaActivityText.description(a, CalorieBasis.NONE).contains("stopped early"))
     }

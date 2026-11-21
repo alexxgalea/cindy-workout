@@ -370,7 +370,7 @@ class RecordsTest {
 
     /** A session of a workout that is not Cindy, at Cindy's own movements. */
     private fun other(rounds: Int, at: Long = 0L) =
-        attempt(rounds, at = at).copy(workoutId = "freestyle")
+        attempt(rounds, at = at).copy(workoutId = "chelsea")
 
     @Test
     fun `a level is awarded only to a standard Cindy`() {
@@ -384,7 +384,7 @@ class RecordsTest {
         val cindy = attempt(10, at = 1L)
         val free = other(12, at = 2L)
         assertEquals(listOf(cindy), Records.ofWorkout(listOf(cindy, free), Workouts.CINDY_ID))
-        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "freestyle"))
+        assertEquals(listOf(free), Records.ofWorkout(listOf(cindy, free), "chelsea"))
     }
 
     @Test

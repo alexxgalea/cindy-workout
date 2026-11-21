@@ -71,6 +71,7 @@ data class Workout(
         get() {
             val minutes = timeCapMs?.let { it / 60_000L }
             return when {
+                structure == Structure.FREE -> "Count up"
                 minutes == null -> structure.label
                 structure == Structure.FOR_TIME -> "${structure.label}, $minutes-minute cap"
                 else -> "$minutes-minute ${structure.label}"
@@ -104,8 +105,27 @@ object Workouts {
         )
     }
 
+    const val FREESTYLE_ID = "freestyle"
+
+    /** Pull-ups, push-ups and squats in any order, counted by recognition (ADR 0010). */
+    val FREESTYLE = Workout(
+        id = FREESTYLE_ID,
+        name = "Freestyle",
+        structure = Structure.FREE,
+        movements = Exercise.entries.map { Prescription(it, null) },
+        timeCapMs = null,
+        scoring = Scoring.TOTALS,
+        description = "Pull-ups, push-ups and squats, in any order."
+    )
+
+    /**
+     * What a build lists: Cindy, and Freestyle in a debug build only, until the ticket that
+     * releases it. A release build's catalog is as it was, so its first run is too.
+     */
+    fun catalogFor(debug: Boolean): List<Workout> = if (debug) listOf(CINDY, FREESTYLE) else listOf(CINDY)
+
     /** In the order the Workouts page lists them. */
-    val catalog: List<Workout> = listOf(CINDY)
+    val catalog: List<Workout> = catalogFor(BuildConfig.DEBUG)
 
     /** The workout filed under [id], or null for one this build does not know. */
     fun byId(id: String?): Workout? = catalog.firstOrNull { it.id == id }
