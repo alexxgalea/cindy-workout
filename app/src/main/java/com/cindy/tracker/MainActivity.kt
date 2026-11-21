@@ -304,6 +304,9 @@ class MainActivity : AppCompatActivity() {
      */
     @Volatile private var freestyle = FreestyleEngine()
 
+    /** When a Freestyle has gone 10 minutes without a rep, the app asks whether to stop. */
+    private val idleWatch = FreestyleIdleWatch()
+
     /** Whether the workout chosen is counted by recognition, Freestyle. A live session never changes it. */
     private val freestyleMode: Boolean get() = CameraControls.isFreestyle(workout)
 
@@ -505,6 +508,7 @@ class MainActivity : AppCompatActivity() {
                 elapsedMs += step
                 lastTickAt = now
                 renderClock()
+                if (idleWatch.shouldAsk(now)) askToStopIdleFreestyle()
                 ui.postDelayed(this, 200L)
                 return
             }
@@ -1612,6 +1616,7 @@ class MainActivity : AppCompatActivity() {
         recognitionLine?.reset()
         val now = SystemClock.elapsedRealtime()
         freestyle = FreestyleEngine(profile.movements).also { it.start(now) }
+        idleWatch.start(now)
         editorsLive = false
         state = WorkoutState.RUNNING
         LiveWorkout.active = true // Keeps a reminder from interrupting this very session.
@@ -1663,6 +1668,7 @@ class MainActivity : AppCompatActivity() {
         drawFreestyle(freestyle.current(), motion)
         for (event in frame.events) {
             buzz(if (event is FreestyleEvent.Banked) 35 else 20)
+            if (event is FreestyleEvent.Banked) idleWatch.repBanked(SystemClock.elapsedRealtime())
         }
         for (say in frame.voice) {
             when (say) {
@@ -1866,6 +1872,7 @@ class MainActivity : AppCompatActivity() {
                 // band learned before the pause no longer describes what the camera is seeing.
                 if (freestyleMode) {
                     freestyle.resume(now)
+                    idleWatch.resume(now)
                 } else {
                     synchronized(engineLock) { engine.recalibrate() }
                     traceControl(EngineTrace.Control.RECALIBRATE_RESUMED)
@@ -1884,7 +1891,10 @@ class MainActivity : AppCompatActivity() {
                 coach.interrupted()
                 val now = SystemClock.elapsedRealtime()
                 pauseStartedAt = now
-                if (freestyleMode) freestyle.pause(now)
+                if (freestyleMode) {
+                    freestyle.pause(now)
+                    idleWatch.pause(now)
+                }
                 heartRate.pause(now)
                 primary(R.drawable.ic_play)
                 status.text = "Paused"
@@ -1979,6 +1989,25 @@ class MainActivity : AppCompatActivity() {
 
     /** A workout is live once the clock has started, whether or not it is ticking right now. */
     private fun inWorkout(): Boolean = state == WorkoutState.RUNNING || state == WorkoutState.PAUSED
+
+    /**
+     * Ten minutes of a Freestyle without a banked rep: asks, and never stops by itself. STOP files
+     * as the STOP button does; KEEP GOING waits another 10 minutes. The clock keeps running behind it.
+     */
+    private fun askToStopIdleFreestyle() {
+        CindySheet(
+            this,
+            title = "Still there?",
+            subtitle = "No rep has been counted for 10 minutes. Stop the workout?"
+        ).actions(
+            primary = "STOP",
+            onPrimary = { finishWorkout(stoppedEarly = true) },
+            secondary = "KEEP GOING"
+        ).onDismiss {
+            // Any way out but STOP is "keep going", the back gesture and a tap outside included.
+            if (inWorkout()) idleWatch.keepGoing(SystemClock.elapsedRealtime())
+        }.show()
+    }
 
     private fun confirmStop() {
         val wasRunning = state == WorkoutState.RUNNING
