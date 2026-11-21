@@ -34,7 +34,7 @@ data class ControlNames(
             WorkoutState.IDLE, WorkoutState.FINISHED ->
                 ControlNames(null, null, null, CameraControls.idleLine(workout))
             WorkoutState.SETUP, WorkoutState.PAUSED -> ControlNames(
-                end = "END".takeIf { panel[CameraControl.END].enabled },
+                end = (if (CameraControls.isFreestyle(workout)) "STOP" else "END").takeIf { panel[CameraControl.END].enabled },
                 shutter = "RESUME".takeIf { state == WorkoutState.PAUSED && panel[CameraControl.SHUTTER].enabled },
                 skip = "SKIP".takeIf { panel[CameraControl.SKIP].enabled },
                 idleLine = null
