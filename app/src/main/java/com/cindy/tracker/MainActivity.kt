@@ -1700,7 +1700,8 @@ class MainActivity : AppCompatActivity() {
             manualReps = filed.manualReps,
             countedReps = filed.totalReps,
             workoutId = workout.id,
-            movementTotals = filed.totals
+            movementTotals = filed.totals,
+            freestyleSets = filed.sets
         )
         val saved = records.add(attempt)
         if (saved && trace != null) HeartRateStore(this).save(attempt.atMillis, trace)

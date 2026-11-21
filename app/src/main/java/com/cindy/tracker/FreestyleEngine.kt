@@ -52,14 +52,16 @@ data class FreestyleFrame(
 
 /**
  * What STOP files: the clock time (pauses excluded), the pause time, the totals per movement, how
- * many reps were tapped in, and when each rep banked. The sets are worked out from [marks] later.
+ * many reps were tapped in, and when each rep banked. The sets are worked out from [marks] at STOP.
  */
 data class FiledSession(
     val durationMs: Long,
     val pausedMs: Long,
     val totals: Map<Exercise, Int>,
     val manualReps: Int,
-    val marks: List<RepMark>
+    val marks: List<RepMark>,
+    /** The sets worked out from [marks] at STOP ([FreestyleSets.derive]). */
+    val sets: List<FreestyleSet> = FreestyleSets.derive(marks).sets
 ) {
     val totalReps: Int get() = totals.values.sum()
 }

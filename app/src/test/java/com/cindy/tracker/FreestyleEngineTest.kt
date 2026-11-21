@@ -135,6 +135,18 @@ class FreestyleEngineTest {
     }
 
     @Test
+    fun `STOP files the sets derived from when the reps banked`() {
+        hold(PoseFixtures.pushup(175f))
+        repeat(2) { pushupRep() }
+        hold(PoseFixtures.squat(175f), forMs = 2_000)
+        repeat(2) { squatRep() }
+        val filed = engine.stop(clock)!!
+        assertEquals(listOf(Exercise.PUSHUP, Exercise.SQUAT), filed.sets.map { it.movement })
+        assertEquals(filed.totals, filed.sets.groupBy { it.movement }.mapValues { (_, s) -> s.sumOf { it.reps } })
+        assertEquals(FreestyleSets.derive(filed.marks).sets, filed.sets)
+    }
+
+    @Test
     fun `zero reps files nothing`() {
         hold(PoseFixtures.pushup(175f))
         pushupRep()

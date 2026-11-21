@@ -87,7 +87,13 @@ data class Attempt(
      * The reps of each movement, for a session that has no rounds to say it (Freestyle). Empty
      * for Cindy, whose sets say it, and for every attempt written before this existed.
      */
-    val movementTotals: Map<Exercise, Int> = emptyMap()
+    val movementTotals: Map<Exercise, Int> = emptyMap(),
+    /**
+     * A Freestyle's sets, Rests and Transitions as worked out at STOP ([FreestyleSets]), in order.
+     * They live and die with the attempt, so DISCARD takes them. Empty for Cindy and for every
+     * attempt written before this existed. The gaps are not stored: they follow from the sets.
+     */
+    val freestyleSets: List<FreestyleSet> = emptyList()
 ) {
     /** What [workoutId] names, or null for a workout from a build that knew one this does not. */
     val workout: Workout? get() = Workouts.byId(workoutId)
@@ -189,6 +195,7 @@ object Records {
     private const val V7 = "v7"
     private const val V8 = "v8"
     private const val V9 = "v9"
+    private const val V10 = "v10"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -202,10 +209,15 @@ object Records {
     const val UNTRACKED_TOLERANCE_MS = 30_000L
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
-        // V9 only for an attempt that has totals to carry, so every other line is written as it
-        // always was, and a build that predates V9 reads everything but a Freestyle.
+        // V9 only for an attempt that has totals to carry, V10 only one that has sets too, so
+        // every other line is written as it always was, and an older build reads everything but
+        // a Freestyle.
         listOf(
-            if (a.movementTotals.isEmpty()) V8 else V9,
+            when {
+                a.freestyleSets.isNotEmpty() -> V10
+                a.movementTotals.isEmpty() -> V8
+                else -> V9
+            },
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -225,8 +237,13 @@ object Records {
             },
             a.workoutId
         ).let { fields ->
-            if (a.movementTotals.isEmpty()) fields else fields + a.movementTotals.entries.joinToString(",") {
-                "${it.key.name}:${it.value}"
+            val totals = a.movementTotals.entries.joinToString(",") { "${it.key.name}:${it.value}" }
+            when {
+                a.freestyleSets.isNotEmpty() -> fields + totals + a.freestyleSets.joinToString(",") {
+                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}"
+                }
+                a.movementTotals.isEmpty() -> fields
+                else -> fields + totals
             }
         }.joinToString("|")
     }
@@ -235,6 +252,7 @@ object Records {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V10|") -> decodeV10(line)
                 line.startsWith("$V9|") -> decodeV9(line)
                 line.startsWith("$V8|") -> decodeV8(line)
                 // Everything below was written before workouts existed, when every session was a
@@ -252,10 +270,30 @@ object Records {
         }.toList()
     }
 
+    /** V9 plus the sets a Freestyle was worked out into. */
+    private fun decodeV10(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 17) return null
+        val sets = p[16].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val f = entry.split(":")
+            if (f.size != 4) return@mapNotNull null
+            val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
+            val reps = f[1].toIntOrNull() ?: return@mapNotNull null
+            val start = f[2].toLongOrNull() ?: return@mapNotNull null
+            val end = f[3].toLongOrNull() ?: return@mapNotNull null
+            FreestyleSet(movement, reps, start, end)
+        }
+        return decodeV9(p)?.copy(freestyleSets = sets)
+    }
+
     /** V8 plus the reps of each movement. */
     private fun decodeV9(line: String): Attempt? {
         val p = line.split("|")
         if (p.size != 16) return null
+        return decodeV9(p)
+    }
+
+    private fun decodeV9(p: List<String>): Attempt? {
         val totals = p[15].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
             val f = entry.split(":")
             if (f.size != 2) return@mapNotNull null

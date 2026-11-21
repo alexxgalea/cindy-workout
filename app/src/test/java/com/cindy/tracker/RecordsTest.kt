@@ -447,4 +447,36 @@ class RecordsTest {
         val line = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9,SQUAT:x"
         assertEquals(mapOf(Exercise.PUSHUP to 9), Records.decode(line).single().movementTotals)
     }
+
+    // ── a Freestyle's derived sets (record format v10) ──
+
+    private val derived = listOf(
+        FreestyleSet(Exercise.SQUAT, 7, 10_000L, 40_000L),
+        FreestyleSet(Exercise.PUSHUP, 5, 55_000L, 70_000L)
+    )
+
+    @Test
+    fun `an attempt with derived sets round-trips as v10`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PUSHUP to 5, Exercise.SQUAT to 7), freestyleSets = derived
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v10|"))
+        assertTrue(line.endsWith("|freestyle|PUSHUP:5,SQUAT:7|SQUAT:7:10000:40000,PUSHUP:5:55000:70000"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
+    fun `a v9 line reads with no sets, and a v10 line with a bad set costs only that set`() {
+        val v9 = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9"
+        assertEquals(emptyList<FreestyleSet>(), Records.decode(v9).single().freestyleSets)
+        val v10 = "v10|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9|PUSHUP:9:0:5000,SQUAT:x:1:2"
+        assertEquals(listOf(FreestyleSet(Exercise.PUSHUP, 9, 0L, 5_000L)), Records.decode(v10).single().freestyleSets)
+    }
+
+    @Test
+    fun `sets are never written for a Cindy, so its line stays v8`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
+    }
 }
