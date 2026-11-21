@@ -202,8 +202,15 @@ class ResultsActivity : AppCompatActivity() {
         // The date and time of the session, whether it has just ended or is reopened: the time
         // figure under it is the clock, and the eyebrow must not read as a second one.
         val when_ = reviewHeadline(a, zone)
-        binding.headline.text = if (stopped) "STOPPED · $when_" else when_
-
+        val free = a.workoutId == Workouts.FREESTYLE_ID
+        val headline = if (free) "$when_ · Count up" else when_
+        binding.headline.text = if (stopped) "STOPPED · $headline" else headline
+        if (free) {
+            renderFreestyle(a)
+            stats(a, zone, RecordStore(this).all().filter { it.atMillis <= a.atMillis })
+            renderHeartRate(a)
+            return
+        }
         lead(a)
 
         // Sessions this one could honestly be measured against: in review, only what had
@@ -218,6 +225,82 @@ class ResultsActivity : AppCompatActivity() {
         liftedCard(a)
         compareCard(a, all)
 
+        stats(a, zone, all)
+        roundSplits(a)
+        renderHeartRate(a)
+    }
+
+    /**
+     * A Freestyle's page (prototype verdict A): the lead, a tile per movement, every set in order
+     * with its Rest or Transition, and the footnote. Everything Cindy's page says about rounds,
+     * rungs, records and comparisons is hidden, since a Freestyle has none of them. Cleared first
+     * because [render] runs again when the body weight changes.
+     */
+    private fun renderFreestyle(a: Attempt) {
+        val pace = SessionStats.repsPerMinute(a)?.let { "%.1f reps/min".format(Locale.US, it) }
+        val detail = listOfNotNull(
+            "${a.totalReps} ${if (a.totalReps == 1) "rep" else "reps"}", pace,
+            if (a.manualReps > 0) "${a.manualReps} tapped" else null
+        ).joinToString(" · ")
+        val clock = formatDuration(a.durationMs)
+        val note = if (a.pausedMs > 0L) "plus ${formatDuration(a.pausedMs)} paused" else null
+        binding.score.text = "${a.totalReps}"
+        binding.scoreReps.visibility = View.GONE
+        binding.leadTime.text = clock
+        binding.leadTimeNote.visibility = if (note != null) View.VISIBLE else View.GONE
+        binding.leadTimeNote.text = note.orEmpty()
+        binding.scoreDetail.text = detail
+        binding.lead.contentDescription = "$detail. $clock on the clock" + (note?.let { ", $it" } ?: "") + "."
+        for (i in 0 until binding.lead.childCount) {
+            binding.lead.getChildAt(i).importantForAccessibility =
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        for (v in listOf(
+            binding.celebration, binding.trackTitle, binding.track, binding.levelCard, binding.lifted,
+            binding.compareTitle, binding.compare, binding.timelineTitle, binding.timeline,
+            binding.splitsTitle, binding.splitsCard, binding.splitsNote
+        )) v.visibility = View.GONE
+
+        binding.tiles.removeAllViews()
+        val tiles = FreestylePage.tiles(a)
+        binding.tiles.visibility = if (tiles.isEmpty()) View.GONE else View.VISIBLE
+        if (tiles.isNotEmpty()) binding.tiles.addView(statTileGrid(tiles))
+
+        binding.movements.removeAllViews()
+        val rows = FreestylePage.rows(a)
+        val show = if (rows.isEmpty()) View.GONE else View.VISIBLE
+        binding.movementsTitle.text = "SETS"
+        binding.movementsTitle.visibility = show
+        binding.movements.visibility = show
+        if (rows.isNotEmpty()) {
+            val group = InsetGroup(this)
+            rows.forEach { group.row(freestyleRow(it)) }
+            binding.movements.addView(
+                group,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            )
+        }
+        binding.movements.addView(styledText(R.style.Cindy_Footnote, FreestylePage.FOOTNOTE).apply {
+            textSize = 11f
+            setPadding(dp(4), dp(10), dp(4), 0)
+        })
+        binding.movements.visibility = View.VISIBLE
+    }
+
+    /** One line of the set list: a set in full, or a quieter Rest or Transition with its length. */
+    private fun freestyleRow(row: FreestyleRow): View {
+        val gap = row.kind != FreestyleRow.Kind.SET
+        return statRow(
+            if (gap) row.title else "${row.title} · ${row.detail}", row.length
+        ).apply {
+            contentDescription = if (gap) "${row.title}, ${row.length}" else
+                "${row.title}, ${row.detail}, ${row.length} long"
+            if (gap) alpha = 0.7f
+        }
+    }
+
+    /** The SESSION rows: pauses, streak, hand-added reps, lost camera time, energy and Strava. */
+    private fun stats(a: Attempt, zone: ZoneId, all: List<Attempt>) {
         binding.stats.removeAllViews()
         val group = InsetGroup(this)
         fun stat(label: String, value: CharSequence, onTap: (() -> Unit)? = null) =
@@ -257,9 +340,6 @@ class ResultsActivity : AppCompatActivity() {
         energy(a, group)
         strava(a, group)
         binding.stats.addView(group)
-
-        roundSplits(a)
-        renderHeartRate(a)
     }
 
     /**
