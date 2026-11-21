@@ -105,4 +105,57 @@ class FreestyleSetsTest {
         assertEquals(1_000L, d.timeInSets(Exercise.PUSHUP))
         assertEquals(2, d.setCount(Exercise.SQUAT))
     }
+
+    // ── giving a set another movement (ticket #194) ──
+
+    private fun filed(): Attempt {
+        val sets = listOf(
+            FreestyleSet(Exercise.SQUAT, 7, 10_000L, 40_000L),
+            FreestyleSet(Exercise.PUSHUP, 4, 55_000L, 60_000L),
+            FreestyleSet(Exercise.SQUAT, 5, 80_000L, 90_000L)
+        )
+        return Attempt(
+            rounds = 0, reps = 0, atMillis = 1L, durationMs = 100_000L, countedReps = 16,
+            workoutId = Workouts.FREESTYLE_ID,
+            movementTotals = mapOf(Exercise.PUSHUP to 4, Exercise.SQUAT to 12), freestyleSets = sets
+        )
+    }
+
+    @Test
+    fun `relabelling a set moves its reps to the new movement and recomputes the totals`() {
+        val a = FreestyleSets.relabel(filed(), 0, Exercise.PULLUP)
+        assertEquals(Exercise.PULLUP, a.freestyleSets[0].movement)
+        assertEquals(7, a.freestyleSets[0].reps)
+        assertEquals(mapOf(Exercise.PULLUP to 7, Exercise.PUSHUP to 4, Exercise.SQUAT to 5), a.movementTotals)
+        assertEquals(16, a.totalReps)
+    }
+
+    @Test
+    fun `only the relabelled set is marked as changed by the athlete`() {
+        val a = FreestyleSets.relabel(filed(), 1, Exercise.SQUAT)
+        assertEquals(listOf(false, true, false), a.freestyleSets.map { it.changedByAthlete })
+    }
+
+    @Test
+    fun `giving a set its own movement changes nothing, not even the mark`() {
+        val a = filed()
+        assertEquals(a, FreestyleSets.relabel(a, 0, Exercise.SQUAT))
+    }
+
+    @Test
+    fun `a relabel that makes neighbours one movement keeps them as two sets with a Rest between`() {
+        val a = FreestyleSets.relabel(filed(), 1, Exercise.SQUAT)
+        assertEquals(3, a.freestyleSets.size)
+        assertEquals(
+            listOf(GapKind.REST, GapKind.REST),
+            FreestyleSets.gapsBetween(a.freestyleSets).map { it.kind }
+        )
+        assertEquals(mapOf(Exercise.SQUAT to 16), a.movementTotals)
+    }
+
+    @Test
+    fun `an index outside the sets changes nothing`() {
+        val a = filed()
+        assertEquals(a, FreestyleSets.relabel(a, 9, Exercise.PULLUP))
+    }
 }
