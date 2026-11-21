@@ -190,4 +190,31 @@ class ReminderTest {
         assertEquals("12:00 AM", Reminder.formatTime(0, false))
         assertEquals("12:05 PM", Reminder.formatTime(725, false))
     }
+
+    private fun freestyle(iso: String): Attempt {
+        val at = LocalDate.parse(iso).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        return Attempt(
+            rounds = 0, reps = 0, atMillis = at, durationMs = 15 * 60_000L, countedReps = 900,
+            workoutId = Workouts.FREESTYLE_ID, profile = CindyProfile.STANDARD,
+            movementTotals = mapOf(Exercise.entries[0] to 900)
+        )
+    }
+
+    @Test
+    fun `a Freestyle trained yesterday keeps the streak at risk`() {
+        val m = message(freestyle("2026-09-08"))!!
+        assertEquals("Make it two days in a row", m.title)
+    }
+
+    @Test
+    fun `the best a reminder quotes is Cindy's, never a Freestyle's`() {
+        val m = message(attempt("2026-08-01", rounds = 15, reps = 0), freestyle("2026-09-01"))!!
+        assertEquals("Your best is 15. Twenty minutes to chase it.", m.body)
+    }
+
+    @Test
+    fun `with only Freestyle sessions a reminder quotes no best`() {
+        val m = message(freestyle("2026-09-01"))!!
+        assertTrue(m.body, "best" !in m.body)
+    }
 }
