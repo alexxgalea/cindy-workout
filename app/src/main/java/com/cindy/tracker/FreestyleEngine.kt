@@ -60,6 +60,8 @@ data class FiledSession(
     val totals: Map<Exercise, Int>,
     val manualReps: Int,
     val marks: List<RepMark>,
+    /** Clock time the camera could not read the athlete, as Cindy files it: a floor under the total, not an exact count. */
+    val untrackedMs: Long = 0L,
     /** The sets worked out from [marks] at STOP ([FreestyleSets.derive]). */
     val sets: List<FreestyleSet> = FreestyleSets.derive(marks).sets
 ) {
@@ -98,9 +100,18 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
     private val marks = mutableListOf<RepMark>()
     private var manual = 0
 
+    /**
+     * How well the camera reads the athlete in the position that is entered: the same monitor and
+     * the same rule as Cindy's. Only the time lost is kept, for the filed session. Its advice and
+     * the coach's hints are not Freestyle's (ticket #190), and no frame is judged while no
+     * position is entered, because nothing says what should be legible.
+     */
+    private var health = TrackingHealthMonitor()
+
     @Synchronized
     fun start(now: Long) {
         recogniser = Recogniser(profile)
+        health = TrackingHealthMonitor()
         started = true
         startedAt = now
         pausedMs = 0L
@@ -131,7 +142,10 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
      * occasions. What is banked, the figure and the movement shown are kept.
      */
     @Synchronized
-    fun recalibrate() = recogniser.recalibrate()
+    fun recalibrate() {
+        recogniser.recalibrate()
+        health.reframe()
+    }
 
     @Synchronized
     fun current(): FreestyleReadout = readout()
@@ -141,9 +155,15 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
     fun totalReps(): Int = banked.values.sum()
 
     @Synchronized
-    fun onFrame(k: Array<Keypoint>, now: Long, identityStable: Boolean = true): FreestyleFrame {
+    fun onFrame(
+        k: Array<Keypoint>,
+        now: Long,
+        identityStable: Boolean = true,
+        softGain: Float = 0f
+    ): FreestyleFrame {
         if (!counting()) return FreestyleFrame(readout())
         val recognition = recogniser.onFrame(k, now, identityStable)
+        recogniser.countingMovement?.let { health.update(it.exercise, recogniser.countingLegible, softGain, now) }
         val events = mutableListOf<FreestyleEvent>()
         val voice = mutableListOf<FreestyleVoice>()
         for (movement in Movement.entries) {
@@ -204,7 +224,8 @@ class FreestyleEngine(private val profile: CindyProfile = CindyProfile.STANDARD)
             totals = Movement.entries.filter { banked.getValue(it) > 0 }
                 .associate { it.exercise to banked.getValue(it) },
             manualReps = manual,
-            marks = marks.toList()
+            marks = marks.toList(),
+            untrackedMs = health.lostMs
         )
     }
 

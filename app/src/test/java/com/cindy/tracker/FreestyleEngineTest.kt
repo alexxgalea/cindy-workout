@@ -221,4 +221,25 @@ class FreestyleEngineTest {
         assertEquals(Movement.PUSH_UPS, engine.current().movement)
         assertEquals(3, engine.totalReps())
     }
+
+    private fun wristsUnseen(pose: Array<Keypoint>): Array<Keypoint> = pose.copyOf().also {
+        it[KP.LEFT_WRIST] = Keypoint(0f, 0f, 0f)
+        it[KP.RIGHT_WRIST] = Keypoint(0f, 0f, 0f)
+    }
+
+    @Test
+    fun `time the camera could not read the athlete is filed as untracked, so the total reads as a floor`() {
+        hold(PoseFixtures.pushup(175f))
+        repeat(3) { pushupRep() }
+        hold(wristsUnseen(PoseFixtures.pushup(175f)), forMs = 45_000)
+        val filed = engine.stop(clock)!!
+        assertTrue("untracked ${filed.untrackedMs}", filed.untrackedMs >= Records.UNTRACKED_TOLERANCE_MS)
+    }
+
+    @Test
+    fun `a session the camera read throughout files no untracked time`() {
+        hold(PoseFixtures.pushup(175f))
+        repeat(5) { pushupRep() }
+        assertEquals(0L, engine.stop(clock)!!.untrackedMs)
+    }
 }

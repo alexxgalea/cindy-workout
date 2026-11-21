@@ -1170,7 +1170,7 @@ class MainActivity : AppCompatActivity() {
             // hand-off below keeps only the newest.
             val recognition = recognise(keypoints, now, det.tracking)
             val freestyleFrame = if (state == WorkoutState.RUNNING && freestyleMode) {
-                freestyle.onFrame(keypoints, now, det.tracking)
+                freestyle.onFrame(keypoints, now, det.tracking, det.softGain)
             } else {
                 null
             }
@@ -1707,6 +1707,8 @@ class MainActivity : AppCompatActivity() {
             profile = profile.movements,
             manualReps = filed.manualReps,
             countedReps = filed.totalReps,
+            // What the camera could not read is part of the result, as in Cindy's.
+            untrackedMs = filed.untrackedMs,
             workoutId = workout.id,
             movementTotals = filed.totals,
             freestyleSets = filed.sets
