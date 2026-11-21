@@ -182,10 +182,20 @@ class Speaker(
         // Silent captures are queued only when nothing else is, so dropping them cuts nothing off.
         if (enabled && director.ready && director.capturingNow) engine.stop()
         if (enabled && director.ready && clipEndsAt > SystemClock.uptimeMillis()) {
-            main.postAtTime({ speak(line, SpeakQueue.APPEND) }, held, clipEndsAt)
+            main.postAtTime({ speakOrPlay(line) }, held, clipEndsAt)
             return null
         }
         return speak(line, SpeakQueue.APPEND)
+    }
+
+    /** A held cue, when its turn comes: a kept number is played, anything else is spoken, as Cindy's cues always were. */
+    private fun speakOrPlay(line: VoiceLine) {
+        val clip = if (line is VoiceLine.Count) clipFor(line) else null
+        if (clip != null && player.play(clip, volume)) {
+            clipStarted(clip)
+        } else {
+            speak(line, SpeakQueue.APPEND)
+        }
     }
 
     /**

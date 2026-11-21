@@ -441,6 +441,18 @@ class SpeakerTest {
     }
 
     @Test
+    fun `a number queued behind a played name is played too, when the name ends`() {
+        val speaker = capturingSpeaker()
+        speaker.say(VoiceLine.Movement(Exercise.PUSHUP))
+        assertNull(speaker.queue(VoiceLine.Count(2)))
+        assertEquals(1, player.played.size)
+
+        later()
+        assertEquals(2, player.played.size)
+        assertEquals(emptyList<FakeTtsEngine.Said>(), engine.said)
+    }
+
+    @Test
     fun `the next number drops a cue still held, as the engine's flush would`() {
         val speaker = capturingSpeaker()
         speaker.say(VoiceLine.Count(5))
