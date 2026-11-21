@@ -263,9 +263,9 @@
 
         <!--
           The figure and the capsule that edits it. The zone is 96dp tall: the count, a slash and
-          the target as one piece of text at 96sp, in the 280dp between 8dp from the start edge
-          and 8dp before the capsule, centred, and shrunk to fit rather than cut ("12/15" fits at
-          full size). The capsule is + over -, each half a 48dp target, 16dp from the end edge.
+          the target as one piece of text at 96sp, in the width between 72dp from either edge,
+          so it is centred on the screen and the capsule's 16dp + 48dp is mirrored by empty space,
+          and shrunk to fit rather than cut. The capsule is + over -, each half a 48dp target, 16dp from the end edge.
           The athlete is 2 to 3m from the phone while the clock runs; this is what they read.
         -->
         <FrameLayout
@@ -279,7 +279,7 @@
                 style="@style/Cindy.Scoreboard"
                 android:layout_width="match_parent"
                 android:layout_height="96dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="72dp"
                 android:layout_marginEnd="72dp"
                 android:gravity="center"
                 android:text="0" />
@@ -315,15 +315,15 @@
 
         <!--
           The movement and the round, on one line: "Pull-ups · Round 2". It shares the figure's
-          zone, the same 8dp and 72dp margins, so the two are centred on one point (148dp on a
-          360dp phone) in every state; the capsule sits beside the figure, not the screen's centre.
+          zone, the same 72dp margins either side, so the two are centred on the screen's own centre
+          in every state; the capsule sits in the margin on the end side.
         -->
         <TextView
             android:id="@+id/movementLine"
             style="@style/Cindy.ScoreLine"
             android:layout_width="match_parent"
             android:layout_height="24dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="72dp"
             android:layout_marginEnd="72dp"
             android:gravity="center"
             android:text="Pull-ups · Round 1" />
@@ -332,7 +332,7 @@
           The next set, over the figure zone and the line for about 1.5s when the movement changes
           while the clock runs: its target over the movement's name, "10" over "PUSH-UPS", one size,
           two rows, no slash, so it cannot be read as a count. It covers the 120dp of the zone and
-          the line, and only the figure's 280dp of width, so the capsule and the control row stay
+          the line, and only the figure's width between the 72dp margins, so the capsule and the control row stay
           where they are and answer. It adds no height: the margin takes back what it is given.
           Gone until a movement changes; see ScoreboardReadout.
         -->
@@ -340,7 +340,7 @@
             android:id="@+id/nextSet"
             android:layout_width="match_parent"
             android:layout_height="120dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="72dp"
             android:layout_marginTop="-120dp"
             android:layout_marginEnd="72dp"
             android:gravity="center"

@@ -332,7 +332,7 @@ class ScoreboardReadoutTest {
     }
 
     @Test
-    fun `the next set is two rows at 48 sp over the figure zone and its line, and leaves the capsule clear`() {
+    fun `the next set is two rows at 40 sp over the figure zone and its line, and leaves the capsule clear`() {
         showingTheNextSet()
         val zone = box(hud.reps)
         val line = box(hud.movementLine)
@@ -348,7 +348,7 @@ class ScoreboardReadoutTest {
         assertTrue("the target is not over the movement", target.bottom <= movement.top + 0.5f)
         for (row in listOf(hud.nextSetTarget, hud.nextSetMovement)) {
             row as TextView
-            assertEquals("${row.text} is not 48 sp", 48f * density, row.textSize, 0.5f)
+            assertEquals("${row.text} is not 40 sp", 40f * density, row.textSize, 0.5f)
             assertEquals("${row.text} is not one row", 1, row.layout.lineCount)
             assertEquals("${row.text} is cut", 0, row.layout.getEllipsisCount(0))
             assertTrue("${row.text} is wider than its zone", row.layout.getLineWidth(0) <= row.width - row.totalPaddingLeft - row.totalPaddingRight)
