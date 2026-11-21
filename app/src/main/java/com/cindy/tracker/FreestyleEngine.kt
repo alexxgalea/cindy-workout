@@ -80,8 +80,8 @@ data class FiledSession(
  * Outputs: a [FreestyleFrame] (readout, banked-rep events, voice), and from [stop] a
  * [FiledSession], or null when no rep was banked, so an empty session files nothing.
  *
- * A movement is confirmed at its 2nd counted rep and both reps are banked then; a lone rep banks
- * and shows nothing. − and + act on the recognised movement. Frames while paused or before START
+ * A movement is confirmed at its 2nd counted rep and both reps are banked then; a lone rep is
+ * never banked and shows nothing (a set of one rep is not counted, ADR 0010). − and + act on the recognised movement. Frames while paused or before START
  * count nothing.
  *
  * Threads: the camera thread calls [onFrame] and the main thread the rest, so every call is

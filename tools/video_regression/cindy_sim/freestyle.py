@@ -2,7 +2,7 @@
 
 A Freestyle is counted by recognition: recognition names the movement and counts its reps, and this
 banks what recognition counts. A movement is confirmed at its 2nd counted rep with both banked; a
-lone rep banks and shows nothing. Sets are derived from the rep marks at STOP. Cindy's counting is
+lone rep is never banked and shows nothing (a set of one rep is not counted, ADR 0010). Sets are derived from the rep marks at STOP. Cindy's counting is
 not touched: the recogniser drives its own engines. `freestyle_parity_check.py` holds this to the
 Kotlin on one trace.
 
