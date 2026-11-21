@@ -82,7 +82,12 @@ data class Attempt(
      * rather than relabelled: [workout] is null for it, and it is only ever ranked against
      * sessions filed under the same id.
      */
-    val workoutId: String = Workouts.CINDY_ID
+    val workoutId: String = Workouts.CINDY_ID,
+    /**
+     * The reps of each movement, for a session that has no rounds to say it (Freestyle). Empty
+     * for Cindy, whose sets say it, and for every attempt written before this existed.
+     */
+    val movementTotals: Map<Exercise, Int> = emptyMap()
 ) {
     /** What [workoutId] names, or null for a workout from a build that knew one this does not. */
     val workout: Workout? get() = Workouts.byId(workoutId)
@@ -183,6 +188,7 @@ object Records {
     private const val V6 = "v6"
     private const val V7 = "v7"
     private const val V8 = "v8"
+    private const val V9 = "v9"
 
     /**
      * Untracked time a score can carry and still be treated as exact.
@@ -196,8 +202,10 @@ object Records {
     const val UNTRACKED_TOLERANCE_MS = 30_000L
 
     fun encode(attempts: List<Attempt>): String = attempts.joinToString("\n") { a ->
+        // V9 only for an attempt that has totals to carry, so every other line is written as it
+        // always was, and a build that predates V9 reads everything but a Freestyle.
         listOf(
-            V8,
+            if (a.movementTotals.isEmpty()) V8 else V9,
             a.rounds.toString(),
             a.reps.toString(),
             a.atMillis.toString(),
@@ -216,13 +224,18 @@ object Records {
                 "${it.movement.name}:${it.ms}:${it.reps}:${it.manualReps}"
             },
             a.workoutId
-        ).joinToString("|")
+        ).let { fields ->
+            if (a.movementTotals.isEmpty()) fields else fields + a.movementTotals.entries.joinToString(",") {
+                "${it.key.name}:${it.value}"
+            }
+        }.joinToString("|")
     }
 
     fun decode(raw: String?): List<Attempt> {
         if (raw.isNullOrBlank()) return emptyList()
         return raw.lineSequence().mapNotNull { line ->
             when {
+                line.startsWith("$V9|") -> decodeV9(line)
                 line.startsWith("$V8|") -> decodeV8(line)
                 // Everything below was written before workouts existed, when every session was a
                 // Cindy, so each decodes as one by the field's default rather than by a rewrite.
@@ -237,6 +250,19 @@ object Records {
                 else -> decodeV1(line)
             }
         }.toList()
+    }
+
+    /** V8 plus the reps of each movement. */
+    private fun decodeV9(line: String): Attempt? {
+        val p = line.split("|")
+        if (p.size != 16) return null
+        val totals = p[15].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
+            val f = entry.split(":")
+            if (f.size != 2) return@mapNotNull null
+            val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
+            movement to (f[1].toIntOrNull() ?: return@mapNotNull null)
+        }.toMap()
+        return decodeV7Fields(p)?.copy(workoutId = p[14], movementTotals = totals)
     }
 
     /**

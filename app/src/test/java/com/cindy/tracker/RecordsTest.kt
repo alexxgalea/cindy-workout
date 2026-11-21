@@ -422,4 +422,29 @@ class RecordsTest {
         assertEquals("Workout not recognised", other(27).caption)
         assertEquals(Level.of(27)?.title, attempt(27).caption)
     }
+
+    // ── per-movement totals (record format v9), for a session with no rounds ──
+
+    @Test
+    fun `an attempt with movement totals round-trips as v9`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PULLUP to 5, Exercise.SQUAT to 7)
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v9|"))
+        assertTrue(line.endsWith("|freestyle|PULLUP:5,SQUAT:7"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
+    fun `an attempt with no movement totals is still written as v8, byte for byte`() {
+        assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
+    }
+
+    @Test
+    fun `a v9 line with a bad total costs only that entry`() {
+        val line = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9,SQUAT:x"
+        assertEquals(mapOf(Exercise.PUSHUP to 9), Records.decode(line).single().movementTotals)
+    }
 }
