@@ -39,7 +39,6 @@ object FreestyleSets {
 
     fun derive(marks: List<RepMark>): DerivedSets {
         val sets = mutableListOf<FreestyleSet>()
-        val gaps = mutableListOf<FreestyleGap>()
         var movement: Exercise? = null
         var reps = 0
         var start = 0L
@@ -54,16 +53,18 @@ object FreestyleSets {
                 end = mark.clockMs
                 continue
             }
-            if (movement != null) {
-                close()
-                gaps += FreestyleGap(if (sameMovement) GapKind.REST else GapKind.TRANSITION, end, mark.clockMs)
-            }
+            close()
             movement = mark.movement
             reps = 1
             start = mark.clockMs
             end = mark.clockMs
         }
         close()
-        return DerivedSets(sets, gaps)
+        return DerivedSets(sets, gapsBetween(sets))
+    }
+
+    /** The gap between each pair of neighbouring [sets]: a Rest inside one movement, else a Transition. */
+    fun gapsBetween(sets: List<FreestyleSet>): List<FreestyleGap> = sets.zipWithNext { a, b ->
+        FreestyleGap(if (a.movement == b.movement) GapKind.REST else GapKind.TRANSITION, a.endMs, b.startMs)
     }
 }
