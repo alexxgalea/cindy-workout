@@ -26,6 +26,7 @@ object StravaSets {
      * line the rest of the app holds for every rep it reports.
      */
     fun from(a: Attempt): List<WorkoutSet>? {
+        if (a.workoutId == Workouts.FREESTYLE_ID) return freestyle(a)
         // Null means this attempt predates a counted total (pre-V5) and totalReps falls back to
         // rounds * 30 + reps — an inferred tally, not a bank. Strava never sees one.
         val counted = a.countedReps ?: return null
@@ -63,5 +64,17 @@ object StravaSets {
         if (sets.none { it.reps > 0 }) return null
 
         return sets
+    }
+
+    /**
+     * A Freestyle has no rounds and no splits: its sets are the ones derived at STOP
+     * ([Attempt.freestyleSets]), already carrying whatever movement the athlete relabelled them
+     * to. Each is numbered by its place in the session, since Strava's set list takes only the
+     * movement and the reps. An attempt with no derived sets (one filed before they were kept)
+     * has nothing honest to send.
+     */
+    private fun freestyle(a: Attempt): List<WorkoutSet>? {
+        val sets = a.freestyleSets.mapIndexed { i, s -> WorkoutSet(i + 1, s.movement, s.reps) }
+        return sets.takeIf { list -> list.any { it.reps > 0 } }
     }
 }

@@ -144,4 +144,12 @@ class ComparisonsTest {
         assertNull(Comparisons.delta(withSplits, withoutSplits).avgRoundMs)
         assertNull(Comparisons.delta(withoutSplits, withSplits).avgRoundMs)
     }
+
+    @Test
+    fun `a Freestyle is compared with nothing, so its session page offers no comparison`() {
+        val earlier = Attempt(0, 0, 1000L, countedReps = 40, workoutId = Workouts.FREESTYLE_ID,
+            profile = CindyProfile.STANDARD, movementTotals = mapOf(Exercise.entries[0] to 40))
+        val of = earlier.copy(atMillis = 2000L)
+        assertTrue(Comparisons.options(listOf(earlier, of), of).isEmpty())
+    }
 }

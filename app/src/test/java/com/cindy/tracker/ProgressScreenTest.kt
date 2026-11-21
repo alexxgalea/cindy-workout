@@ -260,4 +260,73 @@ class ProgressScreenTest {
             top(chart, content) + chart.height / 2 <= fold
         )
     }
+
+    // ── Freestyle chosen: totals per movement instead of trend, bests and leaderboard ──
+
+    private fun freestyleSession(daysAgo: Int, vararg totals: Pair<Exercise, Int>) {
+        val map = totals.toMap()
+        RecordStore(context).add(
+            Attempt(
+                rounds = 0, reps = 0, atMillis = System.currentTimeMillis() - daysAgo * day,
+                durationMs = 15 * 60_000L, countedReps = map.values.sum(),
+                profile = CindyProfile.STANDARD, workoutId = Workouts.FREESTYLE_ID,
+                movementTotals = map
+            )
+        )
+    }
+
+    private fun chooseFreestyle() {
+        Profile(context).workout = Workouts.FREESTYLE
+    }
+
+    @After
+    fun backToCindy() {
+        Profile(context).workout = Workouts.CINDY
+    }
+
+    @Test
+    fun `with Freestyle chosen Progress shows recent totals per movement`() {
+        history(3)
+        freestyleSession(1, Exercise.PULLUP to 10, Exercise.PUSHUP to 20)
+        freestyleSession(0, Exercise.SQUAT to 30)
+        chooseFreestyle()
+        val shown = texts(open())
+        assertTrue(shown.toString(), "RECENT TOTALS" in shown)
+        assertTrue(shown.toString(), "${Exercise.PULLUP.label} 10 \u00b7 ${Exercise.PUSHUP.label} 20" in shown)
+        assertTrue(shown.toString(), "${Exercise.SQUAT.label} 30" in shown)
+    }
+
+    @Test
+    fun `with Freestyle chosen the trend, the bests and the leaderboard give way`() {
+        history(3)
+        freestyleSession(0, Exercise.SQUAT to 30)
+        chooseFreestyle()
+        val activity = open()
+        val shown = texts(activity)
+        assertFalse(shown.toString(), "LEADERBOARD" in shown)
+        assertFalse(shown.toString(), "PEAKS" in shown)
+        assertTrue("a rank row", rankRows(activity).isEmpty())
+        assertNull("a score chart", chart(activity))
+        assertFalse("a Score tab", "Score" in shown)
+        assertFalse("a Pace tab", "Pace" in shown)
+    }
+
+    @Test
+    fun `with Freestyle chosen the habit still counts its days`() {
+        freestyleSession(1, Exercise.SQUAT to 30)
+        freestyleSession(0, Exercise.SQUAT to 30)
+        chooseFreestyle()
+        val shown = texts(open())
+        assertTrue(shown.toString(), shown.any { it.contains("2 days trained") })
+    }
+
+    @Test
+    fun `with Cindy chosen a Freestyle is on no board and no chart`() {
+        history(3)
+        freestyleSession(0, Exercise.SQUAT to 900)
+        val activity = open()
+        assertEquals(4, rankRows(activity).size)
+        assertFalse("RECENT TOTALS" in texts(activity))
+        assertTrue(texts(activity).toString(), texts(activity).any { it.contains("4 sessions in all") })
+    }
 }

@@ -26,7 +26,7 @@ object Peaks {
         firstDayOfWeek: DayOfWeek
     ): List<Peak> {
         val out = ArrayList<Peak>()
-        val clean = attempts.filter { it.category == category && !it.scoreIsLowerBound }
+        val clean = attempts.filter { it.category == category && !it.isFreestyle && !it.scoreIsLowerBound }
         val movements = category?.profile
         fun date(a: Attempt) = dateFormat.format(Progress.localDate(a, zone))
 

@@ -32,6 +32,8 @@ object StravaActivityText {
      * workout is called by its own name, and one this build does not know is called a workout.
      */
     fun name(a: Attempt): String {
+        // A Freestyle has no score to put after its name: the description carries what was done.
+        if (a.workoutId == Workouts.FREESTYLE_ID) return Workouts.FREESTYLE.name
         val title = if (a.isCindy) a.profile?.mode?.label ?: Workouts.CINDY.name
         else a.workout?.name ?: "Workout"
         val prefix = if (a.scoreIsLowerBound) "at least " else ""
@@ -48,6 +50,7 @@ object StravaActivityText {
      * coverage than there was.
      */
     fun description(a: Attempt, calorieBasis: CalorieBasis, heartRateMs: Long? = null): String {
+        if (a.workoutId == Workouts.FREESTYLE_ID) return freestyleDescription(a, calorieBasis, heartRateMs)
         val lines = mutableListOf<String>()
 
         val roundsPart =
@@ -65,6 +68,40 @@ object StravaActivityText {
                 "fastest ${formatDuration(a.fastestRoundMs!!)} · slowest ${formatDuration(a.slowestRoundMs!!)}"
         }
 
+        lines += caveats(a, calorieBasis, heartRateMs)
+
+        lines += "Counted by Cindy Tracker"
+
+        return lines.joinToString("\n")
+    }
+
+    /**
+     * What a Freestyle shows (spec #188): the reps and time, the totals per movement, then the
+     * sets in order. Only movements and rep counts: no clock time of any set leaves the phone,
+     * and nothing here is data a Cindy upload does not already send.
+     */
+    private fun freestyleDescription(a: Attempt, calorieBasis: CalorieBasis, heartRateMs: Long?): String {
+        val lines = mutableListOf("${count(a.totalReps, "rep")} in ${formatDuration(a.durationMs)}")
+        val totals = a.freestyleSets.groupBy { it.movement }.mapValues { (_, s) -> s.sumOf { it.reps } }
+        val byMovement = Exercise.entries.filter { (totals[it] ?: 0) > 0 }
+        if (byMovement.isNotEmpty()) lines += byMovement.joinToString(" · ") { "${named(it)} ${totals.getValue(it)}" }
+        val sets = a.freestyleSets.filter { it.reps > 0 }
+        if (sets.isNotEmpty()) lines += "Sets: " + sets.joinToString(", ") { "${named(it.movement)} ${it.reps}" }
+
+        val profile = a.profile
+        lines += if (profile != null && !profile.isStandard) "${Workouts.FREESTYLE.name} · ${profile.changedMovements()}"
+        else Workouts.FREESTYLE.name
+        lines += caveats(a, calorieBasis, heartRateMs)
+        lines += "Counted by Cindy Tracker"
+        return lines.joinToString("\n")
+    }
+
+    /** "Pull-ups": the movement's label in the sentence case the rest of the description uses. */
+    private fun named(e: Exercise): String = e.label.lowercase().replaceFirstChar { it.uppercase() }
+
+    /** The honesty and calorie lines both kinds of description share, in their order. */
+    private fun caveats(a: Attempt, calorieBasis: CalorieBasis, heartRateMs: Long?): List<String> {
+        val lines = mutableListOf<String>()
         if (a.pausedMs > 0L) {
             lines += "Paused ${formatDuration(a.pausedMs)} · ${formatDuration(a.realTimeMs)} real time"
         }
@@ -91,10 +128,7 @@ object StravaActivityText {
                 "Calories estimated from heart rate"
             }
         }
-
-        lines += "Counted by Cindy Tracker"
-
-        return lines.joinToString("\n")
+        return lines
     }
 
     /** "1 round", "6 rounds": the same care [Coach] takes, since this is read as often as heard. */

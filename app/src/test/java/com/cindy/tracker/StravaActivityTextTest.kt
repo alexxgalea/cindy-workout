@@ -202,4 +202,55 @@ class StravaActivityTextTest {
         val lines = StravaActivityText.description(fullCindy, CalorieBasis.NONE).lines()
         assertEquals("Counted by Cindy Tracker", lines.last())
     }
+
+    // ---- Freestyle ---------------------------------------------------------------------------
+
+    private val freestyle = Attempt(
+        rounds = 0, reps = 0, atMillis = 0L, durationMs = 600_000L, countedReps = 25,
+        workoutId = Workouts.FREESTYLE_ID, profile = CindyProfile.STANDARD,
+        freestyleSets = listOf(
+            FreestyleSet(Exercise.PUSHUP, 10, 1_000, 20_000),
+            FreestyleSet(Exercise.SQUAT, 8, 30_000, 50_000),
+            FreestyleSet(Exercise.PUSHUP, 7, 90_000, 100_000)
+        )
+    )
+
+    @Test
+    fun `a Freestyle is named Freestyle, with no score`() {
+        assertEquals("Freestyle", StravaActivityText.name(freestyle))
+    }
+
+    @Test
+    fun `a Freestyle description gives the totals per movement, then the sets in order`() {
+        val lines = StravaActivityText.description(freestyle, CalorieBasis.NONE).lines()
+        assertEquals(
+            listOf(
+                "25 reps in 10:00",
+                "Push-ups 17 · Squats 8",
+                "Sets: Push-ups 10, Squats 8, Push-ups 7",
+                "Freestyle",
+                "Counted by Cindy Tracker"
+            ),
+            lines
+        )
+    }
+
+    @Test
+    fun `a relabelled set is told as the movement it now has`() {
+        val relabelled = freestyle.copy(
+            freestyleSets = freestyle.freestyleSets.mapIndexed { i, s ->
+                if (i == 1) s.copy(movement = Exercise.PULLUP) else s
+            }
+        )
+        val lines = StravaActivityText.description(relabelled, CalorieBasis.NONE).lines()
+        assertEquals("Pull-ups 8 · Push-ups 17", lines[1])
+        assertEquals("Sets: Push-ups 10, Pull-ups 8, Push-ups 7", lines[2])
+    }
+
+    @Test
+    fun `a Freestyle sends no clock times of its sets`() {
+        val text = StravaActivityText.description(freestyle, CalorieBasis.NONE)
+        assertFalse(text.contains("0:20"))
+        assertFalse(text.contains("1:30"))
+    }
 }

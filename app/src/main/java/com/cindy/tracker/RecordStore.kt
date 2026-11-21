@@ -104,6 +104,16 @@ data class Attempt(
     /** True for a session of Cindy, which the ladder, the benchmark and the badges describe. */
     val isCindy: Boolean get() = workoutId == Workouts.CINDY_ID
 
+    /**
+     * True for a Freestyle, which has no score: it is counted in reps per movement and ranked
+     * against nothing. Its days are work done, so streaks, the calendar and weekly volume count
+     * it; the trend, bests, leaderboard, levels, badges and records never do.
+     */
+    val isFreestyle: Boolean get() = workoutId == Workouts.FREESTYLE_ID
+
+    /** The reps of a Freestyle: its movements' totals added up, whatever else is recorded. */
+    val freestyleReps: Int get() = movementTotals.values.sum().takeIf { it > 0 } ?: totalReps
+
     val totalReps: Int get() = countedReps ?: (rounds * 30 + reps)
 
     /**
@@ -240,7 +250,10 @@ object Records {
             val totals = a.movementTotals.entries.joinToString(",") { "${it.key.name}:${it.value}" }
             when {
                 a.freestyleSets.isNotEmpty() -> fields + totals + a.freestyleSets.joinToString(",") {
-                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}"
+                    // A fifth field, ":1", only on a set the athlete gave another movement; an
+                    // unchanged set is written exactly as before.
+                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}" +
+                        if (it.changedByAthlete) ":1" else ""
                 }
                 a.movementTotals.isEmpty() -> fields
                 else -> fields + totals
@@ -276,12 +289,12 @@ object Records {
         if (p.size != 17) return null
         val sets = p[16].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
             val f = entry.split(":")
-            if (f.size != 4) return@mapNotNull null
+            if (f.size != 4 && f.size != 5) return@mapNotNull null
             val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
             val reps = f[1].toIntOrNull() ?: return@mapNotNull null
             val start = f[2].toLongOrNull() ?: return@mapNotNull null
             val end = f[3].toLongOrNull() ?: return@mapNotNull null
-            FreestyleSet(movement, reps, start, end)
+            FreestyleSet(movement, reps, start, end, changedByAthlete = f.getOrNull(4) == "1")
         }
         return decodeV9(p)?.copy(freestyleSets = sets)
     }
@@ -409,9 +422,12 @@ object Records {
         return Attempt(rounds, reps, at)
     }
 
-    /** Best score first; ties broken by the more recent attempt. */
+    /**
+     * Best score first; ties broken by the more recent attempt. A Freestyle has no score and is
+     * left out: a total of reps is not a result to rank.
+     */
     fun ranked(attempts: List<Attempt>): List<Attempt> =
-        attempts.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
+        attempts.filter { !it.isFreestyle }.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 
@@ -480,7 +496,7 @@ object Records {
      * movements: rank it honestly rather than withhold it.
      */
     fun isPersonalRecord(attempts: List<Attempt>, of: Attempt): Boolean {
-        if (of.scoreIsLowerBound) return false
+        if (of.scoreIsLowerBound || of.isFreestyle) return false
         val previous = personalRecord(attempts, of) ?: return of.totalReps > 0
         return of.totalReps > previous.totalReps
     }
@@ -508,6 +524,18 @@ class RecordStore(context: Context) {
     fun add(attempt: Attempt): Boolean {
         if (attempt.totalReps == 0) return false
         prefs.edit().putString(KEY, Records.encode(all() + attempt)).apply()
+        return true
+    }
+
+    /**
+     * Rewrites the filed session that has [attempt]'s time with [attempt], and says whether there
+     * was one. Its place on the board does not change; nothing else is touched.
+     */
+    fun replace(attempt: Attempt): Boolean {
+        val before = all()
+        if (before.none { it.atMillis == attempt.atMillis }) return false
+        val after = before.map { if (it.atMillis == attempt.atMillis) attempt else it }
+        prefs.edit().putString(KEY, Records.encode(after)).apply()
         return true
     }
 

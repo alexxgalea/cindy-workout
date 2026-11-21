@@ -46,4 +46,23 @@ class FreestylePageTest {
         assertEquals(listOf("4", "12"), FreestylePage.tiles(old).map { it.value })
         assertEquals(emptyList<FreestyleRow>(), FreestylePage.rows(old))
     }
+
+    @Test
+    fun `a set the athlete changed says so on its row, and each set row knows its place`() {
+        val changed = FreestyleSets.relabel(attempt, 2, Exercise.PULLUP)
+        val setRows = FreestylePage.rows(changed).filter { it.kind == FreestyleRow.Kind.SET }
+        assertEquals(listOf(0, 1, 2), setRows.map { it.setIndex })
+        assertEquals("PULL-UPS|4 reps · 1:35–1:40 · changed by you", setRows[2].let { "${it.title}|${it.detail}" })
+        assertEquals("5 reps · 1:06–1:20", setRows[1].detail)
+    }
+
+    @Test
+    fun `after a relabel the tiles and the gaps follow`() {
+        val changed = FreestyleSets.relabel(attempt, 2, Exercise.SQUAT)
+        assertEquals(listOf("SQUATS"), FreestylePage.tiles(changed).map { it.label })
+        assertEquals(
+            listOf("Rest", "Rest"),
+            FreestylePage.rows(changed).filter { it.kind != FreestyleRow.Kind.SET }.map { it.title }
+        )
+    }
 }

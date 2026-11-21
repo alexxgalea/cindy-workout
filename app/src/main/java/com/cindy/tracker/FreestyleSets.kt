@@ -1,7 +1,16 @@
 package com.cindy.tracker
 
-/** One run of one movement's reps: [start]/[end] are the clock times of its first and last rep. */
-data class FreestyleSet(val movement: Exercise, val reps: Int, val startMs: Long, val endMs: Long) {
+/**
+ * One run of one movement's reps: [startMs]/[endMs] are the clock times of its first and last rep.
+ * [changedByAthlete] is true once the athlete gave the set another movement on the session page.
+ */
+data class FreestyleSet(
+    val movement: Exercise,
+    val reps: Int,
+    val startMs: Long,
+    val endMs: Long,
+    val changedByAthlete: Boolean = false
+) {
     val lengthMs: Long get() = endMs - startMs
 }
 
@@ -66,5 +75,27 @@ object FreestyleSets {
     /** The gap between each pair of neighbouring [sets]: a Rest inside one movement, else a Transition. */
     fun gapsBetween(sets: List<FreestyleSet>): List<FreestyleGap> = sets.zipWithNext { a, b ->
         FreestyleGap(if (a.movement == b.movement) GapKind.REST else GapKind.TRANSITION, a.endMs, b.startMs)
+    }
+
+    /**
+     * The attempt with set [index] given [to] as its movement: the set's reps move with it, the
+     * totals are recomputed from the sets, and the set is marked as changed by the athlete.
+     *
+     * Neighbours are never merged. If the relabel makes two adjacent sets the same movement they
+     * stay two sets and the gap between them reads as a Rest, which is what [gapsBetween] says of
+     * any two neighbouring sets of one movement; this matches [derive], where a quiet spell
+     * inside one movement ends a set. The Rest and Transition labels are not stored, so they
+     * follow with no further work.
+     *
+     * Giving a set its own movement, or naming a set that is not there, returns [a] unchanged,
+     * so a tap that decides nothing files nothing and marks nothing.
+     */
+    fun relabel(a: Attempt, index: Int, to: Exercise): Attempt {
+        val set = a.freestyleSets.getOrNull(index) ?: return a
+        if (set.movement == to) return a
+        val sets = a.freestyleSets.toMutableList()
+        sets[index] = set.copy(movement = to, changedByAthlete = true)
+        val totals = DerivedSets(sets, emptyList()).totals
+        return a.copy(freestyleSets = sets, movementTotals = Exercise.entries.filter { it in totals }.associateWith { totals.getValue(it) })
     }
 }

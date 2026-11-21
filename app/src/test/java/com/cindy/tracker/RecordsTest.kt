@@ -476,7 +476,44 @@ class RecordsTest {
     }
 
     @Test
+    fun `a set changed by the athlete is written with a trailing 1, and an unchanged set with no extra field`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PUSHUP to 5, Exercise.SQUAT to 7),
+            freestyleSets = listOf(derived[0], derived[1].copy(changedByAthlete = true))
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v10|"))
+        assertTrue(line.endsWith("|SQUAT:7:10000:40000,PUSHUP:5:55000:70000:1"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
     fun `sets are never written for a Cindy, so its line stays v8`() {
         assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
+    }
+
+    // ── a Freestyle has no score, so it is never ranked ───────────────────────
+
+    private fun freestyleOf(reps: Int, at: Long = 0L) = Attempt(
+        rounds = 0, reps = 0, atMillis = at, countedReps = reps, workoutId = Workouts.FREESTYLE_ID,
+        movementTotals = mapOf(Exercise.entries[0] to reps)
+    )
+
+    @Test
+    fun `a Freestyle is never ranked, however many reps it holds`() {
+        val cindy = attempt(5, 0, at = 1)
+        val free = freestyleOf(900, at = 2)
+        assertEquals(listOf(cindy), Records.ranked(listOf(free, cindy)))
+        assertEquals(cindy, Records.best(listOf(free, cindy)))
+        assertNull(Records.best(listOf(free)))
+        assertEquals(listOf(cindy), Records.standings(listOf(free, cindy), withBenchmark = false).mapNotNull { it.attempt })
+    }
+
+    @Test
+    fun `a Freestyle is never a personal record, not even the first`() {
+        val free = freestyleOf(50, at = 1)
+        assertFalse(Records.isPersonalRecord(listOf(free), free))
+        assertNull(Records.bestIn(listOf(free), free.category))
     }
 }

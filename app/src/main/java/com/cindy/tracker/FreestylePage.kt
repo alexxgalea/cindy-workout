@@ -1,7 +1,14 @@
 package com.cindy.tracker
 
 /** One line of a Freestyle's set list: a set, or the Rest or Transition after it. */
-data class FreestyleRow(val kind: Kind, val title: String, val detail: String, val length: String) {
+data class FreestyleRow(
+    val kind: Kind,
+    val title: String,
+    val detail: String,
+    val length: String,
+    /** For a SET row, its place in [Attempt.freestyleSets]; null for a Rest or Transition. */
+    val setIndex: Int? = null
+) {
     enum class Kind { SET, REST, TRANSITION }
 }
 
@@ -35,8 +42,10 @@ object FreestylePage {
             val row = FreestyleRow(
                 FreestyleRow.Kind.SET, set.movement.label,
                 "${set.reps} ${if (set.reps == 1) "rep" else "reps"} · " +
-                    "${formatDuration(set.startMs)}–${formatDuration(set.endMs)}",
-                formatDuration(set.lengthMs)
+                    "${formatDuration(set.startMs)}–${formatDuration(set.endMs)}" +
+                    if (set.changedByAthlete) " · $CHANGED_BY_YOU" else "",
+                formatDuration(set.lengthMs),
+                setIndex = i
             )
             val gap = gaps.getOrNull(i)?.let {
                 if (it.kind == GapKind.REST) {
@@ -48,6 +57,8 @@ object FreestylePage {
             listOfNotNull(row, gap)
         }
     }
+
+    const val CHANGED_BY_YOU = "changed by you"
 
     const val FOOTNOTE = "Freestyle keeps no records: no best, no rank and no level."
 }
