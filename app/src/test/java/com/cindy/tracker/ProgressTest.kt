@@ -389,4 +389,48 @@ class ProgressTest {
         val week = Progress.weeklyVolume(list, null, today, zone, monday)
         assertEquals(720.0, week.last().value, 0.0)
     }
+
+    private fun freestyleOn(iso: String, vararg totals: Pair<Exercise, Int>, hour: Int = 12): Attempt {
+        val at = LocalDate.parse(iso).atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
+        val map = totals.toMap()
+        return Attempt(
+            rounds = 0, reps = 0, atMillis = at, durationMs = 15 * 60_000L,
+            countedReps = map.values.sum(), workoutId = Workouts.FREESTYLE_ID,
+            profile = CindyProfile.STANDARD, movementTotals = map
+        )
+    }
+
+    @Test
+    fun `a Freestyle is never on the trend, even under its own category`() {
+        val f = freestyleOn("2026-08-02", Exercise.entries[0] to 900)
+        assertTrue(Progress.scoreSeries(listOf(f), f.category, null, zone).points.isEmpty())
+        assertTrue(Progress.paceSeries(listOf(f), f.category, null, zone).points.isEmpty())
+    }
+
+    @Test
+    fun `Freestyle days count in the calendar, the week and the streak`() {
+        val f = freestyleOn("2026-09-08", Exercise.entries[0] to 40, Exercise.entries[2] to 80)
+        val list = listOf(scored("2026-09-07", 300), f)
+        assertEquals(2, Streak.current(Streak.daysTrained(list, zone), today))
+        assertEquals(420.0, Progress.weeklyVolume(list, null, today, zone, monday).last().value, 0.0)
+        assertEquals(2, Progress.summary(list, today, zone, monday).thisWeek.sessions)
+        assertEquals(420, Progress.summary(list, today, zone, monday).thisWeek.reps)
+    }
+
+    @Test
+    fun `recent totals per movement list the latest Freestyle sessions, newest first`() {
+        val pull = Exercise.entries[0]
+        val push = Exercise.entries[1]
+        val old = freestyleOn("2026-09-01", pull to 5)
+        val mid = freestyleOn("2026-09-05", pull to 10, push to 20)
+        val cindy = scored("2026-09-06", 300)
+        val new = freestyleOn("2026-09-08", push to 30)
+        val rows = Progress.recentTotals(listOf(old, cindy, new, mid), limit = 2, zone = zone)
+        assertEquals(listOf(new.atMillis, mid.atMillis), rows.map { it.atMillis })
+        assertEquals(mapOf(push to 30), rows[0].totals)
+        assertEquals(30, rows[0].reps)
+        assertEquals(30, rows[1].reps)
+        assertEquals("8 Sep", rows[0].date)
+        assertEquals("${pull.label} 10 · ${push.label} 20", rows[1].line)
+    }
 }

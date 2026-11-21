@@ -53,6 +53,19 @@ data class Series(
     val lowerIsBetter: Boolean
 )
 
+/** One Freestyle session on Progress: the reps of each movement, which is all it has to say. */
+data class FreestyleTotals(
+    val atMillis: Long,
+    /** "8 Sep". */
+    val date: String,
+    /** The reps of each movement, only those with any, in the movements' own order. */
+    val totals: Map<Exercise, Int>,
+    val reps: Int
+) {
+    /** "Pull-ups 10 · Push-ups 20". */
+    val line: String get() = totals.entries.joinToString(" · ") { "${it.key.label} ${it.value}" }
+}
+
 /** Totals over a stretch of days. */
 data class Period(val sessions: Int, val reps: Int, val clockMs: Long)
 
@@ -92,7 +105,7 @@ object Progress {
     fun scoreSeries(
         attempts: List<Attempt>, category: Category?, from: LocalDate?, zone: ZoneId
     ): Series {
-        val own = attempts.filter { it.category == category }.sortedBy { it.atMillis }
+        val own = attempts.filter { it.category == category && !it.isFreestyle }.sortedBy { it.atMillis }
         var best = Int.MIN_VALUE
         val points = ArrayList<ProgressPoint>()
         val bests = ArrayList<Double>()
@@ -119,7 +132,10 @@ object Progress {
         attempts: List<Attempt>, category: Category?, from: LocalDate?, zone: ZoneId
     ): Series {
         val own = attempts
-            .filter { it.category == category && isFullSession(it) && it.avgRoundMs != null }
+            .filter {
+                it.category == category && !it.isFreestyle && isFullSession(it) &&
+                    it.avgRoundMs != null
+            }
             .sortedBy { it.atMillis }
         var best = Double.MAX_VALUE
         val points = ArrayList<ProgressPoint>()
@@ -171,6 +187,19 @@ object Progress {
         }
         return out
     }
+
+    /**
+     * The latest Freestyle sessions, newest first, as the reps of each movement. What Progress
+     * shows with Freestyle chosen, in place of the trend, the bests and the leaderboard: a
+     * Freestyle has no score to trend or rank, only what was done.
+     */
+    fun recentTotals(attempts: List<Attempt>, limit: Int = 5, zone: ZoneId): List<FreestyleTotals> =
+        attempts.filter { it.isFreestyle }.sortedByDescending { it.atMillis }.take(limit).map { a ->
+            val totals = Exercise.entries.mapNotNull { e ->
+                a.movementTotals[e]?.takeIf { it > 0 }?.let { e to it }
+            }.toMap()
+            FreestyleTotals(a.atMillis, shortDate(a.atMillis, zone), totals, a.freestyleReps)
+        }
 
     fun summary(
         attempts: List<Attempt>, today: LocalDate, zone: ZoneId, firstDayOfWeek: DayOfWeek

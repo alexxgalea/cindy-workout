@@ -124,4 +124,31 @@ class StravaSetsTest {
         val pushSet = json.getJSONArray("sets").getJSONObject(1)
         assertEquals("MODIFIED_PUSH_UP", pushSet.getString("exercise_type"))
     }
+
+    // ---- Freestyle: the sets come from the derived sets, not from splits -------------------------
+
+    private fun freestyle(vararg sets: FreestyleSet, counted: Int = sets.sumOf { it.reps }) = Attempt(
+        rounds = 0, reps = 0, atMillis = 0L, countedReps = counted, workoutId = Workouts.FREESTYLE_ID,
+        freestyleSets = sets.toList(), profile = CindyProfile.STANDARD
+    )
+
+    @Test
+    fun `a Freestyle gives its derived sets in order, numbered by position`() {
+        val a = freestyle(
+            FreestyleSet(Exercise.SQUAT, 12, 1_000, 30_000),
+            FreestyleSet(Exercise.PULLUP, 5, 40_000, 55_000),
+            FreestyleSet(Exercise.SQUAT, 8, 80_000, 95_000)
+        )
+        assertEquals(
+            listOf(
+                WorkoutSet(1, Exercise.SQUAT, 12), WorkoutSet(2, Exercise.PULLUP, 5), WorkoutSet(3, Exercise.SQUAT, 8)
+            ),
+            StravaSets.from(a)
+        )
+    }
+
+    @Test
+    fun `a Freestyle with no derived sets has nothing to upload`() {
+        assertNull(StravaSets.from(freestyle(counted = 4)))
+    }
 }
