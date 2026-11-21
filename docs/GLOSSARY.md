@@ -45,7 +45,7 @@ A camera frame the counter did not use, with the reason it was refused (for exam
 _Avoid_: rejected rep
 
 **Set**:
-One movement's reps within one round, such as the 10 push-ups of round 3. In Freestyle, which has no rounds, a set is a run of one movement's reps, ended by a rest or a transition; it is worked out after STOP from when the reps were banked, and the athlete may give a set another movement on the session page.
+One movement's reps within one round, such as the 10 push-ups of round 3. In Freestyle, which has no rounds, a set is a run of one movement's reps, ended by a rest or a transition; it is worked out after STOP from when the reps were banked, and the athlete may give a set another movement on the session page, which marks the set "changed by you" and recomputes the totals. A set given the movement of its neighbour stays a separate set, and the gap between them reads as a Rest.
 _Avoid_: block, bout
 
 **Rest**:

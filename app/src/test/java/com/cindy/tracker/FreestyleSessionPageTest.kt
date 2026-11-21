@@ -108,4 +108,95 @@ class FreestyleSessionPageTest {
         SessionDiscard.discard(context, a.atMillis)
         assertEquals(emptyList<Attempt>(), RecordStore(context).all())
     }
+
+    // ── giving a set another movement (ticket #194) ──
+
+    private fun views(root: View): List<View> {
+        val out = mutableListOf<View>()
+        fun walk(v: View) {
+            out += v
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        return out
+    }
+
+    private fun rowOf(page: ResultsActivity, text: String): View =
+        views(page.window.decorView).first { v ->
+            v.isClickable && views(v).any { it is TextView && it.text.toString() == text }
+        }
+
+    private fun sheet(): View? =
+        org.robolectric.shadows.ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window?.decorView
+
+    private fun choice(sheet: View, label: String): View =
+        views(sheet).first { it.isClickable && it.contentDescription?.toString()?.startsWith("$label,") == true }
+
+    @Test
+    fun `tapping a set opens a sheet of the three movements with the set's own checked`() {
+        val page = stopped(filed())
+        rowOf(page, "SQUATS · 7 reps · 0:10–0:40").performClick()
+        val open = sheet() ?: error("no sheet")
+        assertTrue(shown(open).any { it.contains("SQUATS · 7 reps · 0:10–0:40") })
+        assertEquals(
+            listOf("PULL-UPS, not selected", "PUSH-UPS, not selected", "SQUATS, selected"),
+            Exercise.entries.map { choice(open, it.label).contentDescription.toString() }
+        )
+    }
+
+    @Test
+    fun `choosing another movement files it, redraws the page and says changed by you`() {
+        val a = filed()
+        val page = stopped(a)
+        rowOf(page, "SQUATS · 7 reps · 0:10–0:40").performClick()
+        choice(sheet()!!, "PULL-UPS").performClick()
+        val stored = RecordStore(context).all().single()
+        assertEquals(Exercise.PULLUP, stored.freestyleSets[0].movement)
+        assertTrue(stored.freestyleSets[0].changedByAthlete)
+        assertEquals(mapOf(Exercise.PULLUP to 7, Exercise.PUSHUP to 4, Exercise.SQUAT to 5), stored.movementTotals)
+        val text = shown(page.window.decorView)
+        assertTrue("no changed row: $text", text.contains("PULL-UPS · 7 reps · 0:10–0:40 · changed by you"))
+        assertTrue("tiles not redrawn: $text", text.contains("0:14 in sets · 1 set"))
+        assertTrue("Rest should now be a Transition: $text", text.count { it == "Transition" } == 2 && !text.contains("Rest"))
+    }
+
+    @Test
+    fun `choosing the set's own movement changes nothing`() {
+        val a = filed()
+        val before = RecordStore(context).all()
+        val page = stopped(a)
+        rowOf(page, "SQUATS · 7 reps · 0:10–0:40").performClick()
+        choice(sheet()!!, "SQUATS").performClick()
+        assertEquals(before, RecordStore(context).all())
+        assertFalse(shown(page.window.decorView).any { it.contains("changed by you") })
+    }
+
+    @Test
+    fun `a relabel survives reopening the page from the board`() {
+        val a = filed()
+        val page = stopped(a)
+        rowOf(page, "SQUATS · 5 reps · 1:06–1:20").performClick()
+        choice(sheet()!!, "PUSH-UPS").performClick()
+        val again = Robolectric.buildActivity(
+            ResultsActivity::class.java, ResultsActivity.review(context, a.atMillis)
+        ).setup().get()
+        assertTrue(shown(again.window.decorView).contains("PUSH-UPS · 5 reps · 1:06–1:20 · changed by you"))
+    }
+
+    @Test
+    fun `the stored rep marks of a relabelled set take its new movement too`() {
+        val a = filed()
+        val marks = listOf(
+            RepMark(10_000L, Exercise.SQUAT, false), RepMark(40_000L, Exercise.SQUAT, false),
+            RepMark(66_000L, Exercise.SQUAT, false), RepMark(95_000L, Exercise.PUSHUP, false)
+        )
+        RepTimesStore(context).save(a.atMillis, marks)
+        val page = stopped(a)
+        rowOf(page, "SQUATS · 7 reps · 0:10–0:40").performClick()
+        choice(sheet()!!, "PULL-UPS").performClick()
+        assertEquals(
+            listOf(Exercise.PULLUP, Exercise.PULLUP, Exercise.SQUAT, Exercise.PUSHUP),
+            RepTimesStore(context).load(a.atMillis)!!.map { it.movement }
+        )
+    }
 }

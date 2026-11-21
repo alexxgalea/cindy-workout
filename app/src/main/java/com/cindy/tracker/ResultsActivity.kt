@@ -274,7 +274,7 @@ class ResultsActivity : AppCompatActivity() {
         binding.movements.visibility = show
         if (rows.isNotEmpty()) {
             val group = InsetGroup(this)
-            rows.forEach { group.row(freestyleRow(it)) }
+            rows.forEach { group.row(freestyleRow(it, a)) }
             binding.movements.addView(
                 group,
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -288,15 +288,75 @@ class ResultsActivity : AppCompatActivity() {
     }
 
     /** One line of the set list: a set in full, or a quieter Rest or Transition with its length. */
-    private fun freestyleRow(row: FreestyleRow): View {
+    private fun freestyleRow(row: FreestyleRow, a: Attempt): View {
         val gap = row.kind != FreestyleRow.Kind.SET
-        return statRow(
-            if (gap) row.title else "${row.title} · ${row.detail}", row.length
-        ).apply {
-            contentDescription = if (gap) "${row.title}, ${row.length}" else
-                "${row.title}, ${row.detail}, ${row.length} long"
-            if (gap) alpha = 0.7f
+        val index = row.setIndex
+        val label = if (gap) row.title else "${row.title} · ${row.detail}"
+        return statRow(label, row.length, if (index == null) null else ({ askMovement(a, index, label) })).apply {
+            if (gap) {
+                contentDescription = "${row.title}, ${row.length}"
+                alpha = 0.7f
+            } else {
+                contentDescription = "${row.title}, ${row.detail}, ${row.length} long" +
+                    ", tap to give it another movement"
+            }
         }
+    }
+
+    /**
+     * The sheet behind a set row: the three movements, the set's own one checked. Choosing
+     * another gives the set that movement, rewrites the filed session and redraws the page;
+     * choosing the set's own does nothing at all.
+     */
+    private fun askMovement(a: Attempt, index: Int, setLabel: String) {
+        val current = a.freestyleSets.getOrNull(index)?.movement ?: return
+        val sheet = CindySheet(this, title = "Which movement was this set?", subtitle = setLabel)
+        val group = InsetGroup(this)
+        Exercise.entries.forEach { movement ->
+            val selected = movement == current
+            group.row(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(52)
+                setPadding(dp(18), dp(12), dp(16), dp(12))
+                addView(styledText(R.style.Cindy_Headline, movement.label).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                })
+                addView(ImageView(this@ResultsActivity).apply {
+                    setImageResource(R.drawable.ic_check)
+                    imageTintList = ColorStateList.valueOf(getColor(R.color.label))
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    visibility = if (selected) View.VISIBLE else View.INVISIBLE
+                }, LinearLayout.LayoutParams(dp(19), dp(19)))
+                describeAsButton("${movement.label}, ${if (selected) "selected" else "not selected"}")
+                setOnClickListener {
+                    sheet.dismiss()
+                    giveSetMovement(index, movement)
+                }
+            })
+        }
+        sheet.add(group)
+        sheet.actions(primary = "CANCEL", onPrimary = {})
+        sheet.show()
+    }
+
+    /** Files [movement] on set [index] and redraws; no write for a set's own movement. */
+    private fun giveSetMovement(index: Int, movement: Exercise) {
+        val changed = FreestyleSets.relabel(attempt, index, movement)
+        if (changed == attempt) return
+        RecordStore(this).replace(changed)
+        // The rep marks, if kept, say which movement each rep was; they follow the set.
+        val set = attempt.freestyleSets[index]
+        RepTimesStore(this).apply {
+            load(attempt.atMillis)?.let { marks ->
+                save(attempt.atMillis, marks.map {
+                    if (it.movement == set.movement && it.clockMs in set.startMs..set.endMs) it.copy(movement = movement) else it
+                })
+            }
+        }
+        attempt = changed
+        render(attempt, stoppedEarly)
     }
 
     /** The SESSION rows: pauses, streak, hand-added reps, lost camera time, energy and Strava. */
