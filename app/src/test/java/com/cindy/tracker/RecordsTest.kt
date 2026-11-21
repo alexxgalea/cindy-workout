@@ -476,6 +476,19 @@ class RecordsTest {
     }
 
     @Test
+    fun `a set changed by the athlete is written with a trailing 1, and an unchanged set with no extra field`() {
+        val free = attempt(0).copy(
+            workoutId = "freestyle", countedReps = 12,
+            movementTotals = mapOf(Exercise.PUSHUP to 5, Exercise.SQUAT to 7),
+            freestyleSets = listOf(derived[0], derived[1].copy(changedByAthlete = true))
+        )
+        val line = Records.encode(listOf(free))
+        assertTrue(line.startsWith("v10|"))
+        assertTrue(line.endsWith("|SQUAT:7:10000:40000,PUSHUP:5:55000:70000:1"))
+        assertEquals(free, Records.decode(line).single())
+    }
+
+    @Test
     fun `sets are never written for a Cindy, so its line stays v8`() {
         assertTrue(Records.encode(listOf(attempt(12, 7))).startsWith("v8|"))
     }

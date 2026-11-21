@@ -240,7 +240,10 @@ object Records {
             val totals = a.movementTotals.entries.joinToString(",") { "${it.key.name}:${it.value}" }
             when {
                 a.freestyleSets.isNotEmpty() -> fields + totals + a.freestyleSets.joinToString(",") {
-                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}"
+                    // A fifth field, ":1", only on a set the athlete gave another movement; an
+                    // unchanged set is written exactly as before.
+                    "${it.movement.name}:${it.reps}:${it.startMs}:${it.endMs}" +
+                        if (it.changedByAthlete) ":1" else ""
                 }
                 a.movementTotals.isEmpty() -> fields
                 else -> fields + totals
@@ -276,12 +279,12 @@ object Records {
         if (p.size != 17) return null
         val sets = p[16].split(",").filter { it.isNotBlank() }.mapNotNull { entry ->
             val f = entry.split(":")
-            if (f.size != 4) return@mapNotNull null
+            if (f.size != 4 && f.size != 5) return@mapNotNull null
             val movement = enumOrNull<Exercise>(f[0]) ?: return@mapNotNull null
             val reps = f[1].toIntOrNull() ?: return@mapNotNull null
             val start = f[2].toLongOrNull() ?: return@mapNotNull null
             val end = f[3].toLongOrNull() ?: return@mapNotNull null
-            FreestyleSet(movement, reps, start, end)
+            FreestyleSet(movement, reps, start, end, changedByAthlete = f.getOrNull(4) == "1")
         }
         return decodeV9(p)?.copy(freestyleSets = sets)
     }
@@ -508,6 +511,18 @@ class RecordStore(context: Context) {
     fun add(attempt: Attempt): Boolean {
         if (attempt.totalReps == 0) return false
         prefs.edit().putString(KEY, Records.encode(all() + attempt)).apply()
+        return true
+    }
+
+    /**
+     * Rewrites the filed session that has [attempt]'s time with [attempt], and says whether there
+     * was one. Its place on the board does not change; nothing else is touched.
+     */
+    fun replace(attempt: Attempt): Boolean {
+        val before = all()
+        if (before.none { it.atMillis == attempt.atMillis }) return false
+        val after = before.map { if (it.atMillis == attempt.atMillis) attempt else it }
+        prefs.edit().putString(KEY, Records.encode(after)).apply()
         return true
     }
 
