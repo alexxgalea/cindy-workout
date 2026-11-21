@@ -2479,7 +2479,9 @@ class MainActivity : AppCompatActivity() {
         workout = chosen
         // The idle line names it, and the clock counts up in Freestyle and down in Cindy.
         renderClock()
-        if (freestyleMode) showFreestyleIdle()
+        // Whichever workout it now is, its idle scoreboard is drawn over the other's, as at
+        // startup and after a reset; otherwise Freestyle's readout and film label would stay.
+        if (freestyleMode) showFreestyleIdle() else apply(runEngine { RepEvent.NONE })
         renderControls()
     }
 
