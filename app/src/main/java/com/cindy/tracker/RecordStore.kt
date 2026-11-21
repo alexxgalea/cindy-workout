@@ -381,9 +381,12 @@ object Records {
         return Attempt(rounds, reps, at)
     }
 
-    /** Best score first; ties broken by the more recent attempt. */
+    /**
+     * Best score first; ties broken by the more recent attempt. A Freestyle has no score and is
+     * left out: a total of reps is not a result to rank.
+     */
     fun ranked(attempts: List<Attempt>): List<Attempt> =
-        attempts.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
+        attempts.filter { !it.isFreestyle }.sortedWith(compareByDescending<Attempt> { it.totalReps }.thenByDescending { it.atMillis })
 
     fun best(attempts: List<Attempt>): Attempt? = ranked(attempts).firstOrNull()
 
@@ -452,7 +455,7 @@ object Records {
      * movements: rank it honestly rather than withhold it.
      */
     fun isPersonalRecord(attempts: List<Attempt>, of: Attempt): Boolean {
-        if (of.scoreIsLowerBound) return false
+        if (of.scoreIsLowerBound || of.isFreestyle) return false
         val previous = personalRecord(attempts, of) ?: return of.totalReps > 0
         return of.totalReps > previous.totalReps
     }

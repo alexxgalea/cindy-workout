@@ -447,4 +447,28 @@ class RecordsTest {
         val line = "v9|0|0|100|1000|0||STRICT_PULL_UP|STANDARD_PUSH_UP|AIR_SQUAT|0|9|0||freestyle|PUSHUP:9,SQUAT:x"
         assertEquals(mapOf(Exercise.PUSHUP to 9), Records.decode(line).single().movementTotals)
     }
+
+    // ── a Freestyle has no score, so it is never ranked ───────────────────────
+
+    private fun freestyleOf(reps: Int, at: Long = 0L) = Attempt(
+        rounds = 0, reps = 0, atMillis = at, countedReps = reps, workoutId = Workouts.FREESTYLE_ID,
+        movementTotals = mapOf(Exercise.entries[0] to reps)
+    )
+
+    @Test
+    fun `a Freestyle is never ranked, however many reps it holds`() {
+        val cindy = attempt(5, 0, at = 1)
+        val free = freestyleOf(900, at = 2)
+        assertEquals(listOf(cindy), Records.ranked(listOf(free, cindy)))
+        assertEquals(cindy, Records.best(listOf(free, cindy)))
+        assertNull(Records.best(listOf(free)))
+        assertEquals(listOf(cindy), Records.standings(listOf(free, cindy), withBenchmark = false).mapNotNull { it.attempt })
+    }
+
+    @Test
+    fun `a Freestyle is never a personal record, not even the first`() {
+        val free = freestyleOf(50, at = 1)
+        assertFalse(Records.isPersonalRecord(listOf(free), free))
+        assertNull(Records.bestIn(listOf(free), free.category))
+    }
 }
